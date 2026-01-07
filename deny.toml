@@ -1,0 +1,31 @@
+[licenses]
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "GPL-3.0",
+  "ISC",
+  "LGPL-2.1",
+  "LGPL-3.0",
+  "MIT",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "Zlib",
+  "0BSD",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[advisories]
+db-urls = ["https://github.com/RustSec/advisory-db"]
+db-path = "advisory-db"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

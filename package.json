@@ -2,6 +2,7 @@
   "name": "mithril-vault",
   "private": true,
   "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,6 +20,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "licenses:js": "license-checker-rseidelsohn --summary --production --excludePrivatePackages --onlyAllow \"MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;Zlib;0BSD;CC0-1.0;MPL-2.0;LGPL-2.1-only;LGPL-2.1-or-later;LGPL-3.0-only;LGPL-3.0-or-later;GPL-3.0-only;GPL-3.0-or-later;MIT OR Apache-2.0;Apache-2.0 OR MIT\"",
+    "licenses:js:all": "license-checker-rseidelsohn --summary --excludePrivatePackages --onlyAllow \"MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;Zlib;0BSD;CC0-1.0;MPL-2.0;LGPL-2.1-only;LGPL-2.1-or-later;LGPL-3.0-only;LGPL-3.0-or-later;GPL-3.0-only;GPL-3.0-or-later;MIT OR Apache-2.0;Apache-2.0 OR MIT\"",
+    "licenses:rust": "cd src-tauri && cargo deny check --config ../deny.toml licenses bans sources",
+    "advisories:rust": "cd src-tauri && cargo deny check --config ../deny.toml advisories",
+    "licenses:check": "concurrently -g \"bun run licenses:js\" \"bun run licenses:rust\"",
     "prepare": "husky",
     "changelog": "git-cliff -V >/dev/null 2>&1 || (echo 'git-cliff required: https://github.com/orhun/git-cliff#installation' && exit 1); git-cliff -o CHANGELOG.md",
     "changelog:preview": "git-cliff -V >/dev/null 2>&1 || (echo 'git-cliff required: https://github.com/orhun/git-cliff#installation' && exit 1); git-cliff --unreleased"
@@ -58,6 +64,7 @@
     "globals": "^17.0.0",
     "husky": "^9.1.7",
     "jsdom": "^27.4.0",
+    "license-checker-rseidelsohn": "^4.4.2",
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
     "typescript": "~5.6.2",
