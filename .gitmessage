@@ -1,0 +1,12 @@
+<type>(<scope>): <description>
+
+# Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, security
+# Scopes (optional): core, ui, cli, extension, sync, deps
+#
+# Examples:
+#   feat(core): add KDBX4 file reading support
+#   fix(ui): resolve entry list not updating after delete
+#   security(core): patch vulnerability in password handling
+#   feat!: redesign database unlock flow
+#
+# Breaking changes: add ! after type or BREAKING CHANGE: in footer
