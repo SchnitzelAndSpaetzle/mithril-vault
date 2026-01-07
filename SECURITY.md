@@ -17,22 +17,12 @@ If you discover a security vulnerability in MithrilVault, please report it respo
 ## Security Contact
 
 - Primary: GitHub Security Advisories (preferred)
-- Email: aleksandar.z.boric@gmail.com
 
 ### Preferred Method: GitHub Security Advisories
 
 1. Go to the [Security Advisories](https://github.com/SchnitzelAndSpaetzle/mithril-vault/security/advisories) page
 2. Click "New draft security advisory"
 3. Fill out the form with details about the vulnerability
-
-### Alternative: Email
-
-If you cannot use GitHub Security Advisories, you may email the maintainers directly. Please include:
-
-- A description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Any suggested fixes (if applicable)
 
 ### What to Include
 

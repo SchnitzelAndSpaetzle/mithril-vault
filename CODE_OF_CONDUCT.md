@@ -2,7 +2,7 @@
 
 ## Our Pledge
 
-We as members, contributors, and maintainers of **Mithril Vault** pledge to make participation in this project and our community a harassment-free experience for everyone—regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, caste, color, religion, or sexual identity and orientation.
+We as members, contributors, and maintainers of **MithrilVault** pledge to make participation in this project and our community a harassment-free experience for everyone—regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, caste, color, religion, or sexual identity and orientation.
 
 We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
 
@@ -32,7 +32,7 @@ Examples of unacceptable behavior include:
 
 ## Scope
 
-This Code of Conduct applies within all community spaces related to **Mithril Vault**, including but not limited to:
+This Code of Conduct applies within all community spaces related to **MithrilVault**, including but not limited to:
 
 - GitHub issues
 - Pull requests
@@ -48,17 +48,18 @@ It also applies when an individual is officially representing the project in pub
 If you experience or witness unacceptable behavior, please report it as soon as possible.
 
 **Primary contact:**
-- 📧 **aleksandar.z.boric@gmail.com**
-
-**Alternative reporting channel:**
 - 💬 **GitHub Discussions**  
   https://github.com/SchnitzelAndSpaetzle/mithril-vault/discussions
+
+**Alternative reporting channel:**
+- 🐛 **GitHub Issues**  
+  https://github.com/SchnitzelAndSpaetzle/mithril-vault/issues
 
 Reports will be handled with discretion. Confidentiality will be respected to the extent possible, while recognizing that limited information may need to be shared to investigate and respond appropriately.
 
 ### Security & Privacy Reports (Important)
 
-Because **Mithril Vault** is a password vault application, **security and privacy are critical**.
+Because **MithrilVault** is a password vault application, **security and privacy are critical**.
 
 If your report involves:
 - a security vulnerability
@@ -69,8 +70,8 @@ If your report involves:
 **Do NOT open a public issue.**
 
 Instead, report it via:
-- 📧 **aleksandar.z.boric@gmail.com**  
-  (Subject: `Security Issue – Mithril Vault`)
+- 🔒 **GitHub Security Advisories**  
+  https://github.com/SchnitzelAndSpaetzle/mithril-vault/security/advisories
 
 ## Enforcement
 
