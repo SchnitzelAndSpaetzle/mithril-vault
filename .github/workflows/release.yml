@@ -13,20 +13,130 @@ on:
         type: boolean
         default: true
 
-  # Tag trigger - kept for backward compatibility / automation
+  # Tag trigger - for releases after version-bump PR is merged
   push:
     tags:
       - "v[0-9]+.*"
 
 permissions:
   contents: write
+  pull-requests: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  prepare:
+    name: Prepare Release
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.create-pr.outputs.pull-request-number }}
+      pr_merged: ${{ steps.auto-merge.outputs.merged }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format. Use semver (e.g., 0.2.0 or 0.2.0-beta.1)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Check tag doesn't already exist
+        run: |
+          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ inputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Bump version in config files
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
+          sed -i 's/^version = ".*"/version = "'"$VERSION"'"/' src-tauri/Cargo.toml
+
+          echo "Updated versions to $VERSION"
+
+      - name: Create Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to ${{ inputs.version }}"
+          title: "chore: release v${{ inputs.version }}"
+          body: |
+            ## Release v${{ inputs.version }}
+
+            This PR bumps the version to `${{ inputs.version }}` in preparation for release.
+
+            ### Files Updated
+            - `package.json`
+            - `src-tauri/tauri.conf.json`
+            - `src-tauri/Cargo.toml`
+
+            ---
+            *This PR was automatically created by the release workflow.*
+            *Once merged, the release build will start automatically.*
+          branch: release/v${{ inputs.version }}
+          base: main
+          labels: release
+
+      - name: Enable auto-merge
+        if: steps.create-pr.outputs.pull-request-number
+        run: |
+          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} --auto --squash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for PR to be merged
+        id: auto-merge
+        if: steps.create-pr.outputs.pull-request-number
+        run: |
+          PR_NUMBER="${{ steps.create-pr.outputs.pull-request-number }}"
+          echo "Waiting for PR #$PR_NUMBER to be merged..."
+
+          for i in {1..60}; do
+            STATE=$(gh pr view $PR_NUMBER --json state,mergedAt --jq '.state')
+            if [ "$STATE" == "MERGED" ]; then
+              echo "PR #$PR_NUMBER merged successfully!"
+              echo "merged=true" >> $GITHUB_OUTPUT
+              exit 0
+            elif [ "$STATE" == "CLOSED" ]; then
+              echo "::error::PR #$PR_NUMBER was closed without merging"
+              exit 1
+            fi
+            echo "Waiting... (attempt $i/60)"
+            sleep 10
+          done
+
+          echo "::error::Timeout waiting for PR to be merged"
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push tag
+        if: steps.auto-merge.outputs.merged == 'true'
+        run: |
+          git fetch origin main
+          git checkout main
+          git pull origin main
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+          echo "Tag v${{ inputs.version }} created and pushed"
+
   validate:
     name: Validate Release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -37,68 +147,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine version
+      - name: Determine version from tag
         id: version
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-            # Validate semver format
-            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-              echo "::error::Invalid version format. Use semver (e.g., 0.2.0 or 0.2.0-beta.1)"
-              exit 1
-            fi
-          else
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
+          VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
           echo "Release version: $VERSION"
 
-      - name: Check tag doesn't already exist (manual trigger)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "::error::Tag v${{ steps.version.outputs.version }} already exists"
-            exit 1
-          fi
-
-      - name: Bump version in config files (manual trigger only)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          # Update package.json
-          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
-
-          # Update tauri.conf.json
-          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
-
-          # Update Cargo.toml (using sed for TOML)
-          sed -i 's/^version = ".*"/version = "'"$VERSION"'"/' src-tauri/Cargo.toml
-
-          echo "Updated versions to $VERSION"
-          grep '"version"' package.json
-          grep '"version"' src-tauri/tauri.conf.json
-          grep '^version' src-tauri/Cargo.toml
-
-      - name: Commit version bump (manual trigger only)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          git push origin HEAD:${{ github.ref_name }}
-
-      - name: Create and push tag (manual trigger only)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
-
   create-release:
     name: Create Release
     needs: validate
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create-release.outputs.id }}
@@ -122,7 +182,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.validate.outputs.version }}
-          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
+          draft: false
           body: ${{ steps.git-cliff.outputs.content }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -130,6 +190,7 @@ jobs:
   build:
     name: Build (${{ matrix.name }})
     needs: [validate, create-release]
+    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -155,6 +216,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.validate.outputs.version }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -192,6 +255,7 @@ jobs:
   checksums:
     name: Generate Checksums
     needs: [validate, create-release, build]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Download all release assets
@@ -219,6 +283,7 @@ jobs:
   update-manifest:
     name: Generate Update Manifest
     needs: [validate, create-release, build]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -239,7 +304,6 @@ jobs:
           REPO="SchnitzelAndSpaetzle/mithril-vault"
           BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 
-          # Read signatures
           LINUX_SIG=""
           WINDOWS_SIG=""
           MACOS_INTEL_SIG=""
