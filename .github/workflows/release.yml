@@ -12,8 +12,12 @@ on:
         description: "Create as draft release"
         type: boolean
         default: true
+      _internal_build_only:
+        description: "Internal: skip prepare, run build only"
+        type: boolean
+        default: false
 
-  # Tag trigger - for releases after version-bump PR is merged
+  # Tag trigger - for releases created outside the workflow
   push:
     tags:
       - "v[0-9]+.*"
@@ -28,7 +32,7 @@ env:
 jobs:
   prepare:
     name: Prepare Release
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs._internal_build_only != true
     runs-on: ubuntu-latest
     outputs:
       pr_number: ${{ steps.create-pr.outputs.pull-request-number }}
@@ -134,9 +138,20 @@ jobs:
           git push origin "v${{ inputs.version }}"
           echo "Tag v${{ inputs.version }} created and pushed"
 
+      - name: Trigger build workflow
+        if: steps.auto-merge.outputs.merged == 'true'
+        run: |
+          gh workflow run release.yml \
+            --ref "v${{ inputs.version }}" \
+            -f version="${{ inputs.version }}" \
+            -f draft="${{ inputs.draft }}" \
+            -f _internal_build_only=true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   validate:
     name: Validate Release
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs._internal_build_only)
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -147,10 +162,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine version from tag
+      - name: Determine version
         id: version
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
           echo "Release version: $VERSION"
@@ -158,7 +177,7 @@ jobs:
   create-release:
     name: Create Release
     needs: validate
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs._internal_build_only)
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create-release.outputs.id }}
@@ -182,7 +201,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.validate.outputs.version }}
-          draft: false
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
           body: ${{ steps.git-cliff.outputs.content }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -190,7 +209,7 @@ jobs:
   build:
     name: Build (${{ matrix.name }})
     needs: [validate, create-release]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs._internal_build_only)
     strategy:
       fail-fast: false
       matrix:
@@ -255,7 +274,7 @@ jobs:
   checksums:
     name: Generate Checksums
     needs: [validate, create-release, build]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs._internal_build_only)
     runs-on: ubuntu-latest
     steps:
       - name: Download all release assets
@@ -283,7 +302,7 @@ jobs:
   update-manifest:
     name: Generate Update Manifest
     needs: [validate, create-release, build]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs._internal_build_only)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
