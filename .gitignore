@@ -26,3 +26,6 @@ dist-ssr
 # Coverage reports
 coverage/
 *.lcov
+
+# cargo-deny advisory cache
+/src-tauri/advisory-db/
