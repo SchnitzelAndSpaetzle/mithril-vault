@@ -31,5 +31,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU3RjFDNDFGMjgwNTEzRDMKUldUVEV3VW9IOFR4VjhENWFhelhpVEJmRzZudkpTNHhNYWJhc2p1cHJhb3ptYXNTSHBLZWt6U3oK",
+      "endpoints": [
+        "https://github.com/SchnitzelAndSpaetzle/mithril-vault/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -3,17 +3,30 @@ name: Release
 on:
   push:
     tags:
-      - 'v[0-9]+.*'
+      - "v[0-9]+.*"
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Create as draft release"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  changelog:
-    name: Generate Changelog
+  create-release:
+    name: Create Release
     runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.id }}
+      release_upload_url: ${{ steps.create-release.outputs.upload_url }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -25,8 +38,177 @@ jobs:
           args: --latest --strip header
 
       - name: Create GitHub Release
+        id: create-release
         uses: softprops/action-gh-release@v2
         with:
+          draft: ${{ inputs.draft || true }}
           body: ${{ steps.git-cliff.outputs.content }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage,rpm
+          - name: Windows x64
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+          - name: macOS Intel
+            platform: macos-13
+            target: x86_64-apple-darwin
+            bundles: dmg,app
+          - name: macOS ARM
+            platform: macos-14
+            target: aarch64-apple-darwin
+            bundles: dmg,app
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install system dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+  checksums:
+    name: Generate Checksums
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all release assets
+        uses: robinraju/release-downloader@v1
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          fileName: "*"
+          out-file-path: artifacts
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload checksums to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-manifest:
+    name: Generate Update Manifest
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release assets
+        uses: robinraju/release-downloader@v1
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          fileName: "*.sig"
+          out-file-path: signatures
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Generate latest.json
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          REPO="SchnitzelAndSpaetzle/mithril-vault"
+          BASE_URL="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}"
+
+          # Read signatures
+          LINUX_SIG=""
+          WINDOWS_SIG=""
+          MACOS_INTEL_SIG=""
+          MACOS_ARM_SIG=""
+
+          if [ -f "signatures/mithril-vault_${VERSION}_amd64.AppImage.sig" ]; then
+            LINUX_SIG=$(cat "signatures/mithril-vault_${VERSION}_amd64.AppImage.sig")
+          fi
+          if [ -f "signatures/mithril-vault_${VERSION}_x64-setup.exe.sig" ]; then
+            WINDOWS_SIG=$(cat "signatures/mithril-vault_${VERSION}_x64-setup.exe.sig")
+          fi
+          if [ -f "signatures/mithril-vault_${VERSION}_x64.dmg.sig" ]; then
+            MACOS_INTEL_SIG=$(cat "signatures/mithril-vault_${VERSION}_x64.dmg.sig")
+          fi
+          if [ -f "signatures/mithril-vault_${VERSION}_aarch64.dmg.sig" ]; then
+            MACOS_ARM_SIG=$(cat "signatures/mithril-vault_${VERSION}_aarch64.dmg.sig")
+          fi
+
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See the release notes at https://github.com/${REPO}/releases/tag/${GITHUB_REF_NAME}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "linux-x86_64": {
+                "url": "${BASE_URL}/mithril-vault_${VERSION}_amd64.AppImage",
+                "signature": "${LINUX_SIG}"
+              },
+              "windows-x86_64": {
+                "url": "${BASE_URL}/mithril-vault_${VERSION}_x64-setup.exe",
+                "signature": "${WINDOWS_SIG}"
+              },
+              "darwin-x86_64": {
+                "url": "${BASE_URL}/mithril-vault_${VERSION}_x64.dmg",
+                "signature": "${MACOS_INTEL_SIG}"
+              },
+              "darwin-aarch64": {
+                "url": "${BASE_URL}/mithril-vault_${VERSION}_aarch64.dmg",
+                "signature": "${MACOS_ARM_SIG}"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+
+      - name: Upload update manifest to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
