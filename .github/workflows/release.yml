@@ -23,8 +23,6 @@ jobs:
         with:
           config: cliff.toml
           args: --latest --strip header
-        env:
-          OUTPUT: CHANGELOG.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
