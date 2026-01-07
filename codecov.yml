@@ -1,0 +1,26 @@
+coverage:
+  precision: 2
+  round: down
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 2%
+    patch:
+      default:
+        target: 70%
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
+flags:
+  frontend:
+    paths:
+      - src/
+    carryforward: true
+  backend:
+    paths:
+      - src-tauri/src/
+    carryforward: true

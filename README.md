@@ -1,5 +1,7 @@
 # Tauri + React + Typescript
 
+[![codecov](https://codecov.io/gh/SchnitzelAndSpaetzle/mithril-vault/branch/main/graph/badge.svg)](https://codecov.io/gh/SchnitzelAndSpaetzle/mithril-vault)
+
 This template should help get you started developing with Tauri, React and Typescript in Vite.
 
 ## Recommended IDE Setup
