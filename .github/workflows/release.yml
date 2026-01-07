@@ -96,7 +96,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.validate.outputs.version }}
-          draft: ${{ inputs.draft || true }}
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
           body: ${{ steps.git-cliff.outputs.content }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
