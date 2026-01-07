@@ -4,7 +4,7 @@ fn greet(name: &str) -> String {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used)] // Panic is intentional: app cannot continue if Tauri builder fails
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
