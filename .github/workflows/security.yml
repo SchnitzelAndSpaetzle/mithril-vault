@@ -55,7 +55,7 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
-          deny-licenses: LGPL-2.0, GPL-2.0
+          config-file: .github/dependency-review.yml
 
   rust-audit:
     name: Rust Security Audit
