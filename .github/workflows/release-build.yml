@@ -1,0 +1,241 @@
+name: Release Build
+
+on:
+  repository_dispatch:
+    types: [release-build]
+  push:
+    tags:
+      - "v[0-9]+.*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      draft: ${{ steps.version.outputs.draft }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            VERSION="${{ github.event.client_payload.version }}"
+            DRAFT="${{ github.event.client_payload.draft }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+            DRAFT="false"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "draft=$DRAFT" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION (draft: $DRAFT)"
+
+  create-release:
+    name: Create Release
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: v${{ needs.validate.outputs.version }}
+
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.validate.outputs.version }}
+          draft: ${{ needs.validate.outputs.draft == 'true' }}
+          body: ${{ steps.git-cliff.outputs.content }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: [validate, create-release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage,rpm
+          - name: Windows x64
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+          - name: macOS Intel
+            platform: macos-13
+            target: x86_64-apple-darwin
+            bundles: dmg,app
+          - name: macOS ARM
+            platform: macos-14
+            target: aarch64-apple-darwin
+            bundles: dmg,app
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.validate.outputs.version }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install system dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: v${{ needs.validate.outputs.version }}
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+  checksums:
+    name: Generate Checksums
+    needs: [validate, create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all release assets
+        uses: robinraju/release-downloader@v1
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          fileName: "*"
+          out-file-path: artifacts
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload checksums to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.validate.outputs.version }}
+          files: artifacts/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-manifest:
+    name: Generate Update Manifest
+    needs: [validate, create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release assets
+        uses: robinraju/release-downloader@v1
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          fileName: "*.sig"
+          out-file-path: signatures
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate latest.json
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          TAG="${{ needs.validate.outputs.tag }}"
+          REPO="${{ github.repository }}"
+          BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+
+          LINUX_SIG=""
+          WINDOWS_SIG=""
+          MACOS_INTEL_SIG=""
+          MACOS_ARM_SIG=""
+
+          if [ -f "signatures/mithril-vault_${VERSION}_amd64.AppImage.sig" ]; then
+            LINUX_SIG=$(cat "signatures/mithril-vault_${VERSION}_amd64.AppImage.sig")
+          fi
+          if [ -f "signatures/mithril-vault_${VERSION}_x64-setup.exe.sig" ]; then
+            WINDOWS_SIG=$(cat "signatures/mithril-vault_${VERSION}_x64-setup.exe.sig")
+          fi
+          if [ -f "signatures/mithril-vault_${VERSION}_x64.dmg.sig" ]; then
+            MACOS_INTEL_SIG=$(cat "signatures/mithril-vault_${VERSION}_x64.dmg.sig")
+          fi
+          if [ -f "signatures/mithril-vault_${VERSION}_aarch64.dmg.sig" ]; then
+            MACOS_ARM_SIG=$(cat "signatures/mithril-vault_${VERSION}_aarch64.dmg.sig")
+          fi
+
+          cat > latest.json << MANIFEST
+          {
+            "version": "${VERSION}",
+            "notes": "See the release notes at https://github.com/${REPO}/releases/tag/${TAG}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "linux-x86_64": {
+                "url": "${BASE_URL}/mithril-vault_${VERSION}_amd64.AppImage",
+                "signature": "${LINUX_SIG}"
+              },
+              "windows-x86_64": {
+                "url": "${BASE_URL}/mithril-vault_${VERSION}_x64-setup.exe",
+                "signature": "${WINDOWS_SIG}"
+              },
+              "darwin-x86_64": {
+                "url": "${BASE_URL}/mithril-vault_${VERSION}_x64.dmg",
+                "signature": "${MACOS_INTEL_SIG}"
+              },
+              "darwin-aarch64": {
+                "url": "${BASE_URL}/mithril-vault_${VERSION}_aarch64.dmg",
+                "signature": "${MACOS_ARM_SIG}"
+              }
+            }
+          }
+          MANIFEST
+
+          cat latest.json
+
+      - name: Upload update manifest to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.validate.outputs.version }}
+          files: latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
