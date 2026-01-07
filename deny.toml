@@ -13,6 +13,7 @@ allow = [
     "BSL-1.0",
     "CC0-1.0",
     "GPL-3.0",
+    "GPL-3.0-or-later",
     "ISC",
     "LGPL-2.1",
     "LGPL-3.0",
@@ -44,7 +45,29 @@ external-default-features = "allow"
 
 [advisories]
 version = 2
-ignore = []
+ignore = [
+    # Tauri/Wry GTK3 dependency tree (gtk-rs) unmaintained; tracked upstream.
+    "RUSTSEC-2024-0411",
+    "RUSTSEC-2024-0412",
+    "RUSTSEC-2024-0413",
+    "RUSTSEC-2024-0414",
+    "RUSTSEC-2024-0415",
+    "RUSTSEC-2024-0416",
+    "RUSTSEC-2024-0417",
+    "RUSTSEC-2024-0418",
+    "RUSTSEC-2024-0419",
+    "RUSTSEC-2024-0420",
+    # gtk-rs core unsoundness; blocked by GTK3 dependency tree.
+    "RUSTSEC-2024-0429",
+    # Unmaintained deps pulled by tauri/wry stack.
+    "RUSTSEC-2024-0370",
+    "RUSTSEC-2025-0057",
+    "RUSTSEC-2025-0075",
+    "RUSTSEC-2025-0080",
+    "RUSTSEC-2025-0081",
+    "RUSTSEC-2025-0098",
+    "RUSTSEC-2025-0100",
+]
 
 [sources]
 unknown-registry = "deny"
