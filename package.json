@@ -19,7 +19,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "prepare": "husky"
+    "prepare": "husky",
+    "changelog": "git-cliff -V >/dev/null 2>&1 || (echo 'git-cliff required: https://github.com/orhun/git-cliff#installation' && exit 1); git-cliff -o CHANGELOG.md",
+    "changelog:preview": "git-cliff -V >/dev/null 2>&1 || (echo 'git-cliff required: https://github.com/orhun/git-cliff#installation' && exit 1); git-cliff --unreleased"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -36,6 +38,8 @@
     ]
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.3.0",
+    "@commitlint/config-conventional": "^20.3.0",
     "@eslint/js": "^9.39.2",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
