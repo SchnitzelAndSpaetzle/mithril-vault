@@ -33,10 +33,10 @@ split_commits = false
 commit_parsers = [
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Bug Fixes" },
-    { message = "^doc", group = "Documentation" },
+    { message = "^docs", group = "Documentation" },
     { message = "^perf", group = "Performance" },
     { message = "^security", group = "Security" },
-    { message = "^refactor", group = "Refactor" },
+    { message = "^refactor", skip = true },
     { message = "^style", skip = true },
     { message = "^test", skip = true },
     { message = "^build", skip = true },

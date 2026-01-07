@@ -23,7 +23,7 @@ export default {
       'always',
       ['core', 'ui', 'cli', 'extension', 'sync', 'deps'],
     ],
-    'subject-case': [2, 'always', 'lower-case'],
+    'subject-case': [0],
     'body-max-line-length': [1, 'always', 100],
   },
 };
