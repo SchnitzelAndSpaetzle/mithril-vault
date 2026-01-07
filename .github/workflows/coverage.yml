@@ -36,7 +36,7 @@ jobs:
       - name: Install Tauri dependencies (Linux)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y pkg-config libglib2.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Run Rust tests with coverage
         working-directory: src-tauri

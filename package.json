@@ -10,6 +10,7 @@
     "dev-android": "bun run tauri android dev",
     "dev-ios": "bun run tauri ios dev",
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint src",
