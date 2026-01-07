@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "security:openssf-scorecard",
+    ":dependencyDashboard"
+  ],
+  "schedule": ["before 9am on monday"],
+  "timezone": "UTC",
+  "labels": ["dependencies"],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"]
+  },
+  "packageRules": [
+    {
+      "description": "Auto-merge patch updates after CI passes",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Auto-merge security patches immediately",
+      "matchUpdateTypes": ["patch", "minor"],
+      "matchCategories": ["security"],
+      "automerge": true,
+      "schedule": ["at any time"]
+    },
+    {
+      "description": "Group Tauri packages",
+      "matchPackagePatterns": ["^@tauri-apps/", "^tauri-"],
+      "groupName": "Tauri ecosystem"
+    },
+    {
+      "description": "Group React packages",
+      "matchPackagePatterns": ["^react", "^@types/react"],
+      "groupName": "React ecosystem"
+    },
+    {
+      "description": "Group Rust crypto packages",
+      "matchManagers": ["cargo"],
+      "matchPackagePatterns": ["^aes", "^chacha", "^argon2", "^sha", "^hmac"],
+      "groupName": "Rust crypto"
+    },
+    {
+      "description": "Group linting tools",
+      "matchPackagePatterns": ["eslint", "prettier"],
+      "groupName": "Linting tools"
+    },
+    {
+      "description": "Group testing tools",
+      "matchPackagePatterns": ["vitest", "^@testing-library/"],
+      "groupName": "Testing tools"
+    }
+  ],
+  "cargo": {
+    "enabled": true
+  }
+}
