@@ -1,4 +1,4 @@
-name: Release
+name: Release - Prepare
 
 on:
   workflow_dispatch:
@@ -7,10 +7,6 @@ on:
         description: "Version to release (e.g., 0.2.0)"
         required: true
         type: string
-      draft:
-        description: "Create as draft release"
-        type: boolean
-        default: true
 
 permissions:
   contents: write
@@ -18,7 +14,7 @@ permissions:
 
 jobs:
   prepare:
-    name: Prepare Release
+    name: Prepare Release PR
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -67,59 +63,21 @@ jobs:
             - `src-tauri/Cargo.toml`
 
             ---
-            *This PR was automatically created by the release workflow.*
-            *Once merged, the release build will start automatically.*
+            ### Next Steps
+            1. Wait for CI checks to pass
+            2. Merge this PR
+            3. Run the **"Release - Tag & Build"** workflow with version `${{ inputs.version }}`
           branch: release/v${{ inputs.version }}
           base: main
           labels: release
 
-      - name: Enable auto-merge
-        if: steps.create-pr.outputs.pull-request-number
+      - name: Summary
         run: |
-          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} --auto --squash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Wait for PR to be merged
-        id: auto-merge
-        if: steps.create-pr.outputs.pull-request-number
-        run: |
-          PR_NUMBER="${{ steps.create-pr.outputs.pull-request-number }}"
-          echo "Waiting for PR #$PR_NUMBER to be merged..."
-
-          for i in {1..60}; do
-            STATE=$(gh pr view $PR_NUMBER --json state --jq '.state')
-            if [ "$STATE" == "MERGED" ]; then
-              echo "PR #$PR_NUMBER merged successfully!"
-              exit 0
-            elif [ "$STATE" == "CLOSED" ]; then
-              echo "::error::PR #$PR_NUMBER was closed without merging"
-              exit 1
-            fi
-            echo "Waiting... (attempt $i/60)"
-            sleep 10
-          done
-
-          echo "::error::Timeout waiting for PR to be merged"
-          exit 1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create and push tag
-        run: |
-          git fetch origin main
-          git checkout main
-          git pull origin main
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
-          git push origin "v${{ inputs.version }}"
-          echo "Tag v${{ inputs.version }} created and pushed"
-
-      - name: Trigger release build
-        run: |
-          gh api repos/${{ github.repository }}/dispatches \
-            -f event_type=release-build \
-            -f client_payload='{"version":"${{ inputs.version }}","draft":${{ inputs.draft }}}'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "## Release PR Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "PR #${{ steps.create-pr.outputs.pull-request-number }} has been created." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Wait for CI checks to pass" >> $GITHUB_STEP_SUMMARY
+          echo "2. Merge the PR" >> $GITHUB_STEP_SUMMARY
+          echo "3. Run **Release - Tag & Build** workflow with version \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY

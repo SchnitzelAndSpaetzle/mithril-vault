@@ -1,0 +1,79 @@
+name: Release - Tag & Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.2.0)"
+        required: true
+        type: string
+      draft:
+        description: "Create as draft release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Create Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format. Use semver (e.g., 0.2.0 or 0.2.0-beta.1)"
+            exit 1
+          fi
+
+      - name: Check tag doesn't already exist
+        run: |
+          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ inputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Verify version was bumped
+        run: |
+          VERSION="${{ inputs.version }}"
+          PKG_VERSION=$(jq -r '.version' package.json)
+          if [ "$PKG_VERSION" != "$VERSION" ]; then
+            echo "::error::Version mismatch! package.json has $PKG_VERSION but expected $VERSION"
+            echo "::error::Make sure the release PR was merged before running this workflow."
+            exit 1
+          fi
+          echo "Version verified: $VERSION"
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+          echo "Tag v${{ inputs.version }} created and pushed"
+
+      - name: Trigger release build
+        run: |
+          gh api repos/${{ github.repository }}/dispatches \
+            -f event_type=release-build \
+            -f client_payload='{"version":"${{ inputs.version }}","draft":${{ inputs.draft }}}'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Release Tagged" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tag \`v${{ inputs.version }}\` has been created and pushed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The **Release Build** workflow has been triggered." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Draft release: ${{ inputs.draft }}" >> $GITHUB_STEP_SUMMARY
