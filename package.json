@@ -25,6 +25,7 @@
     "licenses:rust": "cd src-tauri && cargo deny check --config ../deny.toml licenses bans sources",
     "advisories:rust": "cd src-tauri && cargo deny check --config ../deny.toml advisories",
     "licenses:check": "concurrently -g \"bun run licenses:js\" \"bun run licenses:rust\"",
+    "licenses:generate": "license-checker-rseidelsohn --production --excludePrivatePackages --markdown --out THIRD_PARTY_LICENSES.md",
     "prepare": "husky",
     "changelog": "git-cliff -V >/dev/null 2>&1 || (echo 'git-cliff required: https://github.com/orhun/git-cliff#installation' && exit 1); git-cliff -o CHANGELOG.md",
     "changelog:preview": "git-cliff -V >/dev/null 2>&1 || (echo 'git-cliff required: https://github.com/orhun/git-cliff#installation' && exit 1); git-cliff --unreleased"

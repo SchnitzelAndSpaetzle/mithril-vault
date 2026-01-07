@@ -72,21 +72,21 @@ The application will launch with hot-reload enabled.
 
 ### Available Scripts
 
-| Command | Description |
-|---------|-------------|
-| `bun run dev-desktop` | Start desktop development server |
-| `bun run dev-android` | Start Android development |
-| `bun run dev-ios` | Start iOS development |
-| `bun run build` | Build frontend |
-| `bun run tauri build` | Build complete application |
-| `bun run test` | Run tests |
-| `bun run test:watch` | Run tests in watch mode |
-| `bun run test:coverage` | Run tests with coverage report |
-| `bun run lint` | Check for linting errors |
-| `bun run lint:fix` | Fix linting errors automatically |
-| `bun run format` | Format code with Prettier |
-| `bun run format:check` | Check code formatting |
-| `bun run check` | Run lint and format checks |
+| Command                 | Description                      |
+| ----------------------- | -------------------------------- |
+| `bun run dev-desktop`   | Start desktop development server |
+| `bun run dev-android`   | Start Android development        |
+| `bun run dev-ios`       | Start iOS development            |
+| `bun run build`         | Build frontend                   |
+| `bun run tauri build`   | Build complete application       |
+| `bun run test`          | Run tests                        |
+| `bun run test:watch`    | Run tests in watch mode          |
+| `bun run test:coverage` | Run tests with coverage report   |
+| `bun run lint`          | Check for linting errors         |
+| `bun run lint:fix`      | Fix linting errors automatically |
+| `bun run format`        | Format code with Prettier        |
+| `bun run format:check`  | Check code formatting            |
+| `bun run check`         | Run lint and format checks       |
 
 ### IDE Setup
 
@@ -175,19 +175,19 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/) t
 
 ### Types
 
-| Type | Description | Changelog Section |
-|------|-------------|-------------------|
-| `feat` | New feature | Features |
-| `fix` | Bug fix | Bug Fixes |
-| `docs` | Documentation | Documentation |
-| `style` | Formatting (no code change) | (hidden) |
-| `refactor` | Code restructure | (hidden) |
-| `perf` | Performance improvement | Performance |
-| `test` | Tests | (hidden) |
-| `build` | Build system | (hidden) |
-| `ci` | CI changes | (hidden) |
-| `chore` | Maintenance | (hidden) |
-| `security` | Security fix | Security |
+| Type       | Description                 | Changelog Section |
+| ---------- | --------------------------- | ----------------- |
+| `feat`     | New feature                 | Features          |
+| `fix`      | Bug fix                     | Bug Fixes         |
+| `docs`     | Documentation               | Documentation     |
+| `style`    | Formatting (no code change) | (hidden)          |
+| `refactor` | Code restructure            | (hidden)          |
+| `perf`     | Performance improvement     | Performance       |
+| `test`     | Tests                       | (hidden)          |
+| `build`    | Build system                | (hidden)          |
+| `ci`       | CI changes                  | (hidden)          |
+| `chore`    | Maintenance                 | (hidden)          |
+| `security` | Security fix                | Security          |
 
 ### Scopes (Optional)
 
@@ -324,6 +324,47 @@ mod tests {
 ## Security
 
 If you discover a security vulnerability, **do not** open a public issue. Please see our [Security Policy](SECURITY.md) for responsible disclosure guidelines.
+
+## License Policy
+
+MithrilVault is licensed under **GPL-3.0-or-later**. All dependencies must have compatible licenses.
+
+### Allowed Licenses
+
+| License                                    | Status                  |
+| ------------------------------------------ | ----------------------- |
+| MIT, ISC, BSD-2-Clause, BSD-3-Clause, 0BSD | Allowed                 |
+| Apache-2.0, Zlib, Unlicense, CC0-1.0       | Allowed                 |
+| MPL-2.0                                    | Allowed (weak copyleft) |
+| LGPL-2.1, LGPL-3.0                         | Allowed                 |
+| GPL-3.0, GPL-3.0-or-later                  | Allowed                 |
+
+### Denied Licenses
+
+| License            | Reason                      |
+| ------------------ | --------------------------- |
+| GPL-2.0-only       | Not compatible with GPL-3.0 |
+| AGPL-3.0           | Requires network disclosure |
+| Proprietary        | Not open source             |
+| Unknown/UNLICENSED | Cannot verify compatibility |
+
+### Checking Licenses
+
+Before submitting a PR that adds new dependencies:
+
+```bash
+bun run licenses:check
+```
+
+This runs license checks for both npm and Cargo dependencies.
+
+### Adding Dependencies
+
+1. Check the dependency's license before adding
+2. Run `bun run licenses:check` after adding
+3. If the license isn't in the allowed list, open an issue for discussion
+
+The CI pipeline will block PRs that introduce incompatible licenses.
 
 ## Questions?
 
