@@ -1,0 +1,62 @@
+name: License Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  license-check:
+    name: Check Dependency Licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Check npm dependencies
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Check npm licenses (production)
+        run: bun run licenses:js
+
+      - name: Check npm licenses (all)
+        run: bun run licenses:js:all
+
+      # Check Cargo dependencies
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Check Cargo licenses
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check --config ../deny.toml licenses bans sources
+          manifest-path: src-tauri/Cargo.toml
+
+  advisories:
+    name: Security Advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check Cargo advisories
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check --config ../deny.toml advisories
+          manifest-path: src-tauri/Cargo.toml
