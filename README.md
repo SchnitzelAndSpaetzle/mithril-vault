@@ -1,5 +1,7 @@
 # MithrilVault
 
+[![CI](https://github.com/SchnitzelAndSpaetzle/mithril-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/SchnitzelAndSpaetzle/mithril-vault/actions/workflows/ci.yml)
+[![Security](https://github.com/SchnitzelAndSpaetzle/mithril-vault/actions/workflows/security.yml/badge.svg)](https://github.com/SchnitzelAndSpaetzle/mithril-vault/actions/workflows/security.yml)
 [![codecov](https://codecov.io/gh/SchnitzelAndSpaetzle/mithril-vault/branch/main/graph/badge.svg)](https://codecov.io/gh/SchnitzelAndSpaetzle/mithril-vault)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -94,16 +96,16 @@ The built application will be in `src-tauri/target/release/bundle/`.
 
 ### Available Scripts
 
-| Command | Description |
-|---------|-------------|
-| `bun run dev-desktop` | Start development server with hot reload |
-| `bun run build` | Build frontend for production |
-| `bun run tauri build` | Build complete application |
-| `bun run test` | Run tests |
-| `bun run test:coverage` | Run tests with coverage |
-| `bun run lint` | Run ESLint |
-| `bun run format` | Format code with Prettier |
-| `bun run check` | Run lint and format checks |
+| Command                 | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `bun run dev-desktop`   | Start development server with hot reload |
+| `bun run build`         | Build frontend for production            |
+| `bun run tauri build`   | Build complete application               |
+| `bun run test`          | Run tests                                |
+| `bun run test:coverage` | Run tests with coverage                  |
+| `bun run lint`          | Run ESLint                               |
+| `bun run format`        | Format code with Prettier                |
+| `bun run check`         | Run lint and format checks               |
 
 ### Project Structure
 
@@ -143,5 +145,3 @@ MithrilVault is licensed under the [GNU General Public License v3.0](LICENSE).
 - [KeePassXC](https://keepassxc.org/) - Inspiration and reference implementation
 - [Tauri](https://tauri.app/) - Secure application framework
 - [keepass-rs](https://crates.io/crates/keepass) - Rust KDBX library
-
-![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
