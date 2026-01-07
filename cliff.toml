@@ -18,7 +18,7 @@ body = """
     ### {{ group | upper_first }}
     {% for commit in commits %}\
         - {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
-            {{ commit.message | upper_first }}\
+            {{ commit.message }}\
             {% if commit.breaking %} (**BREAKING**){% endif %}\
     {% endfor %}
 {% endfor %}\n
