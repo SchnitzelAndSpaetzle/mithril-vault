@@ -25,7 +25,7 @@ const PathPasswordSchema = z.object({
 });
 
 const IdSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
 });
 
 const GroupIdSchema = z.object({
@@ -37,7 +37,7 @@ const NameSchema = z.object({
 });
 
 const CopyPasswordSchema = z.object({
-  entryId: z.string().uuid(),
+  entryId: z.uuid(),
   timeoutMs: z.number().int().positive().optional(),
 });
 
@@ -114,7 +114,7 @@ export const groups = {
   },
 
   async create(parentId: string, name: string): Promise<Group> {
-    z.string().uuid().parse(parentId);
+    z.uuid().parse(parentId);
     NameSchema.parse({ name });
     const result = await invoke("create_group", { parentId, name });
     return GroupSchema.parse(result);
