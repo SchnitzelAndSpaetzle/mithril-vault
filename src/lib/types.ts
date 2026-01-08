@@ -1,53 +1,70 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-export interface DatabaseInfo {
-  name: string;
-  path: string;
-  isModified: boolean;
-  rootGroupId: string;
-}
+import { z } from "zod/v4";
 
-export interface Entry {
-  id: string;
-  groupId: string;
-  title: string;
-  username: string;
-  url?: string;
-  notes?: string;
-  createdAt: string;
-  modifiedAt: string;
-}
+export const DatabaseInfoSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  isModified: z.boolean(),
+  rootGroupId: z.string(),
+});
+export type DatabaseInfo = z.infer<typeof DatabaseInfoSchema>;
+
+export const EntrySchema = z.object({
+  id: z.string(),
+  groupId: z.string(),
+  title: z.string(),
+  username: z.string(),
+  url: z.string().optional(),
+  notes: z.string().optional(),
+  createdAt: z.string(),
+  modifiedAt: z.string(),
+});
+export type Entry = z.infer<typeof EntrySchema>;
 
 export interface Group {
   id: string;
-  parentId?: string;
+  parentId?: string | undefined;
   name: string;
-  icon?: string;
+  icon?: string | undefined;
   children: Group[];
 }
 
-export interface PasswordGeneratorOptions {
-  length: number;
-  uppercase: boolean;
-  lowercase: boolean;
-  numbers: boolean;
-  symbols: boolean;
-  excludeAmbiguous: boolean;
-  excludeChars?: string;
-}
+export const GroupSchema: z.ZodType<Group> = z.object({
+  id: z.string(),
+  parentId: z.string().optional(),
+  name: z.string(),
+  icon: z.string().optional(),
+  children: z.lazy(() => z.array(GroupSchema)),
+});
 
-export interface CreateEntryData {
-  title: string;
-  username: string;
-  password: string;
-  url?: string;
-  notes?: string;
-}
+export const PasswordGeneratorOptionsSchema = z.object({
+  length: z.number().int().min(1).max(128),
+  uppercase: z.boolean(),
+  lowercase: z.boolean(),
+  numbers: z.boolean(),
+  symbols: z.boolean(),
+  excludeAmbiguous: z.boolean(),
+  excludeChars: z.string().optional(),
+});
+export type PasswordGeneratorOptions = z.infer<
+  typeof PasswordGeneratorOptionsSchema
+>;
 
-export interface UpdateEntryData {
-  title?: string;
-  username?: string;
-  password?: string;
-  url?: string;
-  notes?: string;
-}
+export const CreateEntryDataSchema = z.object({
+  title: z.string().min(1),
+  username: z.string(),
+  password: z.string(),
+  url: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type CreateEntryData = z.infer<typeof CreateEntryDataSchema>;
+
+export const UpdateEntryDataSchema = z.object({
+  title: z.string().min(1).optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
+  url: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type UpdateEntryData = z.infer<typeof UpdateEntryDataSchema>;
