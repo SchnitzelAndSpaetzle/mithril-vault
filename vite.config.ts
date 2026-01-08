@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": import.meta.dirname + "/src",
+      "@": new URL("./src", import.meta.url).pathname,
     },
   },
   clearScreen: false,
