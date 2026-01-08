@@ -21,7 +21,7 @@ import type {
 
 const PathPasswordSchema = z.object({
   path: z.string().min(1),
-  password: z.string().min(1),
+  password: z.string().min(8),
 });
 
 const IdSchema = z.object({
