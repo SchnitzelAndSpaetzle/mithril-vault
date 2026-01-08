@@ -32,10 +32,13 @@
     "changelog:preview": "git-cliff -V >/dev/null 2>&1 || (echo 'git-cliff required: https://github.com/orhun/git-cliff#installation' && exit 1); git-cliff --unreleased"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "dayjs": "^1.11.19",
+    "lodash-es": "^4.17.22",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2"
+    "zod": "^4.3.5"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx}": [
@@ -52,6 +55,7 @@
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
+    "@types/lodash-es": "^4.17.12",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

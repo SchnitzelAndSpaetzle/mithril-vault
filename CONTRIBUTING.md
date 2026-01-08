@@ -7,6 +7,7 @@ Thank you for your interest in contributing to MithrilVault! This document provi
 - [Development Setup](#development-setup)
 - [Code Style Guidelines](#code-style-guidelines)
 - [Commit Message Guidelines](#commit-message-guidelines)
+- [Signed Commits](#signed-commits)
 - [Pull Request Process](#pull-request-process)
 - [Testing](#testing)
 - [Security](#security)
@@ -197,6 +198,12 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/) t
 - `extension` - Browser extension
 - `sync` - Cloud sync
 - `deps` - Dependencies
+
+## Signed Commits
+
+We prefer signed commits so GitHub can verify contributions. Follow the setup guide:
+
+- docs/signed-commits.md
 
 ### Examples
 
