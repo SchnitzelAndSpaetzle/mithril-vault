@@ -1,15 +1,52 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {name}! You've been greeted from Rust!")
-}
+
+pub mod commands;
+pub mod models;
+pub mod services;
+pub mod utils;
+
+use commands::{
+    add_recent_database, calculate_password_strength, clear_recent_databases, close_database,
+    create_database, create_entry, create_group, delete_entry, delete_group, generate_passphrase,
+    generate_password, get_entry, get_entry_password, get_group, get_settings, list_entries,
+    list_groups, lock_database, move_entry, move_group, open_database, remove_recent_database,
+    save_database, unlock_database, update_entry, update_group, update_settings,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[allow(clippy::expect_used)] // Panic is intentional: app cannot continue if Tauri builder fails
+#[allow(clippy::expect_used)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            open_database,
+            close_database,
+            create_database,
+            save_database,
+            lock_database,
+            unlock_database,
+            list_entries,
+            get_entry,
+            get_entry_password,
+            create_entry,
+            update_entry,
+            delete_entry,
+            move_entry,
+            list_groups,
+            get_group,
+            create_group,
+            update_group,
+            delete_group,
+            move_group,
+            generate_password,
+            generate_passphrase,
+            calculate_password_strength,
+            get_settings,
+            update_settings,
+            add_recent_database,
+            remove_recent_database,
+            clear_recent_databases,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
