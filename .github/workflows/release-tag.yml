@@ -63,8 +63,9 @@ jobs:
       - name: Trigger release build
         run: |
           gh api repos/${{ github.repository }}/dispatches \
-            -f event_type=release-build \
-            -f client_payload='{"version":"${{ inputs.version }}","draft":${{ inputs.draft }}}'
+            --raw-field event_type=release-build \
+            --field client_payload[version]="${{ inputs.version }}" \
+            --field client_payload[draft]=${{ inputs.draft }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
