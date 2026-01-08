@@ -67,8 +67,7 @@
     "category": "Utility",
     "shortDescription": "A modern, cross-platform password manager",
     "longDescription": "MithrilVault is a modern, cross-platform password manager with full KeePass compatibility. Built with Tauri, React, and Rust for security and performance.",
-    "copyright": "Copyright © 2024 MithrilVault contributors",
-    "licenseFile": "../LICENSE"
+    "copyright": "Copyright © 2024 MithrilVault contributors"
   },
   "plugins": {
     "updater": {
