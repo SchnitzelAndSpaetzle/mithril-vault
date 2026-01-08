@@ -14,11 +14,7 @@ pub async fn close_database() -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn create_database(
-    path: String,
-    password: String,
-    name: String,
-) -> Result<(), AppError> {
+pub async fn create_database(path: String, password: String, name: String) -> Result<(), AppError> {
     let _ = (path, password, name);
     Err(AppError::NotImplemented("create_database".into()))
 }

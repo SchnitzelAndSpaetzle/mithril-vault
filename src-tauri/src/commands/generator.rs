@@ -57,9 +57,7 @@ pub async fn generate_password(options: PasswordGeneratorOptions) -> Result<Stri
 }
 
 #[tauri::command]
-pub async fn generate_passphrase(
-    options: PassphraseGeneratorOptions,
-) -> Result<String, AppError> {
+pub async fn generate_passphrase(options: PassphraseGeneratorOptions) -> Result<String, AppError> {
     let _ = options;
     Err(AppError::NotImplemented("generate_passphrase".into()))
 }
