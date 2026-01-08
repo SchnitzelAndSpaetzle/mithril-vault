@@ -72,7 +72,7 @@ jobs:
         run: |
           cargo cyclonedx \
             --format json \
-            --spec-version 1.6 \
+            --spec-version 1.5 \
             --describe crates
           mv bom.json ../sbom-backend.json
 
@@ -101,7 +101,7 @@ jobs:
           echo "## SBOM Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ steps.metadata.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Format:** CycloneDX 1.6 (JSON)" >> $GITHUB_STEP_SUMMARY
+          echo "**Format:** CycloneDX (JSON)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Count components
