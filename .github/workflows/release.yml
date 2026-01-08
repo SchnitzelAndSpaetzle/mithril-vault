@@ -37,12 +37,17 @@ jobs:
             exit 1
           fi
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Bump version in config files
         run: |
           VERSION="${{ inputs.version }}"
           jq --arg v "$VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
           jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
           sed -i 's/^version = ".*"/version = "'"$VERSION"'"/' src-tauri/Cargo.toml
+          # Update Cargo.lock to match new version
+          cd src-tauri && cargo update -p mithril-vault
           echo "Updated versions to $VERSION"
 
       - name: Create Pull Request
@@ -61,6 +66,7 @@ jobs:
             - `package.json`
             - `src-tauri/tauri.conf.json`
             - `src-tauri/Cargo.toml`
+            - `src-tauri/Cargo.lock`
 
             ---
             ### Next Steps
