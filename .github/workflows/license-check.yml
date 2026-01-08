@@ -43,5 +43,5 @@ jobs:
       - name: Check Cargo licenses
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          command: check --config ../deny.toml licenses bans sources
+          command: check licenses bans sources
           manifest-path: src-tauri/Cargo.toml
