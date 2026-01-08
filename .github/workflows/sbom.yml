@@ -82,8 +82,8 @@ jobs:
           cargo cyclonedx \
             --format json \
             --spec-version 1.5 \
-            --describe crate
-          mv bom.json ../sbom-backend.json
+            --override-filename sbom-backend
+          mv sbom-backend.json ../
 
       # Merge SBOMs into unified document
       - name: Install CycloneDX CLI
