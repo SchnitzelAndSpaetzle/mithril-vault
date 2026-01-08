@@ -1,0 +1,127 @@
+name: SBOM Generation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+    inputs:
+      version:
+        description: "Version for SBOM metadata"
+        required: false
+        type: string
+        default: "dev"
+    outputs:
+      sbom-artifact:
+        description: "Name of the uploaded SBOM artifact"
+        value: ${{ jobs.generate.outputs.artifact-name }}
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.metadata.outputs.artifact-name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set metadata
+        id: metadata
+        run: |
+          if [ "${{ inputs.version }}" != "" ] && [ "${{ inputs.version }}" != "dev" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "artifact-name=sbom-cyclonedx-$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Frontend SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom-frontend.json
+          upload-artifact: false
+
+      # Backend SBOM - using official CycloneDX Cargo tool
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx
+
+      - name: Generate Backend SBOM (Cargo)
+        working-directory: src-tauri
+        run: |
+          cargo cyclonedx \
+            --format json \
+            --spec-version 1.6 \
+            --describe crates
+          mv bom.json ../sbom-backend.json
+
+      # Merge SBOMs into unified document
+      - name: Install CycloneDX CLI
+        run: |
+          npm install -g @cyclonedx/cyclonedx-cli
+
+      - name: Merge SBOMs
+        run: |
+          cyclonedx merge \
+            --input-files sbom-frontend.json sbom-backend.json \
+            --output-file mithril-vault-sbom.json \
+            --name "MithrilVault" \
+            --version "${{ steps.metadata.outputs.version }}"
+
+      - name: Validate merged SBOM
+        run: |
+          cyclonedx validate \
+            --input-file mithril-vault-sbom.json \
+            --input-format json \
+            --fail-on-errors
+
+      - name: Generate SBOM summary
+        run: |
+          echo "## SBOM Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.metadata.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Format:** CycloneDX 1.6 (JSON)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count components
+          FRONTEND_COUNT=$(jq '.components | length' sbom-frontend.json)
+          BACKEND_COUNT=$(jq '.components | length' sbom-backend.json)
+          TOTAL_COUNT=$(jq '.components | length' mithril-vault-sbom.json)
+
+          echo "### Component Counts" >> $GITHUB_STEP_SUMMARY
+          echo "| Source | Components |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend (Bun) | $FRONTEND_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend (Cargo) | $BACKEND_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total (merged)** | **$TOTAL_COUNT** |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.artifact-name }}
+          path: |
+            mithril-vault-sbom.json
+            sbom-frontend.json
+            sbom-backend.json
+          retention-days: 90

@@ -65,6 +65,38 @@ If you act in good faith, avoid privacy violations, and do not exploit the vulne
 4. **Follow secure coding guidelines** - See [AGENTS.md](AGENTS.md) for detailed requirements
 5. **Request security review** - Tag security-sensitive PRs for additional review
 
+## SBOM and Supply Chain Security
+
+Every MithrilVault release includes a Software Bill of Materials (SBOM) in CycloneDX format, documenting all dependencies.
+
+### Downloading the SBOM
+
+SBOMs are attached to each [GitHub Release](https://github.com/SchnitzelAndSpaetzle/mithril-vault/releases) as `mithril-vault-sbom.json`.
+
+### Verifying Release Attestation
+
+```bash
+gh attestation verify mithril-vault-sbom.json --owner SchnitzelAndSpaetzle
+```
+
+### Scanning for Vulnerabilities
+
+Use [Grype](https://github.com/anchore/grype) or similar tools to scan the SBOM:
+
+```bash
+grype sbom:mithril-vault-sbom.json
+```
+
+### SBOM Contents
+
+The SBOM includes:
+
+- All npm dependencies (frontend)
+- All Cargo dependencies (backend)
+- Package versions and licenses
+- Package URLs (purl) for identification
+- CycloneDX 1.6 specification compliance
+
 ## Security Architecture
 
 MithrilVault is designed with security in mind:
@@ -102,7 +134,7 @@ We do not currently have a formal bug bounty program. However, we deeply appreci
 
 We would like to thank the following security researchers for their responsible disclosures:
 
-*No disclosures yet - be the first!*
+_No disclosures yet - be the first!_
 
 ---
 
