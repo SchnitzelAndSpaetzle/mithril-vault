@@ -158,10 +158,13 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            bundles: msi
           - os: macos-latest
             target: aarch64-apple-darwin
+            bundles: app
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -191,7 +194,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build Tauri app
-        run: bun run tauri build
+        run: bunx tauri build --bundles ${{ matrix.bundles }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
 
@@ -221,7 +224,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-macos
-          path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/macos/*.app
+          path: src-tauri/target/release/bundle/macos/*.app
           if-no-files-found: ignore

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mithril-vault",
+  "productName": "MithrilVault",
   "version": "0.1.1",
   "identifier": "com.mithril-vault.app",
   "build": {
@@ -12,13 +12,46 @@
   "app": {
     "windows": [
       {
-        "title": "mithril-vault",
-        "width": 800,
-        "height": 600
+        "label": "main",
+        "title": "MithrilVault",
+        "width": 1024,
+        "height": 768,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true,
+        "focus": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' asset: http://asset.localhost data: blob:",
+        "font-src": "'self' data:",
+        "connect-src": "ipc: http://ipc.localhost https://github.com",
+        "frame-src": "'none'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      },
+      "devCsp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' asset: http://asset.localhost data: blob:",
+        "font-src": "'self' data:",
+        "connect-src": "ipc: http://ipc.localhost ws://localhost:1420 ws://localhost:1421 ws://127.0.0.1:1420 ws://127.0.0.1:1421 http://localhost:1420",
+        "frame-src": "'none'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'"
+      },
+      "headers": {
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp"
+      }
     }
   },
   "bundle": {
@@ -30,7 +63,11 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Utility",
+    "shortDescription": "A modern, cross-platform password manager",
+    "longDescription": "MithrilVault is a modern, cross-platform password manager with full KeePass compatibility. Built with Tauri, React, and Rust for security and performance.",
+    "copyright": "Copyright © 2024 MithrilVault contributors"
   },
   "plugins": {
     "updater": {
