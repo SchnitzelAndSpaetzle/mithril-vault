@@ -85,10 +85,11 @@ jobs:
             --override-filename sbom-backend
           mv sbom-backend.json ../
 
-      # Merge SBOMs into unified document
       - name: Install CycloneDX CLI
         run: |
-          npm install -g cyclonedx-cli
+          curl -LO https://github.com/CycloneDX/cyclonedx-cli/releases/latest/download/cyclonedx-linux-x64
+          chmod +x cyclonedx-linux-x64
+          sudo mv cyclonedx-linux-x64 /usr/local/bin/cyclonedx
 
       - name: Merge SBOMs
         run: |
