@@ -41,6 +41,9 @@ const CopyPasswordSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
 });
 
+/**
+ * Database lifecycle commands for opening, creating, saving, and closing a vault.
+ */
 export const database = {
   async open(path: string, password: string): Promise<DatabaseInfo> {
     PathPasswordSchema.parse({ path, password });
@@ -63,6 +66,9 @@ export const database = {
   },
 };
 
+/**
+ * Entry CRUD operations (excluding passwords which are fetched separately).
+ */
 export const entries = {
   async list(): Promise<Entry[]> {
     const result = await invoke("list_entries");
@@ -101,6 +107,9 @@ export const entries = {
   },
 };
 
+/**
+ * Group CRUD operations for organizing entries.
+ */
 export const groups = {
   async list(): Promise<Group[]> {
     const result = await invoke("list_groups");
@@ -133,6 +142,9 @@ export const groups = {
   },
 };
 
+/**
+ * Password generation commands backed by the Rust generator.
+ */
 export const generator = {
   async generate(options: PasswordGeneratorOptions): Promise<string> {
     PasswordGeneratorOptionsSchema.parse(options);
@@ -141,6 +153,9 @@ export const generator = {
   },
 };
 
+/**
+ * Clipboard actions for sensitive data (copy and clear).
+ */
 export const clipboard = {
   async copyPassword(entryId: string, timeoutMs?: number): Promise<void> {
     CopyPasswordSchema.parse({ entryId, timeoutMs });
