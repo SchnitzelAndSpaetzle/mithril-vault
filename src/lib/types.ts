@@ -24,19 +24,21 @@ export type Entry = z.infer<typeof EntrySchema>;
 
 export interface Group {
   id: string;
-  parentId?: string;
+  parentId?: string | undefined;
   name: string;
-  icon?: string;
+  icon?: string | undefined;
   children: Group[];
 }
 
-export const GroupSchema: z.ZodType<Group> = z.object({
-  id: z.string(),
-  parentId: z.string().optional(),
-  name: z.string(),
-  icon: z.string().optional(),
-  children: z.lazy(() => z.array(GroupSchema)),
-});
+export const GroupSchema: z.ZodType<Group> = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    parentId: z.string().optional(),
+    name: z.string(),
+    icon: z.string().optional(),
+    children: z.array(GroupSchema),
+  })
+);
 
 export const PasswordGeneratorOptionsSchema = z.object({
   length: z.number().int().min(1).max(128),
