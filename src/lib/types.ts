@@ -24,9 +24,9 @@ export type Entry = z.infer<typeof EntrySchema>;
 
 export interface Group {
   id: string;
-  parentId?: string | undefined;
+  parentId?: string;
   name: string;
-  icon?: string | undefined;
+  icon?: string;
   children: Group[];
 }
 
