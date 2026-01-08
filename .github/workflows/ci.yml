@@ -194,7 +194,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build Tauri app
-        run: bun run tauri build -- --bundles ${{ matrix.bundles }}
+        run: bunx tauri build --bundles ${{ matrix.bundles }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
 
