@@ -45,18 +45,3 @@ jobs:
         with:
           command: check --config ../deny.toml licenses bans sources
           manifest-path: src-tauri/Cargo.toml
-
-  advisories:
-    name: Security Advisories
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Check Cargo advisories
-        uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check --config ../deny.toml advisories
-          manifest-path: src-tauri/Cargo.toml

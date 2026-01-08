@@ -3,9 +3,6 @@ name: Release Build
 on:
   repository_dispatch:
     types: [release-build]
-  push:
-    tags:
-      - "v[0-9]+.*"
 
 permissions:
   contents: write

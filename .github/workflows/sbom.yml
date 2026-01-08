@@ -1,10 +1,6 @@
 name: SBOM Generation
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_call:
     inputs:
       version:
