@@ -73,7 +73,7 @@ jobs:
           cargo cyclonedx \
             --format json \
             --spec-version 1.5 \
-            --describe crates
+            --describe crate
           mv bom.json ../sbom-backend.json
 
       # Merge SBOMs into unified document
