@@ -64,8 +64,17 @@ jobs:
           upload-artifact: false
 
       # Backend SBOM - using official CycloneDX Cargo tool
+      - name: Cache cargo-cyclonedx binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-cyclonedx
+          key: ${{ runner.os }}-cargo-cyclonedx-v1
+
       - name: Install cargo-cyclonedx
-        run: cargo install cargo-cyclonedx
+        run: |
+          if ! command -v cargo-cyclonedx >/dev/null 2>&1; then
+            cargo install cargo-cyclonedx
+          fi
 
       - name: Generate Backend SBOM (Cargo)
         working-directory: src-tauri
