@@ -99,7 +99,7 @@ The SBOM includes:
 - All Cargo dependencies (backend)
 - Package versions and licenses
 - Package URLs (purl) for identification
-- CycloneDX 1.5 specification compliance
+- CycloneDX specification compliance
 
 ## Security Architecture
 
