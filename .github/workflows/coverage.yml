@@ -33,6 +33,11 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install Tauri dependencies (Linux)
         run: |
           sudo apt-get update
@@ -40,7 +45,8 @@ jobs:
 
       - name: Run Rust tests with coverage
         working-directory: src-tauri
-        run: cargo llvm-cov --lcov --output-path rust-lcov.info
+        # Use --release to speed up Argon2 key derivation in KDBX tests
+        run: cargo llvm-cov --release --lcov --output-path rust-lcov.info
 
       # Upload to Codecov
       - name: Upload coverage to Codecov
