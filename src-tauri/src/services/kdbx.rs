@@ -4,7 +4,14 @@ use crate::models::database::DatabaseInfo;
 use crate::models::entry::{Entry, EntryListItem};
 use crate::models::error::AppError;
 use crate::models::group::Group;
-use keepass::db::NodeRef;
+use keepass::db::Node;
+use keepass::error::{
+    BlockStreamError,
+    CryptographyError,
+    DatabaseIntegrityError,
+    DatabaseKeyError,
+    DatabaseOpenError,
+};
 use keepass::{Database, DatabaseKey};
 use std::fs::File;
 use std::sync::Mutex;
@@ -43,17 +50,7 @@ impl KdbxService {
         let mut file = File::open(path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
 
         let key = DatabaseKey::new().with_password(password);
-        let db = Database::open(&mut file, key).map_err(|e| {
-            let err_str = e.to_string();
-            if err_str.contains("Invalid credentials")
-                || err_str.contains("decryption")
-                || err_str.contains("HMAC")
-            {
-                AppError::InvalidPassword
-            } else {
-                AppError::Kdbx(err_str)
-            }
-        })?;
+        let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
         let root_group_id = db.root.uuid.to_string();
         let name = db.root.name.clone();
@@ -95,17 +92,7 @@ impl KdbxService {
             .with_keyfile(&mut keyfile)
             .map_err(|e| AppError::Kdbx(e.to_string()))?;
 
-        let db = Database::open(&mut file, key).map_err(|e| {
-            let err_str = e.to_string();
-            if err_str.contains("Invalid credentials")
-                || err_str.contains("decryption")
-                || err_str.contains("HMAC")
-            {
-                AppError::InvalidPassword
-            } else {
-                AppError::Kdbx(err_str)
-            }
-        })?;
+        let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
         let root_group_id = db.root.uuid.to_string();
         let name = db.root.name.clone();
@@ -230,6 +217,25 @@ impl KdbxService {
     }
 }
 
+fn map_open_error(err: DatabaseOpenError) -> AppError {
+    match err {
+        DatabaseOpenError::Key(DatabaseKeyError::IncorrectKey) => AppError::InvalidPassword,
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::BlockStream(
+            BlockStreamError::BlockHashMismatch { .. },
+        )) => AppError::InvalidPassword,
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::HeaderHashMismatch) => {
+            AppError::InvalidPassword
+        }
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::Cryptography(
+            CryptographyError::Unpadding(_),
+        )) => AppError::InvalidPassword,
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::Cryptography(
+            CryptographyError::Padding(_),
+        )) => AppError::InvalidPassword,
+        other => AppError::Kdbx(other.to_string()),
+    }
+}
+
 impl Default for KdbxService {
     fn default() -> Self {
         Self::new()
@@ -246,8 +252,8 @@ fn find_group_by_id<'a>(group: &'a keepass::db::Group, id: &str) -> Option<&'a k
         return Some(group);
     }
 
-    for node in group {
-        if let NodeRef::Group(child) = node {
+    for node in &group.children {
+        if let Node::Group(child) = node {
             if let Some(found) = find_group_by_id(child, id) {
                 return Some(found);
             }
@@ -259,14 +265,14 @@ fn find_group_by_id<'a>(group: &'a keepass::db::Group, id: &str) -> Option<&'a k
 
 /// Find an entry by its UUID string and return it converted to our Entry type
 fn find_entry_by_id(group: &keepass::db::Group, id: &str) -> Option<Entry> {
-    for node in group {
+    for node in &group.children {
         match node {
-            NodeRef::Entry(entry) => {
+            Node::Entry(entry) => {
                 if entry.uuid.to_string() == id {
                     return Some(convert_entry(entry, &group.uuid.to_string()));
                 }
             }
-            NodeRef::Group(child) => {
+            Node::Group(child) => {
                 if let Some(found) = find_entry_by_id(child, id) {
                     return Some(found);
                 }
@@ -286,9 +292,9 @@ enum PasswordSearchResult {
 
 /// Find an entry's password by its UUID string
 fn find_entry_password(group: &keepass::db::Group, id: &str) -> PasswordSearchResult {
-    for node in group {
+    for node in &group.children {
         match node {
-            NodeRef::Entry(entry) => {
+            Node::Entry(entry) => {
                 if entry.uuid.to_string() == id {
                     // Entry found - return password or empty string if field is missing
                     let password = entry
@@ -298,7 +304,7 @@ fn find_entry_password(group: &keepass::db::Group, id: &str) -> PasswordSearchRe
                     return PasswordSearchResult::Found(password);
                 }
             }
-            NodeRef::Group(child) => {
+            Node::Group(child) => {
                 if let PasswordSearchResult::Found(pw) = find_entry_password(child, id) {
                     return PasswordSearchResult::Found(pw);
                 }
@@ -311,8 +317,8 @@ fn find_entry_password(group: &keepass::db::Group, id: &str) -> PasswordSearchRe
 /// Collect entries from a specific group (non-recursive)
 fn collect_entries_from_group(group: &keepass::db::Group, entries: &mut Vec<EntryListItem>) {
     let group_id = group.uuid.to_string();
-    for node in group {
-        if let NodeRef::Entry(entry) = node {
+    for node in &group.children {
+        if let Node::Entry(entry) = node {
             entries.push(convert_entry_to_list_item(entry, &group_id));
         }
     }
@@ -321,12 +327,12 @@ fn collect_entries_from_group(group: &keepass::db::Group, entries: &mut Vec<Entr
 /// Collect all entries recursively from a group
 fn collect_all_entries(group: &keepass::db::Group, entries: &mut Vec<EntryListItem>) {
     let group_id = group.uuid.to_string();
-    for node in group {
+    for node in &group.children {
         match node {
-            NodeRef::Entry(entry) => {
+            Node::Entry(entry) => {
                 entries.push(convert_entry_to_list_item(entry, &group_id));
             }
-            NodeRef::Group(child) => {
+            Node::Group(child) => {
                 collect_all_entries(child, entries);
             }
         }
@@ -371,8 +377,8 @@ fn convert_group(group: &keepass::db::Group, parent_id: Option<&str>) -> Group {
     let id = group.uuid.to_string();
     let mut children = Vec::new();
 
-    for node in group {
-        if let NodeRef::Group(child) = node {
+    for node in &group.children {
+        if let Node::Group(child) = node {
             children.push(convert_group(child, Some(&id)));
         }
     }
@@ -386,28 +392,4 @@ fn convert_group(group: &keepass::db::Group, parent_id: Option<&str>) -> Group {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_service_creation() {
-        let service = KdbxService::new();
-        // Service should be created without an open database
-        assert!(service.get_info().is_err());
-    }
-
-    #[test]
-    fn test_close_without_open() {
-        let service = KdbxService::new();
-        let result = service.close();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_list_entries_without_open() {
-        let service = KdbxService::new();
-        let result = service.list_entries(None);
-        assert!(result.is_err());
-    }
-}
+// Tests live in src-tauri/tests/kdbx_integration.rs

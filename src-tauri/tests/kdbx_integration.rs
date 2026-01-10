@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Integration tests for KDBX database operations using keepass-rs
+//! Integration tests for KDBX database operations via KdbxService
 
 #![allow(clippy::expect_used)] // expect() is acceptable in tests
 
-use keepass::{db::NodeRef, Database, DatabaseKey};
-use std::fs::File;
+use mithril_vault_lib::models::error::AppError;
+use mithril_vault_lib::services::kdbx::KdbxService;
 use std::path::PathBuf;
 
 /// Get the path to a test fixture file
@@ -27,12 +27,13 @@ fn test_open_kdbx4_with_password() {
         return;
     }
 
-    let mut file = File::open(&path).expect("Failed to open test file");
-    let key = DatabaseKey::new().with_password("test123");
-    let db = Database::open(&mut file, key).expect("Failed to open KDBX4 database");
+    let service = KdbxService::new();
+    let info = service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open KDBX4 database");
 
     // Verify database was opened successfully
-    assert!(!db.root.name.is_empty(), "Root group should have a name");
+    assert!(!info.name.is_empty(), "Root group should have a name");
 }
 
 #[test]
@@ -46,11 +47,12 @@ fn test_open_kdbx3_with_password() {
         return;
     }
 
-    let mut file = File::open(&path).expect("Failed to open test file");
-    let key = DatabaseKey::new().with_password("test123");
-    let db = Database::open(&mut file, key).expect("Failed to open KDBX3 database");
+    let service = KdbxService::new();
+    let info = service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open KDBX3 database");
 
-    assert!(!db.root.name.is_empty(), "Root group should have a name");
+    assert!(!info.name.is_empty(), "Root group should have a name");
 }
 
 #[test]
@@ -66,16 +68,15 @@ fn test_open_with_keyfile() {
         return;
     }
 
-    let mut db_file = File::open(&db_path).expect("Failed to open test database");
-    let mut key_file = File::open(&key_path).expect("Failed to open keyfile");
-
-    let key = DatabaseKey::new()
-        .with_password("test123")
-        .with_keyfile(&mut key_file)
-        .expect("Failed to load keyfile");
-
-    let db = Database::open(&mut db_file, key).expect("Failed to open database with keyfile");
-    assert!(!db.root.name.is_empty());
+    let service = KdbxService::new();
+    let info = service
+        .open_with_keyfile(
+            &db_path.to_string_lossy(),
+            "test123",
+            &key_path.to_string_lossy(),
+        )
+        .expect("Failed to open database with keyfile");
+    assert!(!info.name.is_empty());
 }
 
 #[test]
@@ -86,108 +87,188 @@ fn test_invalid_password() {
         return;
     }
 
-    let mut file = File::open(&path).expect("Failed to open test file");
-    let key = DatabaseKey::new().with_password("wrong_password");
-    let result = Database::open(&mut file, key);
+    let service = KdbxService::new();
+    let result = service.open(&path.to_string_lossy(), "wrong_password");
 
-    assert!(result.is_err(), "Should fail with invalid password");
+    assert!(
+        matches!(result, Err(AppError::InvalidPassword)),
+        "Should fail with invalid password"
+    );
 }
 
 #[test]
 fn test_file_not_found() {
     let path = fixture_path("nonexistent.kdbx");
-    let result = File::open(&path);
+    let service = KdbxService::new();
+    let result = service.open(&path.to_string_lossy(), "test123");
 
-    assert!(result.is_err(), "Should fail when file doesn't exist");
+    assert!(
+        matches!(result, Err(AppError::InvalidPath(_))),
+        "Should fail when file doesn't exist"
+    );
 }
 
 #[test]
-fn test_read_entries() {
+fn test_list_entries_and_get_entry() {
     let path = fixture_path("test-kdbx4.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
     }
 
-    let mut file = File::open(&path).expect("Failed to open test file");
-    let key = DatabaseKey::new().with_password("test123");
-    let db = Database::open(&mut file, key).expect("Failed to open database");
+    let service = KdbxService::new();
+    let info = service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open database");
 
-    // Count entries in the database
-    let entry_count = count_entries(&db.root);
-    println!("Found {entry_count} entries in database");
+    let entries = service.list_entries(None).expect("Failed to list entries");
+    assert!(!entries.is_empty(), "Fixture should have entries");
 
-    // The test database should have at least one entry
-    // (adjust based on your test fixture content)
+    let entry_id = entries[0].id.clone();
+    let entry = service
+        .get_entry(&entry_id)
+        .expect("Failed to fetch entry");
+    assert_eq!(entry.id, entry_id);
+    assert_eq!(entry.group_id, entries[0].group_id);
+
+    let password = service
+        .get_entry_password(&entry_id)
+        .expect("Failed to fetch entry password");
+    let _ = password;
+
+    let entries_in_root = service
+        .list_entries(Some(&info.root_group_id))
+        .expect("Failed to list entries by group");
+    assert!(entries_in_root.len() <= entries.len());
 }
 
 #[test]
-fn test_read_groups() {
+fn test_list_groups_and_get_group() {
     let path = fixture_path("test-kdbx4.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
     }
 
-    let mut file = File::open(&path).expect("Failed to open test file");
-    let key = DatabaseKey::new().with_password("test123");
-    let db = Database::open(&mut file, key).expect("Failed to open database");
+    let service = KdbxService::new();
+    let info = service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open database");
 
-    // Count groups in the database
-    let group_count = count_groups(&db.root);
-    println!("Found {group_count} groups in database");
+    let groups = service.list_groups().expect("Failed to list groups");
+    assert!(!groups.is_empty(), "Should have at least the root group");
 
-    // Should have at least the root group
-    assert!(group_count >= 1, "Should have at least the root group");
+    let root = service
+        .get_group(&info.root_group_id)
+        .expect("Failed to fetch root group");
+    assert_eq!(root.id, info.root_group_id);
 }
 
 #[test]
-fn test_entry_fields() {
+fn test_entry_not_found() {
     let path = fixture_path("test-kdbx4.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
     }
 
-    let mut file = File::open(&path).expect("Failed to open test file");
-    let key = DatabaseKey::new().with_password("test123");
-    let db = Database::open(&mut file, key).expect("Failed to open database");
+    let service = KdbxService::new();
+    service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open database");
 
-    // Find an entry and verify we can read its fields
-    for node in &db.root {
-        if let NodeRef::Entry(entry) = node {
-            // Entry should have standard fields accessible
-            let title = entry.get_title();
-            let username = entry.get_username();
-            let password = entry.get_password();
-            let url = entry.get_url();
+    let result = service.get_entry("missing-entry-id");
+    assert!(
+        matches!(result, Err(AppError::EntryNotFound(_))),
+        "Should error for missing entry"
+    );
 
-            println!(
-                "Entry: title={title:?}, username={username:?}, has_password={}, url={url:?}",
-                password.is_some()
-            );
+    let password_result = service.get_entry_password("missing-entry-id");
+    assert!(
+        matches!(password_result, Err(AppError::EntryNotFound(_))),
+        "Should error for missing entry password"
+    );
+}
 
-            // At least title should be accessible
-            if title.is_some() {
-                return; // Test passed - we found and read an entry
-            }
-        }
+#[test]
+fn test_group_not_found() {
+    let path = fixture_path("test-kdbx4.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: fixture not found");
+        return;
     }
+
+    let service = KdbxService::new();
+    service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open database");
+
+    let result = service.get_group("missing-group-id");
+    assert!(
+        matches!(result, Err(AppError::GroupNotFound(_))),
+        "Should error for missing group"
+    );
 }
 
-/// Helper function to count entries (keepass-rs iterator already traverses all descendants)
-fn count_entries(group: &keepass::db::Group) -> usize {
-    group
-        .iter()
-        .filter(|node| matches!(node, NodeRef::Entry(_)))
-        .count()
+#[test]
+fn test_open_twice_and_close() {
+    let path = fixture_path("test-kdbx4.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open database");
+
+    let result = service.open(&path.to_string_lossy(), "test123");
+    assert!(
+        matches!(result, Err(AppError::DatabaseAlreadyOpen)),
+        "Should not allow opening twice"
+    );
+
+    service.close().expect("Failed to close database");
+    let info_after_close = service.get_info();
+    assert!(
+        matches!(info_after_close, Err(AppError::DatabaseNotOpen)),
+        "Should not return info after close"
+    );
 }
 
-/// Helper function to count groups (keepass-rs iterator already traverses all descendants)
-fn count_groups(group: &keepass::db::Group) -> usize {
-    // +1 for the root group itself, then count all descendant groups
-    1 + group
-        .iter()
-        .filter(|node| matches!(node, NodeRef::Group(_)))
-        .count()
+#[test]
+fn test_close_without_open() {
+    let service = KdbxService::new();
+    let result = service.close();
+    assert!(
+        matches!(result, Err(AppError::DatabaseNotOpen)),
+        "Should error when closing without an open database"
+    );
+}
+
+#[test]
+fn test_list_entries_without_open() {
+    let service = KdbxService::new();
+    let result = service.list_entries(None);
+    assert!(
+        matches!(result, Err(AppError::DatabaseNotOpen)),
+        "Should error when listing entries without an open database"
+    );
+}
+
+#[test]
+fn test_create_and_save_not_implemented() {
+    let service = KdbxService::new();
+    let create_result = service.create("path", "password", "name");
+    assert!(
+        matches!(create_result, Err(AppError::NotImplemented(_))),
+        "Create should be marked not implemented"
+    );
+
+    let save_result = service.save();
+    assert!(
+        matches!(save_result, Err(AppError::NotImplemented(_))),
+        "Save should be marked not implemented"
+    );
 }
