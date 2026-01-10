@@ -1,1 +1,10 @@
+#!/usr/bin/env sh
+
+# Get the repo root directory
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Frontend: lint and format staged files
 bunx lint-staged
+
+# Backend: format Rust code
+cd "$REPO_ROOT/src-tauri" && cargo fmt

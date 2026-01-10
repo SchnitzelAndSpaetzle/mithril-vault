@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+
+# Get the repo root directory
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Run clippy before pushing to catch issues early
+cd "$REPO_ROOT/src-tauri" && cargo clippy --all-targets --all-features -- -D warnings

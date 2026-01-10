@@ -29,3 +29,6 @@ coverage/
 
 # cargo-deny advisory cache
 /src-tauri/advisory-db/
+
+# Claude Code local settings
+.claude/
