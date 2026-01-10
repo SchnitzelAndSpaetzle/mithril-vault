@@ -17,6 +17,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Override target-cpu=native from .cargo/config.toml for CI compatibility
+  RUSTFLAGS: "-C target-cpu=generic"
 
 jobs:
   lint-frontend:

@@ -10,6 +10,10 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  # Override target-cpu=native from .cargo/config.toml for CI compatibility
+  RUSTFLAGS: "-C target-cpu=generic"
+
 jobs:
   coverage:
     runs-on: ubuntu-latest
