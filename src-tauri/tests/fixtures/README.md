@@ -2,41 +2,23 @@
 
 This directory contains KDBX test files for integration testing.
 
-## Required Test Files
+**Note:** These files are committed to the repository and contain only dummy test data.
+All files use password: `test123`
 
-Create these files using [KeePassXC](https://keepassxc.org/) or similar KeePass client:
+## Test Files
 
-### test-kdbx4.kdbx
-- **Format**: KDBX 4.0 (default in KeePassXC)
-- **Password**: `test123`
-- **Content**: Add at least one entry with title, username, password, and URL
+| File | Format | Auth | Content |
+|------|--------|------|---------|
+| `test-kdbx4.kdbx` | KDBX 4.0 | Password only | Test entry |
+| `test-kdbx3.kdbx` | KDBX 3.1 | Password only | Test entry |
+| `test-keyfile-kdbx4.kdbx` | KDBX 4.0 | Password + keyfile | Test entry |
+| `test-keyfile.keyx` | - | Keyfile for above | - |
 
-### test-kdbx3.kdbx
-- **Format**: KDBX 3.1 (select in KeePassXC: Database Settings → Encryption → KDBX 3.1)
-- **Password**: `test123`
-- **Content**: Add at least one entry
+## Recreating Test Files
 
-### test-keyfile.kdbx + test-keyfile.key
-- **Format**: KDBX 4.0
-- **Password**: `test123`
-- **Key File**: Generate a key file named `test-keyfile.key`
-- **Content**: Add at least one entry
+If you need to recreate these files using [KeePassXC](https://keepassxc.org/):
 
-## Creating Test Files with KeePassXC
-
-1. Open KeePassXC
-2. Click "New Database"
-3. Set database name and continue
-4. Set password to `test123`
-5. For KDBX3: Go to Database Settings → Encryption → Select "KDBX 3.1 (legacy)"
-6. For keyfile: Check "Add additional protection" and generate a key file
-7. Add a test entry:
-   - Title: "Test Entry"
-   - Username: "testuser"
-   - Password: "testpass123"
-   - URL: "https://example.com"
-8. Save the database to this directory
-
-## Note
-
-These files are `.gitignore`d by default for security. Each developer needs to create their own test fixtures locally.
+1. Create new database with password `test123`
+2. For KDBX3: Database Settings → Encryption → KDBX 3.1
+3. For keyfile: Add additional protection → generate keyfile
+4. Add test entry: Title="Test Entry", Username="testuser", Password="testpass123", URL="https://example.com"
