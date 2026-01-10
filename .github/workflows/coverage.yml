@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   coverage:
     runs-on: ubuntu-latest
@@ -49,11 +53,16 @@ jobs:
         run: cargo llvm-cov --release --lcov --output-path rust-lcov.info
 
       # Upload to Codecov
-      - name: Upload coverage to Codecov
+      - name: Upload frontend coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: ./coverage/lcov.info,./src-tauri/rust-lcov.info
-          flags: frontend,backend
+          files: ./coverage/lcov.info
+          flags: frontend
           fail_ci_if_error: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload backend coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./src-tauri/rust-lcov.info
+          flags: backend
+          fail_ci_if_error: true
