@@ -130,10 +130,14 @@ fn test_list_entries_and_get_entry() {
     assert_eq!(entry.id, entry_id);
     assert_eq!(entry.group_id, entries[0].group_id);
 
+    // Verify password retrieval works (fixture entries have passwords set)
     let password = service
         .get_entry_password(&entry_id)
         .expect("Failed to fetch entry password");
-    let _ = password;
+    assert!(
+        !password.is_empty(),
+        "Test fixture entry should have a password"
+    );
 
     let entries_in_root = service
         .list_entries(Some(&info.root_group_id))

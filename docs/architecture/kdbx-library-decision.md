@@ -78,9 +78,9 @@ We chose **keepass-rs** (crate name: `keepass`) as our KDBX library.
 
 ## Known Limitations
 
-1. **Write support is experimental**: Creating and saving databases is not production-ready. We return `NotImplemented` for these operations until write support matures.
+1. **Write support is functional but evolving**: Creating and saving databases (`create`, `save`, `save_as` in `KdbxService`) is implemented and covered by tests. The API may evolve as we add more features. Keyfile-authenticated databases currently cannot be saved with keyfile authentication preserved (see TODO in code).
 
-2. **No KDBX3 write support**: If needed, users must create databases in KDBX4 format.
+2. **No KDBX3 write support**: New databases are created in KDBX4 format. KDBX3 databases can be read but saving will convert them to KDBX4.
 
 ## Migration Path
 

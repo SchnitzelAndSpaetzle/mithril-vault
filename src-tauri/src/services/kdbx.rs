@@ -22,9 +22,14 @@ struct OpenDatabase {
     path: String,
     /// Whether the database has unsaved modifications
     is_modified: bool,
-    /// Password used to open/create the database (needed for saving)
-    /// TODO: Use zeroize crate for secure memory handling
+    /// Password used to open/create the database (needed for saving).
+    /// Note: keepass-rs already uses `secstr`/`zeroize` internally for key handling.
+    /// This field is a plain `String` kept only while the database is open.
     password: String,
+    // TODO: Store keyfile_path for databases opened with keyfile authentication.
+    // Currently, saving a database opened with a keyfile will lose the keyfile
+    // requirement, as we only store the password. This needs to be addressed
+    // before keyfile-authenticated databases can be safely modified and saved.
 }
 
 /// Service for KDBX database operations
@@ -150,9 +155,9 @@ impl KdbxService {
 
         if let Some(gid) = group_id {
             // Find the specific group and list its entries
-            if let Some(group) = find_group_by_id(&open_db.db.root, gid) {
-                collect_entries_from_group(group, &mut entries);
-            }
+            let group = find_group_by_id(&open_db.db.root, gid)
+                .ok_or_else(|| AppError::GroupNotFound(gid.to_string()))?;
+            collect_entries_from_group(group, &mut entries);
         } else {
             // List all entries in the database
             collect_all_entries(&open_db.db.root, &mut entries);
