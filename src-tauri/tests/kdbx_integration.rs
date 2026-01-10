@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Integration tests for KDBX database operations using keepass-rs
 
+#![allow(clippy::expect_used)] // expect() is acceptable in tests
+
 use keepass::{db::NodeRef, Database, DatabaseKey};
 use std::fs::File;
 use std::path::PathBuf;
@@ -19,9 +21,8 @@ fn test_open_kdbx4_with_password() {
     let path = fixture_path("test-kdbx4.kdbx");
     if !path.exists() {
         eprintln!(
-            "Skipping test: fixture not found at {:?}. \
-             Create with KeePassXC using password 'test123'",
-            path
+            "Skipping test: fixture not found at {path:?}. \
+             Create with KeePassXC using password 'test123'"
         );
         return;
     }
@@ -39,9 +40,8 @@ fn test_open_kdbx3_with_password() {
     let path = fixture_path("test-kdbx3.kdbx");
     if !path.exists() {
         eprintln!(
-            "Skipping test: fixture not found at {:?}. \
-             Create with KeePassXC (KDBX 3.1 format) using password 'test123'",
-            path
+            "Skipping test: fixture not found at {path:?}. \
+             Create with KeePassXC (KDBX 3.1 format) using password 'test123'"
         );
         return;
     }
@@ -115,7 +115,7 @@ fn test_read_entries() {
 
     // Count entries in the database
     let entry_count = count_entries(&db.root);
-    println!("Found {} entries in database", entry_count);
+    println!("Found {entry_count} entries in database");
 
     // The test database should have at least one entry
     // (adjust based on your test fixture content)
@@ -135,7 +135,7 @@ fn test_read_groups() {
 
     // Count groups in the database
     let group_count = count_groups(&db.root);
-    println!("Found {} groups in database", group_count);
+    println!("Found {group_count} groups in database");
 
     // Should have at least the root group
     assert!(group_count >= 1, "Should have at least the root group");
@@ -163,11 +163,8 @@ fn test_entry_fields() {
             let url = entry.get_url();
 
             println!(
-                "Entry: title={:?}, username={:?}, has_password={}, url={:?}",
-                title,
-                username,
-                password.is_some(),
-                url
+                "Entry: title={title:?}, username={username:?}, has_password={}, url={url:?}",
+                password.is_some()
             );
 
             // At least title should be accessible
