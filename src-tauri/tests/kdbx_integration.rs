@@ -180,11 +180,17 @@ fn test_entry_fields() {
 
 /// Helper function to count entries (keepass-rs iterator already traverses all descendants)
 fn count_entries(group: &keepass::db::Group) -> usize {
-    group.iter().filter(|node| matches!(node, NodeRef::Entry(_))).count()
+    group
+        .iter()
+        .filter(|node| matches!(node, NodeRef::Entry(_)))
+        .count()
 }
 
 /// Helper function to count groups (keepass-rs iterator already traverses all descendants)
 fn count_groups(group: &keepass::db::Group) -> usize {
     // +1 for the root group itself, then count all descendant groups
-    1 + group.iter().filter(|node| matches!(node, NodeRef::Group(_))).count()
+    1 + group
+        .iter()
+        .filter(|node| matches!(node, NodeRef::Group(_)))
+        .count()
 }
