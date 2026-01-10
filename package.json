@@ -18,6 +18,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
     "check": "concurrently -g \"bun run lint\" \"bun run format:check\"",
+    "check:rust": "cd src-tauri && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings",
+    "check:all": "concurrently -g \"bun run check\" \"bun run check:rust\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
