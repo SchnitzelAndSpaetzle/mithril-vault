@@ -15,18 +15,17 @@ allow = [
     "CC0-1.0",
     "ISC",
     "MIT",
-    "MIT/Apache-2.0",
     "MPL-2.0",
     "Unicode-3.0",
     "Unlicense",
-    "Zlib",
+    "Zlib"
 ]
 unused-allowed-license = "allow"
 confidence-threshold = 0.8
 
 [[licenses.exceptions]]
 crate = "mithril-vault"
-allow = ["GPL-3.0", "GPL-3.0-or-later"]
+allow = ["GPL-3.0"]
 
 [[licenses.clarify]]
 name = "ring"
@@ -44,6 +43,22 @@ wildcards = "deny"
 highlight = "all"
 workspace-default-features = "allow"
 external-default-features = "allow"
+skip = [
+    { crate = "windows-core", reason = "duplicate Windows core versions from tauri/keepass" },
+    { crate = "windows-link", reason = "duplicate Windows link versions from tauri/keepass" },
+    { crate = "windows_aarch64_gnullvm", reason = "duplicate Windows targets from tauri toolchain" },
+    { crate = "windows_aarch64_msvc", reason = "duplicate Windows targets from tauri toolchain" },
+    { crate = "windows_i686_gnu", reason = "duplicate Windows targets from tauri toolchain" },
+    { crate = "windows_i686_gnullvm", reason = "duplicate Windows targets from tauri toolchain" },
+    { crate = "windows_i686_msvc", reason = "duplicate Windows targets from tauri toolchain" },
+    { crate = "windows-result", reason = "duplicate versions from tauri and keepass stack" },
+    { crate = "windows-strings", reason = "duplicate versions from tauri and keepass stack" },
+    { crate = "windows-sys", reason = "duplicate Windows sys crate versions from tauri stack" },
+    { crate = "windows-targets", reason = "duplicate Windows target versions from tauri stack" },
+    { crate = "windows_x86_64_gnu", reason = "duplicate Windows targets from tauri toolchain" },
+    { crate = "windows_x86_64_gnullvm", reason = "duplicate Windows targets from tauri toolchain" },
+    { crate = "windows_x86_64_msvc", reason = "duplicate Windows targets from tauri toolchain" },
+]
 
 [advisories]
 version = 2
