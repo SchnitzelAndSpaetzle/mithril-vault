@@ -7,10 +7,7 @@ use crate::models::group::Group;
 use keepass::config::DatabaseConfig;
 use keepass::db::Node;
 use keepass::error::{
-    BlockStreamError,
-    CryptographyError,
-    DatabaseIntegrityError,
-    DatabaseKeyError,
+    BlockStreamError, CryptographyError, DatabaseIntegrityError, DatabaseKeyError,
     DatabaseOpenError,
 };
 use keepass::{Database, DatabaseKey};

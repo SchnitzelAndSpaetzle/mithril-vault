@@ -1,1 +1,7 @@
+#!/usr/bin/env sh
+
+# Frontend: lint and format staged files
 bunx lint-staged
+
+# Backend: format Rust code
+cd src-tauri && cargo fmt
