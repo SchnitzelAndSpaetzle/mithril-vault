@@ -26,10 +26,9 @@ struct OpenDatabase {
     /// Note: keepass-rs already uses `secstr`/`zeroize` internally for key handling.
     /// This field is a plain `String` kept only while the database is open.
     password: String,
-    // TODO: Store keyfile_path for databases opened with keyfile authentication.
-    // Currently, saving a database opened with a keyfile will lose the keyfile
-    // requirement, as we only store the password. This needs to be addressed
-    // before keyfile-authenticated databases can be safely modified and saved.
+    /// Optional keyfile path for databases using keyfile authentication.
+    /// When saving, the keyfile is re-read from this path to preserve authentication.
+    keyfile_path: Option<String>,
 }
 
 /// Service for KDBX database operations
@@ -66,6 +65,7 @@ impl KdbxService {
             path: path.to_string(),
             is_modified: false,
             password: password.to_string(),
+            keyfile_path: None,
         });
 
         Ok(DatabaseInfo {
@@ -109,6 +109,7 @@ impl KdbxService {
             path: path.to_string(),
             is_modified: false,
             password: password.to_string(),
+            keyfile_path: Some(keyfile_path.to_string()),
         });
 
         Ok(DatabaseInfo {
@@ -232,6 +233,7 @@ impl KdbxService {
             path: path.to_string(),
             is_modified: false,
             password: password.to_string(),
+            keyfile_path: None,
         });
 
         Ok(DatabaseInfo {
@@ -248,7 +250,17 @@ impl KdbxService {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
 
-        let key = DatabaseKey::new().with_password(&open_db.password);
+        let mut key = DatabaseKey::new().with_password(&open_db.password);
+
+        // Preserve keyfile authentication if present
+        if let Some(ref kf_path) = open_db.keyfile_path {
+            let mut keyfile = File::open(kf_path)
+                .map_err(|e| AppError::InvalidPath(format!("Keyfile not found: {e}")))?;
+            key = key
+                .with_keyfile(&mut keyfile)
+                .map_err(|e| AppError::Kdbx(e.to_string()))?;
+        }
+
         let mut file = File::create(&open_db.path).map_err(|e| AppError::Io(e.to_string()))?;
 
         open_db
@@ -267,7 +279,17 @@ impl KdbxService {
 
         // Use new password if provided, otherwise use existing
         let password = new_password.unwrap_or(&open_db.password);
-        let key = DatabaseKey::new().with_password(password);
+        let mut key = DatabaseKey::new().with_password(password);
+
+        // Preserve keyfile authentication if present
+        if let Some(ref kf_path) = open_db.keyfile_path {
+            let mut keyfile = File::open(kf_path)
+                .map_err(|e| AppError::InvalidPath(format!("Keyfile not found: {e}")))?;
+            key = key
+                .with_keyfile(&mut keyfile)
+                .map_err(|e| AppError::Kdbx(e.to_string()))?;
+        }
+
         let mut file = File::create(new_path).map_err(|e| AppError::Io(e.to_string()))?;
 
         open_db
