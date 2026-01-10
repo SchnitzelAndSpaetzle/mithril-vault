@@ -17,3 +17,5 @@ allow-licenses:
   - Unicode-3.0
   - Unlicense
   - Zlib
+allow-dependencies-licenses:
+  - pkg:cargo/rust-argon2
