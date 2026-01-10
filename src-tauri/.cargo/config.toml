@@ -1,0 +1,23 @@
+# Cargo configuration for optimal AES/crypto performance
+# See: https://github.com/sseemayer/keepass-rs/blob/master/.cargo/config.toml
+
+# Enable native CPU optimizations for better AES key derivation performance.
+# This enables AES-NI on x86/x64 CPUs that support it.
+[build]
+rustflags = ["-C", "target-cpu=native"]
+
+# ARM64 Linux: Enable hardware AES acceleration (requires Rust 1.61+)
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=native", "--cfg", "aes_armv8"]
+
+# ARM64 macOS (Apple Silicon): Enable hardware AES acceleration
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "target-cpu=native", "--cfg", "aes_armv8"]
+
+# ARM64 Android: Enable hardware AES acceleration
+[target.aarch64-linux-android]
+rustflags = ["--cfg", "aes_armv8"]
+
+# WebAssembly: Configure random number generation backend
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]

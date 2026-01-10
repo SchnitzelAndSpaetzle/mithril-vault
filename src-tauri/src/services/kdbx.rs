@@ -4,6 +4,7 @@ use crate::models::database::DatabaseInfo;
 use crate::models::entry::{Entry, EntryListItem};
 use crate::models::error::AppError;
 use crate::models::group::Group;
+use keepass::config::DatabaseConfig;
 use keepass::db::Node;
 use keepass::error::{
     BlockStreamError,
@@ -24,6 +25,9 @@ struct OpenDatabase {
     path: String,
     /// Whether the database has unsaved modifications
     is_modified: bool,
+    /// Password used to open/create the database (needed for saving)
+    /// TODO: Use zeroize crate for secure memory handling
+    password: String,
 }
 
 /// Service for KDBX database operations
@@ -59,6 +63,7 @@ impl KdbxService {
             db,
             path: path.to_string(),
             is_modified: false,
+            password: password.to_string(),
         });
 
         Ok(DatabaseInfo {
@@ -101,6 +106,7 @@ impl KdbxService {
             db,
             path: path.to_string(),
             is_modified: false,
+            password: password.to_string(),
         });
 
         Ok(DatabaseInfo {
@@ -199,39 +205,96 @@ impl KdbxService {
             .ok_or_else(|| AppError::GroupNotFound(id.to_string()))
     }
 
-    /// Create a new database (experimental - keepass-rs write support)
-    pub fn create(&self, _path: &str, _password: &str, _name: &str) -> Result<(), AppError> {
-        // Write support is experimental in keepass-rs
-        // For now, return not implemented
-        Err(AppError::NotImplemented(
-            "Database creation not yet implemented".into(),
-        ))
+    /// Create a new KDBX4 database
+    pub fn create(&self, path: &str, password: &str, name: &str) -> Result<DatabaseInfo, AppError> {
+        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+
+        if db_lock.is_some() {
+            return Err(AppError::DatabaseAlreadyOpen);
+        }
+
+        // Create a new database with default settings (KDBX4)
+        let mut db = Database::new(DatabaseConfig::default());
+        db.root.name = name.to_string();
+
+        // Save the database to disk
+        let key = DatabaseKey::new().with_password(password);
+        let mut file = File::create(path).map_err(|e| AppError::Io(e.to_string()))?;
+        db.save(&mut file, key)
+            .map_err(|e| AppError::Kdbx(e.to_string()))?;
+
+        let root_group_id = db.root.uuid.to_string();
+
+        *db_lock = Some(OpenDatabase {
+            db,
+            path: path.to_string(),
+            is_modified: false,
+            password: password.to_string(),
+        });
+
+        Ok(DatabaseInfo {
+            name: name.to_string(),
+            path: path.to_string(),
+            is_modified: false,
+            is_locked: false,
+            root_group_id,
+        })
     }
 
     /// Save the currently open database
     pub fn save(&self) -> Result<(), AppError> {
-        // Write support is experimental in keepass-rs
-        Err(AppError::NotImplemented(
-            "Database saving not yet implemented".into(),
-        ))
+        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+
+        let key = DatabaseKey::new().with_password(&open_db.password);
+        let mut file = File::create(&open_db.path).map_err(|e| AppError::Io(e.to_string()))?;
+
+        open_db
+            .db
+            .save(&mut file, key)
+            .map_err(|e| AppError::Kdbx(e.to_string()))?;
+
+        open_db.is_modified = false;
+        Ok(())
+    }
+
+    /// Save the database to a new path (Save As)
+    pub fn save_as(&self, new_path: &str, new_password: Option<&str>) -> Result<(), AppError> {
+        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+
+        // Use new password if provided, otherwise use existing
+        let password = new_password.unwrap_or(&open_db.password);
+        let key = DatabaseKey::new().with_password(password);
+        let mut file = File::create(new_path).map_err(|e| AppError::Io(e.to_string()))?;
+
+        open_db
+            .db
+            .save(&mut file, key)
+            .map_err(|e| AppError::Kdbx(e.to_string()))?;
+
+        // Update path and password if changed
+        open_db.path = new_path.to_string();
+        if new_password.is_some() {
+            open_db.password = password.to_string();
+        }
+        open_db.is_modified = false;
+
+        Ok(())
     }
 }
 
 fn map_open_error(err: DatabaseOpenError) -> AppError {
     match err {
-        DatabaseOpenError::Key(DatabaseKeyError::IncorrectKey) => AppError::InvalidPassword,
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::BlockStream(
-            BlockStreamError::BlockHashMismatch { .. },
-        )) => AppError::InvalidPassword,
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::HeaderHashMismatch) => {
-            AppError::InvalidPassword
-        }
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::Cryptography(
-            CryptographyError::Unpadding(_),
-        )) => AppError::InvalidPassword,
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::Cryptography(
-            CryptographyError::Padding(_),
-        )) => AppError::InvalidPassword,
+        // All of these errors indicate incorrect password/key
+        DatabaseOpenError::Key(DatabaseKeyError::IncorrectKey)
+        | DatabaseOpenError::DatabaseIntegrity(
+            DatabaseIntegrityError::BlockStream(BlockStreamError::BlockHashMismatch { .. })
+            | DatabaseIntegrityError::HeaderHashMismatch
+            | DatabaseIntegrityError::Cryptography(
+                CryptographyError::Unpadding(_) | CryptographyError::Padding(_),
+            ),
+        ) => AppError::InvalidPassword,
         other => AppError::Kdbx(other.to_string()),
     }
 }
