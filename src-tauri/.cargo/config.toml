@@ -1,5 +1,11 @@
 # Cargo configuration for optimal AES/crypto performance
 # See: https://github.com/sseemayer/keepass-rs/blob/master/.cargo/config.toml
+#
+# NOTE: `target-cpu=native` optimizes for the local CPU, which is ideal for
+# development but may produce binaries incompatible with older CPUs.
+# For release builds targeting distribution, CI should either:
+# - Override with RUSTFLAGS="-C target-cpu=generic"
+# - Or use Tauri's cross-compilation which handles this appropriately
 
 # Enable native CPU optimizations for better AES key derivation performance.
 # This enables AES-NI on x86/x64 CPUs that support it.
