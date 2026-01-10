@@ -2,8 +2,9 @@
 
 This directory contains KDBX test files for integration testing.
 
-**Note:** These files are committed to the repository and contain only dummy test data.
-All files use password: `test123`
+> **WARNING:** These fixtures are for automated testing **only**. Never store real credentials, personal data, or any sensitive information in these files.
+
+**Note:** These files are intentionally committed to the repository and contain only dummy test data. All files use the public test password: `test123` — this password must **never** be reused for any real database.
 
 ## Test Files
 
