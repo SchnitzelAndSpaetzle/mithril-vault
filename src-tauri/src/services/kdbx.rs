@@ -181,12 +181,15 @@ impl KdbxService {
     }
 
     /// Get the password for a specific entry
+    /// Returns empty string if entry exists but has no password field
     pub fn get_entry_password(&self, id: &str) -> Result<String, AppError> {
         let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
 
-        find_entry_password(&open_db.db.root, id)
-            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))
+        match find_entry_password(&open_db.db.root, id) {
+            PasswordSearchResult::Found(password) => Ok(password),
+            PasswordSearchResult::NotFound => Err(AppError::EntryNotFound(id.to_string())),
+        }
     }
 
     /// List all groups as a hierarchical structure
@@ -273,23 +276,36 @@ fn find_entry_by_id(group: &keepass::db::Group, id: &str) -> Option<Entry> {
     None
 }
 
+/// Result of searching for an entry's password
+enum PasswordSearchResult {
+    /// Entry not found
+    NotFound,
+    /// Entry found, password returned (empty string if no password field)
+    Found(String),
+}
+
 /// Find an entry's password by its UUID string
-fn find_entry_password(group: &keepass::db::Group, id: &str) -> Option<String> {
+fn find_entry_password(group: &keepass::db::Group, id: &str) -> PasswordSearchResult {
     for node in group {
         match node {
             NodeRef::Entry(entry) => {
                 if entry.uuid.to_string() == id {
-                    return entry.get_password().map(std::string::ToString::to_string);
+                    // Entry found - return password or empty string if field is missing
+                    let password = entry
+                        .get_password()
+                        .map(std::string::ToString::to_string)
+                        .unwrap_or_default();
+                    return PasswordSearchResult::Found(password);
                 }
             }
             NodeRef::Group(child) => {
-                if let Some(found) = find_entry_password(child, id) {
-                    return Some(found);
+                if let PasswordSearchResult::Found(pw) = find_entry_password(child, id) {
+                    return PasswordSearchResult::Found(pw);
                 }
             }
         }
     }
-    None
+    PasswordSearchResult::NotFound
 }
 
 /// Collect entries from a specific group (non-recursive)
