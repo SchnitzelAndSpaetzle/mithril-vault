@@ -23,9 +23,6 @@ allow = [
 unused-allowed-license = "allow"
 confidence-threshold = 0.8
 
-[[licenses.exceptions]]
-crate = "mithril-vault"
-allow = ["GPL-3.0-or-later"]
 
 [[licenses.clarify]]
 name = "ring"

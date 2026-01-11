@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 import { APP_NAME } from "@/lib/constants";
 
 function App() {

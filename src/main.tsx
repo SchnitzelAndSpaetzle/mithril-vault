@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

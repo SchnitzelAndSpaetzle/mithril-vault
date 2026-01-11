@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";

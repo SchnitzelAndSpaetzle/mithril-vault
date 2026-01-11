@@ -113,5 +113,5 @@ Scopes: `core`, `ui`, `cli`, `extension`, `sync`, `deps`
 
 ## License Compliance
 
-GPL-3.0-or-later. Dependencies must have compatible licenses. CI blocks incompatible licenses.
+MIT License. Dependencies must have compatible licenses. CI blocks incompatible licenses.
 See CONTRIBUTING.md for allowed/denied license list.
