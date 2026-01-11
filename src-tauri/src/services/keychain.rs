@@ -38,10 +38,12 @@ impl SecureStorageService {
             std::fs::remove_file(&snapshot_path)?;
         }
 
-        let mut key = Zeroizing::new([0u8; 32]);
-        OsRng.fill_bytes(&mut key[..]);
+        // Use Zeroizing<Vec<u8>> to ensure our copy of the key is cleared from memory.
+        // Stronghold takes ownership of a clone; our Zeroizing wrapper ensures our copy is zeroized.
+        let mut key = Zeroizing::new(vec![0u8; 32]);
+        OsRng.fill_bytes(&mut key);
 
-        let stronghold = Stronghold::new(snapshot_path.clone(), key.to_vec())
+        let stronghold = Stronghold::new(snapshot_path.clone(), (*key).clone())
             .map_err(|err| AppError::SecureStorage(err.to_string()))?;
 
         Ok(Self {
@@ -209,5 +211,40 @@ mod tests {
     fn test_default_session_ttl() {
         let ttl = SecureStorageService::default_session_ttl();
         assert_eq!(ttl, Duration::from_secs(300));
+    }
+
+    #[test]
+    fn test_session_key_ttl_expiration() {
+        let (service, _temp_dir) = create_test_service();
+        let test_key = b"expiring_key";
+
+        // Store with a short TTL (2 seconds)
+        service
+            .store_session_key(test_key, Duration::from_secs(2))
+            .expect("store");
+
+        // Verify the key is present immediately after storing
+        assert!(
+            service.session_key_present().expect("presence check"),
+            "Key should be present immediately after storing"
+        );
+        assert_eq!(
+            service.load_session_key().expect("load"),
+            Some(test_key.to_vec()),
+            "Key should be loadable immediately after storing"
+        );
+
+        // Wait for TTL to expire (TTL + buffer for timing variability)
+        std::thread::sleep(Duration::from_secs(3));
+
+        // Verify the key has expired
+        assert!(
+            !service.session_key_present().expect("presence check"),
+            "Key should have expired after TTL"
+        );
+        assert!(
+            service.load_session_key().expect("load").is_none(),
+            "Expired key should not be loadable"
+        );
     }
 }
