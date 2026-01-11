@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 
 export { debounce, throttle, cloneDeep, isEqual, pick, omit } from "lodash-es";
 export { default as dayjs } from "dayjs";

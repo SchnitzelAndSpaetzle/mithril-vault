@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 export * from "./ui";
 export * from "./layout";
 export * from "./entries";

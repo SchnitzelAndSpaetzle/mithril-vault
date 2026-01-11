@@ -334,7 +334,7 @@ If you discover a security vulnerability, **do not** open a public issue. Please
 
 ## License Policy
 
-MithrilVault is licensed under **GPL-3.0-or-later**. All dependencies must have compatible licenses.
+MithrilVault is licensed under the **MIT License**. All dependencies must have compatible licenses.
 
 ### Allowed Licenses
 
@@ -343,17 +343,16 @@ MithrilVault is licensed under **GPL-3.0-or-later**. All dependencies must have 
 | MIT, ISC, BSD-2-Clause, BSD-3-Clause, 0BSD | Allowed                 |
 | Apache-2.0, Zlib, Unlicense, CC0-1.0       | Allowed                 |
 | MPL-2.0                                    | Allowed (weak copyleft) |
-| LGPL-2.1, LGPL-3.0                         | Allowed                 |
-| GPL-3.0, GPL-3.0-or-later                  | Allowed                 |
+| LGPL-2.1, LGPL-3.0                         | Allowed (weak copyleft) |
 
 ### Denied Licenses
 
-| License            | Reason                      |
-| ------------------ | --------------------------- |
-| GPL-2.0-only       | Not compatible with GPL-3.0 |
-| AGPL-3.0           | Requires network disclosure |
-| Proprietary        | Not open source             |
-| Unknown/UNLICENSED | Cannot verify compatibility |
+| License            | Reason                               |
+| ------------------ | ------------------------------------ |
+| GPL-2.0, GPL-3.0   | Copyleft incompatible with MIT       |
+| AGPL-3.0           | Strong copyleft, network disclosure  |
+| Proprietary        | Not open source                      |
+| Unknown/UNLICENSED | Cannot verify compatibility          |
 
 ### Checking Licenses
 

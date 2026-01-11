@@ -51,8 +51,8 @@ We chose **keepass-rs** (crate name: `keepass`) as our KDBX library.
 ## Rationale
 
 ### 1. License Compatibility
-- **keepass-rs** uses MIT license, which is maximally permissive and compatible with our GPL-3.0 license
-- **kdbx-rs** uses GPL-3.0+ which would work but adds restrictions
+- **keepass-rs** uses MIT license, which is maximally permissive and compatible with our MIT license
+- **kdbx-rs** uses GPL-3.0+ which would require us to use a copyleft license
 - Clear licensing reduces legal complexity
 
 ### 2. Community and Maintenance
