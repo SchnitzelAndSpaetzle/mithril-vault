@@ -3,4 +3,4 @@
 pub mod clipboard;
 pub mod crypto;
 pub mod kdbx;
-pub mod keychain;
+pub mod secure_storage;

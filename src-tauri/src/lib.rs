@@ -13,7 +13,7 @@ use commands::{
     open_database, remove_recent_database, save_database, store_session_key, unlock_database,
     update_entry, update_group, update_settings,
 };
-use services::keychain::SecureStorageService;
+use services::secure_storage::SecureStorageService;
 use std::sync::Arc;
 use tauri::Manager;
 
