@@ -1,14 +1,15 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 
 use crate::models::error::AppError;
 use crate::services::keychain::SecureStorageService;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::State;
+use zeroize::Zeroize;
 
 #[tauri::command]
 pub async fn store_session_key(
-    key: Vec<u8>,
+    mut key: Vec<u8>,
     ttl_secs: Option<u64>,
     state: State<'_, Arc<SecureStorageService>>,
 ) -> Result<(), AppError> {
@@ -16,7 +17,9 @@ pub async fn store_session_key(
         SecureStorageService::default_session_ttl,
         Duration::from_secs,
     );
-    state.store_session_key(&key, ttl)
+    let result = state.store_session_key(&key, ttl);
+    key.zeroize();
+    result
 }
 
 #[tauri::command]
@@ -26,12 +29,10 @@ pub async fn has_session_key(
     state.session_key_present()
 }
 
-#[tauri::command]
-pub async fn load_session_key(
-    state: State<'_, Arc<SecureStorageService>>,
-) -> Result<Option<Vec<u8>>, AppError> {
-    state.load_session_key()
-}
+// Note: load_session_key is intentionally NOT exposed as a command.
+// Session keys should remain in the Rust boundary and never be sent to the frontend.
+// Use has_session_key to check presence, and unlock_database_with_session (when implemented)
+// to use the stored key for database operations.
 
 #[tauri::command]
 pub async fn clear_session_key(
