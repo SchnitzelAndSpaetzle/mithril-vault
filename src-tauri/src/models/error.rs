@@ -35,6 +35,9 @@ pub enum AppError {
     #[error("Keychain error: {0}")]
     Keychain(String),
 
+    #[error("Secure storage error: {0}")]
+    SecureStorage(String),
+
     #[error("Lock error")]
     Lock,
 
