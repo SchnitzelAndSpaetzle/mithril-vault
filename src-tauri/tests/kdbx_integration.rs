@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
 //! Integration tests for KDBX database operations via `KdbxService`
 
 #![allow(clippy::expect_used)] // expect() is acceptable in tests

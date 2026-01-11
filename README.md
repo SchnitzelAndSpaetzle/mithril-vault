@@ -3,7 +3,7 @@
 [![CI](https://github.com/SchnitzelAndSpaetzle/mithril-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/SchnitzelAndSpaetzle/mithril-vault/actions/workflows/ci.yml)
 [![Security](https://github.com/SchnitzelAndSpaetzle/mithril-vault/actions/workflows/security.yml/badge.svg)](https://github.com/SchnitzelAndSpaetzle/mithril-vault/actions/workflows/security.yml)
 [![codecov](https://codecov.io/gh/SchnitzelAndSpaetzle/mithril-vault/branch/main/graph/badge.svg)](https://codecov.io/gh/SchnitzelAndSpaetzle/mithril-vault)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A modern, cross-platform password manager with full KeePass compatibility. Built with Tauri, React, and Rust for security and performance.
 
@@ -16,7 +16,7 @@ A modern, cross-platform password manager with full KeePass compatibility. Built
 - **Cross-Platform** - Native apps for Linux, Windows, and macOS
 - **Modern UI** - Clean, intuitive interface built with React
 - **Secure by Design** - All cryptographic operations in Rust, memory zeroization, auto-lock
-- **Open Source** - Fully auditable codebase under GPL-3.0
+- **Open Source** - Fully auditable codebase under MIT license
 
 ### Planned Features
 
@@ -137,7 +137,7 @@ MithrilVault takes security seriously. If you discover a security vulnerability,
 
 ## License
 
-MithrilVault is licensed under the [GNU General Public License v3.0](LICENSE).
+MithrilVault is licensed under the [MIT License](LICENSE.md).
 
 ## Acknowledgments
 
