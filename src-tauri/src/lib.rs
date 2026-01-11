@@ -8,10 +8,10 @@ pub mod utils;
 use commands::{
     add_recent_database, calculate_password_strength, clear_recent_databases, clear_session_key,
     close_database, create_database, create_entry, create_group, delete_entry, delete_group,
-    generate_passphrase, generate_password, get_entry, get_entry_password, get_group,
-    get_settings, has_session_key, list_entries, list_groups, load_session_key, lock_database,
-    move_entry, move_group, open_database, remove_recent_database, save_database,
-    store_session_key, unlock_database, update_entry, update_group, update_settings,
+    generate_passphrase, generate_password, get_entry, get_entry_password, get_group, get_settings,
+    has_session_key, list_entries, list_groups, load_session_key, lock_database, move_entry,
+    move_group, open_database, remove_recent_database, save_database, store_session_key,
+    unlock_database, update_entry, update_group, update_settings,
 };
 use services::keychain::SecureStorageService;
 use std::sync::Arc;
