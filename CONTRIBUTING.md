@@ -201,9 +201,11 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/) t
 
 ## Signed Commits
 
-We prefer signed commits so GitHub can verify contributions. Follow the setup guide:
+We prefer signed commits so GitHub can verify contributions and display the "Verified" badge on your commits. Follow the setup guide:
 
 - docs/signed-commits.md
+
+If you cannot sign commits for a specific contribution, please mention it in your pull request so maintainers have the right context.
 
 ### Examples
 
