@@ -129,7 +129,7 @@ See [AGENTS.md](AGENTS.md) for detailed architecture documentation.
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. This project prefers signed commits; see [docs/signed-commits.md](docs/signed-commits.md) for setup instructions.
 
 ## Security
 
