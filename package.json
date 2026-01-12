@@ -34,6 +34,8 @@
     "changelog:preview": "git-cliff -V >/dev/null 2>&1 || (echo 'git-cliff required: https://github.com/orhun/git-cliff#installation' && exit 1); git-cliff --unreleased"
   },
   "dependencies": {
+    "@tanstack/react-router": "^1.147.3",
+    "@tanstack/react-router-devtools": "^1.149.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "dayjs": "^1.11.19",
@@ -55,6 +57,7 @@
     "@commitlint/cli": "^20.3.0",
     "@commitlint/config-conventional": "^20.3.0",
     "@eslint/js": "^9.39.2",
+    "@tanstack/router-plugin": "^1.149.0",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
