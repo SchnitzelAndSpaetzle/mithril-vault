@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: MIT
-import { APP_NAME } from "@/lib/constants";
 
-function App() {
+import { ThemeProvider } from "@/components/theme-provider.tsx";
+import React from "react";
+
+interface AppProps {
+  children: React.ReactNode;
+}
+
+function App({ children }: Readonly<AppProps>) {
   return (
-    <main>
-      <h1>{APP_NAME}</h1>
-      <p>Password manager with KeePass compatibility.</p>
-    </main>
+    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+      <main>{children}</main>
+    </ThemeProvider>
   );
 }
 
