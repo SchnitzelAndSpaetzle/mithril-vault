@@ -32,3 +32,6 @@ coverage/
 
 # Claude Code local settings
 .claude/
+
+# Tanstack Router generated file
+/src/routeTree.gen.ts

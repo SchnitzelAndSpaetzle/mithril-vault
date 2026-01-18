@@ -9,8 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as OpenDbRouteImport } from './routes/open-db'
+import { Route as NewDbRouteImport } from './routes/new-db'
 import { Route as IndexRouteImport } from './routes/index'
 
+const OpenDbRoute = OpenDbRouteImport.update({
+  id: '/open-db',
+  path: '/open-db',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewDbRoute = NewDbRouteImport.update({
+  id: '/new-db',
+  path: '/new-db',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +31,50 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/new-db': typeof NewDbRoute
+  '/open-db': typeof OpenDbRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/new-db': typeof NewDbRoute
+  '/open-db': typeof OpenDbRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/new-db': typeof NewDbRoute
+  '/open-db': typeof OpenDbRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/new-db' | '/open-db'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/new-db' | '/open-db'
+  id: '__root__' | '/' | '/new-db' | '/open-db'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  NewDbRoute: typeof NewDbRoute
+  OpenDbRoute: typeof OpenDbRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/open-db': {
+      id: '/open-db'
+      path: '/open-db'
+      fullPath: '/open-db'
+      preLoaderRoute: typeof OpenDbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/new-db': {
+      id: '/new-db'
+      path: '/new-db'
+      fullPath: '/new-db'
+      preLoaderRoute: typeof NewDbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +87,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  NewDbRoute: NewDbRoute,
+  OpenDbRoute: OpenDbRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
