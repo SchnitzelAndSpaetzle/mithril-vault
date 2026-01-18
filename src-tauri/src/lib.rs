@@ -13,6 +13,7 @@ use commands::{
     open_database, remove_recent_database, save_database, store_session_key, unlock_database,
     update_entry, update_group, update_settings,
 };
+use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
 use std::sync::Arc;
 use tauri::Manager;
@@ -25,6 +26,9 @@ pub fn run() {
         .setup(|app| {
             let secure_storage = SecureStorageService::new(app.handle())?;
             app.manage(Arc::new(secure_storage));
+
+            let kdbx_service = KdbxService::new();
+            app.manage(Arc::new(kdbx_service));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
