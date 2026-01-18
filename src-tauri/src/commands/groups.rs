@@ -2,16 +2,18 @@
 
 use crate::models::error::AppError;
 use crate::models::group::{CreateGroupData, Group, UpdateGroupData};
+use crate::services::kdbx::KdbxService;
+use std::sync::Arc;
+use tauri::State;
 
 #[tauri::command]
-pub async fn list_groups() -> Result<Vec<Group>, AppError> {
-    Err(AppError::NotImplemented("list_groups".into()))
+pub async fn list_groups(state: State<'_, Arc<KdbxService>>) -> Result<Vec<Group>, AppError> {
+    state.list_groups()
 }
 
 #[tauri::command]
-pub async fn get_group(id: String) -> Result<Group, AppError> {
-    let _ = id;
-    Err(AppError::NotImplemented("get_group".into()))
+pub async fn get_group(id: String, state: State<'_, Arc<KdbxService>>) -> Result<Group, AppError> {
+    state.get_group(&id)
 }
 
 #[tauri::command]

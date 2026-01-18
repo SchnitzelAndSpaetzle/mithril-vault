@@ -2,23 +2,29 @@
 
 use crate::models::entry::{CreateEntryData, Entry, EntryListItem, UpdateEntryData};
 use crate::models::error::AppError;
+use crate::services::kdbx::KdbxService;
+use std::sync::Arc;
+use tauri::State;
 
 #[tauri::command]
-pub async fn list_entries(group_id: Option<String>) -> Result<Vec<EntryListItem>, AppError> {
-    let _ = group_id;
-    Err(AppError::NotImplemented("list_entries".into()))
+pub async fn list_entries(
+    group_id: Option<String>,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<Vec<EntryListItem>, AppError> {
+    state.list_entries(group_id.as_deref())
 }
 
 #[tauri::command]
-pub async fn get_entry(id: String) -> Result<Entry, AppError> {
-    let _ = id;
-    Err(AppError::NotImplemented("get_entry".into()))
+pub async fn get_entry(id: String, state: State<'_, Arc<KdbxService>>) -> Result<Entry, AppError> {
+    state.get_entry(&id)
 }
 
 #[tauri::command]
-pub async fn get_entry_password(id: String) -> Result<String, AppError> {
-    let _ = id;
-    Err(AppError::NotImplemented("get_entry_password".into()))
+pub async fn get_entry_password(
+    id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<String, AppError> {
+    state.get_entry_password(&id)
 }
 
 #[tauri::command]
