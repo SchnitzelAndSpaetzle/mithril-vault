@@ -4,12 +4,12 @@ import {
   Blocks,
   Calendar,
   Command,
-  Home,
-  Inbox,
   MessageCircleQuestion,
   Search,
   Settings2,
+  ShieldIcon,
   Sparkles,
+  TagsIcon,
   Trash2,
 } from "lucide-react";
 
@@ -56,15 +56,16 @@ const data = {
       icon: Sparkles,
     },
     {
-      title: "Home",
+      // TODO: if user hase weak passwords or other security issues, we can solve it here and mark this menu item somehow
+      title: "Security",
       url: "#",
-      icon: Home,
+      icon: ShieldIcon,
       isActive: true,
     },
     {
-      title: "Inbox",
+      title: "Tags",
       url: "#",
-      icon: Inbox,
+      icon: TagsIcon,
       badge: "10",
     },
   ],

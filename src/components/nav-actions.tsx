@@ -1,8 +1,10 @@
 import * as React from "react";
 import {
   ArrowDown,
+  ArrowDownAZ,
   ArrowUp,
   Bell,
+  CirclePlus,
   Copy,
   CornerUpLeft,
   CornerUpRight,
@@ -12,7 +14,6 @@ import {
   Link,
   MoreHorizontal,
   Settings2,
-  Star,
   Trash,
   Trash2,
 } from "lucide-react";
@@ -100,16 +101,19 @@ export function NavActions() {
   const [isOpen, setIsOpen] = React.useState(false);
 
   React.useEffect(() => {
-    setIsOpen(true);
+    setIsOpen(false);
   }, []);
 
   return (
     <div className="flex items-center gap-2 text-sm">
-      <div className="text-muted-foreground hidden font-medium md:inline-block">
-        Edit Oct 08
-      </div>
+      {/*<div className="text-muted-foreground hidden font-medium md:inline-block">*/}
+      {/*  Edit Oct 08*/}
+      {/*</div>*/}
       <Button variant="ghost" size="icon" className="h-7 w-7">
-        <Star />
+        <CirclePlus />
+      </Button>
+      <Button variant="ghost" size="icon" className="h-7 w-7">
+        <ArrowDownAZ />
       </Button>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
