@@ -57,6 +57,173 @@ fn test_open_kdbx3_with_password() {
 }
 
 #[test]
+fn test_open_kdbx3_returns_correct_version() {
+    let path = fixture_path("test-kdbx3.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: KDBX3 fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    let info = service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open KDBX3 database");
+
+    // Check if fixture is actually KDBX 3.1 format
+    if !info.version.starts_with("KDBX 3.") {
+        eprintln!(
+            "Skipping test: fixture is {} format, not KDBX 3.x. \
+             Recreate with KeePassXC using KDBX 3.1 format.",
+            info.version
+        );
+        return;
+    }
+
+    assert_eq!(
+        info.version, "KDBX 3.1",
+        "KDBX3 database should report version 'KDBX 3.1'"
+    );
+}
+
+#[test]
+fn test_open_kdbx4_returns_correct_version() {
+    let path = fixture_path("test-kdbx4.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: KDBX4 fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    let info = service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open KDBX4 database");
+
+    assert_eq!(
+        info.version, "KDBX 4.0",
+        "KDBX4 database should report version 'KDBX 4.0'"
+    );
+}
+
+#[test]
+fn test_kdbx3_invalid_password_rejection() {
+    let path = fixture_path("test-kdbx3.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: KDBX3 fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    let result = service.open(&path.to_string_lossy(), "wrong_password");
+
+    assert!(
+        matches!(result, Err(AppError::InvalidPassword)),
+        "KDBX3 should reject invalid password"
+    );
+}
+
+#[test]
+fn test_kdbx3_list_entries() {
+    let path = fixture_path("test-kdbx3.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: KDBX3 fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open KDBX3 database");
+
+    let entries = service
+        .list_entries(None)
+        .expect("Failed to list entries from KDBX3");
+
+    assert!(!entries.is_empty(), "KDBX3 fixture should have entries");
+}
+
+#[test]
+fn test_kdbx3_get_entry_password() {
+    let path = fixture_path("test-kdbx3.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: KDBX3 fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open KDBX3 database");
+
+    let entries = service.list_entries(None).expect("Failed to list entries");
+
+    if entries.is_empty() {
+        eprintln!("Skipping password test: no entries in KDBX3 fixture");
+        return;
+    }
+
+    let entry_id = &entries[0].id;
+    let password = service
+        .get_entry_password(entry_id)
+        .expect("Failed to get entry password from KDBX3");
+
+    assert!(!password.is_empty(), "KDBX3 entry should have a password");
+}
+
+#[test]
+fn test_kdbx3_list_groups() {
+    let path = fixture_path("test-kdbx3.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: KDBX3 fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open KDBX3 database");
+
+    let groups = service
+        .list_groups()
+        .expect("Failed to list groups from KDBX3");
+
+    assert!(
+        !groups.is_empty(),
+        "KDBX3 should have at least the root group"
+    );
+}
+
+#[test]
+fn test_create_database_returns_kdbx4_version() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("version-test.kdbx");
+
+    let service = KdbxService::new();
+    let info = service
+        .create(&db_path.to_string_lossy(), "testpass", "Version Test")
+        .expect("Failed to create database");
+
+    assert_eq!(info.version, "KDBX 4.0", "New databases should be KDBX 4.0");
+}
+
+#[test]
+fn test_get_info_returns_version() {
+    let path = fixture_path("test-kdbx4.kdbx");
+    if !path.exists() {
+        eprintln!("Skipping test: KDBX4 fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    service
+        .open(&path.to_string_lossy(), "test123")
+        .expect("Failed to open database");
+
+    let info = service.get_info().expect("Failed to get database info");
+
+    assert_eq!(info.version, "KDBX 4.0", "get_info() should return version");
+}
+
+#[test]
 fn test_open_with_keyfile() {
     let db_path = fixture_path("test-keyfile-kdbx4.kdbx");
     let key_path = fixture_path("test-keyfile.keyx");

@@ -4,7 +4,7 @@ use crate::models::database::DatabaseInfo;
 use crate::models::entry::{Entry, EntryListItem};
 use crate::models::error::AppError;
 use crate::models::group::Group;
-use keepass::config::DatabaseConfig;
+use keepass::config::{DatabaseConfig, DatabaseVersion};
 use keepass::db::Node;
 use keepass::error::{
     BlockStreamError, CryptographyError, DatabaseIntegrityError, DatabaseKeyError,
@@ -29,6 +29,18 @@ struct OpenDatabase {
     /// Optional keyfile path for databases using keyfile authentication.
     /// When saving, the keyfile is re-read from this path to preserve authentication.
     keyfile_path: Option<String>,
+    /// Database format version (e.g., "KDBX 3.1", "KDBX 4.0")
+    version: String,
+}
+
+/// Format the database version as a user-friendly string
+fn format_database_version(version: &DatabaseVersion) -> String {
+    match version {
+        DatabaseVersion::KDB(minor) => format!("KDB 1.{minor}"),
+        DatabaseVersion::KDB2(minor) => format!("KDB 2.{minor}"),
+        DatabaseVersion::KDB3(minor) => format!("KDBX 3.{minor}"),
+        DatabaseVersion::KDB4(minor) => format!("KDBX 4.{minor}"),
+    }
 }
 
 /// Service for KDBX database operations
@@ -59,6 +71,7 @@ impl KdbxService {
 
         let root_group_id = db.root.uuid.to_string();
         let name = db.root.name.clone();
+        let version = format_database_version(&db.config.version);
 
         *db_lock = Some(OpenDatabase {
             db,
@@ -66,6 +79,7 @@ impl KdbxService {
             is_modified: false,
             password: password.to_string(),
             keyfile_path: None,
+            version: version.clone(),
         });
 
         Ok(DatabaseInfo {
@@ -74,6 +88,7 @@ impl KdbxService {
             is_modified: false,
             is_locked: false,
             root_group_id,
+            version,
         })
     }
 
@@ -103,6 +118,7 @@ impl KdbxService {
 
         let root_group_id = db.root.uuid.to_string();
         let name = db.root.name.clone();
+        let version = format_database_version(&db.config.version);
 
         *db_lock = Some(OpenDatabase {
             db,
@@ -110,6 +126,7 @@ impl KdbxService {
             is_modified: false,
             password: password.to_string(),
             keyfile_path: Some(keyfile_path.to_string()),
+            version: version.clone(),
         });
 
         Ok(DatabaseInfo {
@@ -118,6 +135,7 @@ impl KdbxService {
             is_modified: false,
             is_locked: false,
             root_group_id,
+            version,
         })
     }
 
@@ -144,6 +162,7 @@ impl KdbxService {
             is_modified: open_db.is_modified,
             is_locked: false,
             root_group_id: open_db.db.root.uuid.to_string(),
+            version: open_db.version.clone(),
         })
     }
 
@@ -227,6 +246,8 @@ impl KdbxService {
             .map_err(|e| AppError::Kdbx(e.to_string()))?;
 
         let root_group_id = db.root.uuid.to_string();
+        // New databases are always KDBX 4.0
+        let version = String::from("KDBX 4.0");
 
         *db_lock = Some(OpenDatabase {
             db,
@@ -234,6 +255,7 @@ impl KdbxService {
             is_modified: false,
             password: password.to_string(),
             keyfile_path: None,
+            version: version.clone(),
         });
 
         Ok(DatabaseInfo {
@@ -242,6 +264,7 @@ impl KdbxService {
             is_modified: false,
             is_locked: false,
             root_group_id,
+            version,
         })
     }
 

@@ -7,6 +7,7 @@ export const DatabaseInfoSchema = z.object({
   path: z.string(),
   isModified: z.boolean(),
   rootGroupId: z.string(),
+  version: z.string(),
 });
 export type DatabaseInfo = z.infer<typeof DatabaseInfoSchema>;
 
