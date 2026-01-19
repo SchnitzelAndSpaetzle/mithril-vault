@@ -81,10 +81,7 @@ pub async fn update_entry(
 }
 
 #[tauri::command]
-pub async fn delete_entry(
-    id: String,
-    state: State<'_, Arc<KdbxService>>,
-) -> Result<(), AppError> {
+pub async fn delete_entry(id: String, state: State<'_, Arc<KdbxService>>) -> Result<(), AppError> {
     state.delete_entry(&id)
 }
 

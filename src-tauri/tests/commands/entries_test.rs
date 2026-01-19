@@ -7,9 +7,9 @@
 
 #![allow(clippy::expect_used)] // expect() is acceptable in tests
 
-use mithril_vault_lib::models::error::AppError;
 use mithril_vault_lib::models::database::DatabaseCreationOptions;
 use mithril_vault_lib::models::entry::{CreateEntryData, UpdateEntryData};
+use mithril_vault_lib::models::error::AppError;
 use mithril_vault_lib::services::kdbx::KdbxService;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -428,9 +428,7 @@ fn test_delete_entry_moves_to_recycle_bin() {
         "Entry should exist in root before delete"
     );
 
-    service
-        .delete_entry(&entry.id)
-        .expect("delete entry");
+    service.delete_entry(&entry.id).expect("delete entry");
 
     let root_entries_after = service
         .list_entries(Some(&info.root_group_id))

@@ -261,11 +261,7 @@ impl KdbxService {
     }
 
     /// Create a new entry in a group
-    pub fn create_entry(
-        &self,
-        group_id: &str,
-        data: CreateEntryData,
-    ) -> Result<Entry, AppError> {
+    pub fn create_entry(&self, group_id: &str, data: CreateEntryData) -> Result<Entry, AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
 
@@ -368,8 +364,7 @@ impl KdbxService {
 
         let mut entry = {
             let root = &mut open_db.db.root;
-            remove_entry_by_id(root, id)
-                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
+            remove_entry_by_id(root, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
         };
 
         let recycle_bin_id = ensure_recycle_bin(&mut open_db.db)?;
@@ -392,8 +387,7 @@ impl KdbxService {
 
         let mut entry = {
             let root = &mut open_db.db.root;
-            remove_entry_by_id(root, id)
-                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
+            remove_entry_by_id(root, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
         };
 
         let target_group = find_group_by_id_mut(&mut open_db.db.root, target_group_id)
@@ -866,7 +860,10 @@ fn remove_entry_by_id(group: &mut keepass::db::Group, id: &str) -> Option<Keepas
 
 /// Standard entry fields that should not be treated as custom fields
 fn is_standard_entry_field(key: &str) -> bool {
-    matches!(key, "Title" | "UserName" | "Password" | "URL" | "Notes" | "otp")
+    matches!(
+        key,
+        "Title" | "UserName" | "Password" | "URL" | "Notes" | "otp"
+    )
 }
 
 /// Insert custom fields into an entry without overwriting standard fields
