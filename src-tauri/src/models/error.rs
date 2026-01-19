@@ -52,6 +52,12 @@ pub enum AppError {
 
     #[error("Not implemented: {0}")]
     NotImplemented(String),
+
+    #[error("Atomic write failed: {0}")]
+    AtomicWrite(String),
+
+    #[error("Failed to sync file to disk: {0}")]
+    SyncFailed(String),
 }
 
 impl Serialize for AppError {

@@ -1320,3 +1320,176 @@ fn test_database_creation_options_custom_values() {
     assert_eq!(options.iterations(), 5);
     assert_eq!(options.parallelism(), 8);
 }
+
+// =============================================================================
+// Atomic write integration tests (Issue #14)
+// =============================================================================
+
+#[test]
+fn test_save_atomic_write_no_temp_file_remains() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("atomic-save.kdbx");
+    let temp_path = dir.path().join(".atomic-save.kdbx.tmp");
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path.to_string_lossy(), "testpass", "Atomic Test")
+        .expect("Failed to create database");
+
+    // Save should succeed
+    service.save().expect("Failed to save database");
+
+    // Temp file should not exist after successful save
+    assert!(
+        !temp_path.exists(),
+        "Temp file should not exist after successful save"
+    );
+
+    // Original file should still be valid
+    service.close().expect("Failed to close");
+    service
+        .open(&db_path.to_string_lossy(), "testpass")
+        .expect("Failed to reopen after atomic save");
+}
+
+#[test]
+fn test_save_clears_is_modified_flag() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("modified-flag.kdbx");
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path.to_string_lossy(), "testpass", "Modified Flag Test")
+        .expect("Failed to create database");
+
+    // After creation, is_modified should be false
+    let info = service.get_info().expect("Failed to get info");
+    assert!(
+        !info.is_modified,
+        "is_modified should be false after create"
+    );
+
+    // Save should keep is_modified as false
+    service.save().expect("Failed to save");
+    let info_after_save = service.get_info().expect("Failed to get info");
+    assert!(
+        !info_after_save.is_modified,
+        "is_modified should be false after save"
+    );
+}
+
+#[test]
+fn test_save_as_creates_new_file_atomically() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let original_path = dir.path().join("original-atomic.kdbx");
+    let new_path = dir.path().join("new-atomic.kdbx");
+    let temp_path = dir.path().join(".new-atomic.kdbx.tmp");
+
+    let service = KdbxService::new();
+    service
+        .create(&original_path.to_string_lossy(), "testpass", "Original")
+        .expect("Failed to create database");
+
+    // Save to new path
+    service
+        .save_as(&new_path.to_string_lossy(), None)
+        .expect("Failed to save as");
+
+    // Both files should exist
+    assert!(original_path.exists(), "Original file should exist");
+    assert!(new_path.exists(), "New file should exist");
+
+    // Temp file should not exist
+    assert!(!temp_path.exists(), "Temp file should not exist");
+
+    // New file should be valid
+    service.close().expect("Failed to close");
+    service
+        .open(&new_path.to_string_lossy(), "testpass")
+        .expect("Failed to open new file");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_save_sets_secure_permissions_on_new_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("secure-perms.kdbx");
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path.to_string_lossy(), "testpass", "Secure Perms Test")
+        .expect("Failed to create database");
+
+    let metadata = std::fs::metadata(&db_path).expect("Should get metadata");
+    let mode = metadata.permissions().mode() & 0o777;
+
+    assert_eq!(
+        mode, 0o600,
+        "New database file should have 0600 permissions, got {mode:o}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_save_preserves_existing_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("preserved-perms.kdbx");
+
+    let service = KdbxService::new();
+    service
+        .create(
+            &db_path.to_string_lossy(),
+            "testpass",
+            "Preserve Perms Test",
+        )
+        .expect("Failed to create database");
+
+    // Set custom permissions (e.g., 0640)
+    let mut perms = std::fs::metadata(&db_path)
+        .expect("Should get metadata")
+        .permissions();
+    perms.set_mode(0o640);
+    std::fs::set_permissions(&db_path, perms).expect("Failed to set permissions");
+
+    // Save the database (should preserve permissions)
+    service.save().expect("Failed to save");
+
+    let metadata_after = std::fs::metadata(&db_path).expect("Should get metadata after save");
+    let mode_after = metadata_after.permissions().mode() & 0o777;
+
+    assert_eq!(
+        mode_after, 0o640,
+        "Permissions should be preserved after save, got {mode_after:o}"
+    );
+}
+
+#[test]
+fn test_create_database_uses_atomic_write() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("atomic-create.kdbx");
+    let temp_path = dir.path().join(".atomic-create.kdbx.tmp");
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path.to_string_lossy(), "testpass", "Atomic Create")
+        .expect("Failed to create database");
+
+    // Database file should exist
+    assert!(db_path.exists(), "Database file should exist");
+
+    // Temp file should not exist
+    assert!(
+        !temp_path.exists(),
+        "Temp file should not exist after create"
+    );
+
+    // Verify the database can be reopened
+    service.close().expect("Failed to close");
+    service
+        .open(&db_path.to_string_lossy(), "testpass")
+        .expect("Failed to reopen database");
+}
