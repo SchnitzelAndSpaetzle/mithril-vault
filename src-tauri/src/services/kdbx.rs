@@ -4,6 +4,7 @@ use crate::models::database::{DatabaseCreationOptions, DatabaseInfo};
 use crate::models::entry::{Entry, EntryListItem};
 use crate::models::error::AppError;
 use crate::models::group::Group;
+use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::config::{
     CompressionConfig, DatabaseConfig, DatabaseVersion, InnerCipherConfig, KdfConfig,
     OuterCipherConfig,
@@ -349,25 +350,27 @@ impl KdbxService {
             }
         }
 
-        // Build the database key
-        let mut key = DatabaseKey::new();
-        if let Some(pw) = password {
-            key = key.with_password(pw);
-        }
-        if let Some(kf_path) = keyfile_path {
-            let mut keyfile =
-                File::open(kf_path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
-            key = key
-                .with_keyfile(&mut keyfile)
-                .map_err(|e| AppError::Kdbx(e.to_string()))?;
-        }
-
-        // Save the database to disk
-        let mut file = File::create(path).map_err(|e| AppError::Io(e.to_string()))?;
-        db.save(&mut file, key)
-            .map_err(|e| AppError::Kdbx(e.to_string()))?;
-
+        // Get root group ID before moving db into closure
         let root_group_id = db.root.uuid.to_string();
+
+        // Copy values for use in closure
+        let password_owned = password.map(String::from);
+        let keyfile_path_owned = keyfile_path.map(String::from);
+
+        // Save the database to disk using atomic write
+        atomic_write(
+            path,
+            &AtomicWriteOptions {
+                preserve_permissions: false, // New file gets secure 0600 permissions
+            },
+            |file| {
+                // Build key inside closure (DatabaseKey doesn't implement Clone)
+                let key =
+                    build_database_key(password_owned.as_deref(), keyfile_path_owned.as_deref())?;
+                db.save(file, key)
+                    .map_err(|e| AppError::Kdbx(e.to_string()))
+            },
+        )?;
         // New databases are always KDBX 4.0
         let version = String::from("KDBX 4.0");
 
@@ -390,7 +393,10 @@ impl KdbxService {
         })
     }
 
-    /// Save the currently open database
+    /// Save the currently open database using atomic write
+    ///
+    /// Uses the temp file + rename pattern to ensure system interruptions
+    /// cannot corrupt existing database files.
     pub fn save(&self) -> Result<(), AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
@@ -400,70 +406,70 @@ impl KdbxService {
             return Err(AppError::NoCredentials);
         }
 
-        let mut key = DatabaseKey::new();
+        // Clone values needed for the closure (to avoid borrow issues)
+        let path = open_db.path.clone();
+        let password = open_db.password.clone();
+        let keyfile_path = open_db.keyfile_path.clone();
 
-        // Add password if present
-        if let Some(ref password) = open_db.password {
-            key = key.with_password(password);
-        }
-
-        // Preserve keyfile authentication if present
-        if let Some(ref kf_path) = open_db.keyfile_path {
-            let mut keyfile = File::open(kf_path)
-                .map_err(|e| AppError::InvalidPath(format!("Keyfile not found: {e}")))?;
-            key = key
-                .with_keyfile(&mut keyfile)
-                .map_err(|e| AppError::Kdbx(e.to_string()))?;
-        }
-
-        let mut file = File::create(&open_db.path).map_err(|e| AppError::Io(e.to_string()))?;
-
-        open_db
-            .db
-            .save(&mut file, key)
-            .map_err(|e| AppError::Kdbx(e.to_string()))?;
+        // Use atomic write with preserve_permissions for existing files
+        atomic_write(
+            &path,
+            &AtomicWriteOptions {
+                preserve_permissions: true,
+            },
+            |file| {
+                // Build key inside closure (DatabaseKey doesn't implement Clone)
+                let key = build_database_key(password.as_deref(), keyfile_path.as_deref())?;
+                open_db
+                    .db
+                    .save(file, key)
+                    .map_err(|e| AppError::Kdbx(e.to_string()))
+            },
+        )?;
 
         open_db.is_modified = false;
         Ok(())
     }
 
-    /// Save the database to a new path (Save As)
+    /// Save the database to a new path (Save As) using atomic write
+    ///
+    /// Uses the temp file + rename pattern to ensure system interruptions
+    /// cannot corrupt existing database files.
     pub fn save_as(&self, new_path: &str, new_password: Option<&str>) -> Result<(), AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
 
         // Determine the password to use (new_password takes precedence, then existing)
-        let effective_password: Option<&str> = new_password.or(open_db.password.as_deref());
+        let effective_password: Option<String> = new_password
+            .map(String::from)
+            .or_else(|| open_db.password.clone());
 
         // Require at least password or keyfile for saving
         if effective_password.is_none() && open_db.keyfile_path.is_none() {
             return Err(AppError::NoCredentials);
         }
 
-        let mut key = DatabaseKey::new();
+        // Clone keyfile path for the closure
+        let keyfile_path = open_db.keyfile_path.clone();
 
-        // Add password if present
-        if let Some(password) = effective_password {
-            key = key.with_password(password);
-        }
+        // Use atomic write with preserve_permissions=false (new file gets secure permissions)
+        atomic_write(
+            new_path,
+            &AtomicWriteOptions {
+                preserve_permissions: false,
+            },
+            |file| {
+                // Build key inside closure (DatabaseKey doesn't implement Clone)
+                let key =
+                    build_database_key(effective_password.as_deref(), keyfile_path.as_deref())?;
+                open_db
+                    .db
+                    .save(file, key)
+                    .map_err(|e| AppError::Kdbx(e.to_string()))
+            },
+        )?;
 
-        // Preserve keyfile authentication if present
-        if let Some(ref kf_path) = open_db.keyfile_path {
-            let mut keyfile = File::open(kf_path)
-                .map_err(|e| AppError::InvalidPath(format!("Keyfile not found: {e}")))?;
-            key = key
-                .with_keyfile(&mut keyfile)
-                .map_err(|e| AppError::Kdbx(e.to_string()))?;
-        }
-
-        let mut file = File::create(new_path).map_err(|e| AppError::Io(e.to_string()))?;
-
-        open_db
-            .db
-            .save(&mut file, key)
-            .map_err(|e| AppError::Kdbx(e.to_string()))?;
-
-        // Update path and password if changed
+        // Update path and password after successful save
         open_db.path = new_path.to_string();
         if new_password.is_some() {
             open_db.password = new_password.map(String::from);
@@ -487,6 +493,30 @@ fn map_open_error(err: DatabaseOpenError) -> AppError {
         ) => AppError::InvalidPassword,
         other => AppError::Kdbx(other.to_string()),
     }
+}
+
+/// Build a `DatabaseKey` from optional password and keyfile path.
+///
+/// This helper avoids code duplication in save operations.
+fn build_database_key(
+    password: Option<&str>,
+    keyfile_path: Option<&str>,
+) -> Result<DatabaseKey, AppError> {
+    let mut key = DatabaseKey::new();
+
+    if let Some(pw) = password {
+        key = key.with_password(pw);
+    }
+
+    if let Some(kf_path) = keyfile_path {
+        let mut keyfile = File::open(kf_path)
+            .map_err(|e| AppError::InvalidPath(format!("Keyfile not found: {e}")))?;
+        key = key
+            .with_keyfile(&mut keyfile)
+            .map_err(|e| AppError::Kdbx(e.to_string()))?;
+    }
+
+    Ok(key)
 }
 
 impl Default for KdbxService {
