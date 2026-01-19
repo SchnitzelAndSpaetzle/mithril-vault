@@ -105,6 +105,17 @@ where
     drop(file);
 
     // Atomic rename
+    #[cfg(windows)]
+    if target.exists() {
+        // Windows rename fails if the destination exists; remove first.
+        if let Err(e) = fs::remove_file(target) {
+            let _ = fs::remove_file(&temp_path);
+            return Err(AppError::AtomicWrite(format!(
+                "Failed to remove existing target file: {e}"
+            )));
+        }
+    }
+
     if let Err(e) = fs::rename(&temp_path, target) {
         let _ = fs::remove_file(&temp_path);
         return Err(AppError::AtomicWrite(format!(
