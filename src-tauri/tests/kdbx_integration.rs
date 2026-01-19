@@ -789,3 +789,150 @@ fn test_get_entry_password_from_keyfile_only_database() {
         "Entry in keyfile-only database should have a password"
     );
 }
+
+// =============================================================================
+// Save As with keyfile authentication tests
+// =============================================================================
+
+#[test]
+fn test_save_as_preserves_keyfile_only_authentication() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("keyfile-only-save-as-test.kdbx");
+    let new_path = dir.path().join("keyfile-only-copy.kdbx");
+
+    // Copy keyfile-only fixture to temp location
+    let fixture_db = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let fixture_key = fixture_path("test-keyfile.keyx");
+    if !fixture_db.exists() || !fixture_key.exists() {
+        eprintln!("Skipping test: keyfile-only fixtures not found");
+        return;
+    }
+    std::fs::copy(&fixture_db, &db_path).expect("Failed to copy fixture");
+
+    let service = KdbxService::new();
+
+    // Open with keyfile only
+    service
+        .open_with_keyfile_only(&db_path.to_string_lossy(), &fixture_key.to_string_lossy())
+        .expect("Failed to open with keyfile only");
+
+    // Save As to new path (without changing password since there isn't one)
+    service
+        .save_as(&new_path.to_string_lossy(), None)
+        .expect("Failed to save as");
+    service.close().expect("Failed to close");
+
+    // Verify: New file should still require keyfile
+    let result = service.open(&new_path.to_string_lossy(), "any_password");
+    assert!(
+        matches!(result, Err(AppError::InvalidPassword)),
+        "New file should still require keyfile"
+    );
+
+    // Verify: Opening with keyfile should succeed
+    service
+        .open_with_keyfile_only(&new_path.to_string_lossy(), &fixture_key.to_string_lossy())
+        .expect("New file should open with keyfile");
+}
+
+#[test]
+fn test_save_as_preserves_keyfile_plus_password_authentication() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("keyfile-pw-save-as-test.kdbx");
+    let new_path = dir.path().join("keyfile-pw-copy.kdbx");
+
+    // Copy password+keyfile fixture to temp location
+    let fixture_db = fixture_path("test-keyfile-kdbx4.kdbx");
+    let fixture_key = fixture_path("test-keyfile.keyx");
+    if !fixture_db.exists() || !fixture_key.exists() {
+        eprintln!("Skipping test: keyfile fixtures not found");
+        return;
+    }
+    std::fs::copy(&fixture_db, &db_path).expect("Failed to copy fixture");
+
+    let service = KdbxService::new();
+
+    // Open with password + keyfile
+    service
+        .open_with_keyfile(
+            &db_path.to_string_lossy(),
+            "test123",
+            &fixture_key.to_string_lossy(),
+        )
+        .expect("Failed to open with password + keyfile");
+
+    // Save As to new path (keeping same credentials)
+    service
+        .save_as(&new_path.to_string_lossy(), None)
+        .expect("Failed to save as");
+    service.close().expect("Failed to close");
+
+    // Verify: Password-only should fail (still requires keyfile)
+    let result = service.open(&new_path.to_string_lossy(), "test123");
+    assert!(
+        matches!(result, Err(AppError::InvalidPassword)),
+        "New file should still require keyfile"
+    );
+
+    // Verify: Opening with both password + keyfile should succeed
+    service
+        .open_with_keyfile(
+            &new_path.to_string_lossy(),
+            "test123",
+            &fixture_key.to_string_lossy(),
+        )
+        .expect("New file should open with password + keyfile");
+}
+
+#[test]
+fn test_save_as_with_new_password_on_keyfile_database() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("keyfile-newpw-test.kdbx");
+    let new_path = dir.path().join("keyfile-newpw.kdbx");
+
+    // Copy password+keyfile fixture to temp location
+    let fixture_db = fixture_path("test-keyfile-kdbx4.kdbx");
+    let fixture_key = fixture_path("test-keyfile.keyx");
+    if !fixture_db.exists() || !fixture_key.exists() {
+        eprintln!("Skipping test: keyfile fixtures not found");
+        return;
+    }
+    std::fs::copy(&fixture_db, &db_path).expect("Failed to copy fixture");
+
+    let service = KdbxService::new();
+
+    // Open with password + keyfile
+    service
+        .open_with_keyfile(
+            &db_path.to_string_lossy(),
+            "test123",
+            &fixture_key.to_string_lossy(),
+        )
+        .expect("Failed to open with password + keyfile");
+
+    // Save As with a NEW password
+    service
+        .save_as(&new_path.to_string_lossy(), Some("newpassword456"))
+        .expect("Failed to save as with new password");
+    service.close().expect("Failed to close");
+
+    // Verify: Old password + keyfile should FAIL
+    let result = service.open_with_keyfile(
+        &new_path.to_string_lossy(),
+        "test123",
+        &fixture_key.to_string_lossy(),
+    );
+    assert!(
+        matches!(result, Err(AppError::InvalidPassword)),
+        "Old password should not work on new file"
+    );
+
+    // Verify: New password + keyfile should SUCCEED
+    service
+        .open_with_keyfile(
+            &new_path.to_string_lossy(),
+            "newpassword456",
+            &fixture_key.to_string_lossy(),
+        )
+        .expect("New password + keyfile should work");
+}
