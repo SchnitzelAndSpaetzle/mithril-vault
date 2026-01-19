@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::database::{DatabaseCreationOptions, DatabaseInfo};
-use crate::models::error::AppError;
+use crate::dto::database::{DatabaseCreationOptions, DatabaseInfo};
+use crate::dto::error::AppError;
 use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
 use tauri::State;

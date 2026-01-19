@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::error::AppError;
+use crate::dto::error::AppError;
 
 pub struct ClipboardService;
 

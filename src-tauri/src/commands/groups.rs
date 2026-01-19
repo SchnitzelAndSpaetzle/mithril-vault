@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::error::AppError;
-use crate::models::group::{CreateGroupData, Group, UpdateGroupData};
+use crate::dto::error::AppError;
+use crate::dto::group::{CreateGroupData, Group, UpdateGroupData};
 use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
 use tauri::State;

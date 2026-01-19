@@ -11,7 +11,7 @@
 //! 5. Atomic rename to target
 //! 6. Cleanup temp file on any failure
 
-use crate::models::error::AppError;
+use crate::dto::error::AppError;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::Path;

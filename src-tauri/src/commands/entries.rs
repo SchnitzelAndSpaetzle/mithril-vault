@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::entry::{CreateEntryData, Entry, EntryListItem, UpdateEntryData};
-use crate::models::error::AppError;
+use crate::dto::entry::{CreateEntryData, Entry, EntryListItem, UpdateEntryData};
+use crate::dto::error::AppError;
 use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
 use tauri::State;

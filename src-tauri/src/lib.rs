@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 pub mod commands;
-pub mod models;
+pub mod domain;
+pub mod dto;
 pub mod services;
 pub mod utils;
 

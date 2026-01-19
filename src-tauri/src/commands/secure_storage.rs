@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::error::AppError;
+use crate::dto::error::AppError;
 use crate::services::secure_storage::SecureStorageService;
 use std::sync::Arc;
 use std::time::Duration;
