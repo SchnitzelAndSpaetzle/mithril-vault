@@ -1427,8 +1427,7 @@ fn test_save_sets_secure_permissions_on_new_file() {
 
     assert_eq!(
         mode, 0o600,
-        "New database file should have 0600 permissions, got {:o}",
-        mode
+        "New database file should have 0600 permissions, got {mode:o}"
     );
 }
 
@@ -1464,8 +1463,7 @@ fn test_save_preserves_existing_permissions() {
 
     assert_eq!(
         mode_after, 0o640,
-        "Permissions should be preserved after save, got {:o}",
-        mode_after
+        "Permissions should be preserved after save, got {mode_after:o}"
     );
 }
 

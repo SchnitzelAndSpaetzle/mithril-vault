@@ -154,8 +154,8 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_atomic_write_creates_file() {
-        let dir = tempdir().expect("Failed to create temp dir");
+    fn test_atomic_write_creates_file() -> Result<(), AppError> {
+        let dir = tempdir()?;
         let file_path = dir.path().join("test.kdbx");
 
         atomic_write(
@@ -165,22 +165,19 @@ mod tests {
                 file.write_all(b"test content")
                     .map_err(|e| AppError::Io(e.to_string()))
             },
-        )
-            .expect("Atomic write should succeed");
+        )?;
 
         assert!(file_path.exists(), "Target file should exist");
 
         let mut content = String::new();
-        File::open(&file_path)
-            .expect("Should open file")
-            .read_to_string(&mut content)
-            .expect("Should read file");
+        File::open(&file_path)?.read_to_string(&mut content)?;
         assert_eq!(content, "test content");
+        Ok(())
     }
 
     #[test]
-    fn test_atomic_write_no_temp_file_on_success() {
-        let dir = tempdir().expect("Failed to create temp dir");
+    fn test_atomic_write_no_temp_file_on_success() -> Result<(), AppError> {
+        let dir = tempdir()?;
         let file_path = dir.path().join("test.kdbx");
         let temp_path = dir.path().join(".test.kdbx.tmp");
 
@@ -191,18 +188,18 @@ mod tests {
                 file.write_all(b"test content")
                     .map_err(|e| AppError::Io(e.to_string()))
             },
-        )
-            .expect("Atomic write should succeed");
+        )?;
 
         assert!(
             !temp_path.exists(),
             "Temp file should not exist after success"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_atomic_write_cleans_up_on_failure() {
-        let dir = tempdir().expect("Failed to create temp dir");
+    fn test_atomic_write_cleans_up_on_failure() -> Result<(), AppError> {
+        let dir = tempdir()?;
         let file_path = dir.path().join("test.kdbx");
         let temp_path = dir.path().join(".test.kdbx.tmp");
 
@@ -215,15 +212,16 @@ mod tests {
         assert!(result.is_err(), "Should fail on write error");
         assert!(!temp_path.exists(), "Temp file should be cleaned up");
         assert!(!file_path.exists(), "Target file should not exist");
+        Ok(())
     }
 
     #[test]
-    fn test_atomic_write_overwrites_existing() {
-        let dir = tempdir().expect("Failed to create temp dir");
+    fn test_atomic_write_overwrites_existing() -> Result<(), AppError> {
+        let dir = tempdir()?;
         let file_path = dir.path().join("test.kdbx");
 
         // Create initial file
-        fs::write(&file_path, "original content").expect("Failed to create initial file");
+        fs::write(&file_path, "original content")?;
 
         // Overwrite with atomic write
         atomic_write(
@@ -233,19 +231,19 @@ mod tests {
                 file.write_all(b"new content")
                     .map_err(|e| AppError::Io(e.to_string()))
             },
-        )
-            .expect("Atomic write should succeed");
+        )?;
 
-        let content = fs::read_to_string(&file_path).expect("Should read file");
+        let content = fs::read_to_string(&file_path)?;
         assert_eq!(content, "new content");
+        Ok(())
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_atomic_write_sets_unix_permissions() {
+    fn test_atomic_write_sets_unix_permissions() -> Result<(), AppError> {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = tempdir().expect("Failed to create temp dir");
+        let dir = tempdir()?;
         let file_path = dir.path().join("secure.kdbx");
 
         atomic_write(
@@ -255,29 +253,27 @@ mod tests {
                 file.write_all(b"secure content")
                     .map_err(|e| AppError::Io(e.to_string()))
             },
-        )
-            .expect("Atomic write should succeed");
+        )?;
 
-        let metadata = fs::metadata(&file_path).expect("Should get metadata");
+        let metadata = fs::metadata(&file_path)?;
         let mode = metadata.permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "File should have 0600 permissions");
+        Ok(())
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_atomic_write_preserves_existing_permissions() {
+    fn test_atomic_write_preserves_existing_permissions() -> Result<(), AppError> {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = tempdir().expect("Failed to create temp dir");
+        let dir = tempdir()?;
         let file_path = dir.path().join("preserved.kdbx");
 
         // Create initial file with custom permissions
-        fs::write(&file_path, "original").expect("Failed to create initial file");
-        let mut perms = fs::metadata(&file_path)
-            .expect("Should get metadata")
-            .permissions();
+        fs::write(&file_path, "original")?;
+        let mut perms = fs::metadata(&file_path)?.permissions();
         perms.set_mode(0o640);
-        fs::set_permissions(&file_path, perms).expect("Failed to set permissions");
+        fs::set_permissions(&file_path, perms)?;
 
         // Overwrite with preserve_permissions = true
         atomic_write(
@@ -289,21 +285,21 @@ mod tests {
                 file.write_all(b"new content")
                     .map_err(|e| AppError::Io(e.to_string()))
             },
-        )
-            .expect("Atomic write should succeed");
+        )?;
 
-        let metadata = fs::metadata(&file_path).expect("Should get metadata");
+        let metadata = fs::metadata(&file_path)?;
         let mode = metadata.permissions().mode() & 0o777;
         assert_eq!(mode, 0o640, "Original permissions should be preserved");
+        Ok(())
     }
 
     #[test]
-    fn test_atomic_write_preserves_original_on_write_failure() {
-        let dir = tempdir().expect("Failed to create temp dir");
+    fn test_atomic_write_preserves_original_on_write_failure() -> Result<(), AppError> {
+        let dir = tempdir()?;
         let file_path = dir.path().join("preserved-on-failure.kdbx");
 
         // Create initial file
-        fs::write(&file_path, "original content").expect("Failed to create initial file");
+        fs::write(&file_path, "original content")?;
 
         // Attempt atomic write that fails
         let result = atomic_write(
@@ -315,10 +311,11 @@ mod tests {
         assert!(result.is_err());
 
         // Original file should be unchanged
-        let content = fs::read_to_string(&file_path).expect("Should read file");
+        let content = fs::read_to_string(&file_path)?;
         assert_eq!(
             content, "original content",
             "Original file should be preserved on failure"
         );
+        Ok(())
     }
 }
