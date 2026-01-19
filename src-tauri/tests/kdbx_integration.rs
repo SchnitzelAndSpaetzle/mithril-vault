@@ -1106,9 +1106,15 @@ fn test_create_database_with_default_groups() {
     );
 
     let child_names: Vec<&str> = root.children.iter().map(|g| g.name.as_str()).collect();
-    assert!(child_names.contains(&"General"), "Should have General group");
+    assert!(
+        child_names.contains(&"General"),
+        "Should have General group"
+    );
     assert!(child_names.contains(&"Email"), "Should have Email group");
-    assert!(child_names.contains(&"Banking"), "Should have Banking group");
+    assert!(
+        child_names.contains(&"Banking"),
+        "Should have Banking group"
+    );
     assert!(child_names.contains(&"Social"), "Should have Social group");
 }
 
@@ -1183,9 +1189,9 @@ fn test_create_database_with_custom_kdf_settings() {
 
     // Use lower settings for faster test
     let options = DatabaseCreationOptions {
-        kdf_memory: Some(16 * 1024 * 1024),  // 16 MB
-        kdf_iterations: Some(2),              // 2 iterations
-        kdf_parallelism: Some(2),             // 2 threads
+        kdf_memory: Some(16 * 1024 * 1024), // 16 MB
+        kdf_iterations: Some(2),            // 2 iterations
+        kdf_parallelism: Some(2),           // 2 threads
         ..Default::default()
     };
 
@@ -1223,7 +1229,7 @@ fn test_create_database_with_all_options() {
     let options = DatabaseCreationOptions {
         description: Some("Full featured database".to_string()),
         create_default_groups: true,
-        kdf_memory: Some(32 * 1024 * 1024),  // 32 MB
+        kdf_memory: Some(32 * 1024 * 1024), // 32 MB
         kdf_iterations: Some(2),
         kdf_parallelism: Some(2),
     };
@@ -1283,11 +1289,21 @@ fn test_database_creation_options_defaults() {
     let options = DatabaseCreationOptions::default();
 
     // Verify default values
-    assert_eq!(options.memory_bytes(), 64 * 1024 * 1024, "Default memory should be 64 MB");
+    assert_eq!(
+        options.memory_bytes(),
+        64 * 1024 * 1024,
+        "Default memory should be 64 MB"
+    );
     assert_eq!(options.iterations(), 3, "Default iterations should be 3");
     assert_eq!(options.parallelism(), 4, "Default parallelism should be 4");
-    assert!(!options.create_default_groups, "Default should not create groups");
-    assert!(options.description.is_none(), "Default should have no description");
+    assert!(
+        !options.create_default_groups,
+        "Default should not create groups"
+    );
+    assert!(
+        options.description.is_none(),
+        "Default should have no description"
+    );
 }
 
 #[test]
