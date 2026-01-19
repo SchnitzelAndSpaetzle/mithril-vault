@@ -2,26 +2,37 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
-import {
-  DatabaseInfoSchema,
-  EntrySchema,
-  GroupSchema,
-  CreateEntryDataSchema,
-  UpdateEntryDataSchema,
-  PasswordGeneratorOptionsSchema,
-} from "./types";
 import type {
+  CreateEntryData,
   DatabaseInfo,
   Entry,
   Group,
-  CreateEntryData,
-  UpdateEntryData,
   PasswordGeneratorOptions,
+  UpdateEntryData,
+} from "./types";
+import {
+  CreateEntryDataSchema,
+  DatabaseInfoSchema,
+  EntrySchema,
+  GroupSchema,
+  PasswordGeneratorOptionsSchema,
+  UpdateEntryDataSchema,
 } from "./types";
 
 const PathPasswordSchema = z.object({
   path: z.string().min(1),
   password: z.string().min(8),
+});
+
+const PathKeyfileSchema = z.object({
+  path: z.string().min(1),
+  keyfilePath: z.string().min(1),
+});
+
+const PathPasswordKeyfileSchema = z.object({
+  path: z.string().min(1),
+  password: z.string().min(8),
+  keyfilePath: z.string().min(1),
 });
 
 const IdSchema = z.object({
@@ -62,6 +73,32 @@ export const database = {
   async create(path: string, password: string): Promise<DatabaseInfo> {
     PathPasswordSchema.parse({ path, password });
     const result = await invoke("create_database", { path, password });
+    return DatabaseInfoSchema.parse(result);
+  },
+
+  async openWithKeyfile(
+    path: string,
+    password: string,
+    keyfilePath: string
+  ): Promise<DatabaseInfo> {
+    PathPasswordKeyfileSchema.parse({ path, password, keyfilePath });
+    const result = await invoke("open_database_with_keyfile", {
+      path,
+      password,
+      keyfilePath,
+    });
+    return DatabaseInfoSchema.parse(result);
+  },
+
+  async openWithKeyfileOnly(
+    path: string,
+    keyfilePath: string
+  ): Promise<DatabaseInfo> {
+    PathKeyfileSchema.parse({ path, keyfilePath });
+    const result = await invoke("open_database_with_keyfile_only", {
+      path,
+      keyfilePath,
+    });
     return DatabaseInfoSchema.parse(result);
   },
 };
