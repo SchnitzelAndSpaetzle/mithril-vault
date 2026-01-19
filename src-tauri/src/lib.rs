@@ -10,8 +10,9 @@ use commands::{
     close_database, create_database, create_entry, create_group, delete_entry, delete_group,
     generate_passphrase, generate_password, get_entry, get_entry_password, get_group, get_settings,
     has_session_key, list_entries, list_groups, lock_database, move_entry, move_group,
-    open_database, remove_recent_database, save_database, store_session_key, unlock_database,
-    update_entry, update_group, update_settings,
+    open_database, open_database_with_keyfile, open_database_with_keyfile_only,
+    remove_recent_database, save_database, store_session_key, unlock_database, update_entry,
+    update_group, update_settings,
 };
 use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
@@ -33,6 +34,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_database,
+            open_database_with_keyfile,
+            open_database_with_keyfile_only,
             close_database,
             create_database,
             save_database,

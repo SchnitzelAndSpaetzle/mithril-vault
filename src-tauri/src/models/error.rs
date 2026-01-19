@@ -32,6 +32,15 @@ pub enum AppError {
     #[error("KDBX error: {0}")]
     Kdbx(String),
 
+    #[error("Keyfile not found")]
+    KeyfileNotFound,
+
+    #[error("Invalid keyfile format")]
+    KeyfileInvalid,
+
+    #[error("No credentials provided")]
+    NoCredentials,
+
     #[error("Keychain error: {0}")]
     Keychain(String),
 

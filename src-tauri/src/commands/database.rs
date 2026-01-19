@@ -36,6 +36,25 @@ pub async fn save_database(state: State<'_, Arc<KdbxService>>) -> Result<(), App
 }
 
 #[tauri::command]
+pub async fn open_database_with_keyfile(
+    path: String,
+    password: String,
+    keyfile_path: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<DatabaseInfo, AppError> {
+    state.open_with_keyfile(&path, &password, &keyfile_path)
+}
+
+#[tauri::command]
+pub async fn open_database_with_keyfile_only(
+    path: String,
+    keyfile_path: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<DatabaseInfo, AppError> {
+    state.open_with_keyfile_only(&path, &keyfile_path)
+}
+
+#[tauri::command]
 pub async fn lock_database() -> Result<(), AppError> {
     Err(AppError::NotImplemented("lock_database".into()))
 }
