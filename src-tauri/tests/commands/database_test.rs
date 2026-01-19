@@ -32,13 +32,13 @@ fn fixture_exists(filename: &str) -> bool {
 
 #[test]
 fn test_open_database_success() {
-    if !fixture_exists("test-kdbx4.kdbx") {
+    if !fixture_exists("test-kdbx4-low-KDF.kdbx") {
         eprintln!("Skipping test: fixture not found");
         return;
     }
 
     let service = KdbxService::new();
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
 
     let result = service.open(&path.to_string_lossy(), "test123");
 
@@ -57,13 +57,13 @@ fn test_open_database_success() {
 
 #[test]
 fn test_open_database_invalid_password() {
-    if !fixture_exists("test-kdbx4.kdbx") {
+    if !fixture_exists("test-kdbx4-low-KDF.kdbx") {
         eprintln!("Skipping test: fixture not found");
         return;
     }
 
     let service = KdbxService::new();
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
 
     let result = service.open(&path.to_string_lossy(), "wrong_password");
 
@@ -92,13 +92,13 @@ fn test_open_database_file_not_found() {
 
 #[test]
 fn test_close_database_success() {
-    if !fixture_exists("test-kdbx4.kdbx") {
+    if !fixture_exists("test-kdbx4-low-KDF.kdbx") {
         eprintln!("Skipping test: fixture not found");
         return;
     }
 
     let service = KdbxService::new();
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
 
     service
         .open(&path.to_string_lossy(), "test123")

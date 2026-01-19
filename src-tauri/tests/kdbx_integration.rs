@@ -19,7 +19,7 @@ fn fixture_path(filename: &str) -> PathBuf {
 
 #[test]
 fn test_open_kdbx4_with_password() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!(
             "Skipping test: fixture not found at {path:?}. \
@@ -39,7 +39,7 @@ fn test_open_kdbx4_with_password() {
 
 #[test]
 fn test_open_kdbx3_with_password() {
-    let path = fixture_path("test-kdbx3.kdbx");
+    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
     if !path.exists() {
         eprintln!(
             "Skipping test: fixture not found at {path:?}. \
@@ -58,7 +58,7 @@ fn test_open_kdbx3_with_password() {
 
 #[test]
 fn test_open_kdbx3_returns_correct_version() {
-    let path = fixture_path("test-kdbx3.kdbx");
+    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
@@ -87,7 +87,7 @@ fn test_open_kdbx3_returns_correct_version() {
 
 #[test]
 fn test_open_kdbx4_returns_correct_version() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: KDBX4 fixture not found");
         return;
@@ -106,7 +106,7 @@ fn test_open_kdbx4_returns_correct_version() {
 
 #[test]
 fn test_kdbx3_invalid_password_rejection() {
-    let path = fixture_path("test-kdbx3.kdbx");
+    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
@@ -123,7 +123,7 @@ fn test_kdbx3_invalid_password_rejection() {
 
 #[test]
 fn test_kdbx3_list_entries() {
-    let path = fixture_path("test-kdbx3.kdbx");
+    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
@@ -143,7 +143,7 @@ fn test_kdbx3_list_entries() {
 
 #[test]
 fn test_kdbx3_get_entry_password() {
-    let path = fixture_path("test-kdbx3.kdbx");
+    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
@@ -171,7 +171,7 @@ fn test_kdbx3_get_entry_password() {
 
 #[test]
 fn test_kdbx3_list_groups() {
-    let path = fixture_path("test-kdbx3.kdbx");
+    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
@@ -207,7 +207,7 @@ fn test_create_database_returns_kdbx4_version() {
 
 #[test]
 fn test_get_info_returns_version() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: KDBX4 fixture not found");
         return;
@@ -225,7 +225,7 @@ fn test_get_info_returns_version() {
 
 #[test]
 fn test_open_with_keyfile() {
-    let db_path = fixture_path("test-keyfile-kdbx4.kdbx");
+    let db_path = fixture_path("test-keyfile-kdbx4-low-KDF.kdbx");
     let key_path = fixture_path("test-keyfile.keyx");
 
     if !db_path.exists() || !key_path.exists() {
@@ -249,7 +249,7 @@ fn test_open_with_keyfile() {
 
 #[test]
 fn test_invalid_password() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
@@ -278,7 +278,7 @@ fn test_file_not_found() {
 
 #[test]
 fn test_list_entries_and_get_entry() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
@@ -314,7 +314,7 @@ fn test_list_entries_and_get_entry() {
 
 #[test]
 fn test_list_groups_and_get_group() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
@@ -336,7 +336,7 @@ fn test_list_groups_and_get_group() {
 
 #[test]
 fn test_entry_not_found() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
@@ -362,7 +362,7 @@ fn test_entry_not_found() {
 
 #[test]
 fn test_group_not_found() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
@@ -382,7 +382,7 @@ fn test_group_not_found() {
 
 #[test]
 fn test_open_twice_and_close() {
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     if !path.exists() {
         eprintln!("Skipping test: fixture not found");
         return;
@@ -558,7 +558,7 @@ fn test_save_preserves_keyfile_authentication() {
     let db_path = dir.path().join("keyfile-save-test.kdbx");
 
     // Copy fixture to temp location
-    let fixture_db = fixture_path("test-keyfile-kdbx4.kdbx");
+    let fixture_db = fixture_path("test-keyfile-kdbx4-low-KDF.kdbx");
     let fixture_key = fixture_path("test-keyfile.keyx");
     if !fixture_db.exists() || !fixture_key.exists() {
         eprintln!("Skipping test: keyfile fixtures not found");
@@ -604,7 +604,7 @@ fn test_save_preserves_keyfile_authentication() {
 
 #[test]
 fn test_open_with_keyfile_only_success() {
-    let db_path = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let db_path = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
     let key_path = fixture_path("test-keyfile.keyx");
 
     if !db_path.exists() || !key_path.exists() {
@@ -626,7 +626,7 @@ fn test_open_with_keyfile_only_success() {
 
 #[test]
 fn test_open_with_keyfile_only_wrong_keyfile() {
-    let db_path = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let db_path = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
 
     if !db_path.exists() {
         eprintln!("Skipping test: keyfile-only fixture not found");
@@ -654,7 +654,7 @@ fn test_open_with_keyfile_only_wrong_keyfile() {
 
 #[test]
 fn test_keyfile_not_found_error() {
-    let db_path = fixture_path("test-kdbx4.kdbx");
+    let db_path = fixture_path("test-kdbx4-low-KDF.kdbx");
 
     if !db_path.exists() {
         eprintln!("Skipping test: fixture not found");
@@ -675,7 +675,7 @@ fn test_keyfile_not_found_error() {
 
 #[test]
 fn test_keyfile_not_found_for_password_plus_keyfile() {
-    let db_path = fixture_path("test-kdbx4.kdbx");
+    let db_path = fixture_path("test-kdbx4-low-KDF.kdbx");
 
     if !db_path.exists() {
         eprintln!("Skipping test: fixture not found");
@@ -701,7 +701,7 @@ fn test_save_preserves_keyfile_only_authentication() {
     let db_path = dir.path().join("keyfile-only-save-test.kdbx");
 
     // Copy keyfile-only fixture to temp location
-    let fixture_db = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let fixture_db = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
     let fixture_key = fixture_path("test-keyfile.keyx");
     if !fixture_db.exists() || !fixture_key.exists() {
         eprintln!("Skipping test: keyfile-only fixtures not found");
@@ -735,7 +735,7 @@ fn test_save_preserves_keyfile_only_authentication() {
 
 #[test]
 fn test_list_entries_from_keyfile_only_database() {
-    let db_path = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let db_path = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
     let key_path = fixture_path("test-keyfile.keyx");
 
     if !db_path.exists() || !key_path.exists() {
@@ -760,7 +760,7 @@ fn test_list_entries_from_keyfile_only_database() {
 
 #[test]
 fn test_get_entry_password_from_keyfile_only_database() {
-    let db_path = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let db_path = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
     let key_path = fixture_path("test-keyfile.keyx");
 
     if !db_path.exists() || !key_path.exists() {
@@ -801,7 +801,7 @@ fn test_save_as_preserves_keyfile_only_authentication() {
     let new_path = dir.path().join("keyfile-only-copy.kdbx");
 
     // Copy keyfile-only fixture to temp location
-    let fixture_db = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let fixture_db = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
     let fixture_key = fixture_path("test-keyfile.keyx");
     if !fixture_db.exists() || !fixture_key.exists() {
         eprintln!("Skipping test: keyfile-only fixtures not found");
@@ -842,7 +842,7 @@ fn test_save_as_preserves_keyfile_plus_password_authentication() {
     let new_path = dir.path().join("keyfile-pw-copy.kdbx");
 
     // Copy password+keyfile fixture to temp location
-    let fixture_db = fixture_path("test-keyfile-kdbx4.kdbx");
+    let fixture_db = fixture_path("test-keyfile-kdbx4-low-KDF.kdbx");
     let fixture_key = fixture_path("test-keyfile.keyx");
     if !fixture_db.exists() || !fixture_key.exists() {
         eprintln!("Skipping test: keyfile fixtures not found");
@@ -891,7 +891,7 @@ fn test_save_as_with_new_password_on_keyfile_database() {
     let new_path = dir.path().join("keyfile-newpw.kdbx");
 
     // Copy password+keyfile fixture to temp location
-    let fixture_db = fixture_path("test-keyfile-kdbx4.kdbx");
+    let fixture_db = fixture_path("test-keyfile-kdbx4-low-KDF.kdbx");
     let fixture_key = fixture_path("test-keyfile.keyx");
     if !fixture_db.exists() || !fixture_key.exists() {
         eprintln!("Skipping test: keyfile fixtures not found");

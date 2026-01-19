@@ -27,12 +27,12 @@ fn fixture_exists(filename: &str) -> bool {
 
 /// Helper to create a service with an open test database
 fn open_test_database() -> Option<KdbxService> {
-    if !fixture_exists("test-kdbx4.kdbx") {
+    if !fixture_exists("test-kdbx4-low-KDF.kdbx") {
         return None;
     }
 
     let service = KdbxService::new();
-    let path = fixture_path("test-kdbx4.kdbx");
+    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
     service
         .open(&path.to_string_lossy(), "test123")
         .expect("Failed to open test database");
