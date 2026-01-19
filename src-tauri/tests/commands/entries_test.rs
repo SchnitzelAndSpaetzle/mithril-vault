@@ -253,6 +253,8 @@ fn test_create_entry_success() {
 
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Account".to_string(), "Personal".to_string());
+    let mut protected_custom_fields = BTreeMap::new();
+    protected_custom_fields.insert("PIN".to_string(), "1234".to_string());
 
     let data = CreateEntryData {
         title: "New Entry".to_string(),
@@ -263,6 +265,7 @@ fn test_create_entry_success() {
         icon_id: Some(1),
         tags: Some(vec!["tag1".to_string()]),
         custom_fields: Some(custom_fields),
+        protected_custom_fields: Some(protected_custom_fields),
     };
 
     let entry = service
@@ -277,11 +280,27 @@ fn test_create_entry_success() {
         entry.custom_fields.get("Account").map(String::as_str),
         Some("Personal")
     );
+    assert!(
+        !entry.custom_fields.contains_key("PIN"),
+        "Protected custom fields should not be returned in custom_fields"
+    );
+    assert!(
+        entry
+            .custom_field_meta
+            .iter()
+            .any(|meta| meta.key == "PIN" && meta.is_protected),
+        "Protected custom fields should be surfaced as metadata"
+    );
 
     let password = service
         .get_entry_password(&entry.id)
         .expect("entry password");
     assert_eq!(password, "secret");
+
+    let protected = service
+        .get_entry_protected_custom_field(&entry.id, "PIN")
+        .expect("protected custom field");
+    assert_eq!(protected.value, "1234");
 }
 
 #[test]
@@ -297,6 +316,7 @@ fn test_create_entry_group_not_found() {
         icon_id: None,
         tags: None,
         custom_fields: None,
+        protected_custom_fields: None,
     };
 
     let result = service.create_entry("missing-group", data);
@@ -304,6 +324,39 @@ fn test_create_entry_group_not_found() {
     assert!(
         matches!(result, Err(AppError::GroupNotFound(_))),
         "Should fail with GroupNotFound for invalid group ID"
+    );
+}
+
+#[test]
+fn test_get_entry_protected_custom_field_requires_protection() {
+    let (service, _dir) = create_test_database();
+    let info = service.get_info().expect("database info");
+
+    let mut custom_fields = BTreeMap::new();
+    custom_fields.insert("Hint".to_string(), "Visible".to_string());
+
+    let entry = service
+        .create_entry(
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Entry".to_string(),
+                username: "user".to_string(),
+                password: "secret".to_string(),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: Some(custom_fields),
+                protected_custom_fields: None,
+            },
+        )
+        .expect("create entry");
+
+    let result = service.get_entry_protected_custom_field(&entry.id, "Hint");
+
+    assert!(
+        matches!(result, Err(AppError::CustomFieldNotProtected(_))),
+        "Should error when requesting an unprotected custom field"
     );
 }
 
@@ -325,6 +378,7 @@ fn test_update_entry_success() {
         icon_id: None,
         tags: None,
         custom_fields: None,
+        protected_custom_fields: None,
     };
 
     let entry = service
@@ -336,6 +390,8 @@ fn test_update_entry_success() {
 
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Category".to_string(), "Work".to_string());
+    let mut protected_custom_fields = BTreeMap::new();
+    protected_custom_fields.insert("PIN".to_string(), "5678".to_string());
 
     let updated = service
         .update_entry(
@@ -349,6 +405,7 @@ fn test_update_entry_success() {
                 icon_id: Some(2),
                 tags: Some(vec!["tag2".to_string()]),
                 custom_fields: Some(custom_fields),
+                protected_custom_fields: Some(protected_custom_fields),
             },
         )
         .expect("update entry");
@@ -360,6 +417,10 @@ fn test_update_entry_success() {
         updated.custom_fields.get("Category").map(String::as_str),
         Some("Work")
     );
+    assert!(
+        !updated.custom_fields.contains_key("PIN"),
+        "Protected custom fields should not be returned in custom_fields"
+    );
     assert_ne!(
         updated.modified_at, original_modified,
         "modified_at should update on changes"
@@ -369,6 +430,11 @@ fn test_update_entry_success() {
         .get_entry_password(&entry.id)
         .expect("updated password");
     assert_eq!(password, "new-secret");
+
+    let protected = service
+        .get_entry_protected_custom_field(&entry.id, "PIN")
+        .expect("protected custom field");
+    assert_eq!(protected.value, "5678");
 }
 
 #[test]
@@ -386,6 +452,7 @@ fn test_update_entry_not_found() {
             icon_id: None,
             tags: None,
             custom_fields: None,
+            protected_custom_fields: None,
         },
     );
 
@@ -416,6 +483,7 @@ fn test_delete_entry_moves_to_recycle_bin() {
                 icon_id: None,
                 tags: None,
                 custom_fields: None,
+                protected_custom_fields: None,
             },
         )
         .expect("create entry");
@@ -489,6 +557,7 @@ fn test_move_entry_success() {
                 icon_id: None,
                 tags: None,
                 custom_fields: None,
+                protected_custom_fields: None,
             },
         )
         .expect("create entry");

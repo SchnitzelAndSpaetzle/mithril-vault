@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::entry::{CreateEntryData, Entry, UpdateEntryData};
+use crate::models::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::models::error::AppError;
 use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
@@ -25,6 +25,15 @@ pub async fn get_entry_password(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<String, AppError> {
     state.get_entry_password(&id)
+}
+
+#[tauri::command]
+pub async fn get_entry_protected_custom_field(
+    id: String,
+    key: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<CustomFieldValue, AppError> {
+    state.get_entry_protected_custom_field(&id, &key)
 }
 
 #[tauri::command]

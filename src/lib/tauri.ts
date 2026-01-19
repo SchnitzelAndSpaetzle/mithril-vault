@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
   CreateEntryData,
+  CustomFieldValue,
   DatabaseCreationOptions,
   DatabaseInfo,
   Entry,
@@ -13,6 +14,7 @@ import type {
 } from "./types";
 import {
   CreateEntryDataSchema,
+  CustomFieldValueSchema,
   DatabaseCreationOptionsSchema,
   DatabaseInfoSchema,
   EntrySchema,
@@ -43,6 +45,10 @@ const IdSchema = z.object({
 
 const GroupIdSchema = z.object({
   groupId: z.string().uuid(),
+});
+
+const CustomFieldKeySchema = z.object({
+  key: z.string().min(1),
 });
 
 const NameSchema = z.object({
@@ -156,6 +162,19 @@ export const entries = {
     IdSchema.parse({ id });
     const result = await invoke("get_entry_password", { id });
     return z.string().parse(result);
+  },
+
+  async getProtectedCustomField(
+    id: string,
+    key: string
+  ): Promise<CustomFieldValue> {
+    IdSchema.parse({ id });
+    CustomFieldKeySchema.parse({ key });
+    const result = await invoke("get_entry_protected_custom_field", {
+      id,
+      key,
+    });
+    return CustomFieldValueSchema.parse(result);
   },
 
   async create(groupId: string, data: CreateEntryData): Promise<Entry> {

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 use crate::models::database::{DatabaseCreationOptions, DatabaseInfo};
-use crate::models::entry::{CreateEntryData, Entry, UpdateEntryData};
+use crate::models::entry::{
+    CreateEntryData, CustomFieldMeta, CustomFieldValue, Entry, UpdateEntryData,
+};
 use crate::models::error::AppError;
 use crate::models::group::Group;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
@@ -260,6 +262,36 @@ impl KdbxService {
         }
     }
 
+    /// Get a protected custom field value for an entry
+    pub fn get_entry_protected_custom_field(
+        &self,
+        entry_id: &str,
+        key: &str,
+    ) -> Result<CustomFieldValue, AppError> {
+        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+
+        let entry = find_entry_by_id_ref(&open_db.db.root, entry_id)
+            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+
+        if is_standard_entry_field(key) {
+            return Err(AppError::CustomFieldNotFound(key.to_string()));
+        }
+
+        let value = entry
+            .fields
+            .get(key)
+            .ok_or_else(|| AppError::CustomFieldNotFound(key.to_string()))?;
+
+        match value {
+            Value::Protected(secret) => Ok(CustomFieldValue {
+                key: key.to_string(),
+                value: String::from_utf8_lossy(secret.unsecure()).to_string(),
+            }),
+            _ => Err(AppError::CustomFieldNotProtected(key.to_string())),
+        }
+    }
+
     /// Create a new entry in a group
     pub fn create_entry(&self, group_id: &str, data: CreateEntryData) -> Result<Entry, AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
@@ -296,9 +328,11 @@ impl KdbxService {
         if let Some(tags) = data.tags {
             entry.tags = tags;
         }
-        if let Some(custom_fields) = data.custom_fields {
-            insert_custom_fields(&mut entry, &custom_fields);
-        }
+        apply_custom_fields(
+            &mut entry,
+            data.custom_fields.as_ref(),
+            data.protected_custom_fields.as_ref(),
+        );
 
         let entry_model = convert_entry(&entry, group_id);
         group.add_child(entry);
@@ -347,8 +381,12 @@ impl KdbxService {
         if let Some(tags) = data.tags {
             entry.tags = tags;
         }
-        if let Some(custom_fields) = data.custom_fields {
-            replace_custom_fields(entry, &custom_fields);
+        if data.custom_fields.is_some() || data.protected_custom_fields.is_some() {
+            replace_custom_fields(
+                entry,
+                data.custom_fields.as_ref(),
+                data.protected_custom_fields.as_ref(),
+            );
         }
 
         entry.times.set_last_modification(Times::now());
@@ -751,6 +789,28 @@ fn find_entry_by_id(group: &keepass::db::Group, id: &str) -> Option<Entry> {
     None
 }
 
+/// Find an entry by its UUID string and return a reference
+fn find_entry_by_id_ref<'a>(
+    group: &'a keepass::db::Group,
+    id: &str,
+) -> Option<&'a KeepassEntry> {
+    for node in &group.children {
+        match node {
+            Node::Entry(entry) => {
+                if entry.uuid.to_string() == id {
+                    return Some(entry);
+                }
+            }
+            Node::Group(child) => {
+                if let Some(found) = find_entry_by_id_ref(child, id) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Find an entry by its UUID string (mutable) and return it with its group ID
 fn find_entry_by_id_mut<'a>(
     group: &'a mut keepass::db::Group,
@@ -867,44 +927,75 @@ fn is_standard_entry_field(key: &str) -> bool {
 }
 
 /// Insert custom fields into an entry without overwriting standard fields
-fn insert_custom_fields(entry: &mut KeepassEntry, custom_fields: &BTreeMap<String, String>) {
+fn insert_custom_fields(
+    entry: &mut KeepassEntry,
+    custom_fields: &BTreeMap<String, String>,
+    protect_values: bool,
+) {
     for (key, value) in custom_fields {
         if is_standard_entry_field(key) {
             continue;
         }
-        entry
-            .fields
-            .insert(key.clone(), Value::Unprotected(value.clone()));
+        let field_value = if protect_values {
+            Value::Protected(SecStr::new(value.as_bytes().to_vec()))
+        } else {
+            Value::Unprotected(value.clone())
+        };
+        entry.fields.insert(key.clone(), field_value);
+    }
+}
+
+/// Apply custom fields to an entry
+fn apply_custom_fields(
+    entry: &mut KeepassEntry,
+    custom_fields: Option<&BTreeMap<String, String>>,
+    protected_custom_fields: Option<&BTreeMap<String, String>>,
+) {
+    if let Some(fields) = custom_fields {
+        insert_custom_fields(entry, fields, false);
+    }
+    if let Some(fields) = protected_custom_fields {
+        insert_custom_fields(entry, fields, true);
     }
 }
 
 /// Replace all custom fields on an entry
-fn replace_custom_fields(entry: &mut KeepassEntry, custom_fields: &BTreeMap<String, String>) {
+fn replace_custom_fields(
+    entry: &mut KeepassEntry,
+    custom_fields: Option<&BTreeMap<String, String>>,
+    protected_custom_fields: Option<&BTreeMap<String, String>>,
+) {
     entry.fields.retain(|key, _| is_standard_entry_field(key));
-    insert_custom_fields(entry, custom_fields);
+    apply_custom_fields(entry, custom_fields, protected_custom_fields);
 }
 
 /// Collect custom fields from an entry
-fn collect_custom_fields(entry: &keepass::db::Entry) -> BTreeMap<String, String> {
+fn collect_custom_fields(entry: &keepass::db::Entry) -> (BTreeMap<String, String>, Vec<CustomFieldMeta>) {
     let mut custom_fields = BTreeMap::new();
+    let mut custom_field_meta = Vec::new();
 
     for (key, value) in &entry.fields {
         if is_standard_entry_field(key) {
             continue;
         }
 
-        let rendered = match value {
-            Value::Unprotected(text) => Some(text.clone()),
-            Value::Protected(text) => Some(String::from_utf8_lossy(text.unsecure()).to_string()),
-            Value::Bytes(_) => None,
+        let (rendered, is_protected) = match value {
+            Value::Unprotected(text) => (Some(text.clone()), false),
+            Value::Protected(_) => (None, true),
+            Value::Bytes(_) => continue,
         };
 
         if let Some(value) = rendered {
             custom_fields.insert(key.clone(), value);
         }
+
+        custom_field_meta.push(CustomFieldMeta {
+            key: key.clone(),
+            is_protected,
+        });
     }
 
-    custom_fields
+    (custom_fields, custom_field_meta)
 }
 
 /// Ensure the recycle bin group exists and return its UUID
@@ -938,7 +1029,7 @@ fn ensure_recycle_bin(db: &mut Database) -> String {
 /// Convert a keepass-rs Entry to our Entry model
 fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry {
     let times = &entry.times;
-    let custom_fields = collect_custom_fields(entry);
+    let (custom_fields, custom_field_meta) = collect_custom_fields(entry);
 
     Entry {
         id: entry.uuid.to_string(),
@@ -950,6 +1041,7 @@ fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry {
         icon_id: entry.icon_id.and_then(|id| u32::try_from(id).ok()),
         tags: entry.tags.clone(),
         custom_fields,
+        custom_field_meta,
         created_at: times
             .get_creation()
             .map(std::string::ToString::to_string)
