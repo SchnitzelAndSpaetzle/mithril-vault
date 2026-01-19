@@ -319,11 +319,17 @@ fn test_save_clears_is_modified_flag() {
         .expect("Failed to create database");
 
     let info = service.get_info().expect("Failed to get info");
-    assert!(!info.is_modified, "is_modified should be false after create");
+    assert!(
+        !info.is_modified,
+        "is_modified should be false after create"
+    );
 
     service.save().expect("Failed to save");
     let info_after_save = service.get_info().expect("Failed to get info");
-    assert!(!info_after_save.is_modified, "is_modified should be false after save");
+    assert!(
+        !info_after_save.is_modified,
+        "is_modified should be false after save"
+    );
 }
 
 #[test]

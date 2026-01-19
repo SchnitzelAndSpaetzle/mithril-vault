@@ -203,9 +203,15 @@ fn test_create_database_with_default_groups() {
     assert_eq!(root.children.len(), 4, "Root should have 4 default groups");
 
     let child_names: Vec<&str> = root.children.iter().map(|g| g.name.as_str()).collect();
-    assert!(child_names.contains(&"General"), "Should have General group");
+    assert!(
+        child_names.contains(&"General"),
+        "Should have General group"
+    );
     assert!(child_names.contains(&"Email"), "Should have Email group");
-    assert!(child_names.contains(&"Banking"), "Should have Banking group");
+    assert!(
+        child_names.contains(&"Banking"),
+        "Should have Banking group"
+    );
     assert!(child_names.contains(&"Social"), "Should have Social group");
 }
 
@@ -380,7 +386,10 @@ fn test_database_creation_options_defaults() {
         !options.create_default_groups,
         "Default should not create groups"
     );
-    assert!(options.description.is_none(), "Default should have no description");
+    assert!(
+        options.description.is_none(),
+        "Default should have no description"
+    );
 }
 
 #[test]

@@ -55,7 +55,8 @@ impl KdbxService {
                 preserve_permissions: false,
             },
             |file| {
-                let key = build_database_key(effective_password.as_deref(), keyfile_path.as_deref())?;
+                let key =
+                    build_database_key(effective_password.as_deref(), keyfile_path.as_deref())?;
                 open_db
                     .db
                     .save(file, key)
