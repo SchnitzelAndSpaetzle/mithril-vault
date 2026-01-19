@@ -597,3 +597,195 @@ fn test_save_preserves_keyfile_authentication() {
         )
         .expect("Should still open with keyfile after save");
 }
+
+// =============================================================================
+// Keyfile-only authentication tests
+// =============================================================================
+
+#[test]
+fn test_open_with_keyfile_only_success() {
+    let db_path = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let key_path = fixture_path("test-keyfile.keyx");
+
+    if !db_path.exists() || !key_path.exists() {
+        eprintln!(
+            "Skipping test: keyfile-only fixtures not found. \
+             Create database with keyfile-only authentication using test-keyfile.keyx"
+        );
+        return;
+    }
+
+    let service = KdbxService::new();
+    let info = service
+        .open_with_keyfile_only(&db_path.to_string_lossy(), &key_path.to_string_lossy())
+        .expect("Failed to open database with keyfile only");
+
+    assert!(!info.name.is_empty(), "Root group should have a name");
+    assert_eq!(info.version, "KDBX 4.0");
+}
+
+#[test]
+fn test_open_with_keyfile_only_wrong_keyfile() {
+    let db_path = fixture_path("test-keyfile-only-kdbx4.kdbx");
+
+    if !db_path.exists() {
+        eprintln!("Skipping test: keyfile-only fixture not found");
+        return;
+    }
+
+    // Create a fake keyfile
+    let dir = tempdir().expect("Failed to create temp dir");
+    let fake_keyfile = dir.path().join("wrong-keyfile.keyx");
+    std::fs::write(&fake_keyfile, b"wrong keyfile content").expect("Failed to write fake keyfile");
+
+    let service = KdbxService::new();
+    let result =
+        service.open_with_keyfile_only(&db_path.to_string_lossy(), &fake_keyfile.to_string_lossy());
+
+    // Should fail with invalid password (wrong key)
+    assert!(
+        matches!(
+            result,
+            Err(AppError::InvalidPassword | AppError::KeyfileInvalid)
+        ),
+        "Should fail with wrong keyfile: got {result:?}"
+    );
+}
+
+#[test]
+fn test_keyfile_not_found_error() {
+    let db_path = fixture_path("test-kdbx4.kdbx");
+
+    if !db_path.exists() {
+        eprintln!("Skipping test: fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    let result = service.open_with_keyfile_only(
+        &db_path.to_string_lossy(),
+        "/nonexistent/path/to/keyfile.keyx",
+    );
+
+    assert!(
+        matches!(result, Err(AppError::KeyfileNotFound)),
+        "Should fail with keyfile not found error: got {result:?}"
+    );
+}
+
+#[test]
+fn test_keyfile_not_found_for_password_plus_keyfile() {
+    let db_path = fixture_path("test-kdbx4.kdbx");
+
+    if !db_path.exists() {
+        eprintln!("Skipping test: fixture not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    let result = service.open_with_keyfile(
+        &db_path.to_string_lossy(),
+        "test123",
+        "/nonexistent/path/to/keyfile.keyx",
+    );
+
+    assert!(
+        matches!(result, Err(AppError::InvalidPath(_))),
+        "Should fail when keyfile path doesn't exist: got {result:?}"
+    );
+}
+
+#[test]
+fn test_save_preserves_keyfile_only_authentication() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("keyfile-only-save-test.kdbx");
+
+    // Copy keyfile-only fixture to temp location
+    let fixture_db = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let fixture_key = fixture_path("test-keyfile.keyx");
+    if !fixture_db.exists() || !fixture_key.exists() {
+        eprintln!("Skipping test: keyfile-only fixtures not found");
+        return;
+    }
+    std::fs::copy(&fixture_db, &db_path).expect("Failed to copy fixture");
+
+    let service = KdbxService::new();
+
+    // Open with keyfile only
+    service
+        .open_with_keyfile_only(&db_path.to_string_lossy(), &fixture_key.to_string_lossy())
+        .expect("Failed to open with keyfile only");
+
+    // Save the database
+    service.save().expect("Failed to save");
+    service.close().expect("Failed to close");
+
+    // Verify: Opening with password-only should FAIL
+    let result = service.open(&db_path.to_string_lossy(), "any_password");
+    assert!(
+        matches!(result, Err(AppError::InvalidPassword)),
+        "Database should still require keyfile after save"
+    );
+
+    // Verify: Opening with keyfile should succeed
+    service
+        .open_with_keyfile_only(&db_path.to_string_lossy(), &fixture_key.to_string_lossy())
+        .expect("Should still open with keyfile after save");
+}
+
+#[test]
+fn test_list_entries_from_keyfile_only_database() {
+    let db_path = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let key_path = fixture_path("test-keyfile.keyx");
+
+    if !db_path.exists() || !key_path.exists() {
+        eprintln!("Skipping test: keyfile-only fixtures not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    service
+        .open_with_keyfile_only(&db_path.to_string_lossy(), &key_path.to_string_lossy())
+        .expect("Failed to open database");
+
+    let entries = service
+        .list_entries(None)
+        .expect("Failed to list entries from keyfile-only database");
+
+    assert!(
+        !entries.is_empty(),
+        "Keyfile-only fixture should have entries"
+    );
+}
+
+#[test]
+fn test_get_entry_password_from_keyfile_only_database() {
+    let db_path = fixture_path("test-keyfile-only-kdbx4.kdbx");
+    let key_path = fixture_path("test-keyfile.keyx");
+
+    if !db_path.exists() || !key_path.exists() {
+        eprintln!("Skipping test: keyfile-only fixtures not found");
+        return;
+    }
+
+    let service = KdbxService::new();
+    service
+        .open_with_keyfile_only(&db_path.to_string_lossy(), &key_path.to_string_lossy())
+        .expect("Failed to open database");
+
+    let entries = service.list_entries(None).expect("Failed to list entries");
+    if entries.is_empty() {
+        eprintln!("Skipping password test: no entries in keyfile-only fixture");
+        return;
+    }
+
+    let entry_id = &entries[0].id;
+    let password = service
+        .get_entry_password(entry_id)
+        .expect("Failed to get entry password");
+
+    assert!(
+        !password.is_empty(),
+        "Entry in keyfile-only database should have a password"
+    );
+}
