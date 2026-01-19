@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Ellipsis } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 export default function DropdownMenuMoreOptions() {
   return (
@@ -20,7 +21,11 @@ export default function DropdownMenuMoreOptions() {
       <DropdownMenuContent className="w-56" align="end">
         <DropdownMenuGroup>
           <DropdownMenuItem>Demo</DropdownMenuItem>
-          <DropdownMenuItem>Generate Password</DropdownMenuItem>
+          <DropdownMenuItem>
+            <Link to="/password-generator" className="flex items-center gap-2">
+              Generate Password
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem>Settings</DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

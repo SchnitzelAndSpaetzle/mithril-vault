@@ -9,10 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PasswordGeneratorRouteImport } from './routes/password-generator'
 import { Route as OpenDbRouteImport } from './routes/open-db'
 import { Route as NewDbRouteImport } from './routes/new-db'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 
+const PasswordGeneratorRoute = PasswordGeneratorRouteImport.update({
+  id: '/password-generator',
+  path: '/password-generator',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OpenDbRoute = OpenDbRouteImport.update({
   id: '/open-db',
   path: '/open-db',
@@ -28,39 +35,65 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/new-db': typeof NewDbRoute
   '/open-db': typeof OpenDbRoute
+  '/password-generator': typeof PasswordGeneratorRoute
+  '/settings': typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/new-db': typeof NewDbRoute
   '/open-db': typeof OpenDbRoute
+  '/password-generator': typeof PasswordGeneratorRoute
+  '/settings': typeof SettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/new-db': typeof NewDbRoute
   '/open-db': typeof OpenDbRoute
+  '/password-generator': typeof PasswordGeneratorRoute
+  '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/new-db' | '/open-db'
+  fullPaths: '/' | '/new-db' | '/open-db' | '/password-generator' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/new-db' | '/open-db'
-  id: '__root__' | '/' | '/new-db' | '/open-db'
+  to: '/' | '/new-db' | '/open-db' | '/password-generator' | '/settings'
+  id:
+    | '__root__'
+    | '/'
+    | '/new-db'
+    | '/open-db'
+    | '/password-generator'
+    | '/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   NewDbRoute: typeof NewDbRoute
   OpenDbRoute: typeof OpenDbRoute
+  PasswordGeneratorRoute: typeof PasswordGeneratorRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/password-generator': {
+      id: '/password-generator'
+      path: '/password-generator'
+      fullPath: '/password-generator'
+      preLoaderRoute: typeof PasswordGeneratorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/open-db': {
       id: '/open-db'
       path: '/open-db'
@@ -82,6 +115,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +129,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   NewDbRoute: NewDbRoute,
   OpenDbRoute: OpenDbRoute,
+  PasswordGeneratorRoute: PasswordGeneratorRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
