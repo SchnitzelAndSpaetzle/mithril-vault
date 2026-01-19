@@ -1,4 +1,4 @@
-use crate::dto::entry::{CustomFieldMeta, Entry, EntryListItem};
+use crate::dto::entry::{CustomFieldMeta, Entry};
 use crate::dto::group::Group;
 use keepass::db::{Entry as KeepassEntry, Node, Value};
 use secstr::SecStr;
@@ -69,19 +69,6 @@ pub(crate) fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry
             .get_last_access()
             .map(std::string::ToString::to_string)
             .unwrap_or_default(),
-    }
-}
-
-pub(crate) fn convert_entry_to_list_item(
-    entry: &keepass::db::Entry,
-    group_id: &str,
-) -> EntryListItem {
-    EntryListItem {
-        id: entry.uuid.to_string(),
-        group_id: group_id.to_string(),
-        title: entry.get_title().unwrap_or_default().to_string(),
-        username: entry.get_username().unwrap_or_default().to_string(),
-        url: entry.get_url().map(std::string::ToString::to_string),
     }
 }
 
