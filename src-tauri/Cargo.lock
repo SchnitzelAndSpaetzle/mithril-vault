@@ -2615,6 +2615,7 @@ dependencies = [
  "iota_stronghold",
  "keepass",
  "rand 0.8.5",
+ "rust-argon2 3.0.0",
  "serde",
  "serde_json",
  "tauri",

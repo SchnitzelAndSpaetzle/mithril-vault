@@ -71,3 +71,14 @@ export const UpdateEntryDataSchema = z.object({
   notes: z.string().optional(),
 });
 export type UpdateEntryData = z.infer<typeof UpdateEntryDataSchema>;
+
+export const DatabaseCreationOptionsSchema = z.object({
+  description: z.string().optional(),
+  createDefaultGroups: z.boolean().optional(),
+  kdfMemory: z.number().int().positive().optional(),
+  kdfIterations: z.number().int().positive().optional(),
+  kdfParallelism: z.number().int().positive().optional(),
+});
+export type DatabaseCreationOptions = z.infer<
+  typeof DatabaseCreationOptionsSchema
+>;

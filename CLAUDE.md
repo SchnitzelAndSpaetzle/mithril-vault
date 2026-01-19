@@ -111,6 +111,16 @@ export const entries = {
 Uses Conventional Commits: `feat(scope):`, `fix(scope):`, `security(scope):`, etc.
 Scopes: `core`, `ui`, `cli`, `extension`, `sync`, `deps`
 
+## keepass-rs Crate Notes
+
+When working with the `keepass` crate for KDBX operations:
+
+- **Version matching**: The crate uses `rust-argon2` v3.0 internally. When configuring KDF parameters, add `rust-argon2 = "3.0"` to match (not `argon2` which is a different crate)
+- **Enum casing**: Config enums use UPPERCASE variants (e.g., `OuterCipherConfig::AES256`, not `Aes256`)
+- **DatabaseConfig fields**: When building custom config, include all fields including `public_custom_data: None`
+- **Group creation**: Use `Group::new(name)` which auto-generates UUID, then `parent.add_child(group)`
+- **Metadata**: Access via `db.meta.database_name`, `db.meta.database_description`, `db.meta.generator`
+
 ## License Compliance
 
 MIT License. Dependencies must have compatible licenses. CI blocks incompatible licenses.

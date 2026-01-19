@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::database::DatabaseInfo;
+use crate::models::database::{DatabaseCreationOptions, DatabaseInfo};
 use crate::models::entry::{Entry, EntryListItem};
 use crate::models::error::AppError;
 use crate::models::group::Group;
-use keepass::config::{DatabaseConfig, DatabaseVersion};
+use keepass::config::{
+    CompressionConfig, DatabaseConfig, DatabaseVersion, InnerCipherConfig, KdfConfig,
+    OuterCipherConfig,
+};
 use keepass::db::Node;
 use keepass::error::{
     BlockStreamError, CryptographyError, DatabaseIntegrityError, DatabaseKeyError,
@@ -13,6 +16,9 @@ use keepass::error::{
 use keepass::{Database, DatabaseKey};
 use std::fs::File;
 use std::sync::Mutex;
+
+/// Default groups to create when `create_default_groups` option is enabled
+const DEFAULT_GROUP_NAMES: &[&str] = &["General", "Email", "Banking", "Social"];
 
 /// Internal state for an open database
 struct OpenDatabase {
@@ -271,20 +277,92 @@ impl KdbxService {
             .ok_or_else(|| AppError::GroupNotFound(id.to_string()))
     }
 
-    /// Create a new KDBX4 database
+    /// Create a new KDBX4 database with password-only authentication (legacy API)
     pub fn create(&self, path: &str, password: &str, name: &str) -> Result<DatabaseInfo, AppError> {
+        self.create_database(
+            path,
+            Some(password),
+            None,
+            name,
+            &DatabaseCreationOptions::default(),
+        )
+    }
+
+    /// Create a new KDBX4 database with full options
+    ///
+    /// Supports:
+    /// - Password-only, keyfile-only, or password+keyfile authentication
+    /// - Configurable Argon2id KDF parameters (memory, iterations, parallelism)
+    /// - Optional database description metadata
+    /// - Optional default groups (General, Email, Banking, Social)
+    pub fn create_database(
+        &self,
+        path: &str,
+        password: Option<&str>,
+        keyfile_path: Option<&str>,
+        name: &str,
+        options: &DatabaseCreationOptions,
+    ) -> Result<DatabaseInfo, AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
 
         if db_lock.is_some() {
             return Err(AppError::DatabaseAlreadyOpen);
         }
 
-        // Create a new database with default settings (KDBX4)
-        let mut db = Database::new(DatabaseConfig::default());
+        // Require at least password or keyfile
+        if password.is_none() && keyfile_path.is_none() {
+            return Err(AppError::NoCredentials);
+        }
+
+        // Create custom database configuration with Argon2id KDF
+        let config = DatabaseConfig {
+            version: DatabaseVersion::KDB4(0),
+            outer_cipher_config: OuterCipherConfig::AES256,
+            compression_config: CompressionConfig::GZip,
+            inner_cipher_config: InnerCipherConfig::ChaCha20,
+            kdf_config: KdfConfig::Argon2id {
+                iterations: options.iterations(),
+                memory: options.memory_bytes(),
+                parallelism: options.parallelism(),
+                version: argon2::Version::Version13,
+            },
+            public_custom_data: None,
+        };
+
+        let mut db = Database::new(config);
+
+        // Set root group name
         db.root.name = name.to_string();
 
+        // Set database metadata
+        db.meta.database_name = Some(name.to_string());
+        db.meta.generator = Some(String::from("MithrilVault"));
+        if let Some(description) = &options.description {
+            db.meta.database_description = Some(description.clone());
+        }
+
+        // Create default groups if requested
+        if options.create_default_groups {
+            for group_name in DEFAULT_GROUP_NAMES {
+                let group = keepass::db::Group::new(group_name);
+                db.root.add_child(group);
+            }
+        }
+
+        // Build the database key
+        let mut key = DatabaseKey::new();
+        if let Some(pw) = password {
+            key = key.with_password(pw);
+        }
+        if let Some(kf_path) = keyfile_path {
+            let mut keyfile =
+                File::open(kf_path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
+            key = key
+                .with_keyfile(&mut keyfile)
+                .map_err(|e| AppError::Kdbx(e.to_string()))?;
+        }
+
         // Save the database to disk
-        let key = DatabaseKey::new().with_password(password);
         let mut file = File::create(path).map_err(|e| AppError::Io(e.to_string()))?;
         db.save(&mut file, key)
             .map_err(|e| AppError::Kdbx(e.to_string()))?;
@@ -297,8 +375,8 @@ impl KdbxService {
             db,
             path: path.to_string(),
             is_modified: false,
-            password: Some(password.to_string()),
-            keyfile_path: None,
+            password: password.map(String::from),
+            keyfile_path: keyfile_path.map(String::from),
             version: version.clone(),
         });
 
