@@ -947,9 +947,7 @@ fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry {
         username: entry.get_username().unwrap_or_default().to_string(),
         url: entry.get_url().map(std::string::ToString::to_string),
         notes: entry.get("Notes").map(std::string::ToString::to_string),
-        icon_id: entry
-            .icon_id
-            .and_then(|id| u32::try_from(id).ok()),
+        icon_id: entry.icon_id.and_then(|id| u32::try_from(id).ok()),
         tags: entry.tags.clone(),
         custom_fields,
         created_at: times
