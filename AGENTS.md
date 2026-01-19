@@ -323,6 +323,7 @@ log::debug!("Key bytes: {:?}", key_bytes);           // NEVER DO THIS
 - Validate all input from frontend
 - Use typed commands (not string-based)
 - Return minimal data needed
+- Do not return protected custom field values in list/get calls; return metadata only and fetch protected values via an explicit command (e.g., `get_entry_protected_custom_field`)
 
 ```rust
 // Return only what's needed, never the full entry with password

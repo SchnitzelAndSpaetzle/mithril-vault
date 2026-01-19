@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
   CreateEntryData,
+  CustomFieldValue,
   DatabaseCreationOptions,
   DatabaseInfo,
   Entry,
@@ -13,6 +14,7 @@ import type {
 } from "./types";
 import {
   CreateEntryDataSchema,
+  CustomFieldValueSchema,
   DatabaseCreationOptionsSchema,
   DatabaseInfoSchema,
   EntrySchema,
@@ -43,6 +45,10 @@ const IdSchema = z.object({
 
 const GroupIdSchema = z.object({
   groupId: z.string().uuid(),
+});
+
+const CustomFieldKeySchema = z.object({
+  key: z.string().min(1),
 });
 
 const NameSchema = z.object({
@@ -138,8 +144,11 @@ export const database = {
  * Entry CRUD operations (excluding passwords which are fetched separately).
  */
 export const entries = {
-  async list(): Promise<Entry[]> {
-    const result = await invoke("list_entries");
+  async list(groupId?: string): Promise<Entry[]> {
+    if (groupId) {
+      GroupIdSchema.parse({ groupId });
+    }
+    const result = await invoke("list_entries", groupId ? { groupId } : {});
     return z.array(EntrySchema).parse(result);
   },
 
@@ -155,17 +164,30 @@ export const entries = {
     return z.string().parse(result);
   },
 
+  async getProtectedCustomField(
+    id: string,
+    key: string
+  ): Promise<CustomFieldValue> {
+    IdSchema.parse({ id });
+    CustomFieldKeySchema.parse({ key });
+    const result = await invoke("get_entry_protected_custom_field", {
+      id,
+      key,
+    });
+    return CustomFieldValueSchema.parse(result);
+  },
+
   async create(groupId: string, data: CreateEntryData): Promise<Entry> {
     GroupIdSchema.parse({ groupId });
     CreateEntryDataSchema.parse(data);
-    const result = await invoke("create_entry", { groupId, ...data });
+    const result = await invoke("create_entry", { groupId, data });
     return EntrySchema.parse(result);
   },
 
   async update(id: string, data: UpdateEntryData): Promise<Entry> {
     IdSchema.parse({ id });
     UpdateEntryDataSchema.parse(data);
-    const result = await invoke("update_entry", { id, ...data });
+    const result = await invoke("update_entry", { id, data });
     return EntrySchema.parse(result);
   },
 

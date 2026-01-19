@@ -17,6 +17,12 @@ pub enum AppError {
     #[error("Entry not found: {0}")]
     EntryNotFound(String),
 
+    #[error("Custom field not found: {0}")]
+    CustomFieldNotFound(String),
+
+    #[error("Custom field is not protected: {0}")]
+    CustomFieldNotProtected(String),
+
     #[error("Group not found: {0}")]
     GroupNotFound(String),
 

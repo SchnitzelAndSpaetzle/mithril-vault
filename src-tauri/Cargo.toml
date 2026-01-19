@@ -34,6 +34,7 @@ rand = "0.8"
 keepass = { version = "0.8", features = ["save_kdbx4"] }
 # Required for KDF configuration (Argon2id version parameter) - must match keepass's dependency
 rust-argon2 = "3.0"
+secstr = "0.5"
 
 [profile.dev.package.scrypt]
 opt-level = 3

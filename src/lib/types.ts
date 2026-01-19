@@ -11,6 +11,12 @@ export const DatabaseInfoSchema = z.object({
 });
 export type DatabaseInfo = z.infer<typeof DatabaseInfoSchema>;
 
+export const CustomFieldMetaSchema = z.object({
+  key: z.string(),
+  isProtected: z.boolean(),
+});
+export type CustomFieldMeta = z.infer<typeof CustomFieldMetaSchema>;
+
 export const EntrySchema = z.object({
   id: z.string(),
   groupId: z.string(),
@@ -18,8 +24,13 @@ export const EntrySchema = z.object({
   username: z.string(),
   url: z.string().optional(),
   notes: z.string().optional(),
+  iconId: z.number().int().optional(),
+  tags: z.array(z.string()),
+  customFields: z.record(z.string(), z.string()),
+  customFieldMeta: z.array(CustomFieldMetaSchema),
   createdAt: z.string(),
   modifiedAt: z.string(),
+  accessedAt: z.string(),
 });
 export type Entry = z.infer<typeof EntrySchema>;
 
@@ -60,6 +71,10 @@ export const CreateEntryDataSchema = z.object({
   password: z.string(),
   url: z.string().optional(),
   notes: z.string().optional(),
+  iconId: z.number().int().optional(),
+  tags: z.array(z.string()).optional(),
+  customFields: z.record(z.string(), z.string()).optional(),
+  protectedCustomFields: z.record(z.string(), z.string()).optional(),
 });
 export type CreateEntryData = z.infer<typeof CreateEntryDataSchema>;
 
@@ -69,8 +84,18 @@ export const UpdateEntryDataSchema = z.object({
   password: z.string().optional(),
   url: z.string().optional(),
   notes: z.string().optional(),
+  iconId: z.number().int().optional(),
+  tags: z.array(z.string()).optional(),
+  customFields: z.record(z.string(), z.string()).optional(),
+  protectedCustomFields: z.record(z.string(), z.string()).optional(),
 });
 export type UpdateEntryData = z.infer<typeof UpdateEntryDataSchema>;
+
+export const CustomFieldValueSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+});
+export type CustomFieldValue = z.infer<typeof CustomFieldValueSchema>;
 
 export const DatabaseCreationOptionsSchema = z.object({
   description: z.string().optional(),
