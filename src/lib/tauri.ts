@@ -138,8 +138,11 @@ export const database = {
  * Entry CRUD operations (excluding passwords which are fetched separately).
  */
 export const entries = {
-  async list(): Promise<Entry[]> {
-    const result = await invoke("list_entries");
+  async list(groupId?: string): Promise<Entry[]> {
+    if (groupId) {
+      GroupIdSchema.parse({ groupId });
+    }
+    const result = await invoke("list_entries", groupId ? { groupId } : {});
     return z.array(EntrySchema).parse(result);
   },
 

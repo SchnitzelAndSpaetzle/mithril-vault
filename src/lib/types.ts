@@ -18,8 +18,12 @@ export const EntrySchema = z.object({
   username: z.string(),
   url: z.string().optional(),
   notes: z.string().optional(),
+  iconId: z.number().int().optional(),
+  tags: z.array(z.string()),
+  customFields: z.record(z.string(), z.string()),
   createdAt: z.string(),
   modifiedAt: z.string(),
+  accessedAt: z.string(),
 });
 export type Entry = z.infer<typeof EntrySchema>;
 
@@ -60,6 +64,9 @@ export const CreateEntryDataSchema = z.object({
   password: z.string(),
   url: z.string().optional(),
   notes: z.string().optional(),
+  iconId: z.number().int().optional(),
+  tags: z.array(z.string()).optional(),
+  customFields: z.record(z.string(), z.string()).optional(),
 });
 export type CreateEntryData = z.infer<typeof CreateEntryDataSchema>;
 
@@ -69,6 +76,9 @@ export const UpdateEntryDataSchema = z.object({
   password: z.string().optional(),
   url: z.string().optional(),
   notes: z.string().optional(),
+  iconId: z.number().int().optional(),
+  tags: z.array(z.string()).optional(),
+  customFields: z.record(z.string(), z.string()).optional(),
 });
 export type UpdateEntryData = z.infer<typeof UpdateEntryDataSchema>;
 

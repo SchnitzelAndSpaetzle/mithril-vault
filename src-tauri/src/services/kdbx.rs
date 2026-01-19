@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::models::database::{DatabaseCreationOptions, DatabaseInfo};
-use crate::models::entry::{Entry, EntryListItem};
+use crate::models::entry::{CreateEntryData, Entry, UpdateEntryData};
 use crate::models::error::AppError;
 use crate::models::group::Group;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
@@ -9,12 +9,14 @@ use keepass::config::{
     CompressionConfig, DatabaseConfig, DatabaseVersion, InnerCipherConfig, KdfConfig,
     OuterCipherConfig,
 };
-use keepass::db::Node;
+use keepass::db::{Entry as KeepassEntry, Node, Times, Value};
 use keepass::error::{
     BlockStreamError, CryptographyError, DatabaseIntegrityError, DatabaseKeyError,
     DatabaseOpenError,
 };
 use keepass::{Database, DatabaseKey};
+use secstr::SecStr;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::sync::Mutex;
 
@@ -218,7 +220,7 @@ impl KdbxService {
     }
 
     /// List all entries, optionally filtered by group
-    pub fn list_entries(&self, group_id: Option<&str>) -> Result<Vec<EntryListItem>, AppError> {
+    pub fn list_entries(&self, group_id: Option<&str>) -> Result<Vec<Entry>, AppError> {
         let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
 
@@ -256,6 +258,156 @@ impl KdbxService {
             PasswordSearchResult::Found(password) => Ok(password),
             PasswordSearchResult::NotFound => Err(AppError::EntryNotFound(id.to_string())),
         }
+    }
+
+    /// Create a new entry in a group
+    pub fn create_entry(
+        &self,
+        group_id: &str,
+        data: CreateEntryData,
+    ) -> Result<Entry, AppError> {
+        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+
+        let group = find_group_by_id_mut(&mut open_db.db.root, group_id)
+            .ok_or_else(|| AppError::GroupNotFound(group_id.to_string()))?;
+
+        let mut entry = KeepassEntry::new();
+        entry
+            .fields
+            .insert("Title".to_string(), Value::Unprotected(data.title));
+        entry
+            .fields
+            .insert("UserName".to_string(), Value::Unprotected(data.username));
+        entry.fields.insert(
+            "Password".to_string(),
+            Value::Protected(SecStr::new(data.password.into_bytes())),
+        );
+
+        if let Some(url) = data.url {
+            entry
+                .fields
+                .insert("URL".to_string(), Value::Unprotected(url));
+        }
+        if let Some(notes) = data.notes {
+            entry
+                .fields
+                .insert("Notes".to_string(), Value::Unprotected(notes));
+        }
+        if let Some(icon_id) = data.icon_id {
+            entry.icon_id = Some(icon_id as usize);
+        }
+        if let Some(tags) = data.tags {
+            entry.tags = tags;
+        }
+        if let Some(custom_fields) = data.custom_fields {
+            insert_custom_fields(&mut entry, &custom_fields);
+        }
+
+        let entry_model = convert_entry(&entry, group_id);
+        group.add_child(entry);
+        open_db.is_modified = true;
+
+        Ok(entry_model)
+    }
+
+    /// Update an existing entry
+    pub fn update_entry(&self, id: &str, data: UpdateEntryData) -> Result<Entry, AppError> {
+        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+
+        let (entry, group_id) = find_entry_by_id_mut(&mut open_db.db.root, id)
+            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+
+        if let Some(title) = data.title {
+            entry
+                .fields
+                .insert("Title".to_string(), Value::Unprotected(title));
+        }
+        if let Some(username) = data.username {
+            entry
+                .fields
+                .insert("UserName".to_string(), Value::Unprotected(username));
+        }
+        if let Some(password) = data.password {
+            entry.fields.insert(
+                "Password".to_string(),
+                Value::Protected(SecStr::new(password.into_bytes())),
+            );
+        }
+        if let Some(url) = data.url {
+            entry
+                .fields
+                .insert("URL".to_string(), Value::Unprotected(url));
+        }
+        if let Some(notes) = data.notes {
+            entry
+                .fields
+                .insert("Notes".to_string(), Value::Unprotected(notes));
+        }
+        if let Some(icon_id) = data.icon_id {
+            entry.icon_id = Some(icon_id as usize);
+        }
+        if let Some(tags) = data.tags {
+            entry.tags = tags;
+        }
+        if let Some(custom_fields) = data.custom_fields {
+            replace_custom_fields(entry, &custom_fields);
+        }
+
+        entry.times.set_last_modification(Times::now());
+        open_db.is_modified = true;
+
+        Ok(convert_entry(entry, &group_id))
+    }
+
+    /// Delete an entry by moving it to the recycle bin
+    pub fn delete_entry(&self, id: &str) -> Result<(), AppError> {
+        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+
+        let mut entry = {
+            let root = &mut open_db.db.root;
+            remove_entry_by_id(root, id)
+                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
+        };
+
+        let recycle_bin_id = ensure_recycle_bin(&mut open_db.db)?;
+        let recycle_bin = find_group_by_id_mut(&mut open_db.db.root, &recycle_bin_id)
+            .ok_or_else(|| AppError::GroupNotFound(recycle_bin_id.clone()))?;
+
+        let now = Times::now();
+        entry.times.set_last_modification(now);
+        entry.times.set_location_changed(now);
+        recycle_bin.add_child(entry);
+
+        open_db.is_modified = true;
+        Ok(())
+    }
+
+    /// Move an entry to another group
+    pub fn move_entry(&self, id: &str, target_group_id: &str) -> Result<Entry, AppError> {
+        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+
+        let mut entry = {
+            let root = &mut open_db.db.root;
+            remove_entry_by_id(root, id)
+                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
+        };
+
+        let target_group = find_group_by_id_mut(&mut open_db.db.root, target_group_id)
+            .ok_or_else(|| AppError::GroupNotFound(target_group_id.to_string()))?;
+
+        let now = Times::now();
+        entry.times.set_last_modification(now);
+        entry.times.set_location_changed(now);
+
+        let entry_model = convert_entry(&entry, target_group_id);
+        target_group.add_child(entry);
+        open_db.is_modified = true;
+
+        Ok(entry_model)
     }
 
     /// List all groups as a hierarchical structure
@@ -546,6 +698,46 @@ fn find_group_by_id<'a>(group: &'a keepass::db::Group, id: &str) -> Option<&'a k
     None
 }
 
+/// Find a group by its UUID string (mutable)
+fn find_group_by_id_mut<'a>(
+    group: &'a mut keepass::db::Group,
+    id: &str,
+) -> Option<&'a mut keepass::db::Group> {
+    if group.uuid.to_string() == id {
+        return Some(group);
+    }
+
+    for node in &mut group.children {
+        if let Node::Group(child) = node {
+            if let Some(found) = find_group_by_id_mut(child, id) {
+                return Some(found);
+            }
+        }
+    }
+
+    None
+}
+
+/// Find a group by its name
+fn find_group_by_name<'a>(
+    group: &'a keepass::db::Group,
+    name: &str,
+) -> Option<&'a keepass::db::Group> {
+    if group.name == name {
+        return Some(group);
+    }
+
+    for node in &group.children {
+        if let Node::Group(child) = node {
+            if let Some(found) = find_group_by_name(child, name) {
+                return Some(found);
+            }
+        }
+    }
+
+    None
+}
+
 /// Find an entry by its UUID string and return it converted to our Entry type
 fn find_entry_by_id(group: &keepass::db::Group, id: &str) -> Option<Entry> {
     for node in &group.children {
@@ -562,6 +754,31 @@ fn find_entry_by_id(group: &keepass::db::Group, id: &str) -> Option<Entry> {
             }
         }
     }
+    None
+}
+
+/// Find an entry by its UUID string (mutable) and return it with its group ID
+fn find_entry_by_id_mut<'a>(
+    group: &'a mut keepass::db::Group,
+    id: &str,
+) -> Option<(&'a mut KeepassEntry, String)> {
+    let group_id = group.uuid.to_string();
+
+    for node in &mut group.children {
+        match node {
+            Node::Entry(entry) => {
+                if entry.uuid.to_string() == id {
+                    return Some((entry, group_id));
+                }
+            }
+            Node::Group(child) => {
+                if let Some(found) = find_entry_by_id_mut(child, id) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+
     None
 }
 
@@ -598,22 +815,22 @@ fn find_entry_password(group: &keepass::db::Group, id: &str) -> PasswordSearchRe
 }
 
 /// Collect entries from a specific group (non-recursive)
-fn collect_entries_from_group(group: &keepass::db::Group, entries: &mut Vec<EntryListItem>) {
+fn collect_entries_from_group(group: &keepass::db::Group, entries: &mut Vec<Entry>) {
     let group_id = group.uuid.to_string();
     for node in &group.children {
         if let Node::Entry(entry) = node {
-            entries.push(convert_entry_to_list_item(entry, &group_id));
+            entries.push(convert_entry(entry, &group_id));
         }
     }
 }
 
 /// Collect all entries recursively from a group
-fn collect_all_entries(group: &keepass::db::Group, entries: &mut Vec<EntryListItem>) {
+fn collect_all_entries(group: &keepass::db::Group, entries: &mut Vec<Entry>) {
     let group_id = group.uuid.to_string();
     for node in &group.children {
         match node {
             Node::Entry(entry) => {
-                entries.push(convert_entry_to_list_item(entry, &group_id));
+                entries.push(convert_entry(entry, &group_id));
             }
             Node::Group(child) => {
                 collect_all_entries(child, entries);
@@ -622,9 +839,109 @@ fn collect_all_entries(group: &keepass::db::Group, entries: &mut Vec<EntryListIt
     }
 }
 
+/// Remove an entry by ID and return it
+fn remove_entry_by_id(group: &mut keepass::db::Group, id: &str) -> Option<KeepassEntry> {
+    let mut index = 0;
+    while index < group.children.len() {
+        match &mut group.children[index] {
+            Node::Entry(entry) => {
+                if entry.uuid.to_string() == id {
+                    return match group.children.remove(index) {
+                        Node::Entry(removed) => Some(removed),
+                        Node::Group(_) => None,
+                    };
+                }
+                index += 1;
+            }
+            Node::Group(child) => {
+                if let Some(found) = remove_entry_by_id(child, id) {
+                    return Some(found);
+                }
+                index += 1;
+            }
+        }
+    }
+    None
+}
+
+/// Standard entry fields that should not be treated as custom fields
+fn is_standard_entry_field(key: &str) -> bool {
+    matches!(key, "Title" | "UserName" | "Password" | "URL" | "Notes" | "otp")
+}
+
+/// Insert custom fields into an entry without overwriting standard fields
+fn insert_custom_fields(entry: &mut KeepassEntry, custom_fields: &BTreeMap<String, String>) {
+    for (key, value) in custom_fields {
+        if is_standard_entry_field(key) {
+            continue;
+        }
+        entry
+            .fields
+            .insert(key.clone(), Value::Unprotected(value.clone()));
+    }
+}
+
+/// Replace all custom fields on an entry
+fn replace_custom_fields(entry: &mut KeepassEntry, custom_fields: &BTreeMap<String, String>) {
+    entry.fields.retain(|key, _| is_standard_entry_field(key));
+    insert_custom_fields(entry, custom_fields);
+}
+
+/// Collect custom fields from an entry
+fn collect_custom_fields(entry: &keepass::db::Entry) -> BTreeMap<String, String> {
+    let mut custom_fields = BTreeMap::new();
+
+    for (key, value) in &entry.fields {
+        if is_standard_entry_field(key) {
+            continue;
+        }
+
+        let rendered = match value {
+            Value::Unprotected(text) => Some(text.clone()),
+            Value::Protected(text) => Some(String::from_utf8_lossy(text.unsecure()).to_string()),
+            Value::Bytes(_) => None,
+        };
+
+        if let Some(value) = rendered {
+            custom_fields.insert(key.clone(), value);
+        }
+    }
+
+    custom_fields
+}
+
+/// Ensure the recycle bin group exists and return its UUID
+fn ensure_recycle_bin(db: &mut Database) -> Result<String, AppError> {
+    if let Some(recycle_uuid) = db.meta.recyclebin_uuid {
+        if find_group_by_id(&db.root, &recycle_uuid.to_string()).is_some() {
+            db.meta.recyclebin_enabled = Some(true);
+            db.meta.recyclebin_changed = Some(Times::now());
+            return Ok(recycle_uuid.to_string());
+        }
+    }
+
+    if let Some(group) = find_group_by_name(&db.root, "Recycle Bin") {
+        db.meta.recyclebin_enabled = Some(true);
+        db.meta.recyclebin_uuid = Some(group.uuid);
+        db.meta.recyclebin_changed = Some(Times::now());
+        return Ok(group.uuid.to_string());
+    }
+
+    let recycle_bin = keepass::db::Group::new("Recycle Bin");
+    let recycle_uuid = recycle_bin.uuid;
+    db.root.add_child(recycle_bin);
+
+    db.meta.recyclebin_enabled = Some(true);
+    db.meta.recyclebin_uuid = Some(recycle_uuid);
+    db.meta.recyclebin_changed = Some(Times::now());
+
+    Ok(recycle_uuid.to_string())
+}
+
 /// Convert a keepass-rs Entry to our Entry model
 fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry {
     let times = &entry.times;
+    let custom_fields = collect_custom_fields(entry);
 
     Entry {
         id: entry.uuid.to_string(),
@@ -633,6 +950,9 @@ fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry {
         username: entry.get_username().unwrap_or_default().to_string(),
         url: entry.get_url().map(std::string::ToString::to_string),
         notes: entry.get("Notes").map(std::string::ToString::to_string),
+        icon_id: entry.icon_id.map(|id| id as u32),
+        tags: entry.tags.clone(),
+        custom_fields,
         created_at: times
             .get_creation()
             .map(std::string::ToString::to_string)
@@ -641,17 +961,10 @@ fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry {
             .get_last_modification()
             .map(std::string::ToString::to_string)
             .unwrap_or_default(),
-    }
-}
-
-/// Convert a keepass-rs Entry to our `EntryListItem` model (without password)
-fn convert_entry_to_list_item(entry: &keepass::db::Entry, group_id: &str) -> EntryListItem {
-    EntryListItem {
-        id: entry.uuid.to_string(),
-        group_id: group_id.to_string(),
-        title: entry.get_title().unwrap_or_default().to_string(),
-        username: entry.get_username().unwrap_or_default().to_string(),
-        url: entry.get_url().map(std::string::ToString::to_string),
+        accessed_at: times
+            .get_last_access()
+            .map(std::string::ToString::to_string)
+            .unwrap_or_default(),
     }
 }
 
