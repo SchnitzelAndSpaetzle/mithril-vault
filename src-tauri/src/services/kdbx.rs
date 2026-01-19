@@ -790,10 +790,7 @@ fn find_entry_by_id(group: &keepass::db::Group, id: &str) -> Option<Entry> {
 }
 
 /// Find an entry by its UUID string and return a reference
-fn find_entry_by_id_ref<'a>(
-    group: &'a keepass::db::Group,
-    id: &str,
-) -> Option<&'a KeepassEntry> {
+fn find_entry_by_id_ref<'a>(group: &'a keepass::db::Group, id: &str) -> Option<&'a KeepassEntry> {
     for node in &group.children {
         match node {
             Node::Entry(entry) => {
@@ -970,7 +967,9 @@ fn replace_custom_fields(
 }
 
 /// Collect custom fields from an entry
-fn collect_custom_fields(entry: &keepass::db::Entry) -> (BTreeMap<String, String>, Vec<CustomFieldMeta>) {
+fn collect_custom_fields(
+    entry: &keepass::db::Entry,
+) -> (BTreeMap<String, String>, Vec<CustomFieldMeta>) {
     let mut custom_fields = BTreeMap::new();
     let mut custom_field_meta = Vec::new();
 
