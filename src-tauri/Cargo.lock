@@ -2616,6 +2616,7 @@ dependencies = [
  "keepass",
  "rand 0.8.5",
  "rust-argon2 3.0.0",
+ "secstr",
  "serde",
  "serde_json",
  "tauri",

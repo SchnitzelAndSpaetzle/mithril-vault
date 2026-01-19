@@ -9,11 +9,11 @@ pub mod utils;
 use commands::{
     add_recent_database, calculate_password_strength, clear_recent_databases, clear_session_key,
     close_database, create_database, create_entry, create_group, delete_entry, delete_group,
-    generate_passphrase, generate_password, get_entry, get_entry_password, get_group, get_settings,
-    has_session_key, list_entries, list_groups, lock_database, move_entry, move_group,
-    open_database, open_database_with_keyfile, open_database_with_keyfile_only,
-    remove_recent_database, save_database, store_session_key, unlock_database, update_entry,
-    update_group, update_settings,
+    generate_passphrase, generate_password, get_entry, get_entry_password,
+    get_entry_protected_custom_field, get_group, get_settings, has_session_key, list_entries,
+    list_groups, lock_database, move_entry, move_group, open_database, open_database_with_keyfile,
+    open_database_with_keyfile_only, remove_recent_database, save_database, store_session_key,
+    unlock_database, update_entry, update_group, update_settings,
 };
 use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
@@ -45,6 +45,7 @@ pub fn run() {
             list_entries,
             get_entry,
             get_entry_password,
+            get_entry_protected_custom_field,
             create_entry,
             update_entry,
             delete_entry,
