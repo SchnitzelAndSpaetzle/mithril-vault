@@ -367,7 +367,7 @@ impl KdbxService {
             remove_entry_by_id(root, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
         };
 
-        let recycle_bin_id = ensure_recycle_bin(&mut open_db.db)?;
+        let recycle_bin_id = ensure_recycle_bin(&mut open_db.db);
         let recycle_bin = find_group_by_id_mut(&mut open_db.db.root, &recycle_bin_id)
             .ok_or_else(|| AppError::GroupNotFound(recycle_bin_id.clone()))?;
 
@@ -908,12 +908,12 @@ fn collect_custom_fields(entry: &keepass::db::Entry) -> BTreeMap<String, String>
 }
 
 /// Ensure the recycle bin group exists and return its UUID
-fn ensure_recycle_bin(db: &mut Database) -> Result<String, AppError> {
+fn ensure_recycle_bin(db: &mut Database) -> String {
     if let Some(recycle_uuid) = db.meta.recyclebin_uuid {
         if find_group_by_id(&db.root, &recycle_uuid.to_string()).is_some() {
             db.meta.recyclebin_enabled = Some(true);
             db.meta.recyclebin_changed = Some(Times::now());
-            return Ok(recycle_uuid.to_string());
+            return recycle_uuid.to_string();
         }
     }
 
@@ -921,7 +921,7 @@ fn ensure_recycle_bin(db: &mut Database) -> Result<String, AppError> {
         db.meta.recyclebin_enabled = Some(true);
         db.meta.recyclebin_uuid = Some(group.uuid);
         db.meta.recyclebin_changed = Some(Times::now());
-        return Ok(group.uuid.to_string());
+        return group.uuid.to_string();
     }
 
     let recycle_bin = keepass::db::Group::new("Recycle Bin");
@@ -932,7 +932,7 @@ fn ensure_recycle_bin(db: &mut Database) -> Result<String, AppError> {
     db.meta.recyclebin_uuid = Some(recycle_uuid);
     db.meta.recyclebin_changed = Some(Times::now());
 
-    Ok(recycle_uuid.to_string())
+    recycle_uuid.to_string()
 }
 
 /// Convert a keepass-rs Entry to our Entry model
@@ -947,7 +947,9 @@ fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry {
         username: entry.get_username().unwrap_or_default().to_string(),
         url: entry.get_url().map(std::string::ToString::to_string),
         notes: entry.get("Notes").map(std::string::ToString::to_string),
-        icon_id: entry.icon_id.map(|id| id as u32),
+        icon_id: entry
+            .icon_id
+            .and_then(|id| u32::try_from(id).ok()),
         tags: entry.tags.clone(),
         custom_fields,
         created_at: times

@@ -3,7 +3,6 @@
 use crate::models::entry::{CreateEntryData, Entry, UpdateEntryData};
 use crate::models::error::AppError;
 use crate::services::kdbx::KdbxService;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use tauri::State;
 
@@ -31,52 +30,18 @@ pub async fn get_entry_password(
 #[tauri::command]
 pub async fn create_entry(
     group_id: String,
-    title: String,
-    username: String,
-    password: String,
-    url: Option<String>,
-    notes: Option<String>,
-    icon_id: Option<u32>,
-    tags: Option<Vec<String>>,
-    custom_fields: Option<BTreeMap<String, String>>,
+    data: CreateEntryData,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<Entry, AppError> {
-    let data = CreateEntryData {
-        title,
-        username,
-        password,
-        url,
-        notes,
-        icon_id,
-        tags,
-        custom_fields,
-    };
     state.create_entry(&group_id, data)
 }
 
 #[tauri::command]
 pub async fn update_entry(
     id: String,
-    title: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
-    url: Option<String>,
-    notes: Option<String>,
-    icon_id: Option<u32>,
-    tags: Option<Vec<String>>,
-    custom_fields: Option<BTreeMap<String, String>>,
+    data: UpdateEntryData,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<Entry, AppError> {
-    let data = UpdateEntryData {
-        title,
-        username,
-        password,
-        url,
-        notes,
-        icon_id,
-        tags,
-        custom_fields,
-    };
     state.update_entry(&id, data)
 }
 

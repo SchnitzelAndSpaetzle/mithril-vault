@@ -161,14 +161,14 @@ export const entries = {
   async create(groupId: string, data: CreateEntryData): Promise<Entry> {
     GroupIdSchema.parse({ groupId });
     CreateEntryDataSchema.parse(data);
-    const result = await invoke("create_entry", { groupId, ...data });
+    const result = await invoke("create_entry", { groupId, data });
     return EntrySchema.parse(result);
   },
 
   async update(id: string, data: UpdateEntryData): Promise<Entry> {
     IdSchema.parse({ id });
     UpdateEntryDataSchema.parse(data);
-    const result = await invoke("update_entry", { id, ...data });
+    const result = await invoke("update_entry", { id, data });
     return EntrySchema.parse(result);
   },
 
