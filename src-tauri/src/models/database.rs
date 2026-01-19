@@ -10,6 +10,7 @@ pub struct DatabaseInfo {
     pub is_modified: bool,
     pub is_locked: bool,
     pub root_group_id: String,
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
