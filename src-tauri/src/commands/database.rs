@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::database::DatabaseInfo;
+use crate::models::database::{DatabaseCreationOptions, DatabaseInfo};
 use crate::models::error::AppError;
 use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
@@ -20,14 +20,30 @@ pub async fn close_database(state: State<'_, Arc<KdbxService>>) -> Result<(), Ap
     state.close()
 }
 
+/// Create a new KDBX4 database
+///
+/// # Parameters
+/// - `path`: File path where the database will be saved
+/// - `name`: Database name (also used as root group name)
+/// - `password`: Optional password (required if no keyfile)
+/// - `keyfile_path`: Optional path to keyfile for authentication
+/// - `options`: Optional creation options (KDF settings, default groups, description)
 #[tauri::command]
 pub async fn create_database(
     path: String,
-    password: String,
     name: String,
+    password: Option<String>,
+    keyfile_path: Option<String>,
+    options: Option<DatabaseCreationOptions>,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    state.create(&path, &password, &name)
+    state.create_database(
+        &path,
+        password.as_deref(),
+        keyfile_path.as_deref(),
+        &name,
+        &options.unwrap_or_default(),
+    )
 }
 
 #[tauri::command]

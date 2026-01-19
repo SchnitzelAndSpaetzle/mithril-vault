@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
   CreateEntryData,
+  DatabaseCreationOptions,
   DatabaseInfo,
   Entry,
   Group,
@@ -12,6 +13,7 @@ import type {
 } from "./types";
 import {
   CreateEntryDataSchema,
+  DatabaseCreationOptionsSchema,
   DatabaseInfoSchema,
   EntrySchema,
   GroupSchema,
@@ -52,6 +54,14 @@ const CopyPasswordSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
 });
 
+const CreateDatabaseSchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  password: z.string().min(8).optional(),
+  keyfilePath: z.string().min(1).optional(),
+  options: DatabaseCreationOptionsSchema.optional(),
+});
+
 /**
  * Database lifecycle commands for opening, creating, saving, and closing a vault.
  */
@@ -70,9 +80,30 @@ export const database = {
     return invoke("save_database");
   },
 
-  async create(path: string, password: string): Promise<DatabaseInfo> {
-    PathPasswordSchema.parse({ path, password });
-    const result = await invoke("create_database", { path, password });
+  /**
+   * Create a new KDBX4 database
+   *
+   * @param path - File path where the database will be saved
+   * @param name - Database name (also used as root group name)
+   * @param password - Optional password (required if no keyfile)
+   * @param keyfilePath - Optional path to keyfile for authentication
+   * @param options - Optional creation options (KDF settings, default groups, description)
+   */
+  async create(
+    path: string,
+    name: string,
+    password?: string,
+    keyfilePath?: string,
+    options?: DatabaseCreationOptions
+  ): Promise<DatabaseInfo> {
+    CreateDatabaseSchema.parse({ path, name, password, keyfilePath, options });
+    const result = await invoke("create_database", {
+      path,
+      name,
+      password,
+      keyfilePath,
+      options,
+    });
     return DatabaseInfoSchema.parse(result);
   },
 
