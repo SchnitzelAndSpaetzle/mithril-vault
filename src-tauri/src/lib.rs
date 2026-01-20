@@ -12,8 +12,8 @@ use commands::{
     generate_passphrase, generate_password, get_entry, get_entry_password,
     get_entry_protected_custom_field, get_group, get_settings, has_session_key, list_entries,
     list_groups, lock_database, move_entry, move_group, open_database, open_database_with_keyfile,
-    open_database_with_keyfile_only, remove_recent_database, save_database, store_session_key,
-    unlock_database, update_entry, update_group, update_settings,
+    open_database_with_keyfile_only, remove_recent_database, rename_group, save_database,
+    store_session_key, unlock_database, update_entry, update_group, update_settings,
 };
 use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
@@ -57,6 +57,7 @@ pub fn run() {
             update_group,
             delete_group,
             move_group,
+            rename_group,
             generate_password,
             generate_passphrase,
             calculate_password_strength,

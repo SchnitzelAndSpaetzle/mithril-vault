@@ -26,6 +26,18 @@ pub enum AppError {
     #[error("Group not found: {0}")]
     GroupNotFound(String),
 
+    #[error("Cannot delete root group")]
+    CannotDeleteRootGroup,
+
+    #[error("Cannot move root group")]
+    CannotMoveRootGroup,
+
+    #[error("Cannot move group into itself or its descendants")]
+    CircularReference,
+
+    #[error("Group is not empty and recursive delete not requested")]
+    GroupNotEmpty(String),
+
     #[error("Invalid path: {0}")]
     InvalidPath(String),
 
