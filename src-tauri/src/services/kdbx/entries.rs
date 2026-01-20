@@ -1,11 +1,10 @@
 use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::dto::error::AppError;
 use keepass::db::{Entry as KeepassEntry, Node, Times, Value};
-use keepass::Database;
 use secstr::SecStr;
 
 use super::mapping::{
-    apply_custom_fields, convert_entry, find_group_by_id, find_group_by_name,
+    apply_custom_fields, convert_entry, ensure_recycle_bin, find_group_by_id, find_group_by_id_mut,
     is_standard_entry_field, replace_custom_fields,
 };
 use super::KdbxService;
@@ -230,25 +229,6 @@ impl KdbxService {
     }
 }
 
-fn find_group_by_id_mut<'a>(
-    group: &'a mut keepass::db::Group,
-    id: &str,
-) -> Option<&'a mut keepass::db::Group> {
-    if group.uuid.to_string() == id {
-        return Some(group);
-    }
-
-    for node in &mut group.children {
-        if let Node::Group(child) = node {
-            if let Some(found) = find_group_by_id_mut(child, id) {
-                return Some(found);
-            }
-        }
-    }
-
-    None
-}
-
 fn find_entry_by_id(group: &keepass::db::Group, id: &str) -> Option<Entry> {
     for node in &group.children {
         match node {
@@ -381,31 +361,4 @@ fn remove_entry_by_id(group: &mut keepass::db::Group, id: &str) -> Option<Keepas
         }
     }
     None
-}
-
-fn ensure_recycle_bin(db: &mut Database) -> String {
-    if let Some(recycle_uuid) = db.meta.recyclebin_uuid {
-        if find_group_by_id(&db.root, &recycle_uuid.to_string()).is_some() {
-            db.meta.recyclebin_enabled = Some(true);
-            db.meta.recyclebin_changed = Some(Times::now());
-            return recycle_uuid.to_string();
-        }
-    }
-
-    if let Some(group) = find_group_by_name(&db.root, "Recycle Bin") {
-        db.meta.recyclebin_enabled = Some(true);
-        db.meta.recyclebin_uuid = Some(group.uuid);
-        db.meta.recyclebin_changed = Some(Times::now());
-        return group.uuid.to_string();
-    }
-
-    let recycle_bin = keepass::db::Group::new("Recycle Bin");
-    let recycle_uuid = recycle_bin.uuid;
-    db.root.add_child(recycle_bin);
-
-    db.meta.recyclebin_enabled = Some(true);
-    db.meta.recyclebin_uuid = Some(recycle_uuid);
-    db.meta.recyclebin_changed = Some(Times::now());
-
-    recycle_uuid.to_string()
 }
