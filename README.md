@@ -121,7 +121,8 @@ mithril-vault/
 │   └── src/
 │       ├── commands/    # Tauri IPC commands
 │       ├── services/    # Business logic
-│       └── models/      # Data structures
+│       ├── domain/      # Internal domain state
+│       └── dto/         # IPC data structures
 └── docs/                # Documentation
 ```
 

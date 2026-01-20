@@ -7,37 +7,10 @@
 
 #![allow(clippy::expect_used)] // expect() is acceptable in tests
 
-use mithril_vault_lib::models::error::AppError;
+use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::kdbx::KdbxService;
-use std::path::PathBuf;
 
-/// Get the path to a test fixture file
-fn fixture_path(filename: &str) -> PathBuf {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("tests");
-    path.push("fixtures");
-    path.push(filename);
-    path
-}
-
-/// Helper to check if test fixtures exist
-fn fixture_exists(filename: &str) -> bool {
-    fixture_path(filename).exists()
-}
-
-/// Helper to create a service with an open test database
-fn open_test_database() -> Option<KdbxService> {
-    if !fixture_exists("test-kdbx4-low-KDF.kdbx") {
-        return None;
-    }
-
-    let service = KdbxService::new();
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    service
-        .open(&path.to_string_lossy(), "test123")
-        .expect("Failed to open test database");
-    Some(service)
-}
+use super::open_test_database;
 
 // ============================================================================
 // list_groups command tests

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 pub mod commands;
-pub mod models;
+pub mod domain;
+pub mod dto;
 pub mod services;
 pub mod utils;
 
@@ -21,6 +22,7 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[allow(clippy::expect_used)]
+/// Runs the Tauri application.
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

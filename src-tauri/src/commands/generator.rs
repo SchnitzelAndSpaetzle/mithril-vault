@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::models::error::AppError;
+use crate::dto::error::AppError;
 use serde::{Deserialize, Serialize};
 
 #[allow(clippy::struct_excessive_bools)]
@@ -50,18 +50,21 @@ impl Default for PassphraseGeneratorOptions {
     }
 }
 
+/// TODO: Generates a random password (not yet implemented).
 #[tauri::command]
 pub async fn generate_password(options: PasswordGeneratorOptions) -> Result<String, AppError> {
     let _ = options;
     Err(AppError::NotImplemented("generate_password".into()))
 }
 
+/// TODO: Generates a passphrase (not yet implemented).
 #[tauri::command]
 pub async fn generate_passphrase(options: PassphraseGeneratorOptions) -> Result<String, AppError> {
     let _ = options;
     Err(AppError::NotImplemented("generate_passphrase".into()))
 }
 
+/// TODO: Calculates password strength (not yet implemented).
 #[tauri::command]
 pub async fn calculate_password_strength(password: String) -> Result<u8, AppError> {
     let _ = password;
