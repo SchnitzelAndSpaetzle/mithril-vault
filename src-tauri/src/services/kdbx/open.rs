@@ -11,6 +11,7 @@ use std::fs::File;
 use super::KdbxService;
 
 impl KdbxService {
+    /// Opens a database with a password.
     pub fn open(&self, path: &str, password: &str) -> Result<DatabaseInfo, AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
 
@@ -46,6 +47,7 @@ impl KdbxService {
         })
     }
 
+    /// Opens a database with a password and keyfile.
     pub fn open_with_keyfile(
         &self,
         path: &str,
@@ -92,6 +94,7 @@ impl KdbxService {
         })
     }
 
+    /// Opens a database using only a keyfile.
     pub fn open_with_keyfile_only(
         &self,
         path: &str,
@@ -135,6 +138,7 @@ impl KdbxService {
         })
     }
 
+    /// Closes the active database.
     pub fn close(&self) -> Result<(), AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
 
@@ -146,6 +150,7 @@ impl KdbxService {
         Ok(())
     }
 
+    /// Returns metadata for the open database.
     pub fn get_info(&self) -> Result<DatabaseInfo, AppError> {
         let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;

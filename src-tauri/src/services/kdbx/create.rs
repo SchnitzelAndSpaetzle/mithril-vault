@@ -14,6 +14,7 @@ use super::KdbxService;
 const DEFAULT_GROUP_NAMES: &[&str] = &["General", "Email", "Banking", "Social"];
 
 impl KdbxService {
+    /// Creates a new database with a password.
     pub fn create(&self, path: &str, password: &str, name: &str) -> Result<DatabaseInfo, AppError> {
         self.create_database(
             path,
@@ -24,6 +25,7 @@ impl KdbxService {
         )
     }
 
+    /// Creates a new database with the provided options.
     pub fn create_database(
         &self,
         path: &str,

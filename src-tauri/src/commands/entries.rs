@@ -4,6 +4,7 @@ use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
 use tauri::State;
 
+/// Lists entries, optionally filtered by group.
 #[tauri::command]
 pub async fn list_entries(
     group_id: Option<String>,
@@ -12,11 +13,13 @@ pub async fn list_entries(
     state.list_entries(group_id.as_deref())
 }
 
+/// Fetches an entry by ID.
 #[tauri::command]
 pub async fn get_entry(id: String, state: State<'_, Arc<KdbxService>>) -> Result<Entry, AppError> {
     state.get_entry(&id)
 }
 
+/// Fetches an entry password.
 #[tauri::command]
 pub async fn get_entry_password(
     id: String,
@@ -25,6 +28,7 @@ pub async fn get_entry_password(
     state.get_entry_password(&id)
 }
 
+/// Fetches a protected custom field value.
 #[tauri::command]
 pub async fn get_entry_protected_custom_field(
     id: String,
@@ -34,6 +38,7 @@ pub async fn get_entry_protected_custom_field(
     state.get_entry_protected_custom_field(&id, &key)
 }
 
+/// Creates a new entry in a group.
 #[tauri::command]
 pub async fn create_entry(
     group_id: String,
@@ -43,6 +48,7 @@ pub async fn create_entry(
     state.create_entry(&group_id, data)
 }
 
+/// Updates an existing entry.
 #[tauri::command]
 pub async fn update_entry(
     id: String,
@@ -52,11 +58,13 @@ pub async fn update_entry(
     state.update_entry(&id, data)
 }
 
+/// Deletes an entry by ID.
 #[tauri::command]
 pub async fn delete_entry(id: String, state: State<'_, Arc<KdbxService>>) -> Result<(), AppError> {
     state.delete_entry(&id)
 }
 
+/// Moves an entry to another group.
 #[tauri::command]
 pub async fn move_entry(
     id: String,

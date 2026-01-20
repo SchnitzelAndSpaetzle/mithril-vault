@@ -6,6 +6,7 @@ use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
 use tauri::State;
 
+/// Opens a database with a password.
 #[tauri::command]
 pub async fn open_database(
     path: String,
@@ -15,6 +16,7 @@ pub async fn open_database(
     state.open(&path, &password)
 }
 
+/// Closes the currently open database.
 #[tauri::command]
 pub async fn close_database(state: State<'_, Arc<KdbxService>>) -> Result<(), AppError> {
     state.close()
@@ -46,11 +48,13 @@ pub async fn create_database(
     )
 }
 
+/// Saves the open database.
 #[tauri::command]
 pub async fn save_database(state: State<'_, Arc<KdbxService>>) -> Result<(), AppError> {
     state.save()
 }
 
+/// Opens a database with password and keyfile.
 #[tauri::command]
 pub async fn open_database_with_keyfile(
     path: String,
@@ -61,6 +65,7 @@ pub async fn open_database_with_keyfile(
     state.open_with_keyfile(&path, &password, &keyfile_path)
 }
 
+/// Opens a database using only a keyfile.
 #[tauri::command]
 pub async fn open_database_with_keyfile_only(
     path: String,
@@ -70,11 +75,13 @@ pub async fn open_database_with_keyfile_only(
     state.open_with_keyfile_only(&path, &keyfile_path)
 }
 
+/// TODO: Locks the database (not yet implemented).
 #[tauri::command]
 pub async fn lock_database() -> Result<(), AppError> {
     Err(AppError::NotImplemented("lock_database".into()))
 }
 
+/// TODO: Unlocks the database (not yet implemented).
 #[tauri::command]
 pub async fn unlock_database(password: String) -> Result<(), AppError> {
     let _ = password;

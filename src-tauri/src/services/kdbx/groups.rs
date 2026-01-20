@@ -5,6 +5,7 @@ use super::mapping::{convert_group, find_group_by_id};
 use super::KdbxService;
 
 impl KdbxService {
+    /// Lists groups in a hierarchy.
     pub fn list_groups(&self) -> Result<Vec<Group>, AppError> {
         let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
@@ -13,6 +14,7 @@ impl KdbxService {
         Ok(vec![root])
     }
 
+    /// Fetches a group by ID.
     pub fn get_group(&self, id: &str) -> Result<Group, AppError> {
         let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;

@@ -22,6 +22,7 @@ pub struct SecureStorageService {
 }
 
 impl SecureStorageService {
+    /// Creates secure storage rooted in app data.
     pub fn new(app: &AppHandle) -> Result<Self, AppError> {
         let data_dir = app
             .path()
@@ -52,6 +53,7 @@ impl SecureStorageService {
         })
     }
 
+    /// Stores a session key with a TTL.
     pub fn store_session_key(&self, key: &[u8], ttl: Duration) -> Result<(), AppError> {
         let stronghold = self.stronghold.lock().map_err(|_| AppError::Lock)?;
         let client = Self::get_or_create_client(&stronghold)?;
@@ -68,6 +70,7 @@ impl SecureStorageService {
         Ok(())
     }
 
+    /// Checks if a session key is stored.
     pub fn session_key_present(&self) -> Result<bool, AppError> {
         let stronghold = self.stronghold.lock().map_err(|_| AppError::Lock)?;
         let client = Self::get_or_create_client(&stronghold)?;
@@ -80,6 +83,7 @@ impl SecureStorageService {
         Ok(record.is_some())
     }
 
+    /// Loads the session key if present.
     pub fn load_session_key(&self) -> Result<Option<Vec<u8>>, AppError> {
         let stronghold = self.stronghold.lock().map_err(|_| AppError::Lock)?;
         let client = Self::get_or_create_client(&stronghold)?;
@@ -90,6 +94,7 @@ impl SecureStorageService {
             .map_err(|err| AppError::SecureStorage(err.to_string()))
     }
 
+    /// Clears the stored session key.
     pub fn clear_session_key(&self) -> Result<(), AppError> {
         let stronghold = self.stronghold.lock().map_err(|_| AppError::Lock)?;
         let client = Self::get_or_create_client(&stronghold)?;
@@ -110,6 +115,7 @@ impl SecureStorageService {
         Ok(())
     }
 
+    /// Returns the default session TTL.
     pub fn default_session_ttl() -> Duration {
         Duration::from_secs(DEFAULT_SESSION_TTL_SECS)
     }

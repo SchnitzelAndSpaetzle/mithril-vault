@@ -14,6 +14,7 @@ pub struct KdbxService {
 }
 
 impl KdbxService {
+    /// Creates a new KDBX service.
     pub fn new() -> Self {
         Self {
             database: Mutex::new(None),

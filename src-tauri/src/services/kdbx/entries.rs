@@ -11,6 +11,7 @@ use super::mapping::{
 use super::KdbxService;
 
 impl KdbxService {
+    /// Lists entries, optionally filtered by group.
     pub fn list_entries(&self, group_id: Option<&str>) -> Result<Vec<Entry>, AppError> {
         let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
@@ -28,6 +29,7 @@ impl KdbxService {
         Ok(entries)
     }
 
+    /// Fetches an entry by ID.
     pub fn get_entry(&self, id: &str) -> Result<Entry, AppError> {
         let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
@@ -36,6 +38,7 @@ impl KdbxService {
             .ok_or_else(|| AppError::EntryNotFound(id.to_string()))
     }
 
+    /// Fetches an entry password.
     pub fn get_entry_password(&self, id: &str) -> Result<String, AppError> {
         let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
@@ -46,6 +49,7 @@ impl KdbxService {
         }
     }
 
+    /// Fetches a protected custom field value.
     pub fn get_entry_protected_custom_field(
         &self,
         entry_id: &str,
@@ -75,6 +79,7 @@ impl KdbxService {
         }
     }
 
+    /// Creates a new entry in a group.
     pub fn create_entry(&self, group_id: &str, data: CreateEntryData) -> Result<Entry, AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
@@ -123,6 +128,7 @@ impl KdbxService {
         Ok(entry_model)
     }
 
+    /// Updates an existing entry.
     pub fn update_entry(&self, id: &str, data: UpdateEntryData) -> Result<Entry, AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
@@ -176,6 +182,7 @@ impl KdbxService {
         Ok(convert_entry(entry, &group_id))
     }
 
+    /// Deletes an entry by moving it to recycle bin.
     pub fn delete_entry(&self, id: &str) -> Result<(), AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
@@ -198,6 +205,7 @@ impl KdbxService {
         Ok(())
     }
 
+    /// Moves an entry to another group.
     pub fn move_entry(&self, id: &str, target_group_id: &str) -> Result<Entry, AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;

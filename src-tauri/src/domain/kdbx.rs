@@ -11,6 +11,7 @@ pub struct OpenDatabase {
     pub version: String,
 }
 
+/// Formats a database version for display.
 pub fn format_database_version(version: &DatabaseVersion) -> String {
     match version {
         DatabaseVersion::KDB(minor) => format!("KDB 1.{minor}"),

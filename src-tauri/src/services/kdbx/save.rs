@@ -5,6 +5,7 @@ use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use super::KdbxService;
 
 impl KdbxService {
+    /// Saves the open database.
     pub fn save(&self) -> Result<(), AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
@@ -35,6 +36,7 @@ impl KdbxService {
         Ok(())
     }
 
+    /// Saves the database to a new path.
     pub fn save_as(&self, new_path: &str, new_password: Option<&str>) -> Result<(), AppError> {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;

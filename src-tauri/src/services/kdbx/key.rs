@@ -2,6 +2,7 @@ use crate::dto::error::AppError;
 use keepass::DatabaseKey;
 use std::fs::File;
 
+/// Builds a database key from credentials.
 pub fn build_database_key(
     password: Option<&str>,
     keyfile_path: Option<&str>,
