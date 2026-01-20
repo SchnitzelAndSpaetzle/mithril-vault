@@ -95,7 +95,7 @@ impl KdbxService {
             .insert("UserName".to_string(), Value::Unprotected(data.username));
         entry.fields.insert(
             "Password".to_string(),
-            Value::Protected(SecStr::new(data.password.into_bytes())),
+            Value::Protected(SecStr::new(data.password.as_str().as_bytes().to_vec())),
         );
 
         if let Some(url) = data.url {
@@ -145,10 +145,10 @@ impl KdbxService {
                 .fields
                 .insert("UserName".to_string(), Value::Unprotected(username));
         }
-        if let Some(password) = data.password {
+        if let Some(ref password) = data.password {
             entry.fields.insert(
                 "Password".to_string(),
-                Value::Protected(SecStr::new(password.into_bytes())),
+                Value::Protected(SecStr::new(password.as_str().as_bytes().to_vec())),
             );
         }
         if let Some(url) = data.url {

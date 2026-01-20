@@ -106,6 +106,37 @@ export const entries = {
 - **Clipboard auto-clears** after timeout (default 30 seconds)
 - **Return minimal data** in list views (no password fields in `EntryListItem`)
 
+### Secure Memory Types
+
+The codebase uses secure memory types that automatically zeroize on drop to prevent memory disclosure:
+
+- **`SecureString`** - Use for all password parameters and storage. Wraps `String` with automatic zeroization.
+- **`SecureBytes`** - Use for binary sensitive data like keys and keyfile contents. Wraps `Vec<u8>` with automatic zeroization.
+
+Both types:
+- Auto-zeroize memory when dropped (via `zeroize` crate with `ZeroizeOnDrop` derive)
+- Print `[REDACTED]` in `Debug` and `Display` output to prevent accidental logging
+- Support serde for Tauri IPC (deserialize from JSON, serialize with warning)
+- Implement `Deref` for easy access to inner value
+
+Usage example:
+```rust
+use crate::domain::secure::SecureString;
+
+// Create from string
+let password = SecureString::from("my-password");
+
+// Access inner value
+let password_str: &str = password.as_str();
+
+// Debug won't leak
+println!("{:?}", password); // Prints: SecureString("[REDACTED]")
+
+// Automatically zeroized when dropped
+```
+
+Location: `src-tauri/src/domain/secure.rs`
+
 ## Code Conventions
 
 ### Rust

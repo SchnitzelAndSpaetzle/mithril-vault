@@ -1,3 +1,4 @@
+use crate::domain::secure::SecureString;
 use crate::dto::error::AppError;
 use crate::services::kdbx::key::build_database_key;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
@@ -24,7 +25,10 @@ impl KdbxService {
                 preserve_permissions: true,
             },
             |file| {
-                let key = build_database_key(password.as_deref(), keyfile_path.as_deref())?;
+                let key = build_database_key(
+                    password.as_ref().map(SecureString::as_str),
+                    keyfile_path.as_deref(),
+                )?;
                 open_db
                     .db
                     .save(file, key)
@@ -41,8 +45,8 @@ impl KdbxService {
         let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
         let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
 
-        let effective_password: Option<String> = new_password
-            .map(String::from)
+        let effective_password: Option<SecureString> = new_password
+            .map(SecureString::from)
             .or_else(|| open_db.password.clone());
 
         if effective_password.is_none() && open_db.keyfile_path.is_none() {
@@ -57,8 +61,10 @@ impl KdbxService {
                 preserve_permissions: false,
             },
             |file| {
-                let key =
-                    build_database_key(effective_password.as_deref(), keyfile_path.as_deref())?;
+                let key = build_database_key(
+                    effective_password.as_ref().map(SecureString::as_str),
+                    keyfile_path.as_deref(),
+                )?;
                 open_db
                     .db
                     .save(file, key)
@@ -68,7 +74,7 @@ impl KdbxService {
 
         open_db.path = new_path.to_string();
         if new_password.is_some() {
-            open_db.password = new_password.map(String::from);
+            open_db.password = new_password.map(SecureString::from);
         }
         open_db.is_modified = false;
 

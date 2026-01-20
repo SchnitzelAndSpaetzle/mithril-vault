@@ -7,6 +7,7 @@
 
 #![allow(clippy::expect_used)] // expect() is acceptable in tests
 
+use mithril_vault_lib::domain::secure::SecureString;
 use mithril_vault_lib::dto::database::DatabaseCreationOptions;
 use mithril_vault_lib::dto::entry::{CreateEntryData, UpdateEntryData};
 use mithril_vault_lib::dto::error::AppError;
@@ -226,13 +227,13 @@ fn test_create_entry_success() {
 
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Account".to_string(), "Personal".to_string());
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("PIN".to_string(), "1234".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("PIN".to_string(), SecureString::from("1234"));
 
     let data = CreateEntryData {
         title: "New Entry".to_string(),
         username: "user".to_string(),
-        password: "secret".to_string(),
+        password: SecureString::from("secret"),
         url: Some("https://example.com".to_string()),
         notes: Some("Notes".to_string()),
         icon_id: Some(1),
@@ -283,7 +284,7 @@ fn test_create_entry_group_not_found() {
     let data = CreateEntryData {
         title: "New Entry".to_string(),
         username: "user".to_string(),
-        password: "secret".to_string(),
+        password: SecureString::from("secret"),
         url: None,
         notes: None,
         icon_id: None,
@@ -314,7 +315,7 @@ fn test_get_entry_protected_custom_field_requires_protection() {
             CreateEntryData {
                 title: "Entry".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -345,7 +346,7 @@ fn test_update_entry_success() {
     let data = CreateEntryData {
         title: "Original".to_string(),
         username: "user".to_string(),
-        password: "secret".to_string(),
+        password: SecureString::from("secret"),
         url: None,
         notes: None,
         icon_id: None,
@@ -363,8 +364,8 @@ fn test_update_entry_success() {
 
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Category".to_string(), "Work".to_string());
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("PIN".to_string(), "5678".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("PIN".to_string(), SecureString::from("5678"));
 
     let updated = service
         .update_entry(
@@ -372,7 +373,7 @@ fn test_update_entry_success() {
             UpdateEntryData {
                 title: Some("Updated".to_string()),
                 username: None,
-                password: Some("new-secret".to_string()),
+                password: Some(SecureString::from("new-secret")),
                 url: Some("https://updated.example.com".to_string()),
                 notes: Some("Updated notes".to_string()),
                 icon_id: Some(2),
@@ -450,7 +451,7 @@ fn test_delete_entry_moves_to_recycle_bin() {
             CreateEntryData {
                 title: "Disposable".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -524,7 +525,7 @@ fn test_move_entry_success() {
             CreateEntryData {
                 title: "Movable".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -588,8 +589,11 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
 
     let info = service.get_info().expect("database info");
 
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("SecretKey".to_string(), "my-secret-value-123".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert(
+        "SecretKey".to_string(),
+        SecureString::from("my-secret-value-123"),
+    );
 
     let entry = service
         .create_entry(
@@ -597,7 +601,7 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
             CreateEntryData {
                 title: "Roundtrip Entry".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -637,8 +641,8 @@ fn test_protected_custom_field_empty_value() {
     let (service, _dir) = create_test_database();
     let info = service.get_info().expect("database info");
 
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("EmptySecret".to_string(), String::new());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("EmptySecret".to_string(), SecureString::from(""));
 
     let entry = service
         .create_entry(
@@ -646,7 +650,7 @@ fn test_protected_custom_field_empty_value() {
             CreateEntryData {
                 title: "Empty Protected Field".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -672,11 +676,11 @@ fn test_protected_custom_field_unicode_value() {
     let (service, _dir) = create_test_database();
     let info = service.get_info().expect("database info");
 
-    let mut protected_custom_fields = BTreeMap::new();
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     // Test with emojis, CJK characters, and other Unicode
     protected_custom_fields.insert(
         "UnicodeSecret".to_string(),
-        "密码🔐パスワード🗝️Contraseña".to_string(),
+        SecureString::from("密码🔐パスワード🗝️Contraseña"),
     );
 
     let entry = service
@@ -685,7 +689,7 @@ fn test_protected_custom_field_unicode_value() {
             CreateEntryData {
                 title: "Unicode Protected Field".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -711,11 +715,11 @@ fn test_protected_custom_field_special_characters() {
     let (service, _dir) = create_test_database();
     let info = service.get_info().expect("database info");
 
-    let mut protected_custom_fields = BTreeMap::new();
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     // Test with XML special chars and other special characters
     protected_custom_fields.insert(
         "SpecialSecret".to_string(),
-        "<>&\"'{}[]|\\`~!@#$%^&*()".to_string(),
+        SecureString::from("<>&\"'{}[]|\\`~!@#$%^&*()"),
     );
 
     let entry = service
@@ -724,7 +728,7 @@ fn test_protected_custom_field_special_characters() {
             CreateEntryData {
                 title: "Special Chars Protected Field".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -757,7 +761,7 @@ fn test_update_entry_add_protected_custom_field() {
             CreateEntryData {
                 title: "Entry Without Protected".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -769,8 +773,8 @@ fn test_update_entry_add_protected_custom_field() {
         .expect("create entry");
 
     // Update to add protected field
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("NewSecret".to_string(), "added-value".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("NewSecret".to_string(), SecureString::from("added-value"));
 
     let updated = service
         .update_entry(
@@ -812,8 +816,8 @@ fn test_update_entry_modify_protected_custom_field() {
     let (service, _dir) = create_test_database();
     let info = service.get_info().expect("database info");
 
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("ModifyMe".to_string(), "original-value".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("ModifyMe".to_string(), SecureString::from("original-value"));
 
     let entry = service
         .create_entry(
@@ -821,7 +825,7 @@ fn test_update_entry_modify_protected_custom_field() {
             CreateEntryData {
                 title: "Entry To Modify".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -839,8 +843,8 @@ fn test_update_entry_modify_protected_custom_field() {
     assert_eq!(original.value, "original-value");
 
     // Update the protected field
-    let mut updated_protected = BTreeMap::new();
-    updated_protected.insert("ModifyMe".to_string(), "updated-value".to_string());
+    let mut updated_protected: BTreeMap<String, SecureString> = BTreeMap::new();
+    updated_protected.insert("ModifyMe".to_string(), SecureString::from("updated-value"));
 
     service
         .update_entry(
@@ -874,10 +878,13 @@ fn test_multiple_protected_custom_fields() {
     let (service, _dir) = create_test_database();
     let info = service.get_info().expect("database info");
 
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("APIKey".to_string(), "api-key-value".to_string());
-    protected_custom_fields.insert("SecretToken".to_string(), "token-value".to_string());
-    protected_custom_fields.insert("PrivateKey".to_string(), "private-key-value".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("APIKey".to_string(), SecureString::from("api-key-value"));
+    protected_custom_fields.insert("SecretToken".to_string(), SecureString::from("token-value"));
+    protected_custom_fields.insert(
+        "PrivateKey".to_string(),
+        SecureString::from("private-key-value"),
+    );
 
     let entry = service
         .create_entry(
@@ -885,7 +892,7 @@ fn test_multiple_protected_custom_fields() {
             CreateEntryData {
                 title: "Multiple Protected Fields".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -934,9 +941,9 @@ fn test_mixed_protected_and_unprotected_fields() {
     custom_fields.insert("Category".to_string(), "Work".to_string());
     custom_fields.insert("Website".to_string(), "example.com".to_string());
 
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("APIKey".to_string(), "secret-api-key".to_string());
-    protected_custom_fields.insert("PIN".to_string(), "1234".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("APIKey".to_string(), SecureString::from("secret-api-key"));
+    protected_custom_fields.insert("PIN".to_string(), SecureString::from("1234"));
 
     let entry = service
         .create_entry(
@@ -944,7 +951,7 @@ fn test_mixed_protected_and_unprotected_fields() {
             CreateEntryData {
                 title: "Mixed Fields Entry".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -1021,8 +1028,8 @@ fn test_get_protected_field_field_not_found() {
     let (service, _dir) = create_test_database();
     let info = service.get_info().expect("database info");
 
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("ExistingField".to_string(), "value".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("ExistingField".to_string(), SecureString::from("value"));
 
     let entry = service
         .create_entry(
@@ -1030,7 +1037,7 @@ fn test_get_protected_field_field_not_found() {
             CreateEntryData {
                 title: "Entry".to_string(),
                 username: "user".to_string(),
-                password: "secret".to_string(),
+                password: SecureString::from("secret"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -1097,7 +1104,7 @@ fn test_password_roundtrip_save_reopen() {
             CreateEntryData {
                 title: "Password Test".to_string(),
                 username: "user".to_string(),
-                password: "super-secret-password".to_string(),
+                password: SecureString::from("super-secret-password"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -1142,7 +1149,7 @@ fn test_password_unicode() {
             CreateEntryData {
                 title: "Unicode Password".to_string(),
                 username: "user".to_string(),
-                password: unicode_password.to_string(),
+                password: SecureString::from(unicode_password),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -1176,7 +1183,7 @@ fn test_password_special_characters() {
             CreateEntryData {
                 title: "Special Chars Password".to_string(),
                 username: "user".to_string(),
-                password: special_password.to_string(),
+                password: SecureString::from(special_password),
                 url: None,
                 notes: None,
                 icon_id: None,

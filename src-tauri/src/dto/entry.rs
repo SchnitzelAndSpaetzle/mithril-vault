@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+use crate::domain::secure::SecureString;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -50,13 +51,13 @@ pub struct EntryListItem {
 pub struct CreateEntryData {
     pub title: String,
     pub username: String,
-    pub password: String,
+    pub password: SecureString,
     pub url: Option<String>,
     pub notes: Option<String>,
     pub icon_id: Option<u32>,
     pub tags: Option<Vec<String>>,
     pub custom_fields: Option<BTreeMap<String, String>>,
-    pub protected_custom_fields: Option<BTreeMap<String, String>>,
+    pub protected_custom_fields: Option<BTreeMap<String, SecureString>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,11 +65,11 @@ pub struct CreateEntryData {
 pub struct UpdateEntryData {
     pub title: Option<String>,
     pub username: Option<String>,
-    pub password: Option<String>,
+    pub password: Option<SecureString>,
     pub url: Option<String>,
     pub notes: Option<String>,
     pub icon_id: Option<u32>,
     pub tags: Option<Vec<String>>,
     pub custom_fields: Option<BTreeMap<String, String>>,
-    pub protected_custom_fields: Option<BTreeMap<String, String>>,
+    pub protected_custom_fields: Option<BTreeMap<String, SecureString>>,
 }

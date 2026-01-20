@@ -1,4 +1,5 @@
 use crate::domain::kdbx::{format_database_version, OpenDatabase};
+use crate::domain::secure::SecureString;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
 use keepass::error::{
@@ -32,7 +33,7 @@ impl KdbxService {
             db,
             path: path.to_string(),
             is_modified: false,
-            password: Some(password.to_string()),
+            password: Some(SecureString::from(password)),
             keyfile_path: None,
             version: version.clone(),
         });
@@ -79,7 +80,7 @@ impl KdbxService {
             db,
             path: path.to_string(),
             is_modified: false,
-            password: Some(password.to_string()),
+            password: Some(SecureString::from(password)),
             keyfile_path: Some(keyfile_path.to_string()),
             version: version.clone(),
         });
