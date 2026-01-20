@@ -1,7 +1,11 @@
 #![allow(clippy::expect_used)]
 
+use mithril_vault_lib::dto::database::DatabaseCreationOptions;
+use mithril_vault_lib::dto::entry::CreateEntryData;
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::kdbx::KdbxService;
+use std::collections::BTreeMap;
+use tempfile::TempDir;
 
 #[path = "support/mod.rs"]
 mod support;
@@ -247,4 +251,238 @@ fn test_get_entry_password_from_keyfile_only_database() {
         !password.is_empty(),
         "Entry in keyfile-only database should have a password"
     );
+}
+
+// ============================================================================
+// Protected field integration tests
+// ============================================================================
+
+/// Helper to create a KDBX4 test database
+fn create_kdbx4_database() -> (KdbxService, TempDir) {
+    let dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("protected-fields.kdbx");
+
+    let options = DatabaseCreationOptions {
+        create_default_groups: false,
+        kdf_memory: Some(1024 * 1024),
+        kdf_iterations: Some(1),
+        kdf_parallelism: Some(1),
+        description: None,
+    };
+
+    let service = KdbxService::new();
+    service
+        .create_database(
+            &db_path.to_string_lossy(),
+            Some("testpass"),
+            None,
+            "Protected Fields Test",
+            &options,
+        )
+        .expect("Failed to create test database");
+
+    (service, dir)
+}
+
+#[test]
+fn test_protected_fields_kdbx4_roundtrip() {
+    let dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("kdbx4-protected.kdbx");
+
+    let options = DatabaseCreationOptions {
+        create_default_groups: false,
+        kdf_memory: Some(1024 * 1024),
+        kdf_iterations: Some(1),
+        kdf_parallelism: Some(1),
+        description: None,
+    };
+
+    // Create KDBX4 database with protected fields
+    let service = KdbxService::new();
+    service
+        .create_database(
+            &db_path.to_string_lossy(),
+            Some("testpass"),
+            None,
+            "KDBX4 Protected Test",
+            &options,
+        )
+        .expect("Failed to create database");
+
+    let info = service.get_info().expect("database info");
+
+    let mut custom_fields = BTreeMap::new();
+    custom_fields.insert("Category".to_string(), "Test".to_string());
+
+    let mut protected_custom_fields = BTreeMap::new();
+    protected_custom_fields.insert("APIKey".to_string(), "secret-api-key-12345".to_string());
+    protected_custom_fields.insert("SecretToken".to_string(), "bearer-token-xyz".to_string());
+
+    let entry = service
+        .create_entry(
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Integration Test Entry".to_string(),
+                username: "testuser".to_string(),
+                password: "integration-password".to_string(),
+                url: Some("https://example.com".to_string()),
+                notes: Some("Test notes".to_string()),
+                icon_id: None,
+                tags: None,
+                custom_fields: Some(custom_fields),
+                protected_custom_fields: Some(protected_custom_fields),
+            },
+        )
+        .expect("create entry");
+
+    let entry_id = entry.id.clone();
+
+    // Save and close
+    service.save().expect("save database");
+    let _ = service.close();
+
+    // Reopen and verify all protected fields
+    service
+        .open(&db_path.to_string_lossy(), "testpass")
+        .expect("reopen database");
+
+    // Verify entry exists
+    let reopened_entry = service
+        .get_entry(&entry_id)
+        .expect("get entry after reopen");
+    assert_eq!(reopened_entry.title, "Integration Test Entry");
+
+    // Verify unprotected custom field
+    assert_eq!(
+        reopened_entry
+            .custom_fields
+            .get("Category")
+            .map(String::as_str),
+        Some("Test"),
+        "Unprotected custom field should persist"
+    );
+
+    // Verify password
+    let password = service.get_entry_password(&entry_id).expect("get password");
+    assert_eq!(
+        password, "integration-password",
+        "Password should persist in KDBX4"
+    );
+
+    // Verify protected custom fields
+    let api_key = service
+        .get_entry_protected_custom_field(&entry_id, "APIKey")
+        .expect("get APIKey");
+    assert_eq!(
+        api_key.value, "secret-api-key-12345",
+        "Protected APIKey should persist in KDBX4"
+    );
+
+    let secret_token = service
+        .get_entry_protected_custom_field(&entry_id, "SecretToken")
+        .expect("get SecretToken");
+    assert_eq!(
+        secret_token.value, "bearer-token-xyz",
+        "Protected SecretToken should persist in KDBX4"
+    );
+
+    // Verify metadata correctly identifies protected fields
+    let protected_meta: Vec<_> = reopened_entry
+        .custom_field_meta
+        .iter()
+        .filter(|meta| meta.is_protected)
+        .collect();
+    assert_eq!(
+        protected_meta.len(),
+        2,
+        "Should have 2 protected fields in metadata after reopen"
+    );
+}
+
+#[test]
+fn test_protected_fields_persist_after_save() {
+    let (service, dir) = create_kdbx4_database();
+    let db_path = dir.path().join("protected-fields.kdbx");
+    let info = service.get_info().expect("database info");
+
+    // Create first entry with protected field
+    let mut protected1 = BTreeMap::new();
+    protected1.insert("Secret1".to_string(), "value1".to_string());
+
+    let entry1 = service
+        .create_entry(
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Entry 1".to_string(),
+                username: "user1".to_string(),
+                password: "pass1".to_string(),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields: Some(protected1),
+            },
+        )
+        .expect("create entry 1");
+
+    // Save database
+    service.save().expect("first save");
+
+    // Create second entry with protected field (after first save)
+    let mut protected2 = BTreeMap::new();
+    protected2.insert("Secret2".to_string(), "value2".to_string());
+
+    let entry2 = service
+        .create_entry(
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Entry 2".to_string(),
+                username: "user2".to_string(),
+                password: "pass2".to_string(),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields: Some(protected2),
+            },
+        )
+        .expect("create entry 2");
+
+    // Save again
+    service.save().expect("second save");
+
+    let entry1_id = entry1.id.clone();
+    let entry2_id = entry2.id.clone();
+
+    // Close and reopen
+    let _ = service.close();
+    service
+        .open(&db_path.to_string_lossy(), "testpass")
+        .expect("reopen database");
+
+    // Verify both entries and their protected fields
+    let secret1 = service
+        .get_entry_protected_custom_field(&entry1_id, "Secret1")
+        .expect("get Secret1");
+    assert_eq!(
+        secret1.value, "value1",
+        "First entry's protected field should persist after multiple saves"
+    );
+
+    let secret2 = service
+        .get_entry_protected_custom_field(&entry2_id, "Secret2")
+        .expect("get Secret2");
+    assert_eq!(
+        secret2.value, "value2",
+        "Second entry's protected field should persist after save"
+    );
+
+    // Verify passwords also persisted
+    let pass1 = service.get_entry_password(&entry1_id).expect("get pass1");
+    assert_eq!(pass1, "pass1");
+
+    let pass2 = service.get_entry_password(&entry2_id).expect("get pass2");
+    assert_eq!(pass2, "pass2");
 }
