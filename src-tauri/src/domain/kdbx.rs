@@ -1,12 +1,14 @@
 use keepass::config::DatabaseVersion;
 use keepass::Database;
 
+use super::secure::SecureString;
+
 #[derive(Debug)]
 pub struct OpenDatabase {
     pub db: Database,
     pub path: String,
     pub is_modified: bool,
-    pub password: Option<String>,
+    pub password: Option<SecureString>,
     pub keyfile_path: Option<String>,
     pub version: String,
 }

@@ -1,4 +1,5 @@
 use crate::domain::kdbx::OpenDatabase;
+use crate::domain::secure::SecureString;
 use crate::dto::database::{DatabaseCreationOptions, DatabaseInfo};
 use crate::dto::error::AppError;
 use crate::services::kdbx::key::build_database_key;
@@ -95,7 +96,7 @@ impl KdbxService {
             db,
             path: path.to_string(),
             is_modified: false,
-            password: password.map(String::from),
+            password: password.map(SecureString::from),
             keyfile_path: keyfile_path.map(String::from),
             version: version.clone(),
         });

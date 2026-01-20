@@ -1,5 +1,6 @@
 #![allow(clippy::expect_used)]
 
+use mithril_vault_lib::domain::secure::SecureString;
 use mithril_vault_lib::dto::database::DatabaseCreationOptions;
 use mithril_vault_lib::dto::entry::CreateEntryData;
 use mithril_vault_lib::dto::error::AppError;
@@ -314,9 +315,9 @@ fn test_protected_fields_kdbx4_roundtrip() {
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Category".to_string(), "Test".to_string());
 
-    let mut protected_custom_fields = BTreeMap::new();
-    protected_custom_fields.insert("APIKey".to_string(), "secret-api-key-12345".to_string());
-    protected_custom_fields.insert("SecretToken".to_string(), "bearer-token-xyz".to_string());
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("APIKey".to_string(), SecureString::from("secret-api-key-12345"));
+    protected_custom_fields.insert("SecretToken".to_string(), SecureString::from("bearer-token-xyz"));
 
     let entry = service
         .create_entry(
@@ -324,7 +325,7 @@ fn test_protected_fields_kdbx4_roundtrip() {
             CreateEntryData {
                 title: "Integration Test Entry".to_string(),
                 username: "testuser".to_string(),
-                password: "integration-password".to_string(),
+                password: SecureString::from("integration-password"),
                 url: Some("https://example.com".to_string()),
                 notes: Some("Test notes".to_string()),
                 icon_id: None,
@@ -406,8 +407,8 @@ fn test_protected_fields_persist_after_save() {
     let info = service.get_info().expect("database info");
 
     // Create first entry with protected field
-    let mut protected1 = BTreeMap::new();
-    protected1.insert("Secret1".to_string(), "value1".to_string());
+    let mut protected1: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected1.insert("Secret1".to_string(), SecureString::from("value1"));
 
     let entry1 = service
         .create_entry(
@@ -415,7 +416,7 @@ fn test_protected_fields_persist_after_save() {
             CreateEntryData {
                 title: "Entry 1".to_string(),
                 username: "user1".to_string(),
-                password: "pass1".to_string(),
+                password: SecureString::from("pass1"),
                 url: None,
                 notes: None,
                 icon_id: None,
@@ -430,8 +431,8 @@ fn test_protected_fields_persist_after_save() {
     service.save().expect("first save");
 
     // Create second entry with protected field (after first save)
-    let mut protected2 = BTreeMap::new();
-    protected2.insert("Secret2".to_string(), "value2".to_string());
+    let mut protected2: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected2.insert("Secret2".to_string(), SecureString::from("value2"));
 
     let entry2 = service
         .create_entry(
@@ -439,7 +440,7 @@ fn test_protected_fields_persist_after_save() {
             CreateEntryData {
                 title: "Entry 2".to_string(),
                 username: "user2".to_string(),
-                password: "pass2".to_string(),
+                password: SecureString::from("pass2"),
                 url: None,
                 notes: None,
                 icon_id: None,

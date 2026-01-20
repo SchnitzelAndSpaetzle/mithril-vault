@@ -1,3 +1,4 @@
+use crate::domain::secure::SecureString;
 use crate::dto::entry::{CustomFieldMeta, Entry};
 use crate::dto::group::Group;
 use keepass::db::{Entry as KeepassEntry, Group as KeepassGroup, Node, Times, Value};
@@ -102,38 +103,49 @@ pub(crate) fn is_standard_entry_field(key: &str) -> bool {
 pub(crate) fn insert_custom_fields(
     entry: &mut KeepassEntry,
     custom_fields: &BTreeMap<String, String>,
-    protect_values: bool,
 ) {
     for (key, value) in custom_fields {
         if is_standard_entry_field(key) {
             continue;
         }
-        let field_value = if protect_values {
-            Value::Protected(SecStr::new(value.as_bytes().to_vec()))
-        } else {
-            Value::Unprotected(value.clone())
-        };
-        entry.fields.insert(key.clone(), field_value);
+        entry
+            .fields
+            .insert(key.clone(), Value::Unprotected(value.clone()));
+    }
+}
+
+pub(crate) fn insert_protected_custom_fields(
+    entry: &mut KeepassEntry,
+    protected_fields: &BTreeMap<String, SecureString>,
+) {
+    for (key, value) in protected_fields {
+        if is_standard_entry_field(key) {
+            continue;
+        }
+        entry.fields.insert(
+            key.clone(),
+            Value::Protected(SecStr::new(value.as_str().as_bytes().to_vec())),
+        );
     }
 }
 
 pub(crate) fn apply_custom_fields(
     entry: &mut KeepassEntry,
     custom_fields: Option<&BTreeMap<String, String>>,
-    protected_custom_fields: Option<&BTreeMap<String, String>>,
+    protected_custom_fields: Option<&BTreeMap<String, SecureString>>,
 ) {
     if let Some(fields) = custom_fields {
-        insert_custom_fields(entry, fields, false);
+        insert_custom_fields(entry, fields);
     }
     if let Some(fields) = protected_custom_fields {
-        insert_custom_fields(entry, fields, true);
+        insert_protected_custom_fields(entry, fields);
     }
 }
 
 pub(crate) fn replace_custom_fields(
     entry: &mut KeepassEntry,
     custom_fields: Option<&BTreeMap<String, String>>,
-    protected_custom_fields: Option<&BTreeMap<String, String>>,
+    protected_custom_fields: Option<&BTreeMap<String, SecureString>>,
 ) {
     entry.fields.retain(|key, _| is_standard_entry_field(key));
     apply_custom_fields(entry, custom_fields, protected_custom_fields);
