@@ -111,9 +111,7 @@ fn test_save_reopen_with_secure_password() {
         .expect("reopen database");
 
     // Verify the entry password persisted correctly
-    let password = service
-        .get_entry_password(&entry_id)
-        .expect("get password");
+    let password = service.get_entry_password(&entry_id).expect("get password");
     assert_eq!(
         password, "entry-secure-password",
         "Entry password should persist after save/reopen"

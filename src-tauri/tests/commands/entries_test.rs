@@ -590,7 +590,10 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
     let info = service.get_info().expect("database info");
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
-    protected_custom_fields.insert("SecretKey".to_string(), SecureString::from("my-secret-value-123"));
+    protected_custom_fields.insert(
+        "SecretKey".to_string(),
+        SecureString::from("my-secret-value-123"),
+    );
 
     let entry = service
         .create_entry(
@@ -878,7 +881,10 @@ fn test_multiple_protected_custom_fields() {
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     protected_custom_fields.insert("APIKey".to_string(), SecureString::from("api-key-value"));
     protected_custom_fields.insert("SecretToken".to_string(), SecureString::from("token-value"));
-    protected_custom_fields.insert("PrivateKey".to_string(), SecureString::from("private-key-value"));
+    protected_custom_fields.insert(
+        "PrivateKey".to_string(),
+        SecureString::from("private-key-value"),
+    );
 
     let entry = service
         .create_entry(

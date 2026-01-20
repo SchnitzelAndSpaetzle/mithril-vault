@@ -316,8 +316,14 @@ fn test_protected_fields_kdbx4_roundtrip() {
     custom_fields.insert("Category".to_string(), "Test".to_string());
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
-    protected_custom_fields.insert("APIKey".to_string(), SecureString::from("secret-api-key-12345"));
-    protected_custom_fields.insert("SecretToken".to_string(), SecureString::from("bearer-token-xyz"));
+    protected_custom_fields.insert(
+        "APIKey".to_string(),
+        SecureString::from("secret-api-key-12345"),
+    );
+    protected_custom_fields.insert(
+        "SecretToken".to_string(),
+        SecureString::from("bearer-token-xyz"),
+    );
 
     let entry = service
         .create_entry(
