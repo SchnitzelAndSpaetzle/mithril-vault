@@ -50,6 +50,24 @@ pub enum AppError {
     #[error("KDBX error: {0}")]
     Kdbx(String),
 
+    #[error("Not a valid KDBX file")]
+    InvalidKdbxFile,
+
+    #[error("Unsupported KDBX version: {0}")]
+    UnsupportedKdbxVersion(String),
+
+    #[error("Header integrity check failed")]
+    HeaderIntegrityError,
+
+    #[error("Unsupported cipher: {0}")]
+    UnsupportedCipher(String),
+
+    #[error("Unsupported KDF: {0}")]
+    UnsupportedKdf(String),
+
+    #[error("Header parse error: {0}")]
+    HeaderParseError(String),
+
     #[error("Keyfile not found")]
     KeyfileNotFound,
 

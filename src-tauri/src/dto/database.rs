@@ -55,3 +55,101 @@ impl DatabaseCreationOptions {
         self.kdf_parallelism.unwrap_or(4)
     }
 }
+
+/// Pre-authentication database inspection result.
+/// Contains information that can be read from KDBX headers without needing credentials.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseHeaderInfo {
+    /// Database format version (e.g., "KDBX 4.0", "KDBX 3.1")
+    pub version: String,
+    /// Whether the file has valid KDBX magic bytes
+    pub is_valid_kdbx: bool,
+    /// Whether the KDBX version is supported by this application
+    pub is_supported: bool,
+    /// Path to the database file
+    pub path: String,
+}
+
+/// Outer encryption cipher algorithms.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum OuterCipher {
+    /// AES-256 in CBC mode
+    Aes256,
+    /// Twofish cipher
+    Twofish,
+    /// `ChaCha20` stream cipher
+    ChaCha20,
+}
+
+/// Inner stream cipher algorithms for protecting in-memory values.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum InnerCipher {
+    /// No encryption (plaintext)
+    Plain,
+    /// Salsa20 stream cipher
+    Salsa20,
+    /// `ChaCha20` stream cipher
+    ChaCha20,
+}
+
+/// Compression algorithms.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Compression {
+    /// No compression
+    None,
+    /// `GZip` compression
+    GZip,
+}
+
+/// Key derivation function (KDF) settings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum KdfSettings {
+    /// AES-based KDF (KDBX 3.x)
+    #[serde(rename_all = "camelCase")]
+    AesKdf {
+        /// Number of transformation rounds
+        rounds: u64,
+    },
+    /// Argon2d KDF (KDBX 4.x)
+    #[serde(rename_all = "camelCase")]
+    Argon2d {
+        /// Memory usage in bytes
+        memory: u64,
+        /// Number of iterations (time cost)
+        iterations: u64,
+        /// Degree of parallelism (lanes)
+        parallelism: u32,
+    },
+    /// Argon2id KDF (KDBX 4.x, recommended)
+    #[serde(rename_all = "camelCase")]
+    Argon2id {
+        /// Memory usage in bytes
+        memory: u64,
+        /// Number of iterations (time cost)
+        iterations: u64,
+        /// Degree of parallelism (lanes)
+        parallelism: u32,
+    },
+}
+
+/// Post-authentication database configuration.
+/// Contains the full cryptographic configuration after successfully opening a database.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseConfigDto {
+    /// Database format version (e.g., "KDBX 4.0", "KDBX 3.1")
+    pub version: String,
+    /// Outer encryption cipher
+    pub outer_cipher: OuterCipher,
+    /// Inner stream cipher for protecting values in memory
+    pub inner_cipher: InnerCipher,
+    /// Compression algorithm
+    pub compression: Compression,
+    /// Key derivation function settings
+    pub kdf: KdfSettings,
+}
