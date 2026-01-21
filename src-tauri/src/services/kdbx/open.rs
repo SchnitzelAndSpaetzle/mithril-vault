@@ -3,8 +3,9 @@ use crate::domain::secure::SecureString;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
 use keepass::error::{
-    BlockStreamError, CryptographyError, DatabaseIntegrityError, DatabaseKeyError,
-    DatabaseOpenError,
+    BlockStreamError, CompressionConfigError, CryptographyError, DatabaseIntegrityError,
+    DatabaseKeyError, DatabaseOpenError, InnerCipherConfigError, KdfConfigError,
+    OuterCipherConfigError,
 };
 use keepass::{Database, DatabaseKey};
 use std::fs::File;
@@ -169,14 +170,58 @@ impl KdbxService {
 
 fn map_open_error(err: DatabaseOpenError) -> AppError {
     match err {
+        // Authentication errors - incorrect credentials
         DatabaseOpenError::Key(DatabaseKeyError::IncorrectKey)
         | DatabaseOpenError::DatabaseIntegrity(
             DatabaseIntegrityError::BlockStream(BlockStreamError::BlockHashMismatch { .. })
-            | DatabaseIntegrityError::HeaderHashMismatch
             | DatabaseIntegrityError::Cryptography(
                 CryptographyError::Unpadding(_) | CryptographyError::Padding(_),
             ),
         ) => AppError::InvalidPassword,
+
+        // Header integrity errors
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::HeaderHashMismatch) => {
+            AppError::HeaderIntegrityError
+        }
+
+        // Invalid KDBX file format
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::InvalidKDBXIdentifier) => {
+            AppError::InvalidKdbxFile
+        }
+
+        // Unsupported KDBX version
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::InvalidKDBXVersion {
+            file_major_version,
+            file_minor_version,
+            ..
+        }) => AppError::UnsupportedKdbxVersion(format!(
+            "KDBX {file_major_version}.{file_minor_version}"
+        )),
+
+        // Unsupported outer cipher
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::OuterCipher(
+            OuterCipherConfigError::InvalidOuterCipherID { cid },
+        )) => AppError::UnsupportedCipher(format!("Unknown outer cipher ID: {cid:?}")),
+
+        // Unsupported inner cipher
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::InnerCipher(
+            InnerCipherConfigError::InvalidInnerCipherID { cid },
+        )) => AppError::UnsupportedCipher(format!("Unknown inner cipher ID: {cid}")),
+
+        // Unsupported compression
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::Compression(
+            CompressionConfigError::InvalidCompressionSuite { cid },
+        )) => AppError::HeaderParseError(format!("Unknown compression ID: {cid}")),
+
+        // Unsupported KDF
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::KdfSettings(
+            KdfConfigError::InvalidKDFUUID { uuid },
+        )) => AppError::UnsupportedKdf(format!("Unknown KDF UUID: {uuid:?}")),
+        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::KdfSettings(
+            KdfConfigError::InvalidKDFVersion { version },
+        )) => AppError::UnsupportedKdf(format!("Unsupported KDF version: {version}")),
+
+        // All other errors
         other => AppError::Kdbx(other.to_string()),
     }
 }

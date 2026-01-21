@@ -107,3 +107,49 @@ export const DatabaseCreationOptionsSchema = z.object({
 export type DatabaseCreationOptions = z.infer<
   typeof DatabaseCreationOptionsSchema
 >;
+
+export const DatabaseHeaderInfoSchema = z.object({
+  version: z.string(),
+  isValidKdbx: z.boolean(),
+  isSupported: z.boolean(),
+  path: z.string(),
+});
+export type DatabaseHeaderInfo = z.infer<typeof DatabaseHeaderInfoSchema>;
+
+export const OuterCipherSchema = z.enum(["aes256", "twofish", "chaCha20"]);
+export type OuterCipher = z.infer<typeof OuterCipherSchema>;
+
+export const InnerCipherSchema = z.enum(["plain", "salsa20", "chaCha20"]);
+export type InnerCipher = z.infer<typeof InnerCipherSchema>;
+
+export const CompressionSchema = z.enum(["none", "gZip"]);
+export type Compression = z.infer<typeof CompressionSchema>;
+
+export const KdfSettingsSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("aesKdf"),
+    rounds: z.number().int().positive(),
+  }),
+  z.object({
+    type: z.literal("argon2d"),
+    memory: z.number().int().positive(),
+    iterations: z.number().int().positive(),
+    parallelism: z.number().int().positive(),
+  }),
+  z.object({
+    type: z.literal("argon2id"),
+    memory: z.number().int().positive(),
+    iterations: z.number().int().positive(),
+    parallelism: z.number().int().positive(),
+  }),
+]);
+export type KdfSettings = z.infer<typeof KdfSettingsSchema>;
+
+export const DatabaseConfigSchema = z.object({
+  version: z.string(),
+  outerCipher: OuterCipherSchema,
+  innerCipher: InnerCipherSchema,
+  compression: CompressionSchema,
+  kdf: KdfSettingsSchema,
+});
+export type DatabaseConfig = z.infer<typeof DatabaseConfigSchema>;

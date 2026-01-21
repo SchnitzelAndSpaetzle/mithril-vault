@@ -5,7 +5,9 @@ import { z } from "zod/v4";
 import type {
   CreateEntryData,
   CustomFieldValue,
+  DatabaseConfig,
   DatabaseCreationOptions,
+  DatabaseHeaderInfo,
   DatabaseInfo,
   Entry,
   Group,
@@ -15,7 +17,9 @@ import type {
 import {
   CreateEntryDataSchema,
   CustomFieldValueSchema,
+  DatabaseConfigSchema,
   DatabaseCreationOptionsSchema,
+  DatabaseHeaderInfoSchema,
   DatabaseInfoSchema,
   EntrySchema,
   GroupSchema,
@@ -66,6 +70,10 @@ const CreateDatabaseSchema = z.object({
   password: z.string().min(8).optional(),
   keyfilePath: z.string().min(1).optional(),
   options: DatabaseCreationOptionsSchema.optional(),
+});
+
+const PathOnlySchema = z.object({
+  path: z.string().min(1),
 });
 
 /**
@@ -137,6 +145,27 @@ export const database = {
       keyfilePath,
     });
     return DatabaseInfoSchema.parse(result);
+  },
+
+  /**
+   * Inspect a KDBX file without requiring credentials.
+   * Returns header information including version and validity status.
+   *
+   * @param path - File path to the KDBX database
+   */
+  async inspect(path: string): Promise<DatabaseHeaderInfo> {
+    PathOnlySchema.parse({ path });
+    const result = await invoke("inspect_database", { path });
+    return DatabaseHeaderInfoSchema.parse(result);
+  },
+
+  /**
+   * Get the cryptographic configuration of the currently open database.
+   * Requires the database to be open (authenticated).
+   */
+  async getConfig(): Promise<DatabaseConfig> {
+    const result = await invoke("get_database_config");
+    return DatabaseConfigSchema.parse(result);
   },
 };
 

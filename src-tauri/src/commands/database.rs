@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-use crate::dto::database::{DatabaseCreationOptions, DatabaseInfo};
+use crate::dto::database::{
+    DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
+};
 use crate::dto::error::AppError;
 use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
@@ -86,4 +88,23 @@ pub async fn lock_database() -> Result<(), AppError> {
 pub async fn unlock_database(password: String) -> Result<(), AppError> {
     let _ = password;
     Err(AppError::NotImplemented("unlock_database".into()))
+}
+
+/// Inspects a KDBX file without requiring credentials.
+/// Returns header information including version and validity status.
+#[tauri::command]
+pub async fn inspect_database(
+    path: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<DatabaseHeaderInfo, AppError> {
+    state.inspect(&path)
+}
+
+/// Returns the cryptographic configuration of the currently open database.
+/// Requires the database to be open (authenticated).
+#[tauri::command]
+pub async fn get_database_config(
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<DatabaseConfigDto, AppError> {
+    state.get_config()
 }
