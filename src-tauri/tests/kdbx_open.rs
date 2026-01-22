@@ -2,23 +2,58 @@
 
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::kdbx::KdbxService;
-use tempfile::tempdir;
+use std::path::PathBuf;
+use tempfile::{tempdir, TempDir};
 
 #[path = "support/mod.rs"]
 mod support;
 
 use support::fixture_path;
 
+/// Creates a temporary copy of a fixture file for isolated testing.
+fn copy_fixture_to_temp(filename: &str) -> Option<(TempDir, PathBuf)> {
+    let source = fixture_path(filename);
+    if !source.exists() {
+        return None;
+    }
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let dest = temp_dir.path().join(filename);
+
+    std::fs::copy(&source, &dest).expect("Failed to copy fixture");
+    Some((temp_dir, dest))
+}
+
+/// Creates a temporary copy of keyfile fixtures for isolated testing.
+fn copy_keyfile_fixtures_to_temp(
+    db_filename: &str,
+    key_filename: &str,
+) -> Option<(TempDir, PathBuf, PathBuf)> {
+    let db_source = fixture_path(db_filename);
+    let key_source = fixture_path(key_filename);
+
+    if !db_source.exists() || !key_source.exists() {
+        return None;
+    }
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let db_dest = temp_dir.path().join(db_filename);
+    let key_dest = temp_dir.path().join(key_filename);
+
+    std::fs::copy(&db_source, &db_dest).expect("Failed to copy database fixture");
+    std::fs::copy(&key_source, &key_dest).expect("Failed to copy keyfile fixture");
+    Some((temp_dir, db_dest, key_dest))
+}
+
 #[test]
 fn test_open_kdbx4_with_password() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!(
-            "Skipping test: fixture not found at {path:?}. \
+            "Skipping test: fixture not found. \
              Create with KeePassXC using password 'test123'"
         );
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let info = service
@@ -30,14 +65,13 @@ fn test_open_kdbx4_with_password() {
 
 #[test]
 fn test_open_kdbx3_with_password() {
-    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx3-low-KDF.kdbx") else {
         eprintln!(
-            "Skipping test: fixture not found at {path:?}. \
+            "Skipping test: fixture not found. \
              Create with KeePassXC (KDBX 3.1 format) using password 'test123'"
         );
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let info = service
@@ -49,11 +83,10 @@ fn test_open_kdbx3_with_password() {
 
 #[test]
 fn test_open_kdbx3_returns_correct_version() {
-    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx3-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let info = service
@@ -77,11 +110,10 @@ fn test_open_kdbx3_returns_correct_version() {
 
 #[test]
 fn test_open_kdbx4_returns_correct_version() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX4 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let info = service
@@ -96,11 +128,10 @@ fn test_open_kdbx4_returns_correct_version() {
 
 #[test]
 fn test_kdbx3_invalid_password_rejection() {
-    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx3-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let result = service.open(&path.to_string_lossy(), "wrong_password");
@@ -126,11 +157,10 @@ fn test_create_database_returns_kdbx4_version() {
 
 #[test]
 fn test_get_info_returns_version() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX4 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -144,16 +174,15 @@ fn test_get_info_returns_version() {
 
 #[test]
 fn test_open_with_keyfile() {
-    let db_path = fixture_path("test-keyfile-kdbx4-low-KDF.kdbx");
-    let key_path = fixture_path("test-keyfile.keyx");
-
-    if !db_path.exists() || !key_path.exists() {
+    let Some((_temp_dir, db_path, key_path)) =
+        copy_keyfile_fixtures_to_temp("test-keyfile-kdbx4-low-KDF.kdbx", "test-keyfile.keyx")
+    else {
         eprintln!(
             "Skipping test: fixtures not found. \
              Create database with password 'test123' and keyfile"
         );
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let info = service
@@ -168,11 +197,10 @@ fn test_open_with_keyfile() {
 
 #[test]
 fn test_invalid_password() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let result = service.open(&path.to_string_lossy(), "wrong_password");
@@ -197,11 +225,10 @@ fn test_file_not_found() {
 
 #[test]
 fn test_open_twice_and_close() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -234,16 +261,15 @@ fn test_close_without_open() {
 
 #[test]
 fn test_open_with_keyfile_only_success() {
-    let db_path = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
-    let key_path = fixture_path("test-keyfile.keyx");
-
-    if !db_path.exists() || !key_path.exists() {
+    let Some((_temp_dir, db_path, key_path)) =
+        copy_keyfile_fixtures_to_temp("test-keyfile-only-kdbx4-low-KDF.kdbx", "test-keyfile.keyx")
+    else {
         eprintln!(
             "Skipping test: keyfile-only fixtures not found. \
              Create database with keyfile-only authentication using test-keyfile.keyx"
         );
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let info = service
@@ -256,12 +282,11 @@ fn test_open_with_keyfile_only_success() {
 
 #[test]
 fn test_open_with_keyfile_only_wrong_keyfile() {
-    let db_path = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
-
-    if !db_path.exists() {
+    let Some((_temp_dir, db_path)) = copy_fixture_to_temp("test-keyfile-only-kdbx4-low-KDF.kdbx")
+    else {
         eprintln!("Skipping test: keyfile-only fixture not found");
         return;
-    }
+    };
 
     let dir = tempdir().expect("Failed to create temp dir");
     let fake_keyfile = dir.path().join("wrong-keyfile.keyx");
@@ -282,12 +307,10 @@ fn test_open_with_keyfile_only_wrong_keyfile() {
 
 #[test]
 fn test_keyfile_not_found_error() {
-    let db_path = fixture_path("test-kdbx4-low-KDF.kdbx");
-
-    if !db_path.exists() {
+    let Some((_temp_dir, db_path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let result = service.open_with_keyfile_only(
@@ -303,12 +326,10 @@ fn test_keyfile_not_found_error() {
 
 #[test]
 fn test_keyfile_not_found_for_password_plus_keyfile() {
-    let db_path = fixture_path("test-kdbx4-low-KDF.kdbx");
-
-    if !db_path.exists() {
+    let Some((_temp_dir, db_path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let result = service.open_with_keyfile(

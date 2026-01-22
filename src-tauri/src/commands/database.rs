@@ -4,6 +4,8 @@ use crate::dto::database::{
     DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
 };
 use crate::dto::error::AppError;
+use crate::dto::lock::LockStatusDto;
+use crate::services::file_lock::FileLockService;
 use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
 use tauri::State;
@@ -77,17 +79,51 @@ pub async fn open_database_with_keyfile_only(
     state.open_with_keyfile_only(&path, &keyfile_path)
 }
 
-/// TODO: Locks the database (not yet implemented).
+/// Locks the database session (clears decrypted data but maintains file lock).
+///
+/// Note: This is for session locking (UI lock), not file locking.
+/// File locking is automatic when opening/closing databases.
 #[tauri::command]
 pub async fn lock_database() -> Result<(), AppError> {
-    Err(AppError::NotImplemented("lock_database".into()))
+    // TODO: Implement session locking (clear decrypted data, keep file lock)
+    Err(AppError::NotImplemented(
+        "lock_database (session lock)".into(),
+    ))
 }
 
-/// TODO: Unlocks the database (not yet implemented).
+/// Unlocks the database session with a password.
+///
+/// Note: This is for session unlocking (UI unlock), not file unlocking.
 #[tauri::command]
 pub async fn unlock_database(password: String) -> Result<(), AppError> {
     let _ = password;
-    Err(AppError::NotImplemented("unlock_database".into()))
+    // TODO: Implement session unlocking (re-decrypt with password)
+    Err(AppError::NotImplemented(
+        "unlock_database (session unlock)".into(),
+    ))
+}
+
+/// Gets the lock status for a database file without opening it.
+///
+/// This can be used to check if a database is locked before attempting to open it,
+/// or to display lock information in the UI.
+#[tauri::command]
+pub async fn get_lock_status(path: String) -> Result<LockStatusDto, AppError> {
+    let status = FileLockService::check_lock_status(&path)?;
+    Ok(status.into())
+}
+
+/// Forces removal of a lock file for recovery purposes.
+///
+/// # Warning
+/// This should only be used when:
+/// - The lock is known to be stale (process crashed)
+/// - The user has confirmed they want to force unlock
+///
+/// Using this on an actively locked database may cause data corruption.
+#[tauri::command]
+pub async fn force_unlock_database(path: String) -> Result<(), AppError> {
+    FileLockService::force_unlock(&path)
 }
 
 /// Inspects a KDBX file without requiring credentials.

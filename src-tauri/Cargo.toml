@@ -36,6 +36,12 @@ keepass = { version = "0.8", features = ["save_kdbx4"] }
 rust-argon2 = "3.0"
 secstr = "0.5"
 
+# File locking support
+fs4 = "0.12"                                         # Cross-platform file locking (flock/LockFileEx)
+hostname = "0.4"                                     # Get machine hostname for lock file metadata
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }  # PID validation
+chrono = { version = "0.4", features = ["serde"] }   # Timestamp handling for lock files
+
 [profile.dev.package.scrypt]
 opt-level = 3
 

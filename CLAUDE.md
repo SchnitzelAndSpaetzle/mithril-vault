@@ -156,6 +156,50 @@ Location: `src-tauri/src/domain/secure.rs`
 Uses Conventional Commits: `feat(scope):`, `fix(scope):`, `security(scope):`, etc.
 Scopes: `core`, `ui`, `cli`, `extension`, `sync`, `deps`
 
+## File Locking
+
+The codebase implements a hybrid file locking mechanism to prevent concurrent database access:
+
+### How It Works
+
+1. **OS-level advisory locks** via `fs4` crate (cross-platform: `flock()` on Unix, `LockFileEx()` on Windows)
+2. **Lock metadata files** (`.kdbx.lock`) containing PID, hostname, timestamp for stale lock detection
+
+### Key Components
+
+- **`FileLockService`** (`src-tauri/src/services/file_lock/mod.rs`): Core locking service
+- **`LockFileInfo`**: Lock metadata (PID, hostname, timestamp, app version)
+- **`LockStatus`**: Enum for lock states (Available, LockedByCurrentProcess, LockedByOtherProcess, StaleLock)
+- **`FileLock`**: RAII wrapper that auto-releases lock on drop
+
+### Usage
+
+```rust
+// Lock is automatically acquired when opening a database
+let info = service.open( & path, & password) ?; // Acquires lock
+
+// Lock is released when closing
+service.close() ?; // Releases lock
+
+// Check lock status without opening
+let status = FileLockService::check_lock_status( & path) ?;
+
+// Force unlock for recovery
+FileLockService::force_unlock( & path) ?;
+```
+
+### Stale Lock Detection
+
+- When a lock file exists but the PID is not running, it's considered stale
+- Stale locks are automatically cleaned up when trying to open the database
+- Uses `sysinfo` crate for cross-platform PID validation
+
+### Test Considerations
+
+- Tests that open database fixtures must copy them to temp directories first
+- This prevents test conflicts when running in parallel with file locking enabled
+- Use `copy_fixture_to_temp()` helper function in tests
+
 ## keepass-rs Crate Notes
 
 When working with the `keepass` crate for KDBX operations:
