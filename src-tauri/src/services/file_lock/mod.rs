@@ -6,14 +6,14 @@
 //! 1. OS-level advisory locks via `fs4` for cross-platform file locking
 //! 2. Lock files (`.kdbx.lock`) for metadata and stale lock detection
 //!
-//! The lock file contains JSON metadata including PID, hostname, and timestamp,
-//! allowing detection of stale locks from crashed processes.
+//! The lock file contains plaintext metadata including PID, hostname, and
+//! timestamp (plus optional version), allowing detection of stale locks.
 
 use chrono::{DateTime, Utc};
 use fs4::fs_std::FileExt;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 use sysinfo::{Pid, System};
@@ -43,9 +43,7 @@ impl LockFileInfo {
             application: "MithrilVault".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             opened_at: Utc::now(),
-            hostname: hostname::get()
-                .map(|h| h.to_string_lossy().to_string())
-                .unwrap_or_else(|_| "unknown".to_string()),
+            hostname: current_hostname(),
         }
     }
 }
@@ -68,8 +66,8 @@ pub enum LockStatus {
 /// The lock is automatically released when this struct is dropped.
 #[derive(Debug)]
 pub struct FileLock {
-    /// The database file handle with OS-level lock
-    db_file: File,
+    /// The lock file handle with OS-level lock
+    lock_file: File,
     /// Path to the lock metadata file
     lock_file_path: PathBuf,
 }
@@ -84,7 +82,7 @@ impl FileLock {
 impl Drop for FileLock {
     fn drop(&mut self) {
         // Release OS-level lock
-        let _ = self.db_file.unlock();
+        let _ = self.lock_file.unlock();
 
         // Remove lock metadata file
         let _ = std::fs::remove_file(&self.lock_file_path);
@@ -110,17 +108,34 @@ impl FileLockService {
     ///
     /// This method:
     /// 1. Checks for existing lock files and validates them
-    /// 2. Acquires an OS-level exclusive lock on the database file
-    /// 3. Creates a lock metadata file with process information
+    /// 2. Acquires an OS-level exclusive lock on the lock file
+    /// 3. Writes lock metadata with process information
     ///
     /// # Errors
     ///
     /// Returns an error if:
-    /// - The database file doesn't exist or can't be opened
+    /// - The database file doesn't exist (when required)
     /// - Another process holds an active lock
     /// - File system operations fail
     pub fn try_acquire_lock(db_path: &str) -> Result<FileLock, AppError> {
+        Self::try_acquire_lock_internal(db_path, true)
+    }
+
+    pub(crate) fn try_acquire_lock_allow_missing(db_path: &str) -> Result<FileLock, AppError> {
+        Self::try_acquire_lock_internal(db_path, false)
+    }
+
+    fn try_acquire_lock_internal(
+        db_path: &str,
+        require_db_exists: bool,
+    ) -> Result<FileLock, AppError> {
         let lock_file_path = Self::lock_file_path(db_path);
+
+        if require_db_exists && !Path::new(db_path).exists() {
+            return Err(AppError::InvalidPath(format!(
+                "Database file not found: {db_path}"
+            )));
+        }
 
         // Check for existing lock
         match Self::check_lock_status(db_path)? {
@@ -143,19 +158,28 @@ impl FileLockService {
             }
         }
 
-        // Open a database file for locking (read mode is enough for advisory lock)
-        let db_file = OpenOptions::new()
+        // Open lock file for locking
+        let mut lock_file = OpenOptions::new()
             .read(true)
             .write(true)
-            .open(db_path)
-            .map_err(|e| AppError::InvalidPath(format!("Cannot open database file: {e}")))?;
+            .create(true)
+            .open(&lock_file_path)
+            .map_err(|e| AppError::Io(format!("Cannot open lock file: {e}")))?;
+
+        // Set restrictive permissions on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(0o600);
+            std::fs::set_permissions(&lock_file_path, permissions)
+                .map_err(|e| AppError::Io(format!("Cannot set lock file permissions: {e}")))?;
+        }
 
         // Try to acquire OS-level exclusive lock (non-blocking)
-        // fs4's try_lock_exclusive returns Ok(()) on success, Err with WouldBlock if locked
-        if let Err(e) = db_file.try_lock_exclusive() {
+        if let Err(e) = lock_file.try_lock_exclusive() {
             if e.kind() == std::io::ErrorKind::WouldBlock {
-                return Err(AppError::FileLockFailed(
-                    "Database file is locked by another process".to_string(),
+                return Err(AppError::DatabaseLocked(
+                    "Database is locked by another process".to_string(),
                 ));
             }
             return Err(AppError::FileLockFailed(format!(
@@ -163,12 +187,11 @@ impl FileLockService {
             )));
         }
 
-        // Create a lock metadata file
         let lock_info = LockFileInfo::for_current_process();
-        Self::write_lock_file(&lock_file_path, &lock_info)?;
+        Self::write_lock_file(&mut lock_file, &lock_info)?;
 
         Ok(FileLock {
-            db_file,
+            lock_file,
             lock_file_path,
         })
     }
@@ -180,6 +203,7 @@ impl FileLockService {
     /// - Determining if force unlock is needed
     pub fn check_lock_status(db_path: &str) -> Result<LockStatus, AppError> {
         let lock_file_path = Self::lock_file_path(db_path);
+        let current_hostname = current_hostname();
 
         // If no lock file exists, the database is available
         if !lock_file_path.exists() {
@@ -202,8 +226,13 @@ impl FileLockService {
         };
 
         // Check if it's our own process
-        if lock_info.pid == process::id() {
+        if lock_info.pid == process::id() && lock_info.hostname == current_hostname {
             return Ok(LockStatus::LockedByCurrentProcess);
+        }
+
+        // If the lock was created on another host, treat as locked for safety
+        if lock_info.hostname != current_hostname {
+            return Ok(LockStatus::LockedByOtherProcess(lock_info));
         }
 
         // Check if the process is still running
@@ -251,38 +280,99 @@ impl FileLockService {
         file.read_to_string(&mut contents)
             .map_err(|e| AppError::Io(e.to_string()))?;
 
+        if let Ok(info) = Self::parse_lock_file_text(&contents) {
+            return Ok(info);
+        }
+
         serde_json::from_str(&contents)
             .map_err(|e| AppError::Io(format!("Invalid lock file format: {e}")))
     }
 
     /// Writes lock information to a lock file.
-    fn write_lock_file(path: &Path, info: &LockFileInfo) -> Result<(), AppError> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)
-            .map_err(|e| AppError::Io(format!("Cannot create lock file: {e}")))?;
+    fn write_lock_file(file: &mut File, info: &LockFileInfo) -> Result<(), AppError> {
+        let contents = format!(
+            "PID: {}\nApplication: {}\nOpened: {}\nHost: {}\nVersion: {}\n",
+            info.pid,
+            info.application,
+            info.opened_at.to_rfc3339(),
+            info.hostname,
+            info.version
+        );
 
-        // Set restrictive permissions on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(path, permissions)
-                .map_err(|e| AppError::Io(format!("Cannot set lock file permissions: {e}")))?;
-        }
-
-        let json = serde_json::to_string_pretty(info)
-            .map_err(|e| AppError::Io(format!("Cannot serialize lock info: {e}")))?;
-
-        file.write_all(json.as_bytes())
+        file.set_len(0)
+            .map_err(|e| AppError::Io(format!("Cannot truncate lock file: {e}")))?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| AppError::Io(format!("Cannot seek lock file: {e}")))?;
+        file.write_all(contents.as_bytes())
             .map_err(|e| AppError::Io(format!("Cannot write lock file: {e}")))?;
-
         file.sync_all()
             .map_err(|e| AppError::Io(format!("Cannot sync lock file: {e}")))?;
 
         Ok(())
+    }
+
+    fn parse_lock_file_text(contents: &str) -> Result<LockFileInfo, AppError> {
+        let mut pid: Option<u32> = None;
+        let mut application: Option<String> = None;
+        let mut version: Option<String> = None;
+        let mut opened_at: Option<DateTime<Utc>> = None;
+        let mut hostname: Option<String> = None;
+
+        for line in contents.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let (key, value) = line
+                .split_once(':')
+                .ok_or_else(|| AppError::Io("Invalid lock file format".to_string()))?;
+            let key = key.trim().to_lowercase();
+            let value = value.trim();
+
+            match key.as_str() {
+                "pid" => {
+                    pid = Some(
+                        value
+                            .parse()
+                            .map_err(|_| AppError::Io("Invalid PID in lock file".to_string()))?,
+                    );
+                }
+                "application" => {
+                    application = Some(value.to_string());
+                }
+                "opened" => {
+                    let parsed = DateTime::parse_from_rfc3339(value)
+                        .map_err(|_| AppError::Io("Invalid timestamp in lock file".to_string()))?
+                        .with_timezone(&Utc);
+                    opened_at = Some(parsed);
+                }
+                "host" | "hostname" => {
+                    hostname = Some(value.to_string());
+                }
+                "version" => {
+                    version = Some(value.to_string());
+                }
+                _ => {}
+            }
+        }
+
+        let pid = pid.ok_or_else(|| AppError::Io("Missing PID in lock file".to_string()))?;
+        let application = application
+            .ok_or_else(|| AppError::Io("Missing application in lock file".to_string()))?;
+        let opened_at = opened_at
+            .ok_or_else(|| AppError::Io("Missing opened timestamp in lock file".to_string()))?;
+        let hostname =
+            hostname.ok_or_else(|| AppError::Io("Missing hostname in lock file".to_string()))?;
+        let version = version.unwrap_or_else(|| "Unknown".to_string());
+
+        Ok(LockFileInfo {
+            pid,
+            application,
+            version,
+            opened_at,
+            hostname,
+        })
     }
 
     /// Removes a lock file.
@@ -290,6 +380,12 @@ impl FileLockService {
         std::fs::remove_file(path)
             .map_err(|e| AppError::Io(format!("Cannot remove lock file: {e}")))
     }
+}
+
+fn current_hostname() -> String {
+    hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string())
 }
 
 #[cfg(test)]
@@ -376,15 +472,21 @@ mod tests {
         let db_path_str = db_path.to_str().unwrap();
         let lock_file_path = FileLockService::lock_file_path(db_path_str);
 
-        // Create a fake lock file with a non-existent PID
+        // Create a fake lock file with a non-existent PID on this host
         let fake_info = LockFileInfo {
             pid: 999_999_999, // Very unlikely to exist
             application: "OtherApp".to_string(),
             version: "1.0.0".to_string(),
             opened_at: Utc::now(),
-            hostname: "other-host".to_string(),
+            hostname: current_hostname(),
         };
-        FileLockService::write_lock_file(&lock_file_path, &fake_info).unwrap();
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&lock_file_path)
+            .unwrap();
+        FileLockService::write_lock_file(&mut file, &fake_info).unwrap();
 
         // Status should show stale lock
         let status = FileLockService::check_lock_status(db_path_str).unwrap();
@@ -405,7 +507,13 @@ mod tests {
 
         // Create a lock file
         let fake_info = LockFileInfo::for_current_process();
-        FileLockService::write_lock_file(&lock_file_path, &fake_info).unwrap();
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&lock_file_path)
+            .unwrap();
+        FileLockService::write_lock_file(&mut file, &fake_info).unwrap();
         assert!(lock_file_path.exists());
 
         // Force unlock
@@ -426,11 +534,36 @@ mod tests {
     }
 
     #[test]
-    fn test_lock_file_info_serialization() {
+    fn test_lock_file_text_round_trip() {
+        let dir = TempDir::new().unwrap();
+        let lock_file_path = dir.path().join("test.lock");
+
+        let info = LockFileInfo::for_current_process();
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&lock_file_path)
+            .unwrap();
+        FileLockService::write_lock_file(&mut file, &info).unwrap();
+        drop(file);
+
+        let parsed = FileLockService::read_lock_file(&lock_file_path).unwrap();
+        assert_eq!(info.pid, parsed.pid);
+        assert_eq!(info.application, parsed.application);
+        assert_eq!(info.version, parsed.version);
+        assert_eq!(info.hostname, parsed.hostname);
+    }
+
+    #[test]
+    fn test_lock_file_json_compatibility() {
+        let dir = TempDir::new().unwrap();
+        let lock_file_path = dir.path().join("test-json.lock");
         let info = LockFileInfo::for_current_process();
         let json = serde_json::to_string(&info).unwrap();
-        let parsed: LockFileInfo = serde_json::from_str(&json).unwrap();
+        std::fs::write(&lock_file_path, json).unwrap();
 
+        let parsed = FileLockService::read_lock_file(&lock_file_path).unwrap();
         assert_eq!(info.pid, parsed.pid);
         assert_eq!(info.application, parsed.application);
         assert_eq!(info.hostname, parsed.hostname);
@@ -445,7 +578,7 @@ mod tests {
 
         // Create a corrupted lock file
         let mut file = File::create(&lock_file_path).unwrap();
-        file.write_all(b"not valid json").unwrap();
+        file.write_all(b"not valid text").unwrap();
 
         // Status should show stale lock (corrupted is treated as stale)
         let status = FileLockService::check_lock_status(db_path_str).unwrap();

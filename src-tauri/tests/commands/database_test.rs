@@ -8,6 +8,7 @@
 #![allow(clippy::expect_used)] // expect() is acceptable in tests
 
 use mithril_vault_lib::dto::error::AppError;
+use mithril_vault_lib::services::file_lock::FileLockService;
 use mithril_vault_lib::services::kdbx::KdbxService;
 use tempfile::tempdir;
 
@@ -192,5 +193,42 @@ fn test_save_database_not_open() {
     assert!(
         matches!(result, Err(AppError::DatabaseNotOpen)),
         "Should fail with DatabaseNotOpen when no database is open"
+    );
+}
+
+#[test]
+fn test_save_as_moves_lock_file() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("original.kdbx");
+    let new_path = dir.path().join("moved.kdbx");
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path.to_string_lossy(), "savepass", "Save Test DB")
+        .expect("Failed to create database");
+
+    let db_path_str = db_path.to_string_lossy();
+    let old_lock_path = FileLockService::lock_file_path(db_path_str.as_ref());
+    assert!(old_lock_path.exists(), "Original lock file should exist");
+
+    service
+        .save_as(&new_path.to_string_lossy(), None)
+        .expect("Failed to save database as new path");
+
+    let new_path_str = new_path.to_string_lossy();
+    let new_lock_path = FileLockService::lock_file_path(new_path_str.as_ref());
+    assert!(
+        !old_lock_path.exists(),
+        "Old lock file should be removed after save_as"
+    );
+    assert!(
+        new_lock_path.exists(),
+        "New lock file should exist after save_as"
+    );
+
+    service.close().expect("Failed to close database");
+    assert!(
+        !new_lock_path.exists(),
+        "Lock file should be removed after close"
     );
 }
