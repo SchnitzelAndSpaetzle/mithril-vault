@@ -213,14 +213,12 @@ impl FileLockService {
 
         // Read and parse lock file
         let Ok(lock_info) = Self::read_lock_file(&lock_file_path) else {
-            // Lock file exists but is corrupted - treat as stale
-            return Ok(LockStatus::StaleLock(LockFileInfo {
-                pid: 0,
-                application: "Unknown".to_string(),
-                version: "Unknown".to_string(),
-                opened_at: Utc::now(),
-                hostname: "Unknown".to_string(),
-            }));
+            // Lock file exists but is unreadable - probe lock before deciding.
+            let unknown_info = Self::unknown_lock_info();
+            return Ok(match Self::probe_lock_file(&lock_file_path) {
+                Ok(false) => LockStatus::StaleLock(unknown_info),
+                Ok(true) | Err(_) => LockStatus::LockedByOtherProcess(unknown_info),
+            });
         };
 
         // Check if it's our own process
@@ -270,6 +268,25 @@ impl FileLockService {
         system.process(Pid::from_u32(pid)).is_some()
     }
 
+    fn probe_lock_file(path: &Path) -> Result<bool, AppError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| AppError::Io(format!("Cannot open lock file: {e}")))?;
+
+        match file.try_lock_exclusive() {
+            Ok(()) => {
+                let _ = file.unlock();
+                Ok(false)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(true),
+            Err(e) => Err(AppError::FileLockFailed(format!(
+                "Failed to probe lock file: {e}"
+            ))),
+        }
+    }
+
     /// Reads and parses a lock file.
     fn read_lock_file(path: &Path) -> Result<LockFileInfo, AppError> {
         let mut file = File::open(path).map_err(|e| AppError::Io(e.to_string()))?;
@@ -307,6 +324,16 @@ impl FileLockService {
             .map_err(|e| AppError::Io(format!("Cannot sync lock file: {e}")))?;
 
         Ok(())
+    }
+
+    fn unknown_lock_info() -> LockFileInfo {
+        LockFileInfo {
+            pid: 0,
+            application: "Unknown".to_string(),
+            version: "Unknown".to_string(),
+            opened_at: Utc::now(),
+            hostname: "Unknown".to_string(),
+        }
     }
 
     fn parse_lock_file_text(contents: &str) -> Result<LockFileInfo, AppError> {
@@ -392,6 +419,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+    use fs4::fs_std::FileExt;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -587,6 +615,28 @@ mod tests {
         // Status should show stale lock (corrupted is treated as stale)
         let status = FileLockService::check_lock_status(db_path_str).unwrap();
         assert!(matches!(status, LockStatus::StaleLock(_)));
+    }
+
+    #[test]
+    fn test_corrupted_lock_file_locked_is_not_stale() {
+        let dir = TempDir::new().unwrap();
+        let db_path = create_test_db(&dir);
+        let db_path_str = db_path.to_str().unwrap();
+        let lock_file_path = FileLockService::lock_file_path(db_path_str);
+
+        std::fs::write(&lock_file_path, "not valid text").unwrap();
+
+        let lock_handle = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock_file_path)
+            .unwrap();
+        lock_handle.try_lock_exclusive().unwrap();
+
+        let status = FileLockService::check_lock_status(db_path_str).unwrap();
+        assert!(matches!(status, LockStatus::LockedByOtherProcess(_)));
+
+        lock_handle.unlock().unwrap();
     }
 
     #[test]
