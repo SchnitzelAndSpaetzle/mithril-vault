@@ -96,10 +96,10 @@ impl FileLockService {
     /// Returns the path to the lock file for a given database path.
     pub fn lock_file_path(db_path: &str) -> PathBuf {
         let mut path = PathBuf::from(db_path);
-        let file_name = path
-            .file_name()
-            .map(|n| format!("{}.lock", n.to_string_lossy()))
-            .unwrap_or_else(|| "database.kdbx.lock".to_string());
+        let file_name = path.file_name().map_or_else(
+            || "database.kdbx.lock".to_string(),
+            |n| format!("{}.lock", n.to_string_lossy()),
+        );
         path.set_file_name(file_name);
         path
     }
@@ -163,6 +163,7 @@ impl FileLockService {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&lock_file_path)
             .map_err(|e| AppError::Io(format!("Cannot open lock file: {e}")))?;
 
@@ -211,18 +212,15 @@ impl FileLockService {
         }
 
         // Read and parse lock file
-        let lock_info = match Self::read_lock_file(&lock_file_path) {
-            Ok(info) => info,
-            Err(_) => {
-                // Lock file exists but is corrupted - treat as stale
-                return Ok(LockStatus::StaleLock(LockFileInfo {
-                    pid: 0,
-                    application: "Unknown".to_string(),
-                    version: "Unknown".to_string(),
-                    opened_at: Utc::now(),
-                    hostname: "Unknown".to_string(),
-                }));
-            }
+        let Ok(lock_info) = Self::read_lock_file(&lock_file_path) else {
+            // Lock file exists but is corrupted - treat as stale
+            return Ok(LockStatus::StaleLock(LockFileInfo {
+                pid: 0,
+                application: "Unknown".to_string(),
+                version: "Unknown".to_string(),
+                opened_at: Utc::now(),
+                hostname: "Unknown".to_string(),
+            }));
         };
 
         // Check if it's our own process
@@ -383,13 +381,16 @@ impl FileLockService {
 }
 
 fn current_hostname() -> String {
-    hostname::get()
-        .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "unknown".to_string())
+    hostname::get().map_or_else(
+        |_| "unknown".to_string(),
+        |h| h.to_string_lossy().to_string(),
+    )
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use std::io::Write;
     use tempfile::TempDir;
@@ -484,6 +485,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&lock_file_path)
             .unwrap();
         FileLockService::write_lock_file(&mut file, &fake_info).unwrap();
@@ -511,6 +513,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&lock_file_path)
             .unwrap();
         FileLockService::write_lock_file(&mut file, &fake_info).unwrap();
@@ -543,6 +546,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&lock_file_path)
             .unwrap();
         FileLockService::write_lock_file(&mut file, &info).unwrap();
