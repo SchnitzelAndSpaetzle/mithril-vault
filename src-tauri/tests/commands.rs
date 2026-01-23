@@ -5,6 +5,8 @@
 //! these tests exercise the underlying service methods that commands delegate to.
 //! This test structure is ready for when command-specific logic is added.
 
+#![allow(clippy::expect_used)]
+
 #[path = "support/mod.rs"]
 mod support;
 
