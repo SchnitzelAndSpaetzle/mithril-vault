@@ -101,40 +101,40 @@ MithrilVault is a cross-platform password manager that:
 
 ### Frontend
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| React | ^18.3 | UI framework |
-| TypeScript | ~5.6 | Type safety |
-| Vite | ^6.0 | Build tool |
-| Zustand | latest | State management |
-| TailwindCSS | latest | Styling |
-| React Router | latest | Navigation |
-| React Hook Form | latest | Form handling |
-| Zod | latest | Schema validation |
+| Technology      | Version | Purpose           |
+| --------------- | ------- | ----------------- |
+| React           | ^18.3   | UI framework      |
+| TypeScript      | ~5.6    | Type safety       |
+| Vite            | ^6.0    | Build tool        |
+| Zustand         | latest  | State management  |
+| TailwindCSS     | latest  | Styling           |
+| React Router    | latest  | Navigation        |
+| React Hook Form | latest  | Form handling     |
+| Zod             | latest  | Schema validation |
 
 ### Backend (Rust)
 
-| Crate | Purpose |
-|-------|---------|
-| `tauri` | Application framework |
-| `keepass-rs` | KDBX file parsing (primary) |
-| `keyring` | OS keychain integration |
-| `serde` / `serde_json` | Serialization |
-| `tokio` | Async runtime |
-| `thiserror` | Error handling |
-| `zeroize` | Secure memory clearing |
-| `argon2` | Key derivation (if needed beyond keepass-rs) |
-| `chacha20poly1305` | Encryption (if needed) |
-| `rand` | Cryptographic RNG |
+| Crate                  | Purpose                                      |
+| ---------------------- | -------------------------------------------- |
+| `tauri`                | Application framework                        |
+| `keepass-rs`           | KDBX file parsing (primary)                  |
+| `keyring`              | OS keychain integration                      |
+| `serde` / `serde_json` | Serialization                                |
+| `tokio`                | Async runtime                                |
+| `thiserror`            | Error handling                               |
+| `zeroize`              | Secure memory clearing                       |
+| `argon2`               | Key derivation (if needed beyond keepass-rs) |
+| `chacha20poly1305`     | Encryption (if needed)                       |
+| `rand`                 | Cryptographic RNG                            |
 
 ### Browser Extension
 
-| Technology | Purpose |
-|------------|---------|
+| Technology       | Purpose                     |
+| ---------------- | --------------------------- |
 | WebExtension API | Cross-browser compatibility |
-| TypeScript | Type safety |
-| Vite | Build tool |
-| TweetNaCl | End-to-end encryption |
+| TypeScript       | Type safety                 |
+| Vite             | Build tool                  |
+| TweetNaCl        | End-to-end encryption       |
 
 ---
 
@@ -206,12 +206,22 @@ mithril-vault/
 │   │   │
 │   │   ├── services/            # Business logic
 │   │   │   ├── mod.rs
-│   │   │   ├── kdbx.rs          # KDBX operations
+│   │   │   ├── kdbx/           # KDBX operations
+│   │   │   │   ├── create.rs
+│   │   │   │   ├── entries.rs
+│   │   │   │   ├── groups.rs
+│   │   │   │   ├── mapping.rs
+│   │   │   │   ├── open.rs
+│   │   │   │   └── save.rs
 │   │   │   ├── crypto.rs        # Cryptographic operations
 │   │   │   ├── keychain.rs      # OS keychain integration
 │   │   │   └── clipboard.rs     # Clipboard operations
 │   │   │
-│   │   ├── models/              # Data structures
+│   │   ├── domain/              # Internal backend state
+│   │   │   ├── mod.rs
+│   │   │   └── kdbx.rs
+│   │   │
+│   │   ├── dto/                 # IPC data structures
 │   │   │   ├── mod.rs
 │   │   │   ├── entry.rs         # Entry model
 │   │   │   ├── group.rs         # Group model
@@ -292,12 +302,12 @@ password.zeroize();
 #[tauri::command]
 async fn copy_to_clipboard(text: String, timeout_secs: u64) -> Result<(), Error> {
     clipboard::set(&text)?;
-    
+
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(timeout_secs)).await;
         clipboard::clear();
     });
-    
+
     Ok(())
 }
 ```
@@ -323,6 +333,7 @@ log::debug!("Key bytes: {:?}", key_bytes);           // NEVER DO THIS
 - Validate all input from frontend
 - Use typed commands (not string-based)
 - Return minimal data needed
+- Do not return protected custom field values in list/get calls; return metadata only and fetch protected values via an explicit command (e.g., `get_entry_protected_custom_field`)
 
 ```rust
 // Return only what's needed, never the full entry with password
@@ -380,13 +391,13 @@ use thiserror::Error;
 pub enum DatabaseError {
     #[error("Failed to open database: {0}")]
     OpenFailed(String),
-    
+
     #[error("Invalid password")]
     InvalidPassword,
-    
+
     #[error("Entry not found: {0}")]
     EntryNotFound(String),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -418,10 +429,10 @@ async fn open_database(
     if path.is_empty() {
         return Err(DatabaseError::InvalidPath);
     }
-    
+
     // Perform operation
     let db = state.kdbx_service.open(&path, &password).await?;
-    
+
     // Return minimal info (no sensitive data)
     Ok(DatabaseInfo::from(db))
 }
@@ -476,7 +487,7 @@ function useDatabase() {}
 
 // Types/Interfaces: PascalCase
 interface DatabaseEntry {}
-type EntryField = 'title' | 'username' | 'password';
+type EntryField = "title" | "username" | "password";
 
 // Constants: SCREAMING_SNAKE_CASE or camelCase
 const MAX_PASSWORD_LENGTH = 1024;
@@ -503,11 +514,11 @@ interface EntryListItemProps {
 
 export function EntryListItem({ entry, isSelected, onSelect }: EntryListItemProps) {
   const { copyToClipboard } = useClipboard();
-  
+
   const handleCopyPassword = async () => {
     await copyToClipboard(entry.id, 'password');
   };
-  
+
   return (
     <div
       className={cn('entry-item', isSelected && 'selected')}
@@ -524,36 +535,36 @@ export function EntryListItem({ entry, isSelected, onSelect }: EntryListItemProp
 ```typescript
 // lib/tauri.ts
 
-import { invoke } from '@tauri-apps/api/core';
-import type { DatabaseInfo, Entry, Group } from './types';
+import { invoke } from "@tauri-apps/api/core";
+import type { DatabaseInfo, Entry, Group } from "./types";
 
 export const database = {
   async open(path: string, password: string): Promise<DatabaseInfo> {
-    return invoke('open_database', { path, password });
+    return invoke("open_database", { path, password });
   },
-  
+
   async close(): Promise<void> {
-    return invoke('close_database');
+    return invoke("close_database");
   },
-  
+
   async save(): Promise<void> {
-    return invoke('save_database');
+    return invoke("save_database");
   },
 };
 
 export const entries = {
   async list(): Promise<Entry[]> {
-    return invoke('list_entries');
+    return invoke("list_entries");
   },
-  
+
   async get(id: string): Promise<Entry> {
-    return invoke('get_entry', { id });
+    return invoke("get_entry", { id });
   },
-  
+
   async getPassword(id: string): Promise<string> {
-    return invoke('get_entry_password', { id });
+    return invoke("get_entry_password", { id });
   },
-  
+
   // ... more commands
 };
 ```
@@ -618,7 +629,7 @@ fn get_entry(id: String, state: State<AppState>) -> Result<Entry, Error> {
 
 ```typescript
 // Frontend
-const entry = await invoke<Entry>('get_entry', { id: entryId });
+const entry = await invoke<Entry>("get_entry", { id: entryId });
 ```
 
 ### Pattern 2: Mutation with Confirmation
@@ -637,8 +648,8 @@ fn delete_entry(id: String, state: State<AppState>) -> Result<(), Error> {
 ```typescript
 // Frontend
 async function handleDelete(id: string) {
-  if (await confirm('Delete this entry?')) {
-    await invoke('delete_entry', { id });
+  if (await confirm("Delete this entry?")) {
+    await invoke("delete_entry", { id });
     // Refresh state
     await refetchEntries();
   }
@@ -656,32 +667,32 @@ async fn import_database(
 ) -> Result<(), Error> {
     let entries = parse_import_file(&path)?;
     let total = entries.len();
-    
+
     for (i, entry) in entries.into_iter().enumerate() {
         // Process entry...
-        
+
         // Emit progress
         window.emit("import-progress", ImportProgress {
             current: i + 1,
             total,
         })?;
     }
-    
+
     Ok(())
 }
 ```
 
 ```typescript
 // Frontend
-import { listen } from '@tauri-apps/api/event';
+import { listen } from "@tauri-apps/api/event";
 
 async function handleImport(path: string) {
-  const unlisten = await listen<ImportProgress>('import-progress', (event) => {
+  const unlisten = await listen<ImportProgress>("import-progress", (event) => {
     setProgress(event.payload);
   });
-  
+
   try {
-    await invoke('import_database', { path });
+    await invoke("import_database", { path });
   } finally {
     unlisten();
   }
@@ -697,9 +708,9 @@ async function handleImport(path: string) {
 ```typescript
 // stores/databaseStore.ts
 
-import { create } from 'zustand';
-import { database, entries } from '@/lib/tauri';
-import type { DatabaseInfo, Entry, Group } from '@/lib/types';
+import { create } from "zustand";
+import { database, entries } from "@/lib/tauri";
+import type { DatabaseInfo, Entry, Group } from "@/lib/types";
 
 interface DatabaseState {
   // State
@@ -710,7 +721,7 @@ interface DatabaseState {
   selectedEntryId: string | null;
   selectedGroupId: string | null;
   searchQuery: string;
-  
+
   // Actions
   open: (path: string, password: string) => Promise<void>;
   close: () => Promise<void>;
@@ -729,8 +740,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   groups: [],
   selectedEntryId: null,
   selectedGroupId: null,
-  searchQuery: '',
-  
+  searchQuery: "",
+
   // Actions
   open: async (path, password) => {
     const info = await database.open(path, password);
@@ -738,7 +749,7 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
       entries.list(),
       groups.list(),
     ]);
-    
+
     set({
       isUnlocked: true,
       info,
@@ -746,7 +757,7 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
       groups: groupsList,
     });
   },
-  
+
   close: async () => {
     await database.close();
     set({
@@ -758,7 +769,7 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
       selectedGroupId: null,
     });
   },
-  
+
   save: async () => {
     await database.save();
     const info = get().info;
@@ -766,11 +777,11 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
       set({ info: { ...info, isModified: false } });
     }
   },
-  
+
   selectEntry: (id) => set({ selectedEntryId: id }),
   selectGroup: (id) => set({ selectedGroupId: id }),
   setSearchQuery: (query) => set({ searchQuery: query }),
-  
+
   refreshEntries: async () => {
     const entriesList = await entries.list();
     set({ entries: entriesList });
@@ -786,7 +797,7 @@ function EntryList() {
   const entries = useDatabaseStore((s) => s.entries);
   const selectedId = useDatabaseStore((s) => s.selectedEntryId);
   const selectEntry = useDatabaseStore((s) => s.selectEntry);
-  
+
   return (
     <ul>
       {entries.map((entry) => (
@@ -813,7 +824,7 @@ function EntryList() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_password_generator() {
         let options = GeneratorOptions {
@@ -823,9 +834,9 @@ mod tests {
             numbers: true,
             symbols: false,
         };
-        
+
         let password = generate_password(&options);
-        
+
         assert_eq!(password.len(), 16);
         assert!(password.chars().any(|c| c.is_uppercase()));
         assert!(password.chars().any(|c| c.is_lowercase()));
@@ -839,9 +850,9 @@ mod tests {
 fn test_open_kdbx4_database() {
     let path = "tests/fixtures/test.kdbx";
     let password = "test123";
-    
+
     let db = Database::open(path, password).unwrap();
-    
+
     assert_eq!(db.name(), "Test Database");
     assert!(db.entries().len() > 0);
 }
@@ -862,7 +873,7 @@ describe('EntryListItem', () => {
       title: 'Test Entry',
       username: 'testuser',
     };
-    
+
     render(
       <EntryListItem
         entry={entry}
@@ -870,15 +881,15 @@ describe('EntryListItem', () => {
         onSelect={vi.fn()}
       />
     );
-    
+
     expect(screen.getByText('Test Entry')).toBeInTheDocument();
     expect(screen.getByText('testuser')).toBeInTheDocument();
   });
-  
+
   it('calls onSelect when clicked', () => {
     const onSelect = vi.fn();
     const entry = { id: '1', title: 'Test', username: 'user' };
-    
+
     render(
       <EntryListItem
         entry={entry}
@@ -886,9 +897,9 @@ describe('EntryListItem', () => {
         onSelect={onSelect}
       />
     );
-    
+
     fireEvent.click(screen.getByRole('button'));
-    
+
     expect(onSelect).toHaveBeenCalledWith('1');
   });
 });
@@ -897,6 +908,7 @@ describe('EntryListItem', () => {
 ### Test File Fixtures
 
 Keep test KDBX files in `tests/fixtures/`:
+
 - `test-kdbx4.kdbx` - KDBX4 format test file
 - `test-kdbx3.kdbx` - KDBX3 format test file
 - `test-keyfile.kdbx` - Database with key file
@@ -922,7 +934,7 @@ pub async fn create_entry(
 ) -> Result<Entry, DatabaseError> {
     let mut db = state.database.lock().map_err(|_| DatabaseError::LockFailed)?;
     let db = db.as_mut().ok_or(DatabaseError::NotOpen)?;
-    
+
     let entry = db.create_entry(&group_id, &title, &username, &password)?;
     Ok(entry)
 }
@@ -945,7 +957,7 @@ pub async fn create_entry(
 export const entries = {
   // ...
   async create(groupId: string, data: CreateEntryData): Promise<Entry> {
-    return invoke('create_entry', {
+    return invoke("create_entry", {
       groupId,
       title: data.title,
       username: data.username,
@@ -1007,13 +1019,13 @@ db.mark_modified();
 
 ```typescript
 // NEVER: Store password in frontend state
-const [password, setPassword] = useState('');  // For the entry's password
+const [password, setPassword] = useState(""); // For the entry's password
 
 // NEVER: Log sensitive data
-console.log('Password:', password);
+console.log("Password:", password);
 
 // NEVER: Store master password
-localStorage.setItem('masterPassword', password);
+localStorage.setItem("masterPassword", password);
 ```
 
 ### Architecture Anti-Patterns
@@ -1023,7 +1035,7 @@ localStorage.setItem('masterPassword', password);
 const decrypted = decrypt(entry.encryptedPassword, key);
 
 // NEVER: Direct file access from frontend
-const file = await fs.readFile('/path/to/database.kdbx');
+const file = await fs.readFile("/path/to/database.kdbx");
 
 // NEVER: Store sensitive data in URL
 navigate(`/entry/${id}?password=${password}`);
@@ -1034,15 +1046,15 @@ navigate(`/entry/${id}?password=${password}`);
 ```typescript
 // AVOID: Fetching all data on every render
 useEffect(() => {
-  fetchAllEntries();  // Called on every render without deps
+  fetchAllEntries(); // Called on every render without deps
 });
 
 // AVOID: Not memoizing expensive computations
-const filtered = entries.filter(e => e.title.includes(query));  // Recalculated every render
+const filtered = entries.filter((e) => e.title.includes(query)); // Recalculated every render
 
 // BETTER:
 const filtered = useMemo(
-  () => entries.filter(e => e.title.includes(query)),
+  () => entries.filter((e) => e.title.includes(query)),
   [entries, query]
 );
 ```
@@ -1104,10 +1116,10 @@ fn create_entry(data: CreateEntryData, state: State<AppState>) -> Result<Entry, 
 
 ## Changelog
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2024-01 | Initial version |
+| Version | Date    | Changes         |
+| ------- | ------- | --------------- |
+| 1.0.0   | 2024-01 | Initial version |
 
 ---
 
-*This document should be updated as the project evolves. If you make architectural decisions or establish new patterns, please update this file.*
+_This document should be updated as the project evolves. If you make architectural decisions or establish new patterns, please update this file._

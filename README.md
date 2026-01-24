@@ -121,7 +121,8 @@ mithril-vault/
 │   └── src/
 │       ├── commands/    # Tauri IPC commands
 │       ├── services/    # Business logic
-│       └── models/      # Data structures
+│       ├── domain/      # Internal domain state
+│       └── dto/         # IPC data structures
 └── docs/                # Documentation
 ```
 
@@ -129,7 +130,7 @@ See [AGENTS.md](AGENTS.md) for detailed architecture documentation.
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. This project prefers signed commits; see [docs/signed-commits.md](docs/signed-commits.md) for setup instructions.
 
 ## Security
 

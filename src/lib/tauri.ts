@@ -2,26 +2,47 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
-import {
-  DatabaseInfoSchema,
-  EntrySchema,
-  GroupSchema,
-  CreateEntryDataSchema,
-  UpdateEntryDataSchema,
-  PasswordGeneratorOptionsSchema,
-} from "./types";
 import type {
+  CreateEntryData,
+  CustomFieldValue,
+  DatabaseConfig,
+  DatabaseCreationOptions,
+  DatabaseHeaderInfo,
   DatabaseInfo,
   Entry,
   Group,
-  CreateEntryData,
-  UpdateEntryData,
+  LockStatus,
   PasswordGeneratorOptions,
+  UpdateEntryData,
+} from "./types";
+import {
+  CreateEntryDataSchema,
+  CustomFieldValueSchema,
+  DatabaseConfigSchema,
+  DatabaseCreationOptionsSchema,
+  DatabaseHeaderInfoSchema,
+  DatabaseInfoSchema,
+  EntrySchema,
+  GroupSchema,
+  LockStatusSchema,
+  PasswordGeneratorOptionsSchema,
+  UpdateEntryDataSchema,
 } from "./types";
 
 const PathPasswordSchema = z.object({
   path: z.string().min(1),
   password: z.string().min(8),
+});
+
+const PathKeyfileSchema = z.object({
+  path: z.string().min(1),
+  keyfilePath: z.string().min(1),
+});
+
+const PathPasswordKeyfileSchema = z.object({
+  path: z.string().min(1),
+  password: z.string().min(8),
+  keyfilePath: z.string().min(1),
 });
 
 const IdSchema = z.object({
@@ -32,6 +53,10 @@ const GroupIdSchema = z.object({
   groupId: z.string().uuid(),
 });
 
+const CustomFieldKeySchema = z.object({
+  key: z.string().min(1),
+});
+
 const NameSchema = z.object({
   name: z.string().min(1),
 });
@@ -39,6 +64,18 @@ const NameSchema = z.object({
 const CopyPasswordSchema = z.object({
   entryId: z.uuid(),
   timeoutMs: z.number().int().positive().optional(),
+});
+
+const CreateDatabaseSchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  password: z.string().min(8).optional(),
+  keyfilePath: z.string().min(1).optional(),
+  options: DatabaseCreationOptionsSchema.optional(),
+});
+
+const PathOnlySchema = z.object({
+  path: z.string().min(1),
 });
 
 /**
@@ -59,10 +96,106 @@ export const database = {
     return invoke("save_database");
   },
 
-  async create(path: string, password: string): Promise<DatabaseInfo> {
-    PathPasswordSchema.parse({ path, password });
-    const result = await invoke("create_database", { path, password });
+  /**
+   * Create a new KDBX4 database
+   *
+   * @param path - File path where the database will be saved
+   * @param name - Database name (also used as root group name)
+   * @param password - Optional password (required if no keyfile)
+   * @param keyfilePath - Optional path to keyfile for authentication
+   * @param options - Optional creation options (KDF settings, default groups, description)
+   */
+  async create(
+    path: string,
+    name: string,
+    password?: string,
+    keyfilePath?: string,
+    options?: DatabaseCreationOptions
+  ): Promise<DatabaseInfo> {
+    CreateDatabaseSchema.parse({ path, name, password, keyfilePath, options });
+    const result = await invoke("create_database", {
+      path,
+      name,
+      password,
+      keyfilePath,
+      options,
+    });
     return DatabaseInfoSchema.parse(result);
+  },
+
+  async openWithKeyfile(
+    path: string,
+    password: string,
+    keyfilePath: string
+  ): Promise<DatabaseInfo> {
+    PathPasswordKeyfileSchema.parse({ path, password, keyfilePath });
+    const result = await invoke("open_database_with_keyfile", {
+      path,
+      password,
+      keyfilePath,
+    });
+    return DatabaseInfoSchema.parse(result);
+  },
+
+  async openWithKeyfileOnly(
+    path: string,
+    keyfilePath: string
+  ): Promise<DatabaseInfo> {
+    PathKeyfileSchema.parse({ path, keyfilePath });
+    const result = await invoke("open_database_with_keyfile_only", {
+      path,
+      keyfilePath,
+    });
+    return DatabaseInfoSchema.parse(result);
+  },
+
+  /**
+   * Inspect a KDBX file without requiring credentials.
+   * Returns header information including version and validity status.
+   *
+   * @param path - File path to the KDBX database
+   */
+  async inspect(path: string): Promise<DatabaseHeaderInfo> {
+    PathOnlySchema.parse({ path });
+    const result = await invoke("inspect_database", { path });
+    return DatabaseHeaderInfoSchema.parse(result);
+  },
+
+  /**
+   * Get the cryptographic configuration of the currently open database.
+   * Requires the database to be open (authenticated).
+   */
+  async getConfig(): Promise<DatabaseConfig> {
+    const result = await invoke("get_database_config");
+    return DatabaseConfigSchema.parse(result);
+  },
+
+  /**
+   * Get the lock status for a database file without opening it.
+   * Can be used to check if a database is locked before attempting to open it.
+   *
+   * @param path - File path to the KDBX database
+   */
+  async getLockStatus(path: string): Promise<LockStatus> {
+    PathOnlySchema.parse({ path });
+    const result = await invoke("get_lock_status", { path });
+    return LockStatusSchema.parse(result);
+  },
+
+  /**
+   * Force remove a lock file for recovery purposes.
+   *
+   * WARNING: Only use this when:
+   * - The lock is known to be stale (process crashed)
+   * - The user has confirmed they want to force unlock
+   *
+   * Using this on an actively locked database may cause data corruption.
+   *
+   * @param path - File path to the KDBX database
+   */
+  async forceUnlock(path: string): Promise<void> {
+    PathOnlySchema.parse({ path });
+    return invoke("force_unlock_database", { path });
   },
 };
 
@@ -70,8 +203,11 @@ export const database = {
  * Entry CRUD operations (excluding passwords which are fetched separately).
  */
 export const entries = {
-  async list(): Promise<Entry[]> {
-    const result = await invoke("list_entries");
+  async list(groupId?: string): Promise<Entry[]> {
+    if (groupId) {
+      GroupIdSchema.parse({ groupId });
+    }
+    const result = await invoke("list_entries", groupId ? { groupId } : {});
     return z.array(EntrySchema).parse(result);
   },
 
@@ -87,17 +223,30 @@ export const entries = {
     return z.string().parse(result);
   },
 
+  async getProtectedCustomField(
+    id: string,
+    key: string
+  ): Promise<CustomFieldValue> {
+    IdSchema.parse({ id });
+    CustomFieldKeySchema.parse({ key });
+    const result = await invoke("get_entry_protected_custom_field", {
+      id,
+      key,
+    });
+    return CustomFieldValueSchema.parse(result);
+  },
+
   async create(groupId: string, data: CreateEntryData): Promise<Entry> {
     GroupIdSchema.parse({ groupId });
     CreateEntryDataSchema.parse(data);
-    const result = await invoke("create_entry", { groupId, ...data });
+    const result = await invoke("create_entry", { groupId, data });
     return EntrySchema.parse(result);
   },
 
   async update(id: string, data: UpdateEntryData): Promise<Entry> {
     IdSchema.parse({ id });
     UpdateEntryDataSchema.parse(data);
-    const result = await invoke("update_entry", { id, ...data });
+    const result = await invoke("update_entry", { id, data });
     return EntrySchema.parse(result);
   },
 

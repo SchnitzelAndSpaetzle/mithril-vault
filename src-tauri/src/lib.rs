@@ -1,42 +1,57 @@
 // SPDX-License-Identifier: MIT
 
 pub mod commands;
-pub mod models;
+pub mod domain;
+pub mod dto;
 pub mod services;
 pub mod utils;
 
 use commands::{
     add_recent_database, calculate_password_strength, clear_recent_databases, clear_session_key,
     close_database, create_database, create_entry, create_group, delete_entry, delete_group,
-    generate_passphrase, generate_password, get_entry, get_entry_password, get_group, get_settings,
-    has_session_key, list_entries, list_groups, lock_database, move_entry, move_group,
-    open_database, remove_recent_database, save_database, store_session_key, unlock_database,
+    force_unlock_database, generate_passphrase, generate_password, get_database_config, get_entry,
+    get_entry_password, get_entry_protected_custom_field, get_group, get_lock_status, get_settings,
+    has_session_key, inspect_database, list_entries, list_groups, lock_database, move_entry,
+    move_group, open_database, open_database_with_keyfile, open_database_with_keyfile_only,
+    remove_recent_database, rename_group, save_database, store_session_key, unlock_database,
     update_entry, update_group, update_settings,
 };
+use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
 use std::sync::Arc;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[allow(clippy::expect_used)]
+/// Runs the Tauri application.
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let secure_storage = SecureStorageService::new(app.handle())?;
             app.manage(Arc::new(secure_storage));
+
+            let kdbx_service = KdbxService::new();
+            app.manage(Arc::new(kdbx_service));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             open_database,
+            open_database_with_keyfile,
+            open_database_with_keyfile_only,
             close_database,
             create_database,
             save_database,
             lock_database,
             unlock_database,
+            get_lock_status,
+            force_unlock_database,
+            inspect_database,
+            get_database_config,
             list_entries,
             get_entry,
             get_entry_password,
+            get_entry_protected_custom_field,
             create_entry,
             update_entry,
             delete_entry,
@@ -47,6 +62,7 @@ pub fn run() {
             update_group,
             delete_group,
             move_group,
+            rename_group,
             generate_password,
             generate_passphrase,
             calculate_password_strength,
