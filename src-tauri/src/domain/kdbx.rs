@@ -2,8 +2,8 @@ use keepass::config::DatabaseVersion;
 use keepass::Database;
 
 use super::secure::SecureString;
+use crate::services::file_lock::FileLock;
 
-#[derive(Debug)]
 pub struct OpenDatabase {
     pub db: Database,
     pub path: String,
@@ -11,6 +11,9 @@ pub struct OpenDatabase {
     pub password: Option<SecureString>,
     pub keyfile_path: Option<String>,
     pub version: String,
+    /// File lock preventing concurrent access to the database.
+    /// This is dropped when the database is closed, releasing the lock.
+    pub file_lock: Option<FileLock>,
 }
 
 /// Formats a database version for display.

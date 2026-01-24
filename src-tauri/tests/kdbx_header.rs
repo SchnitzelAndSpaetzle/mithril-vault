@@ -7,12 +7,27 @@ use mithril_vault_lib::dto::database::{
 };
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::kdbx::KdbxService;
-use tempfile::tempdir;
+use std::path::PathBuf;
+use tempfile::{tempdir, TempDir};
 
 #[path = "support/mod.rs"]
 mod support;
 
 use support::fixture_path;
+
+/// Creates a temporary copy of a fixture file for isolated testing.
+fn copy_fixture_to_temp(filename: &str) -> Option<(TempDir, PathBuf)> {
+    let source = fixture_path(filename);
+    if !source.exists() {
+        return None;
+    }
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let dest = temp_dir.path().join(filename);
+
+    std::fs::copy(&source, &dest).expect("Failed to copy fixture");
+    Some((temp_dir, dest))
+}
 
 // ============================================================================
 // inspect() Tests - Pre-authentication header reading
@@ -152,11 +167,10 @@ fn test_inspect_truncated_header() {
 
 #[test]
 fn test_get_config_after_open() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX4 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -184,11 +198,10 @@ fn test_get_config_after_open() {
 
 #[test]
 fn test_get_config_kdbx3_uses_aes_kdf() {
-    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx3-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -314,11 +327,10 @@ fn test_created_database_custom_kdf_params() {
 
 #[test]
 fn test_inspect_then_open_then_config() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX4 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
 
@@ -344,11 +356,10 @@ fn test_inspect_then_open_then_config() {
 
 #[test]
 fn test_get_config_after_close_fails() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX4 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
 

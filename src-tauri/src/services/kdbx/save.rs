@@ -1,5 +1,6 @@
 use crate::domain::secure::SecureString;
 use crate::dto::error::AppError;
+use crate::services::file_lock::FileLockService;
 use crate::services::kdbx::key::build_database_key;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 
@@ -55,6 +56,8 @@ impl KdbxService {
 
         let keyfile_path = open_db.keyfile_path.clone();
 
+        let new_lock = FileLockService::try_acquire_lock_allow_missing(new_path)?;
+
         atomic_write(
             new_path,
             &AtomicWriteOptions {
@@ -72,6 +75,8 @@ impl KdbxService {
             },
         )?;
 
+        let old_lock = open_db.file_lock.replace(new_lock);
+        drop(old_lock);
         open_db.path = new_path.to_string();
         if new_password.is_some() {
             open_db.password = new_password.map(SecureString::from);

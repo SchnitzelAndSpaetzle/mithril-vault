@@ -6,10 +6,31 @@ export const DatabaseInfoSchema = z.object({
   name: z.string(),
   path: z.string(),
   isModified: z.boolean(),
+  isLocked: z.boolean(),
   rootGroupId: z.string(),
   version: z.string(),
 });
 export type DatabaseInfo = z.infer<typeof DatabaseInfoSchema>;
+
+export const LockFileInfoSchema = z.object({
+  pid: z.number(),
+  application: z.string(),
+  version: z.string(),
+  openedAt: z.string(),
+  hostname: z.string(),
+});
+export type LockFileInfo = z.infer<typeof LockFileInfoSchema>;
+
+export const LockStatusSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("available") }),
+  z.object({ status: z.literal("lockedByCurrentProcess") }),
+  z.object({
+    status: z.literal("lockedByOtherProcess"),
+    info: LockFileInfoSchema,
+  }),
+  z.object({ status: z.literal("staleLock"), info: LockFileInfoSchema }),
+]);
+export type LockStatus = z.infer<typeof LockStatusSchema>;
 
 export const CustomFieldMetaSchema = z.object({
   key: z.string(),

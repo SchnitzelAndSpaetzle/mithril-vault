@@ -52,7 +52,7 @@ fn create_test_database() -> (KdbxService, TempDir) {
 
 #[test]
 fn test_list_entries_all() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
@@ -74,7 +74,7 @@ fn test_list_entries_all() {
 
 #[test]
 fn test_list_entries_by_group() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
@@ -114,7 +114,7 @@ fn test_list_entries_database_not_open() {
 
 #[test]
 fn test_get_entry_success() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
@@ -137,7 +137,7 @@ fn test_get_entry_success() {
 
 #[test]
 fn test_get_entry_not_found() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
@@ -168,7 +168,7 @@ fn test_get_entry_database_not_open() {
 
 #[test]
 fn test_get_entry_password_success() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
@@ -191,7 +191,7 @@ fn test_get_entry_password_success() {
 
 #[test]
 fn test_get_entry_password_not_found() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };

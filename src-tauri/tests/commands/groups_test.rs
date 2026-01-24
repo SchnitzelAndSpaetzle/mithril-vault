@@ -50,7 +50,7 @@ fn create_test_database() -> (KdbxService, TempDir) {
 
 #[test]
 fn test_list_groups_success() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
@@ -88,7 +88,7 @@ fn test_list_groups_database_not_open() {
 
 #[test]
 fn test_get_group_success() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
@@ -109,7 +109,7 @@ fn test_get_group_success() {
 
 #[test]
 fn test_get_group_not_found() {
-    let Some(service) = open_test_database() else {
+    let Some((service, _temp_dir)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };

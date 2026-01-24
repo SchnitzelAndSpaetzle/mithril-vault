@@ -4,8 +4,10 @@ pub mod database;
 pub mod entry;
 pub mod error;
 pub mod group;
+pub mod lock;
 
 pub use database::*;
 pub use entry::*;
 pub use error::*;
 pub use group::*;
+pub use lock::*;

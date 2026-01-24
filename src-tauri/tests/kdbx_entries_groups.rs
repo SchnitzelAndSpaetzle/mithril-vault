@@ -6,6 +6,7 @@ use mithril_vault_lib::dto::entry::CreateEntryData;
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::kdbx::KdbxService;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[path = "support/mod.rs"]
@@ -13,13 +14,26 @@ mod support;
 
 use support::fixture_path;
 
+/// Creates a temporary copy of a fixture file for isolated testing.
+fn copy_fixture_to_temp(filename: &str) -> Option<(TempDir, PathBuf)> {
+    let source = fixture_path(filename);
+    if !source.exists() {
+        return None;
+    }
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let dest = temp_dir.path().join(filename);
+
+    std::fs::copy(&source, &dest).expect("Failed to copy fixture");
+    Some((temp_dir, dest))
+}
+
 #[test]
 fn test_kdbx3_list_entries() {
-    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx3-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -35,11 +49,10 @@ fn test_kdbx3_list_entries() {
 
 #[test]
 fn test_kdbx3_get_entry_password() {
-    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx3-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -63,11 +76,10 @@ fn test_kdbx3_get_entry_password() {
 
 #[test]
 fn test_kdbx3_list_groups() {
-    let path = fixture_path("test-kdbx3-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx3-low-KDF.kdbx") else {
         eprintln!("Skipping test: KDBX3 fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -86,11 +98,10 @@ fn test_kdbx3_list_groups() {
 
 #[test]
 fn test_list_entries_and_get_entry() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let info = service
@@ -121,11 +132,10 @@ fn test_list_entries_and_get_entry() {
 
 #[test]
 fn test_list_groups_and_get_group() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     let info = service
@@ -143,11 +153,10 @@ fn test_list_groups_and_get_group() {
 
 #[test]
 fn test_entry_not_found() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -169,11 +178,10 @@ fn test_entry_not_found() {
 
 #[test]
 fn test_group_not_found() {
-    let path = fixture_path("test-kdbx4-low-KDF.kdbx");
-    if !path.exists() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
         eprintln!("Skipping test: fixture not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -197,15 +205,30 @@ fn test_list_entries_without_open() {
     );
 }
 
+/// Creates a temporary copy of keyfile fixtures for isolated testing.
+fn copy_keyfile_fixtures_to_temp() -> Option<(TempDir, PathBuf, PathBuf)> {
+    let db_source = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
+    let key_source = fixture_path("test-keyfile.keyx");
+
+    if !db_source.exists() || !key_source.exists() {
+        return None;
+    }
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let db_dest = temp_dir.path().join("test-keyfile-only-kdbx4-low-KDF.kdbx");
+    let key_dest = temp_dir.path().join("test-keyfile.keyx");
+
+    std::fs::copy(&db_source, &db_dest).expect("Failed to copy database fixture");
+    std::fs::copy(&key_source, &key_dest).expect("Failed to copy keyfile fixture");
+    Some((temp_dir, db_dest, key_dest))
+}
+
 #[test]
 fn test_list_entries_from_keyfile_only_database() {
-    let db_path = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
-    let key_path = fixture_path("test-keyfile.keyx");
-
-    if !db_path.exists() || !key_path.exists() {
+    let Some((_temp_dir, db_path, key_path)) = copy_keyfile_fixtures_to_temp() else {
         eprintln!("Skipping test: keyfile-only fixtures not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
@@ -224,13 +247,10 @@ fn test_list_entries_from_keyfile_only_database() {
 
 #[test]
 fn test_get_entry_password_from_keyfile_only_database() {
-    let db_path = fixture_path("test-keyfile-only-kdbx4-low-KDF.kdbx");
-    let key_path = fixture_path("test-keyfile.keyx");
-
-    if !db_path.exists() || !key_path.exists() {
+    let Some((_temp_dir, db_path, key_path)) = copy_keyfile_fixtures_to_temp() else {
         eprintln!("Skipping test: keyfile-only fixtures not found");
         return;
-    }
+    };
 
     let service = KdbxService::new();
     service
