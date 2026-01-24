@@ -213,12 +213,9 @@ impl FileLockService {
 
         // Read and parse lock file
         let Ok(lock_info) = Self::read_lock_file(&lock_file_path) else {
-            // Lock file exists but is unreadable - probe lock before deciding.
+            // Lock file exists but is unreadable - treat as locked for safety.
             let unknown_info = Self::unknown_lock_info();
-            return Ok(match Self::probe_lock_file(&lock_file_path) {
-                Ok(false) => LockStatus::StaleLock(unknown_info),
-                Ok(true) | Err(_) => LockStatus::LockedByOtherProcess(unknown_info),
-            });
+            return Ok(LockStatus::LockedByOtherProcess(unknown_info));
         };
 
         // Check if it's our own process
@@ -266,25 +263,6 @@ impl FileLockService {
             true,
         );
         system.process(Pid::from_u32(pid)).is_some()
-    }
-
-    fn probe_lock_file(path: &Path) -> Result<bool, AppError> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(path)
-            .map_err(|e| AppError::Io(format!("Cannot open lock file: {e}")))?;
-
-        match file.try_lock_exclusive() {
-            Ok(()) => {
-                let _ = file.unlock();
-                Ok(false)
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(true),
-            Err(e) => Err(AppError::FileLockFailed(format!(
-                "Failed to probe lock file: {e}"
-            ))),
-        }
     }
 
     /// Reads and parses a lock file.
@@ -602,7 +580,7 @@ mod tests {
     }
 
     #[test]
-    fn test_corrupted_lock_file_treated_as_stale() {
+    fn test_corrupted_lock_file_treated_as_locked() {
         let dir = TempDir::new().unwrap();
         let db_path = create_test_db(&dir);
         let db_path_str = db_path.to_str().unwrap();
@@ -612,9 +590,9 @@ mod tests {
         let mut file = File::create(&lock_file_path).unwrap();
         file.write_all(b"not valid text").unwrap();
 
-        // Status should show stale lock (corrupted is treated as stale)
+        // Status should show locked (corrupted is treated as locked)
         let status = FileLockService::check_lock_status(db_path_str).unwrap();
-        assert!(matches!(status, LockStatus::StaleLock(_)));
+        assert!(matches!(status, LockStatus::LockedByOtherProcess(_)));
     }
 
     #[test]
