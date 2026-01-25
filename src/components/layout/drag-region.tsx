@@ -4,6 +4,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import EntryList from "@/components/entries/EntryList.tsx";
+import EntryItemDetails from "@/components/entries/EntryItemDetails.tsx";
 
 export default function DragRegion() {
   return (
@@ -24,17 +25,12 @@ export default function DragRegion() {
       <ResizableHandle withHandle />
 
       {/* Panel 2 - Content Area */}
-      <ResizablePanel defaultSize={75} minSize={350}>
+      <ResizablePanel defaultSize={75} minSize={360}>
         <div className="h-full w-full overflow-auto scrollbar-hide">
           <div className="p-4">
-            <h2 className="text-lg font-semibold mb-2">Panel 2</h2>
             {/* Example content to demonstrate scrolling */}
             <div className="mt-4 space-y-2">
-              {Array.from({ length: 50 }, (_, i) => (
-                <div key={i} className="p-2 bg-muted rounded">
-                  Item {i + 1}
-                </div>
-              ))}
+              <EntryItemDetails />
             </div>
           </div>
         </div>
