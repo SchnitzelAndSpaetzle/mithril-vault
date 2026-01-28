@@ -43,7 +43,7 @@ export function InputGroupPassword() {
         </div>
 
         <InputGroupAddon align="block-end" className="border-t">
-          <InputGroupButton size="sm" variant="link">
+          <InputGroupButton size="sm" variant="ghost">
             add key file <KeyRound />
           </InputGroupButton>
           <InputGroupButton size="sm" className="ml-auto" variant="default">

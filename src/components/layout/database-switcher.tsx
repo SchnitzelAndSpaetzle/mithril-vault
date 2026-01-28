@@ -16,6 +16,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar.tsx";
 import { Button } from "../ui/button.tsx";
+import { Link } from "@tanstack/react-router";
 
 export function DatabaseSwitcher({
   teams,
@@ -88,15 +89,19 @@ export function DatabaseSwitcher({
             variant="ghost"
           >
             <Settings />
-            <span className="sr-only">Inbox</span>
+            <span className="sr-only">Settings</span>
           </Button>
+
           <Button
+            asChild
             size="icon"
             className="size-8 group-data-[collapsible=icon]:opacity-0"
             variant="ghost"
           >
-            <Lock />
-            <span className="sr-only">Inbox</span>
+            <Link to="/open-db">
+              <Lock />
+              <span className="sr-only">Lock Database</span>
+            </Link>
           </Button>
         </div>
       </SidebarMenuItem>

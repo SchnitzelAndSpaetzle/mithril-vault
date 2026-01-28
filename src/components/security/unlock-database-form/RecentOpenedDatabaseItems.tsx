@@ -10,6 +10,7 @@ import { ChevronRightIcon, FolderOpen } from "lucide-react";
 import DropBoxIcon from "@/components/ui/customIcons/DropBoxIcon.tsx";
 import OneDriveIcon from "@/components/ui/customIcons/OneDriveIcon.tsx";
 import GoogleDriveIcon from "@/components/ui/customIcons/GoogleDriveIcon.tsx";
+import { Link } from "@tanstack/react-router";
 
 const mockRecentItems = [
   {
@@ -19,18 +20,18 @@ const mockRecentItems = [
   },
   {
     icon: "dropbox",
-    title: "cloud-db-test.kdbx",
-    description: "/Dropbox/cloud-db-test.kdbx",
+    title: "cloud-dashboard-test.kdbx",
+    description: "/Dropbox/cloud-dashboard-test.kdbx",
   },
   {
     icon: "googledrive",
-    title: "cloud-db-test.kdbx",
-    description: "/Google Drive/cloud-db-test.kdbx",
+    title: "cloud-dashboard-test.kdbx",
+    description: "/Google Drive/cloud-dashboard-test.kdbx",
   },
   {
     icon: "onedrive",
-    title: "cloud-db-test.kdbx",
-    description: "/OneDrive/cloud-db-test.kdbx",
+    title: "cloud-dashboard-test.kdbx",
+    description: "/OneDrive/cloud-dashboard-test.kdbx",
   },
 ];
 
@@ -39,7 +40,7 @@ export default function RecentOpenedDatabaseItems() {
     <div className="flex w-full max-w-md flex-col gap-2">
       {mockRecentItems.map((item) => (
         <Item key={item.description} variant="outline" size="sm" asChild>
-          <a href="#">
+          <Link to="/login">
             <ItemMedia>
               <IconSwitch name={item.icon} />
             </ItemMedia>
@@ -52,7 +53,7 @@ export default function RecentOpenedDatabaseItems() {
             <ItemActions>
               <ChevronRightIcon className="size-4" />
             </ItemActions>
-          </a>
+          </Link>
         </Item>
       ))}
     </div>
