@@ -5,11 +5,17 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import prettier from "eslint-plugin-prettier/recommended";
 import globals from "globals";
+import { defineConfig } from "eslint/config";
 
-export default tseslint.config(
+export default defineConfig(
   // Global ignores
   {
-    ignores: ["dist/**", "node_modules/**", "src-tauri/**"],
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "src-tauri/**",
+      "src/routeTree.gen.ts",
+    ],
   },
 
   // Base JS recommended rules
