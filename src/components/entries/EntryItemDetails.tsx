@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { Separator } from "@/components/ui/separator.tsx";
-import { Check, Copy, Keyboard, Share } from "lucide-react";
+import { Check, Copy, Keyboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  ButtonGroup,
-  ButtonGroupSeparator,
-} from "@/components/ui/button-group";
-
 import { Badge } from "@/components/ui/badge";
 import {
   Avatar,
@@ -31,19 +26,6 @@ export default function EntryItemDetails() {
             Jetbrains acc
           </h4>
         </div>
-        <ButtonGroup>
-          <Button variant="default" size="sm" aria-label="edit">
-            Edit
-          </Button>
-          <ButtonGroupSeparator />
-          <Button variant="default" size="sm" aria-label="edit">
-            More
-          </Button>
-          <ButtonGroupSeparator />
-          <Button variant="secondary" size="sm" aria-label="share">
-            <Share />
-          </Button>
-        </ButtonGroup>
       </div>
 
       {/* list items */}
@@ -95,8 +77,6 @@ export default function EntryItemDetails() {
         <Separator />
         {/* TODO: make history clickable and then show user history of passwords for this entry. */}
         <EntryItemBasic label="History" value="2 records" />
-        <Separator />
-        <EntryItemBasic label="Password History" value="Disabled" />
       </div>
       {/*  TODO: make password statuses interactive */}
       <EntryItemPasswordStatusCard />

@@ -1,29 +1,28 @@
-import * as React from "react";
+import type { ComponentProps } from "react";
 import {
+  AlarmClockMinus,
   AudioWaveform,
   Blocks,
-  Calendar,
   Command,
   MessageCircleQuestion,
   Search,
   Settings2,
   ShieldIcon,
-  Sparkles,
-  TagsIcon,
   Trash2,
 } from "lucide-react";
-
-import { NavFavorites } from "@/components/nav-favorites";
-import { NavMain } from "@/components/nav-main";
-import { NavSecondary } from "@/components/nav-secondary";
-import { NavWorkspaces } from "@/components/nav-workspaces";
-import { TeamSwitcher } from "@/components/team-switcher";
+import { NavMain } from "@/components/layout/nav-main.tsx";
+import { NavSecondary } from "@/components/nav-secondary.tsx";
+import { NavEntryGroups } from "@/components/nav-entry-groups.tsx";
+import { DatabaseSwitcher } from "@/components/layout/database-switcher.tsx";
 import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
   SidebarRail,
-} from "@/components/ui/sidebar";
+} from "@/components/ui/sidebar.tsx";
+import { Separator } from "@/components/ui/separator.tsx";
+import NavTags from "@/components/layout/nav-tags.tsx";
+import mocTags from "@/mock/tags-mock-data.json";
 
 // This is sample data.
 const data = {
@@ -46,14 +45,14 @@ const data = {
   ],
   navMain: [
     {
-      title: "Search",
+      title: "All Entries",
       url: "#",
       icon: Search,
     },
     {
-      title: "Ask AI",
+      title: "Expired",
       url: "#",
-      icon: Sparkles,
+      icon: AlarmClockMinus,
     },
     {
       // TODO: if user hase weak passwords or other security issues, we can solve it here and mark this menu item somehow
@@ -61,20 +60,10 @@ const data = {
       url: "#",
       icon: ShieldIcon,
       isActive: true,
-    },
-    {
-      title: "Tags",
-      url: "#",
-      icon: TagsIcon,
-      badge: "10",
+      badge: "12",
     },
   ],
   navSecondary: [
-    {
-      title: "Calendar",
-      url: "#",
-      icon: Calendar,
-    },
     {
       title: "Settings",
       url: "#",
@@ -257,17 +246,19 @@ const data = {
   ],
 };
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar className="border-r-0" {...props}>
-      <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
-        <NavMain items={data.navMain} />
+      <SidebarHeader className="flex h-14 shrink-0 items-center gap-2 border-b pt-3">
+        <DatabaseSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
-        <NavFavorites favorites={data.favorites} />
-        <NavWorkspaces workspaces={data.workspaces} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavMain items={data.navMain} />
+        <Separator />
+        <NavTags tags={mocTags} />
+        {/*<NavFavorites favorites={data.favorites} />*/}
+        <NavEntryGroups workspaces={data.workspaces} />
+        <NavSecondary items={data.navSecondary} className="border-t mt-auto" />
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

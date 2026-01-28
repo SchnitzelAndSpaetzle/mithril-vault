@@ -12,7 +12,7 @@ import {
 
 export default function EntryListItem({ username, title }: Entry) {
   return (
-    <Item asChild variant="default" size="sm" className="py-2 px-0">
+    <Item asChild variant="default" size="sm" className="p-2 rounded-none">
       <a href="/#">
         <ItemMedia>
           <Avatar className="size-10">

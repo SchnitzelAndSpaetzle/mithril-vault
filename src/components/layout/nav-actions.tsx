@@ -18,12 +18,12 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button.tsx";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/popover.tsx";
 import {
   Sidebar,
   SidebarContent,
@@ -32,7 +32,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar";
+} from "@/components/ui/sidebar.tsx";
+import { Separator } from "@/components/ui/separator.tsx";
 
 const data = [
   [
@@ -115,6 +116,10 @@ export function NavActions() {
       <Button variant="ghost" size="icon" className="h-7 w-7">
         <ArrowDownAZ />
       </Button>
+      <Separator
+        orientation="vertical"
+        className="data-[orientation=vertical]:h-6"
+      />
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button

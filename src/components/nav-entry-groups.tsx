@@ -1,5 +1,5 @@
+import type { ReactNode } from "react";
 import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
-
 import {
   Collapsible,
   CollapsibleContent,
@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/collapsible";
 import {
   SidebarGroup,
+  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
@@ -18,21 +19,24 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 
-export function NavWorkspaces({
+export function NavEntryGroups({
   workspaces,
 }: {
   workspaces: {
     name: string;
-    emoji: React.ReactNode;
+    emoji: ReactNode;
     pages: {
       name: string;
-      emoji: React.ReactNode;
+      emoji: ReactNode;
     }[];
   }[];
 }) {
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
+      <SidebarGroupLabel>Groups</SidebarGroupLabel>
+      <SidebarGroupAction title="Add Project">
+        <Plus /> <span className="sr-only">Add Project</span>
+      </SidebarGroupAction>
       <SidebarGroupContent>
         <SidebarMenu>
           {workspaces.map((workspace) => (
