@@ -15,9 +15,10 @@ import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as authIndexRouteImport } from './routes/(auth)/index'
-import { Route as authOpenDbRouteImport } from './routes/(auth)/open-db'
-import { Route as authNewDbRouteImport } from './routes/(auth)/new-db'
+import { Route as authOpenRouteImport } from './routes/(auth)/open'
+import { Route as authNewRouteImport } from './routes/(auth)/new'
 import { Route as authLoginRouteImport } from './routes/(auth)/login'
+import { Route as authImportFileRouteImport } from './routes/(auth)/import-file'
 import { Route as DashboardEntryNewRouteImport } from './routes/dashboard/entry/new'
 import { Route as DashboardEntryEditRouteImport } from './routes/dashboard/entry/edit'
 import { Route as DashboardEntryIdRouteImport } from './routes/dashboard/entry/$id'
@@ -51,19 +52,24 @@ const authIndexRoute = authIndexRouteImport.update({
   path: '/',
   getParentRoute: () => authRouteRoute,
 } as any)
-const authOpenDbRoute = authOpenDbRouteImport.update({
-  id: '/open-db',
-  path: '/open-db',
+const authOpenRoute = authOpenRouteImport.update({
+  id: '/open',
+  path: '/open',
   getParentRoute: () => authRouteRoute,
 } as any)
-const authNewDbRoute = authNewDbRouteImport.update({
-  id: '/new-db',
-  path: '/new-db',
+const authNewRoute = authNewRouteImport.update({
+  id: '/new',
+  path: '/new',
   getParentRoute: () => authRouteRoute,
 } as any)
 const authLoginRoute = authLoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => authRouteRoute,
+} as any)
+const authImportFileRoute = authImportFileRouteImport.update({
+  id: '/import-file',
+  path: '/import-file',
   getParentRoute: () => authRouteRoute,
 } as any)
 const DashboardEntryNewRoute = DashboardEntryNewRouteImport.update({
@@ -85,9 +91,10 @@ const DashboardEntryIdRoute = DashboardEntryIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteRouteWithChildren
   '/password-generator': typeof PasswordGeneratorRoute
+  '/import-file': typeof authImportFileRoute
   '/login': typeof authLoginRoute
-  '/new-db': typeof authNewDbRoute
-  '/open-db': typeof authOpenDbRoute
+  '/new': typeof authNewRoute
+  '/open': typeof authOpenRoute
   '/': typeof authIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -97,9 +104,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/password-generator': typeof PasswordGeneratorRoute
+  '/import-file': typeof authImportFileRoute
   '/login': typeof authLoginRoute
-  '/new-db': typeof authNewDbRoute
-  '/open-db': typeof authOpenDbRoute
+  '/new': typeof authNewRoute
+  '/open': typeof authOpenRoute
   '/': typeof authIndexRoute
   '/dashboard': typeof DashboardIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -112,9 +120,10 @@ export interface FileRoutesById {
   '/(auth)': typeof authRouteRouteWithChildren
   '/dashboard': typeof DashboardRouteRouteWithChildren
   '/password-generator': typeof PasswordGeneratorRoute
+  '/(auth)/import-file': typeof authImportFileRoute
   '/(auth)/login': typeof authLoginRoute
-  '/(auth)/new-db': typeof authNewDbRoute
-  '/(auth)/open-db': typeof authOpenDbRoute
+  '/(auth)/new': typeof authNewRoute
+  '/(auth)/open': typeof authOpenRoute
   '/(auth)/': typeof authIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -127,9 +136,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/dashboard'
     | '/password-generator'
+    | '/import-file'
     | '/login'
-    | '/new-db'
-    | '/open-db'
+    | '/new'
+    | '/open'
     | '/'
     | '/dashboard/'
     | '/settings'
@@ -139,9 +149,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/password-generator'
+    | '/import-file'
     | '/login'
-    | '/new-db'
-    | '/open-db'
+    | '/new'
+    | '/open'
     | '/'
     | '/dashboard'
     | '/settings'
@@ -153,9 +164,10 @@ export interface FileRouteTypes {
     | '/(auth)'
     | '/dashboard'
     | '/password-generator'
+    | '/(auth)/import-file'
     | '/(auth)/login'
-    | '/(auth)/new-db'
-    | '/(auth)/open-db'
+    | '/(auth)/new'
+    | '/(auth)/open'
     | '/(auth)/'
     | '/dashboard/'
     | '/settings/'
@@ -215,18 +227,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authIndexRouteImport
       parentRoute: typeof authRouteRoute
     }
-    '/(auth)/open-db': {
-      id: '/(auth)/open-db'
-      path: '/open-db'
-      fullPath: '/open-db'
-      preLoaderRoute: typeof authOpenDbRouteImport
+    '/(auth)/open': {
+      id: '/(auth)/open'
+      path: '/open'
+      fullPath: '/open'
+      preLoaderRoute: typeof authOpenRouteImport
       parentRoute: typeof authRouteRoute
     }
-    '/(auth)/new-db': {
-      id: '/(auth)/new-db'
-      path: '/new-db'
-      fullPath: '/new-db'
-      preLoaderRoute: typeof authNewDbRouteImport
+    '/(auth)/new': {
+      id: '/(auth)/new'
+      path: '/new'
+      fullPath: '/new'
+      preLoaderRoute: typeof authNewRouteImport
       parentRoute: typeof authRouteRoute
     }
     '/(auth)/login': {
@@ -234,6 +246,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof authLoginRouteImport
+      parentRoute: typeof authRouteRoute
+    }
+    '/(auth)/import-file': {
+      id: '/(auth)/import-file'
+      path: '/import-file'
+      fullPath: '/import-file'
+      preLoaderRoute: typeof authImportFileRouteImport
       parentRoute: typeof authRouteRoute
     }
     '/dashboard/entry/new': {
@@ -261,16 +280,18 @@ declare module '@tanstack/react-router' {
 }
 
 interface authRouteRouteChildren {
+  authImportFileRoute: typeof authImportFileRoute
   authLoginRoute: typeof authLoginRoute
-  authNewDbRoute: typeof authNewDbRoute
-  authOpenDbRoute: typeof authOpenDbRoute
+  authNewRoute: typeof authNewRoute
+  authOpenRoute: typeof authOpenRoute
   authIndexRoute: typeof authIndexRoute
 }
 
 const authRouteRouteChildren: authRouteRouteChildren = {
+  authImportFileRoute: authImportFileRoute,
   authLoginRoute: authLoginRoute,
-  authNewDbRoute: authNewDbRoute,
-  authOpenDbRoute: authOpenDbRoute,
+  authNewRoute: authNewRoute,
+  authOpenRoute: authOpenRoute,
   authIndexRoute: authIndexRoute,
 }
 
