@@ -1011,6 +1011,98 @@ db.delete_entry(&entry_id)?;
 db.mark_modified();
 ```
 
+### Working with Layout Components
+
+**Responsive Design Patterns:**
+
+```typescript
+import { useIsMobile } from "@/hooks/use-mobile";
+
+function MyComponent() {
+  const isMobile = useIsMobile();
+
+  return (
+    <div>
+      { isMobile ? <MobileView / > : <DesktopView / > }
+    < /div>
+  );
+}
+```
+
+**Custom Tailwind Utilities:**
+
+```css
+/* src/index.css */
+@layer utilities {
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tauri-drag-region {
+        -webkit-app-region: drag;
+    }
+}
+```
+
+**Window Drag Region (Desktop Only):**
+
+```tsx
+import { useIsMobile } from "@/hooks/use-mobile";
+
+function MyLayout() {
+  const isMobile = useIsMobile();
+
+  return (
+    <div className="h-full w-full flex flex-col">
+      {/* Drag region only on desktop */}
+      {!isMobile && (
+        <div
+          data-tauri-drag-region
+          className="h-10 w-full tauri-drag-region border-b"
+          aria-label="Window drag region"
+        />
+      )}
+      {/* Rest of layout */}
+    </div>
+  );
+}
+```
+
+**Testing Layout Components:**
+
+```typescript
+// Component test using mocked useIsMobile
+import { describe, it, expect, vi } from "vitest";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: vi.fn(),
+}));
+
+describe("MyComponent", () => {
+  it("renders desktop view when not mobile", () => {
+    vi.mocked(useIsMobile).mockReturnValue(false);
+    // Test desktop behavior
+  });
+
+  it("renders mobile view when mobile", () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    // Test mobile behavior
+  });
+});
+```
+
+**Test Utilities:**
+
+- Use `renderWithProviders` from `src/test/test-utils.tsx` for components that need SidebarProvider or RouterProvider
+- Focus on testing component structure and logic rather than full rendering
+- See `src/components/layout/*.test.tsx` for examples
+
 ---
 
 ## Anti-Patterns to Avoid
@@ -1100,6 +1192,17 @@ fn create_entry(data: CreateEntryData, state: State<AppState>) -> Result<Entry, 
 - [React Documentation](https://react.dev/)
 - [TypeScript Handbook](https://www.typescriptlang.org/docs/)
 - [Zustand Documentation](https://docs.pmnd.rs/zustand/)
+- [TanStack Router](https://tanstack.com/router) - File-based routing
+- [Vitest](https://vitest.dev/) - Unit testing framework
+- [React Testing Library](https://testing-library.com/react) - Testing utilities
+
+### UI Components & Styling
+
+- [shadcn/ui Documentation](https://ui.shadcn.com/) - Reusable components
+- [shadcn/ui Sidebar Component](https://ui.shadcn.com/docs/components/sidebar) - Sidebar implementation
+- [react-resizable-panels](https://github.com/bvaughn/react-resizable-panels) - Resizable panel layouts
+- [Tailwind CSS v4](https://tailwindcss.com/docs) - Utility-first CSS framework
+- [Lucide Icons](https://lucide.dev/) - Icon library
 
 ### Security
 

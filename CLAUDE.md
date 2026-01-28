@@ -70,6 +70,57 @@ bun run licenses:rust        # Check Rust licenses only (uses deny.toml)
 - Tauri command wrappers in `lib/tauri.ts`
 - Types in `lib/types.ts`
 
+#### Frontend Layout Architecture
+
+The application uses a responsive layout system that adapts between desktop and mobile views:
+
+**Responsive Breakpoint System:**
+
+- Breakpoint: `768px` (defined in `hooks/use-mobile.tsx`)
+- Hook: `useIsMobile()` returns boolean based on window width
+- Desktop: `≥768px` | Mobile: `<768px`
+
+**Desktop Layout** (`src/views/DesktopContentArea.tsx`):
+
+- Window drag region for Tauri frameless window (desktop only)
+- Drag bar with `data-tauri-drag-region` attribute and `tauri-drag-region` CSS class
+- Two-panel layout using `react-resizable-panels`:
+  - Left panel: Entry list with search and filters (min 250px)
+  - Right panel: Entry details/editor (min 360px)
+  - Resizable handle between panels
+- Each panel has independent scrolling with `scrollbar-hide` utility class
+- Fixed headers with action buttons
+
+**Mobile Layout** (`src/views/MobileContentArea.tsx`):
+
+- Single scrollable view with `overflow-auto scrollbar-hide`
+- NavEntries header at top
+- Entry list in center
+- Sticky bottom controls with backdrop blur effect
+- No drag region (not needed on mobile)
+
+**Tailwind CSS v4 Patterns:**
+
+- Uses `@tailwindcss/vite` plugin
+- Custom utilities in `src/index.css`:
+  - `.scrollbar-hide` - Hides scrollbars across browsers
+  - `.tauri-drag-region` - Enables window dragging (`-webkit-app-region: drag`)
+- Theme uses `@theme inline` directive for CSS variables
+- Custom variant: `@custom-variant dark (&:is(.dark *))`
+
+**Key Components:**
+
+- `DragRegion` (`src/components/layout/drag-region.tsx`) - Desktop two-panel layout
+- `AppSidebar` (`src/components/layout/app-sidebar.tsx`) - Collapsible navigation sidebar
+- `SidebarProvider` - Context provider from shadcn/ui sidebar component
+
+**Testing Layout Components:**
+
+- Use `renderWithProviders` from `src/test/test-utils.tsx` (includes SidebarProvider + RouterProvider)
+- Mock `useIsMobile` hook to test responsive behavior
+- Focus on structure/behavior tests rather than full rendering due to complex dependencies
+- See `src/components/layout/*.test.tsx` for examples
+
 ### Backend (src-tauri/src/)
 
 - **Tauri v2** with security-hardened capabilities

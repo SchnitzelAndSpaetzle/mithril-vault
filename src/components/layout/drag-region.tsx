@@ -85,9 +85,9 @@ export default function DragRegion() {
           </div>
         </div>
         <div className="h-full w-full overflow-auto scrollbar-hide">
-          <div className="p-4">
+          <div className="">
             {/* Example content to demonstrate scrolling */}
-            <div className="space-y-2">
+            <div className="flex flex-col gap-4 p-4 pb-0 md:pb-20">
               <EntryItemDetails />
             </div>
           </div>
