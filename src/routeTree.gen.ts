@@ -15,7 +15,6 @@ import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as authIndexRouteImport } from './routes/(auth)/index'
-import { Route as authOpenRouteImport } from './routes/(auth)/open'
 import { Route as authNewRouteImport } from './routes/(auth)/new'
 import { Route as authLoginRouteImport } from './routes/(auth)/login'
 import { Route as authImportFileRouteImport } from './routes/(auth)/import-file'
@@ -50,11 +49,6 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
 const authIndexRoute = authIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => authRouteRoute,
-} as any)
-const authOpenRoute = authOpenRouteImport.update({
-  id: '/open',
-  path: '/open',
   getParentRoute: () => authRouteRoute,
 } as any)
 const authNewRoute = authNewRouteImport.update({
@@ -94,7 +88,6 @@ export interface FileRoutesByFullPath {
   '/import-file': typeof authImportFileRoute
   '/login': typeof authLoginRoute
   '/new': typeof authNewRoute
-  '/open': typeof authOpenRoute
   '/': typeof authIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -107,7 +100,6 @@ export interface FileRoutesByTo {
   '/import-file': typeof authImportFileRoute
   '/login': typeof authLoginRoute
   '/new': typeof authNewRoute
-  '/open': typeof authOpenRoute
   '/': typeof authIndexRoute
   '/dashboard': typeof DashboardIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -123,7 +115,6 @@ export interface FileRoutesById {
   '/(auth)/import-file': typeof authImportFileRoute
   '/(auth)/login': typeof authLoginRoute
   '/(auth)/new': typeof authNewRoute
-  '/(auth)/open': typeof authOpenRoute
   '/(auth)/': typeof authIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -139,7 +130,6 @@ export interface FileRouteTypes {
     | '/import-file'
     | '/login'
     | '/new'
-    | '/open'
     | '/'
     | '/dashboard/'
     | '/settings'
@@ -152,7 +142,6 @@ export interface FileRouteTypes {
     | '/import-file'
     | '/login'
     | '/new'
-    | '/open'
     | '/'
     | '/dashboard'
     | '/settings'
@@ -167,7 +156,6 @@ export interface FileRouteTypes {
     | '/(auth)/import-file'
     | '/(auth)/login'
     | '/(auth)/new'
-    | '/(auth)/open'
     | '/(auth)/'
     | '/dashboard/'
     | '/settings/'
@@ -227,13 +215,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authIndexRouteImport
       parentRoute: typeof authRouteRoute
     }
-    '/(auth)/open': {
-      id: '/(auth)/open'
-      path: '/open'
-      fullPath: '/open'
-      preLoaderRoute: typeof authOpenRouteImport
-      parentRoute: typeof authRouteRoute
-    }
     '/(auth)/new': {
       id: '/(auth)/new'
       path: '/new'
@@ -283,7 +264,6 @@ interface authRouteRouteChildren {
   authImportFileRoute: typeof authImportFileRoute
   authLoginRoute: typeof authLoginRoute
   authNewRoute: typeof authNewRoute
-  authOpenRoute: typeof authOpenRoute
   authIndexRoute: typeof authIndexRoute
 }
 
@@ -291,7 +271,6 @@ const authRouteRouteChildren: authRouteRouteChildren = {
   authImportFileRoute: authImportFileRoute,
   authLoginRoute: authLoginRoute,
   authNewRoute: authNewRoute,
-  authOpenRoute: authOpenRoute,
   authIndexRoute: authIndexRoute,
 }
 
