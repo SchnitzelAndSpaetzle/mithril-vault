@@ -4,7 +4,9 @@
 #![allow(clippy::expect_used)]
 
 use mithril_vault_lib::commands::settings::AppSettings;
+use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::settings::SettingsService;
+use serde_json;
 use tauri::test::mock_app;
 use tauri::Manager;
 
@@ -21,6 +23,26 @@ fn cleanup_settings_file(app: &tauri::App<tauri::test::MockRuntime>) {
             let _ = std::fs::remove_file(settings_path);
         }
     }
+}
+
+fn settings_file_path(app: &tauri::App<tauri::test::MockRuntime>) -> std::path::PathBuf {
+    app.path()
+        .app_local_data_dir()
+        .expect("app data dir")
+        .join("settings.json")
+}
+
+fn create_settings_dir(app: &tauri::App<tauri::test::MockRuntime>) -> std::path::PathBuf {
+    let data_dir = app.path().app_local_data_dir().expect("app data dir");
+    let settings_path = data_dir.join("settings.json");
+    let _ = std::fs::remove_file(&settings_path);
+    let _ = std::fs::remove_dir_all(&settings_path);
+    std::fs::create_dir_all(&settings_path).expect("create settings dir");
+    settings_path
+}
+
+fn cleanup_settings_dir(settings_path: std::path::PathBuf) {
+    let _ = std::fs::remove_dir_all(settings_path);
 }
 
 fn new_service(app: &tauri::App<tauri::test::MockRuntime>) -> SettingsService {
@@ -61,6 +83,36 @@ fn update_persists_across_reload() {
     let settings = reloaded.get_settings().expect("get settings");
     assert_eq!(settings.auto_lock_timeout, 45);
     assert_eq!(settings.theme, "light");
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn load_settings_from_existing_file() {
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let settings_path = settings_file_path(&app);
+    let settings = AppSettings {
+        auto_lock_timeout: 120,
+        clipboard_clear_timeout: 45,
+        show_password_by_default: true,
+        minimize_to_tray: false,
+        start_minimized: true,
+        theme: "dark".into(),
+        recent_databases: Vec::new(),
+    };
+    let content = serde_json::to_string_pretty(&settings).expect("serialize settings");
+    std::fs::write(&settings_path, content).expect("write settings");
+
+    let service = new_service(&app);
+    let loaded = service.get_settings().expect("get settings");
+    assert_eq!(loaded.auto_lock_timeout, 120);
+    assert_eq!(loaded.clipboard_clear_timeout, 45);
+    assert!(loaded.show_password_by_default);
+    assert!(!loaded.minimize_to_tray);
+    assert!(loaded.start_minimized);
+    assert_eq!(loaded.theme, "dark");
 
     cleanup_settings_file(&app);
 }
@@ -143,4 +195,77 @@ fn keyfile_lookup_remove_and_clear() {
     assert!(settings.recent_databases.is_empty());
 
     cleanup_settings_file(&app);
+}
+
+#[test]
+fn get_keyfile_returns_none_for_missing_path() {
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let service = new_service(&app);
+    let keyfile = service
+        .get_keyfile_for_database("missing.kdbx")
+        .expect("get keyfile");
+    assert!(keyfile.is_none());
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn save_error_surfaces_as_io_error() {
+    let app = setup_app();
+    let settings_path = create_settings_dir(&app);
+
+    let service = new_service(&app);
+    let mut updated = AppSettings::default();
+    updated.theme = "light".into();
+
+    let err = service
+        .update_settings(updated)
+        .expect_err("expected io error");
+    assert!(matches!(err, AppError::Io(_)));
+
+    cleanup_settings_dir(settings_path);
+}
+
+#[test]
+fn add_recent_database_surfaces_save_error() {
+    let app = setup_app();
+    let settings_path = create_settings_dir(&app);
+
+    let service = new_service(&app);
+    let err = service
+        .add_recent_database("db-1.kdbx", None)
+        .expect_err("expected io error");
+    assert!(matches!(err, AppError::Io(_)));
+
+    cleanup_settings_dir(settings_path);
+}
+
+#[test]
+fn remove_recent_database_surfaces_save_error() {
+    let app = setup_app();
+    let settings_path = create_settings_dir(&app);
+
+    let service = new_service(&app);
+    let err = service
+        .remove_recent_database("db-1.kdbx")
+        .expect_err("expected io error");
+    assert!(matches!(err, AppError::Io(_)));
+
+    cleanup_settings_dir(settings_path);
+}
+
+#[test]
+fn clear_recent_databases_surfaces_save_error() {
+    let app = setup_app();
+    let settings_path = create_settings_dir(&app);
+
+    let service = new_service(&app);
+    let err = service
+        .clear_recent_databases()
+        .expect_err("expected io error");
+    assert!(matches!(err, AppError::Io(_)));
+
+    cleanup_settings_dir(settings_path);
 }
