@@ -33,7 +33,7 @@ import {
 
 const PathPasswordSchema = z.object({
   path: z.string().min(1),
-  password: z.string().min(8),
+  password: z.string(),
 });
 
 const PathKeyfileSchema = z.object({
@@ -43,7 +43,7 @@ const PathKeyfileSchema = z.object({
 
 const PathPasswordKeyfileSchema = z.object({
   path: z.string().min(1),
-  password: z.string().min(8),
+  password: z.string(),
   keyfilePath: z.string().min(1),
 });
 
@@ -52,7 +52,7 @@ const IdSchema = z.object({
 });
 
 const GroupIdSchema = z.object({
-  groupId: z.string().uuid(),
+  groupId: z.uuid(),
 });
 
 const CustomFieldKeySchema = z.object({
@@ -71,7 +71,7 @@ const CopyPasswordSchema = z.object({
 const CreateDatabaseSchema = z.object({
   path: z.string().min(1),
   name: z.string().min(1),
-  password: z.string().min(8).optional(),
+  password: z.string().optional(),
   keyfilePath: z.string().min(1).optional(),
   options: DatabaseCreationOptionsSchema.optional(),
 });
@@ -170,6 +170,15 @@ export const database = {
   async getConfig(): Promise<DatabaseConfig> {
     const result = await invoke("get_database_config");
     return DatabaseConfigSchema.parse(result);
+  },
+
+  /**
+   * Get info about the currently open database.
+   * Returns null if no database is open.
+   */
+  async getInfo(): Promise<DatabaseInfo | null> {
+    const result = await invoke("get_database_info");
+    return result === null ? null : DatabaseInfoSchema.parse(result);
   },
 
   /**

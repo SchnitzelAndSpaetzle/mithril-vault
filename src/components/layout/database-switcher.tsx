@@ -1,5 +1,8 @@
-import * as React from "react";
-import { ChevronDown, Lock, Plus, Settings } from "lucide-react";
+// SPDX-License-Identifier: MIT
+
+import { useEffect } from "react";
+import { ChevronDown, Database, Loader2, Lock, Settings } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import {
   DropdownMenu,
@@ -7,7 +10,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import {
@@ -15,35 +17,82 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar.tsx";
-import { Button } from "../ui/button.tsx";
-import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button.tsx";
+import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { useDatabaseInfo } from "@/hooks/use-database-info.ts";
+import { useRecentDatabases } from "@/hooks/use-recent-databases.ts";
+import { database } from "@/lib/tauri.ts";
 
-export function DatabaseSwitcher({
-  teams,
-}: {
-  teams: {
-    name: string;
-    logo: React.ElementType;
-    plan: string;
-  }[];
-}) {
-  const [activeTeam, setActiveTeam] = React.useState(teams[0]);
+/**
+ * Extracts the filename from a full file path.
+ */
+function getFilename(path: string): string {
+  const parts = path.split(/[/\\]/);
+  return parts[parts.length - 1] || path;
+}
 
-  if (!activeTeam) {
+export function DatabaseSwitcher() {
+  const navigate = useNavigate();
+  const { databaseInfo, isLoading: isLoadingDb } = useDatabaseInfo();
+  const { recentDatabases, isLoading: isLoadingRecent } = useRecentDatabases();
+
+  // Redirect to home if no database is open (after loading completes)
+  useEffect(() => {
+    if (!isLoadingDb && !databaseInfo) {
+      void navigate({ to: "/" });
+    }
+  }, [isLoadingDb, databaseInfo, navigate]);
+
+  const handleLock = async () => {
+    try {
+      await database.close();
+      void navigate({ to: "/" });
+    } catch (error) {
+      console.error("Failed to close database:", error);
+    }
+  };
+
+  const handleSelectDatabase = (path: string) => {
+    void navigate({ to: "/unlock", search: { path } });
+  };
+
+  // Filter out the currently open database from a recent list
+  const otherDatabases = recentDatabases.filter(
+    (db) => db.path !== databaseInfo?.path
+  );
+
+  // Show loading state
+  if (isLoadingDb) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem className="flex items-center gap-2">
+          <div className="flex grow items-center gap-2 px-1.5">
+            <Skeleton className="size-5 rounded-md" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
+
+  // If no database is open, don't render (redirect will happen)
+  if (!databaseInfo) {
     return null;
   }
 
   return (
     <SidebarMenu>
       <SidebarMenuItem className="flex items-center gap-2">
-        <div className="flex grow">
+        <div className="flex grow max-w-40">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton className="w-fit px-1.5">
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-5 items-center justify-center rounded-md">
-                  <activeTeam.logo className="size-3" />
+                  <Database className="size-3" />
                 </div>
-                <span className="truncate font-medium">{activeTeam.name}</span>
+                <span className="truncate font-medium">
+                  {databaseInfo.name || getFilename(databaseInfo.path)}
+                </span>
                 <ChevronDown className="opacity-50" />
               </SidebarMenuButton>
             </DropdownMenuTrigger>
@@ -54,35 +103,48 @@ export function DatabaseSwitcher({
               sideOffset={4}
             >
               <DropdownMenuLabel className="text-muted-foreground text-xs">
-                Databases
+                Recent Databases
               </DropdownMenuLabel>
-              {teams.map((team, index) => (
-                <DropdownMenuItem
-                  key={team.name}
-                  onClick={() => setActiveTeam(team)}
-                  className="gap-2 p-2"
-                >
-                  <div className="flex size-6 items-center justify-center rounded-xs border">
-                    <team.logo className="size-4 shrink-0" />
-                  </div>
-                  {team.name}
-                  <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
+              {isLoadingRecent ? (
+                <div className="flex items-center justify-center p-2">
+                  <Loader2 className="size-4 animate-spin" />
+                </div>
+              ) : otherDatabases.length === 0 ? (
+                <DropdownMenuItem disabled className="text-muted-foreground">
+                  No other databases
                 </DropdownMenuItem>
-              ))}
+              ) : (
+                otherDatabases.map((db) => (
+                  <DropdownMenuItem
+                    key={db.path}
+                    onClick={() => handleSelectDatabase(db.path)}
+                    className="gap-2 p-2"
+                  >
+                    <div className="flex size-6 items-center justify-center rounded-xs border">
+                      <Database className="size-4 shrink-0" />
+                    </div>
+                    <span className="truncate">{getFilename(db.path)}</span>
+                  </DropdownMenuItem>
+                ))
+              )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2 p-2">
+              <DropdownMenuItem
+                onClick={() => void navigate({ to: "/" })}
+                className="gap-2 p-2"
+              >
                 <div className="bg-background flex size-6 items-center justify-center rounded-md border">
-                  <Plus className="size-4" />
+                  <Database className="size-4" />
                 </div>
                 <div className="text-muted-foreground font-medium">
-                  Add database
+                  Open another database
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
-        <div>
+        <div className="flex items-center gap-2" data-collapsible="icon">
+          {/*TODO: database settings page*/}
           <Button
             size="icon"
             className="size-8 group-data-[collapsible=icon]:opacity-0"
@@ -91,17 +153,14 @@ export function DatabaseSwitcher({
             <Settings />
             <span className="sr-only">Settings</span>
           </Button>
-
           <Button
-            asChild
             size="icon"
             className="size-8 group-data-[collapsible=icon]:opacity-0"
             variant="ghost"
+            onClick={() => void handleLock()}
           >
-            <Link to="/unlock">
-              <Lock />
-              <span className="sr-only">Lock Database</span>
-            </Link>
+            <Lock />
+            <span className="sr-only">Lock Database</span>
           </Button>
         </div>
       </SidebarMenuItem>

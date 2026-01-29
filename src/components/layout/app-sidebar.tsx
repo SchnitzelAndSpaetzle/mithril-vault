@@ -1,9 +1,7 @@
 import type { ComponentProps } from "react";
 import {
   AlarmClockMinus,
-  AudioWaveform,
   Blocks,
-  Command,
   MessageCircleQuestion,
   Search,
   Settings2,
@@ -24,25 +22,7 @@ import { Separator } from "@/components/ui/separator.tsx";
 import NavTags from "@/components/layout/nav-tags.tsx";
 import mocTags from "@/mock/tags-mock-data.json";
 
-// This is sample data.
 const data = {
-  teams: [
-    {
-      name: "Acme Inc",
-      logo: Command,
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: Command,
-      plan: "Free",
-    },
-  ],
   navMain: [
     {
       title: "All Entries",
@@ -250,7 +230,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar className="border-r-0" {...props}>
       <SidebarHeader className="flex h-14 shrink-0 items-center gap-2 border-b pt-3">
-        <DatabaseSwitcher teams={data.teams} />
+        <DatabaseSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
