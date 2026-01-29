@@ -14,7 +14,7 @@ fn app_error_serializes_to_string() {
 
 #[test]
 fn app_error_from_io_converts_to_io_variant() {
-    let err = std::io::Error::new(std::io::ErrorKind::Other, "disk full");
+    let err = std::io::Error::other("disk full");
     let app_err: AppError = err.into();
     assert!(matches!(app_err, AppError::Io(_)));
 }
