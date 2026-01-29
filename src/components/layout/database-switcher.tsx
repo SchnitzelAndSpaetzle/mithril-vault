@@ -98,7 +98,7 @@ export function DatabaseSwitcher({
             className="size-8 group-data-[collapsible=icon]:opacity-0"
             variant="ghost"
           >
-            <Link to="/login">
+            <Link to="/unlock">
               <Lock />
               <span className="sr-only">Lock Database</span>
             </Link>

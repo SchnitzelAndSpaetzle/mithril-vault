@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card.tsx";
 import React from "react";
-import { InputGroupPassword } from "@/components/security/unlock-database-form/InputGroupPassword.tsx";
+import { UnlockDbForm } from "@/components/security/unlock-database-form/UnlockDbForm.tsx";
 
 export function LoginForm({
   className,
@@ -25,7 +25,7 @@ export function LoginForm({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <InputGroupPassword />
+          <UnlockDbForm />
         </CardContent>
       </Card>
     </div>
