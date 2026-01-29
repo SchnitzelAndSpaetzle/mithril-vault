@@ -99,14 +99,14 @@ function EntryItem({ label, value }: { label: string; value: string }) {
   };
 
   return (
-    <div className="flex justify-between items-center px-4 py-2">
+    <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
       <small className="shrink-0 text-sm font-medium">{label}</small>
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex w-0 min-w-0 flex-1 items-center justify-end-safe gap-2">
         <button
           onClick={handleCopy}
-          className="group text-sm font-medium text-muted-foreground hover:bg-accent px-2 py-1 rounded-sm cursor-pointer transition-all duration-200 flex items-center gap-2 min-w-0"
+          className="group flex min-w-0 max-w-full flex-1 items-center justify-end gap-2 overflow-hidden rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent"
         >
-          <span className="transition-all duration-200 truncate min-w-0 max-w-full">
+          <span className="min-w-0 truncate text-right transition-all duration-200">
             {isCopied ? "Copied" : value}
           </span>
           {isCopied ? (
