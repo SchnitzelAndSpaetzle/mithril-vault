@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/input-group.tsx";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.tsx";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   type OpenDatabaseFormValues,
@@ -89,8 +89,10 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
     },
   });
 
-  const filePath = openDbForm.watch("filePath");
-  const keyfilePath = openDbForm.watch("keyfilePath");
+  const [filePath, keyfilePath] = useWatch({
+    control: openDbForm.control,
+    name: ["filePath", "keyfilePath"],
+  });
 
   // Load saved keyfile when a path changes
   useEffect(() => {
@@ -108,7 +110,7 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
         }
       }
     }
-    loadSavedKeyfile();
+    void loadSavedKeyfile();
   }, [initialPath, openDbForm]);
 
   async function handleSelectDatabase() {
