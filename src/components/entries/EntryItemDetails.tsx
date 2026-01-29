@@ -15,7 +15,7 @@ export default function EntryItemDetails() {
   return (
     <>
       {/* title section */}
-      <div className="flex justify-between items-center pb-2">
+      <div className="flex justify-between items-center px-4">
         <div className="flex items-center gap-4">
           <Avatar>
             <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
@@ -99,14 +99,14 @@ function EntryItem({ label, value }: { label: string; value: string }) {
   };
 
   return (
-    <div className="flex justify-between items-center px-4 py-2">
-      <small className="text-sm font-medium">{label}</small>
-      <div className="flex gap-2 items-center">
+    <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
+      <small className="shrink-0 text-sm font-medium">{label}</small>
+      <div className="flex w-0 min-w-0 flex-1 items-center justify-end-safe gap-2">
         <button
           onClick={handleCopy}
-          className="group text-sm font-medium text-muted-foreground hover:bg-accent px-2 py-1 rounded-sm cursor-pointer transition-all duration-200 flex items-center gap-2"
+          className="group flex min-w-0 max-w-full flex-1 items-center justify-end gap-2 overflow-hidden rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent"
         >
-          <span className="transition-all duration-200 truncate max-w-50">
+          <span className="min-w-0 truncate text-right transition-all duration-200">
             {isCopied ? "Copied" : value}
           </span>
           {isCopied ? (

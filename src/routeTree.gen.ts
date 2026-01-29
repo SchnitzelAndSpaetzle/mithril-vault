@@ -10,29 +10,30 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PasswordGeneratorRouteImport } from './routes/password-generator'
-import { Route as OpenDbRouteImport } from './routes/open-db'
-import { Route as NewDbRouteImport } from './routes/new-db'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
+import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
+import { Route as authIndexRouteImport } from './routes/(auth)/index'
+import { Route as authNewRouteImport } from './routes/(auth)/new'
+import { Route as authLoginRouteImport } from './routes/(auth)/login'
+import { Route as authImportFileRouteImport } from './routes/(auth)/import-file'
+import { Route as DashboardEntryNewRouteImport } from './routes/dashboard/entry/new'
+import { Route as DashboardEntryEditRouteImport } from './routes/dashboard/entry/edit'
+import { Route as DashboardEntryIdRouteImport } from './routes/dashboard/entry/$id'
 
 const PasswordGeneratorRoute = PasswordGeneratorRouteImport.update({
   id: '/password-generator',
   path: '/password-generator',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OpenDbRoute = OpenDbRouteImport.update({
-  id: '/open-db',
-  path: '/open-db',
+const DashboardRouteRoute = DashboardRouteRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const NewDbRoute = NewDbRouteImport.update({
-  id: '/new-db',
-  path: '/new-db',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const authRouteRoute = authRouteRouteImport.update({
+  id: '/(auth)',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
@@ -40,47 +41,132 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: '/settings/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const authIndexRoute = authIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => authRouteRoute,
+} as any)
+const authNewRoute = authNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => authRouteRoute,
+} as any)
+const authLoginRoute = authLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => authRouteRoute,
+} as any)
+const authImportFileRoute = authImportFileRouteImport.update({
+  id: '/import-file',
+  path: '/import-file',
+  getParentRoute: () => authRouteRoute,
+} as any)
+const DashboardEntryNewRoute = DashboardEntryNewRouteImport.update({
+  id: '/entry/new',
+  path: '/entry/new',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardEntryEditRoute = DashboardEntryEditRouteImport.update({
+  id: '/entry/edit',
+  path: '/entry/edit',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardEntryIdRoute = DashboardEntryIdRouteImport.update({
+  id: '/entry/$id',
+  path: '/entry/$id',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/new-db': typeof NewDbRoute
-  '/open-db': typeof OpenDbRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
   '/password-generator': typeof PasswordGeneratorRoute
+  '/import-file': typeof authImportFileRoute
+  '/login': typeof authLoginRoute
+  '/new': typeof authNewRoute
+  '/': typeof authIndexRoute
+  '/dashboard/': typeof DashboardIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/dashboard/entry/$id': typeof DashboardEntryIdRoute
+  '/dashboard/entry/edit': typeof DashboardEntryEditRoute
+  '/dashboard/entry/new': typeof DashboardEntryNewRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/new-db': typeof NewDbRoute
-  '/open-db': typeof OpenDbRoute
   '/password-generator': typeof PasswordGeneratorRoute
+  '/import-file': typeof authImportFileRoute
+  '/login': typeof authLoginRoute
+  '/new': typeof authNewRoute
+  '/': typeof authIndexRoute
+  '/dashboard': typeof DashboardIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/dashboard/entry/$id': typeof DashboardEntryIdRoute
+  '/dashboard/entry/edit': typeof DashboardEntryEditRoute
+  '/dashboard/entry/new': typeof DashboardEntryNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/new-db': typeof NewDbRoute
-  '/open-db': typeof OpenDbRoute
+  '/(auth)': typeof authRouteRouteWithChildren
+  '/dashboard': typeof DashboardRouteRouteWithChildren
   '/password-generator': typeof PasswordGeneratorRoute
+  '/(auth)/import-file': typeof authImportFileRoute
+  '/(auth)/login': typeof authLoginRoute
+  '/(auth)/new': typeof authNewRoute
+  '/(auth)/': typeof authIndexRoute
+  '/dashboard/': typeof DashboardIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/dashboard/entry/$id': typeof DashboardEntryIdRoute
+  '/dashboard/entry/edit': typeof DashboardEntryEditRoute
+  '/dashboard/entry/new': typeof DashboardEntryNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/new-db' | '/open-db' | '/password-generator' | '/settings'
+  fullPaths:
+    | '/dashboard'
+    | '/password-generator'
+    | '/import-file'
+    | '/login'
+    | '/new'
+    | '/'
+    | '/dashboard/'
+    | '/settings'
+    | '/dashboard/entry/$id'
+    | '/dashboard/entry/edit'
+    | '/dashboard/entry/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/new-db' | '/open-db' | '/password-generator' | '/settings'
+  to:
+    | '/password-generator'
+    | '/import-file'
+    | '/login'
+    | '/new'
+    | '/'
+    | '/dashboard'
+    | '/settings'
+    | '/dashboard/entry/$id'
+    | '/dashboard/entry/edit'
+    | '/dashboard/entry/new'
   id:
     | '__root__'
-    | '/'
-    | '/new-db'
-    | '/open-db'
+    | '/(auth)'
+    | '/dashboard'
     | '/password-generator'
+    | '/(auth)/import-file'
+    | '/(auth)/login'
+    | '/(auth)/new'
+    | '/(auth)/'
+    | '/dashboard/'
     | '/settings/'
+    | '/dashboard/entry/$id'
+    | '/dashboard/entry/edit'
+    | '/dashboard/entry/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  NewDbRoute: typeof NewDbRoute
-  OpenDbRoute: typeof OpenDbRoute
+  authRouteRoute: typeof authRouteRouteWithChildren
+  DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
   PasswordGeneratorRoute: typeof PasswordGeneratorRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
@@ -94,25 +180,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PasswordGeneratorRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/open-db': {
-      id: '/open-db'
-      path: '/open-db'
-      fullPath: '/open-db'
-      preLoaderRoute: typeof OpenDbRouteImport
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/new-db': {
-      id: '/new-db'
-      path: '/new-db'
-      fullPath: '/new-db'
-      preLoaderRoute: typeof NewDbRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/(auth)': {
+      id: '/(auth)'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof authRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/': {
@@ -122,13 +201,104 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/(auth)/': {
+      id: '/(auth)/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof authIndexRouteImport
+      parentRoute: typeof authRouteRoute
+    }
+    '/(auth)/new': {
+      id: '/(auth)/new'
+      path: '/new'
+      fullPath: '/new'
+      preLoaderRoute: typeof authNewRouteImport
+      parentRoute: typeof authRouteRoute
+    }
+    '/(auth)/login': {
+      id: '/(auth)/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof authLoginRouteImport
+      parentRoute: typeof authRouteRoute
+    }
+    '/(auth)/import-file': {
+      id: '/(auth)/import-file'
+      path: '/import-file'
+      fullPath: '/import-file'
+      preLoaderRoute: typeof authImportFileRouteImport
+      parentRoute: typeof authRouteRoute
+    }
+    '/dashboard/entry/new': {
+      id: '/dashboard/entry/new'
+      path: '/entry/new'
+      fullPath: '/dashboard/entry/new'
+      preLoaderRoute: typeof DashboardEntryNewRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/entry/edit': {
+      id: '/dashboard/entry/edit'
+      path: '/entry/edit'
+      fullPath: '/dashboard/entry/edit'
+      preLoaderRoute: typeof DashboardEntryEditRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/entry/$id': {
+      id: '/dashboard/entry/$id'
+      path: '/entry/$id'
+      fullPath: '/dashboard/entry/$id'
+      preLoaderRoute: typeof DashboardEntryIdRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
   }
 }
 
+interface authRouteRouteChildren {
+  authImportFileRoute: typeof authImportFileRoute
+  authLoginRoute: typeof authLoginRoute
+  authNewRoute: typeof authNewRoute
+  authIndexRoute: typeof authIndexRoute
+}
+
+const authRouteRouteChildren: authRouteRouteChildren = {
+  authImportFileRoute: authImportFileRoute,
+  authLoginRoute: authLoginRoute,
+  authNewRoute: authNewRoute,
+  authIndexRoute: authIndexRoute,
+}
+
+const authRouteRouteWithChildren = authRouteRoute._addFileChildren(
+  authRouteRouteChildren,
+)
+
+interface DashboardRouteRouteChildren {
+  DashboardIndexRoute: typeof DashboardIndexRoute
+  DashboardEntryIdRoute: typeof DashboardEntryIdRoute
+  DashboardEntryEditRoute: typeof DashboardEntryEditRoute
+  DashboardEntryNewRoute: typeof DashboardEntryNewRoute
+}
+
+const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
+  DashboardIndexRoute: DashboardIndexRoute,
+  DashboardEntryIdRoute: DashboardEntryIdRoute,
+  DashboardEntryEditRoute: DashboardEntryEditRoute,
+  DashboardEntryNewRoute: DashboardEntryNewRoute,
+}
+
+const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(
+  DashboardRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  NewDbRoute: NewDbRoute,
-  OpenDbRoute: OpenDbRoute,
+  authRouteRoute: authRouteRouteWithChildren,
+  DashboardRouteRoute: DashboardRouteRouteWithChildren,
   PasswordGeneratorRoute: PasswordGeneratorRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
