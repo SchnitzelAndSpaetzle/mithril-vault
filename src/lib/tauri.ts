@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
+  AppSettings,
   CreateEntryData,
   CustomFieldValue,
   DatabaseConfig,
@@ -16,6 +17,7 @@ import type {
   UpdateEntryData,
 } from "./types";
 import {
+  AppSettingsSchema,
   CreateEntryDataSchema,
   CustomFieldValueSchema,
   DatabaseConfigSchema,
@@ -313,5 +315,40 @@ export const clipboard = {
 
   async clear(): Promise<void> {
     return invoke("clear_clipboard");
+  },
+};
+
+/**
+ * Application settings including recent databases and preferences.
+ */
+export const settings = {
+  async get(): Promise<AppSettings> {
+    const result = await invoke("get_settings");
+    return AppSettingsSchema.parse(result);
+  },
+
+  async update(newSettings: AppSettings): Promise<void> {
+    AppSettingsSchema.parse(newSettings);
+    return invoke("update_settings", { newSettings });
+  },
+
+  async addRecentDatabase(path: string, keyfilePath?: string): Promise<void> {
+    PathOnlySchema.parse({ path });
+    return invoke("add_recent_database", { path, keyfilePath });
+  },
+
+  async getKeyfileForDatabase(path: string): Promise<string | null> {
+    PathOnlySchema.parse({ path });
+    const result = await invoke("get_keyfile_for_database", { path });
+    return z.string().nullable().parse(result);
+  },
+
+  async removeRecentDatabase(path: string): Promise<void> {
+    PathOnlySchema.parse({ path });
+    return invoke("remove_recent_database", { path });
+  },
+
+  async clearRecentDatabases(): Promise<void> {
+    return invoke("clear_recent_databases");
   },
 };

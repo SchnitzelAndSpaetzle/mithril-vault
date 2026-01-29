@@ -10,14 +10,15 @@ use commands::{
     add_recent_database, calculate_password_strength, clear_recent_databases, clear_session_key,
     close_database, create_database, create_entry, create_group, delete_entry, delete_group,
     force_unlock_database, generate_passphrase, generate_password, get_database_config, get_entry,
-    get_entry_password, get_entry_protected_custom_field, get_group, get_lock_status, get_settings,
-    has_session_key, inspect_database, list_entries, list_groups, lock_database, move_entry,
-    move_group, open_database, open_database_with_keyfile, open_database_with_keyfile_only,
-    remove_recent_database, rename_group, save_database, store_session_key, unlock_database,
-    update_entry, update_group, update_settings,
+    get_entry_password, get_entry_protected_custom_field, get_group, get_keyfile_for_database,
+    get_lock_status, get_settings, has_session_key, inspect_database, list_entries, list_groups,
+    lock_database, move_entry, move_group, open_database, open_database_with_keyfile,
+    open_database_with_keyfile_only, remove_recent_database, rename_group, save_database,
+    store_session_key, unlock_database, update_entry, update_group, update_settings,
 };
 use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
+use services::settings::SettingsService;
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -27,12 +28,17 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let secure_storage = SecureStorageService::new(app.handle())?;
             app.manage(Arc::new(secure_storage));
 
             let kdbx_service = KdbxService::new();
             app.manage(Arc::new(kdbx_service));
+
+            let settings_service = SettingsService::new(app.handle())?;
+            app.manage(Arc::new(settings_service));
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -71,6 +77,7 @@ pub fn run() {
             add_recent_database,
             remove_recent_database,
             clear_recent_databases,
+            get_keyfile_for_database,
             store_session_key,
             has_session_key,
             clear_session_key,

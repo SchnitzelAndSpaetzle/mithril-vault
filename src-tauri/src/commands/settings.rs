@@ -1,7 +1,18 @@
 // SPDX-License-Identifier: MIT
 
 use crate::dto::error::AppError;
+use crate::services::settings::SettingsService;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tauri::State;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentDatabase {
+    pub path: String,
+    pub keyfile_path: Option<String>,
+    pub last_opened: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,7 +23,7 @@ pub struct AppSettings {
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
     pub theme: String,
-    pub recent_databases: Vec<String>,
+    pub recent_databases: Vec<RecentDatabase>,
 }
 
 impl Default for AppSettings {
@@ -29,35 +40,55 @@ impl Default for AppSettings {
     }
 }
 
-/// TODO: Fetches application settings (not yet implemented).
+/// Fetches application settings.
 #[tauri::command]
-pub async fn get_settings() -> Result<AppSettings, AppError> {
-    Err(AppError::NotImplemented("get_settings".into()))
+pub async fn get_settings(
+    settings_service: State<'_, Arc<SettingsService>>,
+) -> Result<AppSettings, AppError> {
+    settings_service.get_settings()
 }
 
-/// TODO: Updates application settings (not yet implemented).
+/// Updates application settings.
 #[tauri::command]
-pub async fn update_settings(settings: AppSettings) -> Result<(), AppError> {
-    let _ = settings;
-    Err(AppError::NotImplemented("update_settings".into()))
+pub async fn update_settings(
+    new_settings: AppSettings,
+    settings_service: State<'_, Arc<SettingsService>>,
+) -> Result<(), AppError> {
+    settings_service.update_settings(new_settings)
 }
 
-/// TODO: Adds a recent database entry (not yet implemented).
+/// Adds a database to the recent list with optional keyfile association.
 #[tauri::command]
-pub async fn add_recent_database(path: String) -> Result<(), AppError> {
-    let _ = path;
-    Err(AppError::NotImplemented("add_recent_database".into()))
+pub async fn add_recent_database(
+    path: String,
+    keyfile_path: Option<String>,
+    settings_service: State<'_, Arc<SettingsService>>,
+) -> Result<(), AppError> {
+    settings_service.add_recent_database(&path, keyfile_path.as_deref())
 }
 
-/// TODO: Removes a recent database entry (not yet implemented).
+/// Gets the associated keyfile path for a database if one was saved.
 #[tauri::command]
-pub async fn remove_recent_database(path: String) -> Result<(), AppError> {
-    let _ = path;
-    Err(AppError::NotImplemented("remove_recent_database".into()))
+pub async fn get_keyfile_for_database(
+    path: String,
+    settings_service: State<'_, Arc<SettingsService>>,
+) -> Result<Option<String>, AppError> {
+    settings_service.get_keyfile_for_database(&path)
 }
 
-/// TODO: Clears recent database entries (not yet implemented).
+/// Removes a database from the recent list.
 #[tauri::command]
-pub async fn clear_recent_databases() -> Result<(), AppError> {
-    Err(AppError::NotImplemented("clear_recent_databases".into()))
+pub async fn remove_recent_database(
+    path: String,
+    settings_service: State<'_, Arc<SettingsService>>,
+) -> Result<(), AppError> {
+    settings_service.remove_recent_database(&path)
+}
+
+/// Clears all recent database entries.
+#[tauri::command]
+pub async fn clear_recent_databases(
+    settings_service: State<'_, Arc<SettingsService>>,
+) -> Result<(), AppError> {
+    settings_service.clear_recent_databases()
 }
