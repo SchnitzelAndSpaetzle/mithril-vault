@@ -6,6 +6,7 @@ pub mod dto;
 pub mod services;
 pub mod utils;
 
+use crate::dto::error::AppError;
 use commands::{
     add_recent_database, calculate_password_strength, clear_recent_databases, clear_session_key,
     close_database, create_database, create_entry, create_group, delete_entry, delete_group,
@@ -20,27 +21,14 @@ use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
 use services::settings::SettingsService;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Manager, Runtime};
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[allow(clippy::expect_used)]
-/// Runs the Tauri application.
-pub fn run() {
-    tauri::Builder::default()
+#[doc(hidden)]
+pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
-            let secure_storage = SecureStorageService::new(app.handle())?;
-            app.manage(Arc::new(secure_storage));
-
-            let kdbx_service = KdbxService::new();
-            app.manage(Arc::new(kdbx_service));
-
-            let settings_service = SettingsService::new(app.handle())?;
-            app.manage(Arc::new(settings_service));
-
-            Ok(())
-        })
+        .setup(|app| register_services(app.handle()).map_err(Into::into))
         .invoke_handler(tauri::generate_handler![
             open_database,
             open_database_with_keyfile,
@@ -82,6 +70,27 @@ pub fn run() {
             has_session_key,
             clear_session_key,
         ])
+}
+
+#[doc(hidden)]
+pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), AppError> {
+    let secure_storage = SecureStorageService::new(app)?;
+    app.manage(Arc::new(secure_storage));
+
+    let kdbx_service = KdbxService::new();
+    app.manage(Arc::new(kdbx_service));
+
+    let settings_service = SettingsService::new(app)?;
+    app.manage(Arc::new(settings_service));
+
+    Ok(())
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(clippy::expect_used)]
+/// Runs the Tauri application.
+pub fn run() {
+    build_app(tauri::Builder::default())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

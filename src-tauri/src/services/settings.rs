@@ -4,7 +4,7 @@ use crate::commands::settings::{AppSettings, RecentDatabase};
 use crate::dto::error::AppError;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 const SETTINGS_FILE: &str = "settings.json";
 const MAX_RECENT_DATABASES: usize = 10;
@@ -16,7 +16,7 @@ pub struct SettingsService {
 
 impl SettingsService {
     /// Creates a new `SettingsService`, loading settings from the app data directory.
-    pub fn new(app: &AppHandle) -> Result<Self, AppError> {
+    pub fn new<R: Runtime>(app: &AppHandle<R>) -> Result<Self, AppError> {
         let data_dir = app
             .path()
             .app_local_data_dir()

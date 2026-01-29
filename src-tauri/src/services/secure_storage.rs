@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::AppHandle;
 use tauri::Manager;
+use tauri::Runtime;
 use tauri_plugin_stronghold::stronghold::Stronghold;
 use zeroize::Zeroizing;
 
@@ -23,7 +24,7 @@ pub struct SecureStorageService {
 
 impl SecureStorageService {
     /// Creates secure storage rooted in app data.
-    pub fn new(app: &AppHandle) -> Result<Self, AppError> {
+    pub fn new<R: Runtime>(app: &AppHandle<R>) -> Result<Self, AppError> {
         let data_dir = app
             .path()
             .app_local_data_dir()
