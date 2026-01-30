@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
+  AppSettings,
   CreateEntryData,
   CustomFieldValue,
   DatabaseConfig,
@@ -16,6 +17,7 @@ import type {
   UpdateEntryData,
 } from "./types";
 import {
+  AppSettingsSchema,
   CreateEntryDataSchema,
   CustomFieldValueSchema,
   DatabaseConfigSchema,
@@ -31,7 +33,7 @@ import {
 
 const PathPasswordSchema = z.object({
   path: z.string().min(1),
-  password: z.string().min(8),
+  password: z.string(),
 });
 
 const PathKeyfileSchema = z.object({
@@ -41,7 +43,7 @@ const PathKeyfileSchema = z.object({
 
 const PathPasswordKeyfileSchema = z.object({
   path: z.string().min(1),
-  password: z.string().min(8),
+  password: z.string(),
   keyfilePath: z.string().min(1),
 });
 
@@ -50,7 +52,7 @@ const IdSchema = z.object({
 });
 
 const GroupIdSchema = z.object({
-  groupId: z.string().uuid(),
+  groupId: z.uuid(),
 });
 
 const CustomFieldKeySchema = z.object({
@@ -69,7 +71,7 @@ const CopyPasswordSchema = z.object({
 const CreateDatabaseSchema = z.object({
   path: z.string().min(1),
   name: z.string().min(1),
-  password: z.string().min(8).optional(),
+  password: z.string().optional(),
   keyfilePath: z.string().min(1).optional(),
   options: DatabaseCreationOptionsSchema.optional(),
 });
@@ -168,6 +170,15 @@ export const database = {
   async getConfig(): Promise<DatabaseConfig> {
     const result = await invoke("get_database_config");
     return DatabaseConfigSchema.parse(result);
+  },
+
+  /**
+   * Get info about the currently open database.
+   * Returns null if no database is open.
+   */
+  async getInfo(): Promise<DatabaseInfo | null> {
+    const result = await invoke("get_database_info");
+    return result === null ? null : DatabaseInfoSchema.parse(result);
   },
 
   /**
@@ -313,5 +324,40 @@ export const clipboard = {
 
   async clear(): Promise<void> {
     return invoke("clear_clipboard");
+  },
+};
+
+/**
+ * Application settings including recent databases and preferences.
+ */
+export const settings = {
+  async get(): Promise<AppSettings> {
+    const result = await invoke("get_settings");
+    return AppSettingsSchema.parse(result);
+  },
+
+  async update(newSettings: AppSettings): Promise<void> {
+    AppSettingsSchema.parse(newSettings);
+    return invoke("update_settings", { newSettings });
+  },
+
+  async addRecentDatabase(path: string, keyfilePath?: string): Promise<void> {
+    PathOnlySchema.parse({ path });
+    return invoke("add_recent_database", { path, keyfilePath });
+  },
+
+  async getKeyfileForDatabase(path: string): Promise<string | null> {
+    PathOnlySchema.parse({ path });
+    const result = await invoke("get_keyfile_for_database", { path });
+    return z.string().nullable().parse(result);
+  },
+
+  async removeRecentDatabase(path: string): Promise<void> {
+    PathOnlySchema.parse({ path });
+    return invoke("remove_recent_database", { path });
+  },
+
+  async clearRecentDatabases(): Promise<void> {
+    return invoke("clear_recent_databases");
   },
 };

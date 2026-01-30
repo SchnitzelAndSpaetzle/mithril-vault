@@ -144,3 +144,15 @@ pub async fn get_database_config(
 ) -> Result<DatabaseConfigDto, AppError> {
     state.get_config()
 }
+
+/// Gets info about the currently open database, or returns None if no database is open.
+#[tauri::command]
+pub async fn get_database_info(
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<Option<DatabaseInfo>, AppError> {
+    match state.get_info() {
+        Ok(info) => Ok(Some(info)),
+        Err(AppError::DatabaseNotOpen) => Ok(None),
+        Err(e) => Err(e),
+    }
+}

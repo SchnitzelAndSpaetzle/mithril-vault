@@ -6,6 +6,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import prettier from "eslint-plugin-prettier/recommended";
 import globals from "globals";
 import { defineConfig } from "eslint/config";
+import pluginQuery from "@tanstack/eslint-plugin-query";
 
 export default defineConfig(
   // Global ignores
@@ -24,6 +25,9 @@ export default defineConfig(
   // TypeScript rules
   ...tseslint.configs.recommended,
   ...tseslint.configs.stylistic,
+
+  // TanstackQuery rules
+  ...pluginQuery.configs["flat/recommended"],
 
   // React configuration
   {

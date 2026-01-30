@@ -174,3 +174,21 @@ export const DatabaseConfigSchema = z.object({
   kdf: KdfSettingsSchema,
 });
 export type DatabaseConfig = z.infer<typeof DatabaseConfigSchema>;
+
+export const RecentDatabaseSchema = z.object({
+  path: z.string(),
+  keyfilePath: z.string().nullable(),
+  lastOpened: z.string(),
+});
+export type RecentDatabase = z.infer<typeof RecentDatabaseSchema>;
+
+export const AppSettingsSchema = z.object({
+  autoLockTimeout: z.number().int(),
+  clipboardClearTimeout: z.number().int(),
+  showPasswordByDefault: z.boolean(),
+  minimizeToTray: z.boolean(),
+  startMinimized: z.boolean(),
+  theme: z.string(),
+  recentDatabases: z.array(RecentDatabaseSchema),
+});
+export type AppSettings = z.infer<typeof AppSettingsSchema>;

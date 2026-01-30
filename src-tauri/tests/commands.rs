@@ -52,3 +52,6 @@ mod entries_test;
 
 #[path = "commands/groups_test.rs"]
 mod groups_test;
+
+#[path = "commands/settings_test.rs"]
+mod settings_test;

@@ -8,8 +8,8 @@ pub mod secure_storage;
 pub mod settings;
 
 pub use database::{
-    close_database, create_database, force_unlock_database, get_database_config, get_lock_status,
-    inspect_database, lock_database, open_database, open_database_with_keyfile,
+    close_database, create_database, force_unlock_database, get_database_config, get_database_info,
+    get_lock_status, inspect_database, lock_database, open_database, open_database_with_keyfile,
     open_database_with_keyfile_only, save_database, unlock_database,
 };
 pub use entries::*;

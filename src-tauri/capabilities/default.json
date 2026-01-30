@@ -11,6 +11,7 @@
     "core:window:allow-set-focus",
     "core:event:default",
     "core:app:default",
-    "opener:default"
+    "opener:default",
+    "dialog:default"
   ]
 }

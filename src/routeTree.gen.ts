@@ -15,8 +15,8 @@ import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as authIndexRouteImport } from './routes/(auth)/index'
+import { Route as authUnlockRouteImport } from './routes/(auth)/unlock'
 import { Route as authNewRouteImport } from './routes/(auth)/new'
-import { Route as authLoginRouteImport } from './routes/(auth)/login'
 import { Route as authImportFileRouteImport } from './routes/(auth)/import-file'
 import { Route as DashboardEntryNewRouteImport } from './routes/dashboard/entry/new'
 import { Route as DashboardEntryEditRouteImport } from './routes/dashboard/entry/edit'
@@ -51,14 +51,14 @@ const authIndexRoute = authIndexRouteImport.update({
   path: '/',
   getParentRoute: () => authRouteRoute,
 } as any)
+const authUnlockRoute = authUnlockRouteImport.update({
+  id: '/unlock',
+  path: '/unlock',
+  getParentRoute: () => authRouteRoute,
+} as any)
 const authNewRoute = authNewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => authRouteRoute,
-} as any)
-const authLoginRoute = authLoginRouteImport.update({
-  id: '/login',
-  path: '/login',
   getParentRoute: () => authRouteRoute,
 } as any)
 const authImportFileRoute = authImportFileRouteImport.update({
@@ -86,8 +86,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteRouteWithChildren
   '/password-generator': typeof PasswordGeneratorRoute
   '/import-file': typeof authImportFileRoute
-  '/login': typeof authLoginRoute
   '/new': typeof authNewRoute
+  '/unlock': typeof authUnlockRoute
   '/': typeof authIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -98,8 +98,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/password-generator': typeof PasswordGeneratorRoute
   '/import-file': typeof authImportFileRoute
-  '/login': typeof authLoginRoute
   '/new': typeof authNewRoute
+  '/unlock': typeof authUnlockRoute
   '/': typeof authIndexRoute
   '/dashboard': typeof DashboardIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -113,8 +113,8 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteRouteWithChildren
   '/password-generator': typeof PasswordGeneratorRoute
   '/(auth)/import-file': typeof authImportFileRoute
-  '/(auth)/login': typeof authLoginRoute
   '/(auth)/new': typeof authNewRoute
+  '/(auth)/unlock': typeof authUnlockRoute
   '/(auth)/': typeof authIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -128,8 +128,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/password-generator'
     | '/import-file'
-    | '/login'
     | '/new'
+    | '/unlock'
     | '/'
     | '/dashboard/'
     | '/settings'
@@ -140,8 +140,8 @@ export interface FileRouteTypes {
   to:
     | '/password-generator'
     | '/import-file'
-    | '/login'
     | '/new'
+    | '/unlock'
     | '/'
     | '/dashboard'
     | '/settings'
@@ -154,8 +154,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/password-generator'
     | '/(auth)/import-file'
-    | '/(auth)/login'
     | '/(auth)/new'
+    | '/(auth)/unlock'
     | '/(auth)/'
     | '/dashboard/'
     | '/settings/'
@@ -215,18 +215,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authIndexRouteImport
       parentRoute: typeof authRouteRoute
     }
+    '/(auth)/unlock': {
+      id: '/(auth)/unlock'
+      path: '/unlock'
+      fullPath: '/unlock'
+      preLoaderRoute: typeof authUnlockRouteImport
+      parentRoute: typeof authRouteRoute
+    }
     '/(auth)/new': {
       id: '/(auth)/new'
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof authNewRouteImport
-      parentRoute: typeof authRouteRoute
-    }
-    '/(auth)/login': {
-      id: '/(auth)/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof authLoginRouteImport
       parentRoute: typeof authRouteRoute
     }
     '/(auth)/import-file': {
@@ -262,15 +262,15 @@ declare module '@tanstack/react-router' {
 
 interface authRouteRouteChildren {
   authImportFileRoute: typeof authImportFileRoute
-  authLoginRoute: typeof authLoginRoute
   authNewRoute: typeof authNewRoute
+  authUnlockRoute: typeof authUnlockRoute
   authIndexRoute: typeof authIndexRoute
 }
 
 const authRouteRouteChildren: authRouteRouteChildren = {
   authImportFileRoute: authImportFileRoute,
-  authLoginRoute: authLoginRoute,
   authNewRoute: authNewRoute,
+  authUnlockRoute: authUnlockRoute,
   authIndexRoute: authIndexRoute,
 }
 
