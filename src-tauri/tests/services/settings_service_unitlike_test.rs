@@ -24,10 +24,14 @@ fn settings_path(app: &tauri::App<tauri::test::MockRuntime>) -> std::path::PathB
 fn cleanup_settings_file(app: &tauri::App<tauri::test::MockRuntime>) {
     let path = settings_path(app);
     let _ = std::fs::remove_file(path);
+    // Some tests intentionally create a directory at settings.json to force IO errors.
+    // Clean it up as well so other tests can create the service.
+    let _ = std::fs::remove_dir_all(settings_path(app));
 }
 
 #[test]
 fn load_or_default_returns_default_when_missing() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
 
@@ -44,6 +48,7 @@ fn load_or_default_returns_default_when_missing() {
 
 #[test]
 fn save_and_load_roundtrip() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
     let service = SettingsService::new(app.handle()).expect("create service");
@@ -75,6 +80,7 @@ fn save_and_load_roundtrip() {
 
 #[test]
 fn update_and_get_settings_persist() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
     let service = SettingsService::new(app.handle()).expect("create service");
@@ -101,6 +107,7 @@ fn update_and_get_settings_persist() {
 
 #[test]
 fn add_recent_database_dedup_and_limit() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
     let service = SettingsService::new(app.handle()).expect("create service");
@@ -139,6 +146,7 @@ fn add_recent_database_dedup_and_limit() {
 
 #[test]
 fn keyfile_lookup_remove_and_clear() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
     let service = SettingsService::new(app.handle()).expect("create service");

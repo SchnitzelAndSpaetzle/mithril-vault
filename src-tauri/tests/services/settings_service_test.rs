@@ -20,7 +20,8 @@ fn cleanup_settings_file(app: &tauri::App<tauri::test::MockRuntime>) {
     if let Ok(data_dir) = app.path().app_local_data_dir() {
         let settings_path = data_dir.join("settings.json");
         if settings_path.exists() {
-            let _ = std::fs::remove_file(settings_path);
+            let _ = std::fs::remove_file(&settings_path);
+            let _ = std::fs::remove_dir_all(&settings_path);
         }
         if let Ok(entries) = std::fs::read_dir(data_dir) {
             for entry in entries.flatten() {
@@ -62,6 +63,7 @@ fn new_service(app: &tauri::App<tauri::test::MockRuntime>) -> SettingsService {
 
 #[test]
 fn default_settings_when_missing() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
 
@@ -78,6 +80,7 @@ fn default_settings_when_missing() {
 
 #[test]
 fn update_persists_across_reload() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
 
@@ -100,6 +103,7 @@ fn update_persists_across_reload() {
 
 #[test]
 fn load_settings_from_existing_file() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
 
@@ -130,6 +134,7 @@ fn load_settings_from_existing_file() {
 
 #[test]
 fn invalid_settings_falls_back_and_backs_up() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
 
@@ -161,6 +166,7 @@ fn invalid_settings_falls_back_and_backs_up() {
 
 #[test]
 fn add_recent_database_dedup_and_limit() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
 
@@ -201,6 +207,7 @@ fn add_recent_database_dedup_and_limit() {
 
 #[test]
 fn keyfile_lookup_remove_and_clear() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
 
@@ -241,6 +248,7 @@ fn keyfile_lookup_remove_and_clear() {
 
 #[test]
 fn get_keyfile_returns_none_for_missing_path() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
     cleanup_settings_file(&app);
 
@@ -255,10 +263,10 @@ fn get_keyfile_returns_none_for_missing_path() {
 
 #[test]
 fn save_error_surfaces_as_io_error() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
-    let settings_path = create_settings_dir(&app);
-
     let service = new_service(&app);
+    let settings_path = create_settings_dir(&app);
     let mut updated = AppSettings::default();
     updated.theme = "light".into();
 
@@ -272,10 +280,10 @@ fn save_error_surfaces_as_io_error() {
 
 #[test]
 fn add_recent_database_surfaces_save_error() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
-    let settings_path = create_settings_dir(&app);
-
     let service = new_service(&app);
+    let settings_path = create_settings_dir(&app);
     let err = service
         .add_recent_database("db-1.kdbx", None)
         .expect_err("expected io error");
@@ -286,10 +294,10 @@ fn add_recent_database_surfaces_save_error() {
 
 #[test]
 fn remove_recent_database_surfaces_save_error() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
-    let settings_path = create_settings_dir(&app);
-
     let service = new_service(&app);
+    let settings_path = create_settings_dir(&app);
     let err = service
         .remove_recent_database("db-1.kdbx")
         .expect_err("expected io error");
@@ -300,10 +308,10 @@ fn remove_recent_database_surfaces_save_error() {
 
 #[test]
 fn clear_recent_databases_surfaces_save_error() {
+    let _lock = crate::settings_test_lock();
     let app = setup_app();
-    let settings_path = create_settings_dir(&app);
-
     let service = new_service(&app);
+    let settings_path = create_settings_dir(&app);
     let err = service
         .clear_recent_databases()
         .expect_err("expected io error");
