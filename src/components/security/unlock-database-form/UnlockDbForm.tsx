@@ -28,6 +28,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { database, settings } from "@/lib/tauri.ts";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { Label } from "@/components/ui/label.tsx";
+import { toast } from "sonner";
 
 interface UnlockDbFormProps {
   initialPath?: string | undefined;
@@ -186,10 +187,15 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
       }
 
       // Save to recent databases (with keyfile if "remember" is checked)
-      await settings.addRecentDatabase(
-        data.filePath,
-        rememberKeyfile ? data.keyfilePath : undefined
-      );
+      try {
+        await settings.addRecentDatabase(
+          data.filePath,
+          rememberKeyfile ? data.keyfilePath : undefined
+        );
+      } catch (error) {
+        console.warn("Failed to update recent database list", error);
+        toast.warning("Failed to update recent database list");
+      }
 
       await navigate({ to: "/dashboard" });
     } catch (error) {
