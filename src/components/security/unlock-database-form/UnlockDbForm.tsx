@@ -105,6 +105,9 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
           if (savedKeyfile) {
             openDbForm.setValue("keyfilePath", savedKeyfile);
             setRememberKeyfile(true);
+          } else {
+            openDbForm.setValue("keyfilePath", "");
+            setRememberKeyfile(false);
           }
         } catch {
           // Ignore errors - just don't pre-populate
@@ -132,6 +135,9 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
           if (savedKeyfile) {
             openDbForm.setValue("keyfilePath", savedKeyfile);
             setRememberKeyfile(true);
+          } else {
+            openDbForm.setValue("keyfilePath", "");
+            setRememberKeyfile(false);
           }
         } catch {
           // Ignore errors
