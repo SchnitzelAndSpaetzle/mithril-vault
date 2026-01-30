@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from "react";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 import { database } from "@/lib/tauri";
 import type { DatabaseInfo } from "@/lib/types";
 
@@ -8,7 +9,7 @@ interface UseDatabaseInfoResult {
   databaseInfo: DatabaseInfo | null;
   isLoading: boolean;
   error: Error | null;
-  refetch: () => Promise<void>;
+  refetch: UseQueryResult<DatabaseInfo | null, Error>["refetch"];
 }
 
 /**
@@ -16,32 +17,20 @@ interface UseDatabaseInfoResult {
  * Returns null if no database is open.
  */
 export function useDatabaseInfo(): UseDatabaseInfoResult {
-  const [databaseInfo, setDatabaseInfo] = useState<DatabaseInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchInfo = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const info = await database.getInfo();
-      setDatabaseInfo(info);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-      setDatabaseInfo(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetchInfo();
-  }, []);
+  const { data, isLoading, error, refetch } = useQuery<
+    DatabaseInfo | null,
+    Error
+  >({
+    queryKey: queryKeys.database.info(),
+    queryFn: () => database.getInfo(),
+    retry: false,
+    refetchOnWindowFocus: true,
+  });
 
   return {
-    databaseInfo,
+    databaseInfo: data ?? null,
     isLoading,
-    error,
-    refetch: fetchInfo,
+    error: error ?? null,
+    refetch,
   };
 }
