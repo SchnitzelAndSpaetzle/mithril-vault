@@ -9,7 +9,12 @@ use std::sync::{Mutex, MutexGuard};
 static SETTINGS_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn settings_test_lock() -> MutexGuard<'static, ()> {
-    SETTINGS_TEST_LOCK.lock().expect("settings test lock")
+    match SETTINGS_TEST_LOCK.lock() {
+        Ok(guard) => guard,
+        // If the lock was poisoned by a panic in another test, keep going so the
+        // test binary doesn't fail for unrelated reasons.
+        Err(poisoned) => poisoned.into_inner(),
+    }
 }
 
 #[path = "services/settings_service_test.rs"]

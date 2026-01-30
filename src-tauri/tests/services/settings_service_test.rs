@@ -6,7 +6,6 @@
 use mithril_vault_lib::commands::settings::AppSettings;
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::settings::SettingsService;
-use serde_json;
 use tauri::test::mock_app;
 use tauri::Manager;
 
@@ -85,9 +84,11 @@ fn update_persists_across_reload() {
     cleanup_settings_file(&app);
 
     let service = new_service(&app);
-    let mut updated = AppSettings::default();
-    updated.auto_lock_timeout = 45;
-    updated.theme = "light".into();
+    let updated = AppSettings {
+        auto_lock_timeout: 45,
+        theme: "light".into(),
+        ..AppSettings::default()
+    };
 
     service
         .update_settings(updated.clone())
@@ -151,7 +152,7 @@ fn invalid_settings_falls_back_and_backs_up() {
 
     let backups = std::fs::read_dir(&data_dir)
         .expect("read data dir")
-        .filter_map(|entry| entry.ok())
+        .filter_map(Result::ok)
         .filter(|entry| {
             entry
                 .file_name()
@@ -267,8 +268,10 @@ fn save_error_surfaces_as_io_error() {
     let app = setup_app();
     let service = new_service(&app);
     let settings_path = create_settings_dir(&app);
-    let mut updated = AppSettings::default();
-    updated.theme = "light".into();
+    let updated = AppSettings {
+        theme: "light".into(),
+        ..AppSettings::default()
+    };
 
     let err = service
         .update_settings(updated)

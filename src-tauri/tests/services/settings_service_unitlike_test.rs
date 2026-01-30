@@ -85,9 +85,11 @@ fn update_and_get_settings_persist() {
     cleanup_settings_file(&app);
     let service = SettingsService::new(app.handle()).expect("create service");
 
-    let mut updated = AppSettings::default();
-    updated.auto_lock_timeout = 45;
-    updated.theme = "light".into();
+    let updated = AppSettings {
+        auto_lock_timeout: 45,
+        theme: "light".into(),
+        ..AppSettings::default()
+    };
 
     service
         .update_settings(updated.clone())
