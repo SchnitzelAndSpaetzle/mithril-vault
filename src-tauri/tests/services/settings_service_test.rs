@@ -22,6 +22,17 @@ fn cleanup_settings_file(app: &tauri::App<tauri::test::MockRuntime>) {
         if settings_path.exists() {
             let _ = std::fs::remove_file(settings_path);
         }
+        if let Ok(entries) = std::fs::read_dir(data_dir) {
+            for entry in entries.flatten() {
+                let file_name = entry.file_name();
+                if file_name
+                    .to_string_lossy()
+                    .starts_with("settings.json.bad-")
+                {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
     }
 }
 
@@ -113,6 +124,37 @@ fn load_settings_from_existing_file() {
     assert!(!loaded.minimize_to_tray);
     assert!(loaded.start_minimized);
     assert_eq!(loaded.theme, "dark");
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn invalid_settings_falls_back_and_backs_up() {
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let data_dir = app.path().app_local_data_dir().expect("app data dir");
+    let settings_path = data_dir.join("settings.json");
+    std::fs::write(&settings_path, "{ invalid").expect("write invalid settings");
+
+    let service = new_service(&app);
+    let settings = service.get_settings().expect("get settings");
+
+    assert_eq!(settings.auto_lock_timeout, 300);
+    assert_eq!(settings.clipboard_clear_timeout, 30);
+    assert_eq!(settings.theme, "system");
+
+    let backups = std::fs::read_dir(&data_dir)
+        .expect("read data dir")
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("settings.json.bad-")
+        })
+        .count();
+    assert!(backups >= 1);
 
     cleanup_settings_file(&app);
 }

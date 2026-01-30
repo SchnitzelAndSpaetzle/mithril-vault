@@ -35,7 +35,16 @@ impl SettingsService {
     fn load_or_default(path: &PathBuf) -> Result<AppSettings, AppError> {
         if path.exists() {
             let content = std::fs::read_to_string(path)?;
-            serde_json::from_str(&content).map_err(|e| AppError::Io(e.to_string()))
+            match serde_json::from_str(&content) {
+                Ok(settings) => Ok(settings),
+                Err(_) => {
+                    let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
+                    let backup_name = format!("{}.bad-{}", SETTINGS_FILE, timestamp);
+                    let backup_path = path.with_file_name(backup_name);
+                    let _ = std::fs::rename(path, backup_path);
+                    Ok(AppSettings::default())
+                }
+            }
         } else {
             Ok(AppSettings::default())
         }
