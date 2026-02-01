@@ -33,10 +33,11 @@ import {
   type DatabaseTabsState,
   useDatabaseTabs,
 } from "@/stores/database-tabs";
-import { useActiveDatabase } from "@/hooks/use-active-database";
 
 interface UnlockDbFormProps {
   initialPath?: string | undefined;
+  initialKeyfile?: string | undefined;
+  rememberKeyfile?: boolean | undefined;
 }
 
 function getFilenameFromPath(path: string | undefined): string {
@@ -79,9 +80,12 @@ function mapErrorToMessage(error: unknown): string {
   return "Failed to unlock database. Please check your credentials and try again.";
 }
 
-export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
+export function UnlockDbForm({
+  initialPath,
+  initialKeyfile,
+  rememberKeyfile: rememberKeyfileDefault,
+}: UnlockDbFormProps) {
   const navigate = useNavigate();
-  const { tab } = useActiveDatabase();
   const addTab = useDatabaseTabs((state: DatabaseTabsState) => state.addTab);
   const updateTabInfo = useDatabaseTabs(
     (state: DatabaseTabsState) => state.updateTabInfo
@@ -98,14 +102,16 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
-  const [rememberKeyfile, setRememberKeyfile] = useState(false);
+  const [rememberKeyfile, setRememberKeyfile] = useState(
+    Boolean(rememberKeyfileDefault)
+  );
 
   const openDbForm = useForm<OpenDatabaseFormValues>({
     resolver: zodResolver(openDatabaseSchema),
     defaultValues: {
       filePath: initialPath ?? "",
       password: "",
-      keyfilePath: "",
+      keyfilePath: initialKeyfile ?? "",
     },
   });
 
@@ -115,40 +121,19 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
   });
 
   useEffect(() => {
-    if (initialPath && (!tab || tab.path !== initialPath)) {
-      addTab(initialPath);
+    if (initialPath) {
+      openDbForm.setValue("filePath", initialPath);
     }
-  }, [addTab, initialPath, tab]);
+  }, [initialPath, openDbForm]);
 
   useEffect(() => {
-    const currentPath = initialPath ?? tab?.path;
-    if (currentPath) {
-      openDbForm.setValue("filePath", currentPath);
+    if (initialKeyfile !== undefined) {
+      openDbForm.setValue("keyfilePath", initialKeyfile ?? "");
     }
-  }, [initialPath, openDbForm, tab?.path]);
-
-  // Load saved keyfile when a path changes
-  useEffect(() => {
-    async function loadSavedKeyfile() {
-      const currentPath = initialPath ?? tab?.path;
-      if (currentPath) {
-        try {
-          const savedKeyfile =
-            await settings.getKeyfileForDatabase(currentPath);
-          if (savedKeyfile) {
-            openDbForm.setValue("keyfilePath", savedKeyfile);
-            setRememberKeyfile(true);
-          } else {
-            openDbForm.setValue("keyfilePath", "");
-            setRememberKeyfile(false);
-          }
-        } catch {
-          // Ignore errors - just don't pre-populate
-        }
-      }
+    if (rememberKeyfileDefault !== undefined) {
+      setRememberKeyfile(Boolean(rememberKeyfileDefault));
     }
-    void loadSavedKeyfile();
-  }, [initialPath, openDbForm, tab?.path]);
+  }, [initialKeyfile, rememberKeyfileDefault, openDbForm]);
 
   async function handleSelectDatabase() {
     try {
