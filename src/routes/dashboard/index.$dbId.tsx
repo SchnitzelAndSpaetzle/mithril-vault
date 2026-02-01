@@ -40,7 +40,7 @@ function DashboardIndex() {
   Route.useLoaderData();
 
   return (
-    <div className="flex-1 overflow-hidden">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
       {isMobile ? <MobileContentArea /> : <DesktopContentArea />}
     </div>
   );

@@ -115,8 +115,8 @@ export function DatabaseTabBar() {
   }
 
   return (
-    <div className="border-b bg-background/80 backdrop-blur">
-      <div className="flex items-center gap-2 overflow-x-auto px-3 py-2">
+    <div className="border-b bg-background/80 backdrop-blur h-12">
+      <div className="flex h-full items-center gap-2 overflow-x-auto px-3">
         {tabs.map((tab: DatabaseTab) => {
           const isActive =
             (activeDbId && tab.dbId === activeDbId) ||
