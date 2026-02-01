@@ -73,7 +73,12 @@ impl KdbxService {
     }
 
     /// Updates an existing group.
-    pub fn update_group(&self, db_id: &str, id: &str, data: UpdateGroupData) -> Result<Group, AppError> {
+    pub fn update_group(
+        &self,
+        db_id: &str,
+        id: &str,
+        data: UpdateGroupData,
+    ) -> Result<Group, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
@@ -102,7 +107,13 @@ impl KdbxService {
     /// Deletes a group.
     /// If `recursive` is false and the group has children, returns an error.
     /// If `permanent` is true, the group is permanently deleted; otherwise moved to recycle bin.
-    pub fn delete_group(&self, db_id: &str, id: &str, recursive: bool, permanent: bool) -> Result<(), AppError> {
+    pub fn delete_group(
+        &self,
+        db_id: &str,
+        id: &str,
+        recursive: bool,
+        permanent: bool,
+    ) -> Result<(), AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
@@ -148,7 +159,12 @@ impl KdbxService {
 
     /// Moves a group to a new parent.
     /// If `target_parent_id` is None, moves to root.
-    pub fn move_group(&self, db_id: &str, id: &str, target_parent_id: Option<&str>) -> Result<Group, AppError> {
+    pub fn move_group(
+        &self,
+        db_id: &str,
+        id: &str,
+        target_parent_id: Option<&str>,
+    ) -> Result<Group, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases

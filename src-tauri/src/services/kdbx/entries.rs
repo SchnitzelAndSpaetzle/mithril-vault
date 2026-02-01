@@ -11,7 +11,11 @@ use super::KdbxService;
 
 impl KdbxService {
     /// Lists entries, optionally filtered by group.
-    pub fn list_entries(&self, db_id: &str, group_id: Option<&str>) -> Result<Vec<Entry>, AppError> {
+    pub fn list_entries(
+        &self,
+        db_id: &str,
+        group_id: Option<&str>,
+    ) -> Result<Vec<Entry>, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let databases = self.lock_databases()?;
         let open_db = databases
@@ -92,7 +96,12 @@ impl KdbxService {
     }
 
     /// Creates a new entry in a group.
-    pub fn create_entry(&self, db_id: &str, group_id: &str, data: CreateEntryData) -> Result<Entry, AppError> {
+    pub fn create_entry(
+        &self,
+        db_id: &str,
+        group_id: &str,
+        data: CreateEntryData,
+    ) -> Result<Entry, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
@@ -144,7 +153,12 @@ impl KdbxService {
     }
 
     /// Updates an existing entry.
-    pub fn update_entry(&self, db_id: &str, id: &str, data: UpdateEntryData) -> Result<Entry, AppError> {
+    pub fn update_entry(
+        &self,
+        db_id: &str,
+        id: &str,
+        data: UpdateEntryData,
+    ) -> Result<Entry, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
@@ -227,7 +241,12 @@ impl KdbxService {
     }
 
     /// Moves an entry to another group.
-    pub fn move_entry(&self, db_id: &str, id: &str, target_group_id: &str) -> Result<Entry, AppError> {
+    pub fn move_entry(
+        &self,
+        db_id: &str,
+        id: &str,
+        target_group_id: &str,
+    ) -> Result<Entry, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases

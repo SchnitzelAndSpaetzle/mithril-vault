@@ -178,7 +178,9 @@ fn test_get_config_after_open() {
         .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let config = service.get_config(&db_path_str).expect("Failed to get config");
+    let config = service
+        .get_config(&db_path_str)
+        .expect("Failed to get config");
 
     assert!(
         config.version.starts_with("KDBX 4."),
@@ -210,7 +212,9 @@ fn test_get_config_kdbx3_uses_aes_kdf() {
         .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let config = service.get_config(&db_path_str).expect("Failed to get config");
+    let config = service
+        .get_config(&db_path_str)
+        .expect("Failed to get config");
 
     if !config.version.starts_with("KDBX 3.") {
         eprintln!(
@@ -251,7 +255,9 @@ fn test_created_database_config() {
         .create(&db_path_str, "testpassword", "Config Test")
         .expect("Failed to create database");
 
-    let config = service.get_config(&db_path_str).expect("Failed to get config");
+    let config = service
+        .get_config(&db_path_str)
+        .expect("Failed to get config");
 
     // Newly created databases should be KDBX 4.0
     assert_eq!(
@@ -308,7 +314,9 @@ fn test_created_database_custom_kdf_params() {
         )
         .expect("Failed to create database with custom KDF");
 
-    let config = service.get_config(&db_path_str).expect("Failed to get config");
+    let config = service
+        .get_config(&db_path_str)
+        .expect("Failed to get config");
 
     // Verify custom KDF parameters
     match config.kdf {
@@ -352,7 +360,9 @@ fn test_inspect_then_open_then_config() {
         .expect("Failed to open database");
 
     // Step 3: Get full config
-    let config = service.get_config(&db_path_str).expect("Failed to get config");
+    let config = service
+        .get_config(&db_path_str)
+        .expect("Failed to get config");
     assert_eq!(
         header_info.version, config.version,
         "Version from inspect should match version from config"
@@ -374,10 +384,14 @@ fn test_get_config_after_close_fails() {
         .expect("Failed to open database");
 
     // Config should work while open
-    service.get_config(&db_path_str).expect("Should get config while open");
+    service
+        .get_config(&db_path_str)
+        .expect("Should get config while open");
 
     // Close the database
-    service.close(&db_path_str).expect("Failed to close database");
+    service
+        .close(&db_path_str)
+        .expect("Failed to close database");
 
     // Config should fail after close
     let result = service.get_config(&db_path_str);

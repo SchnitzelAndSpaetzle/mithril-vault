@@ -230,7 +230,9 @@ fn test_save_as_moves_lock_file() {
     );
 
     // After save_as, the database is now at new_path
-    service.close(&new_path_str).expect("Failed to close database");
+    service
+        .close(&new_path_str)
+        .expect("Failed to close database");
     assert!(
         !new_lock_path.exists(),
         "Lock file should be removed after close"

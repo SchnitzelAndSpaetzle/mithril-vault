@@ -199,7 +199,9 @@ fn test_create_database_with_default_groups() {
         )
         .expect("Failed to create database with default groups");
 
-    let groups = service.list_groups(&db_path_str).expect("Failed to list groups");
+    let groups = service
+        .list_groups(&db_path_str)
+        .expect("Failed to list groups");
 
     assert!(!groups.is_empty(), "Should have at least root group");
 
@@ -243,7 +245,9 @@ fn test_create_database_without_default_groups() {
         )
         .expect("Failed to create database");
 
-    let groups = service.list_groups(&db_path_str).expect("Failed to list groups");
+    let groups = service
+        .list_groups(&db_path_str)
+        .expect("Failed to list groups");
     let root = &groups[0];
 
     assert!(
@@ -348,7 +352,9 @@ fn test_create_database_with_all_options() {
     assert_eq!(info.name, "Full Featured DB");
     assert_eq!(info.version, "KDBX 4.0");
 
-    let groups = service.list_groups(&db_path_str).expect("Failed to list groups");
+    let groups = service
+        .list_groups(&db_path_str)
+        .expect("Failed to list groups");
     let root = &groups[0];
     assert_eq!(root.children.len(), 4, "Should have 4 default groups");
 

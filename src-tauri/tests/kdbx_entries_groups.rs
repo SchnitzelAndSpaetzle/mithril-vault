@@ -61,7 +61,9 @@ fn test_kdbx3_get_entry_password() {
         .open(&db_path_str, "test123")
         .expect("Failed to open KDBX3 database");
 
-    let entries = service.list_entries(&db_path_str, None).expect("Failed to list entries");
+    let entries = service
+        .list_entries(&db_path_str, None)
+        .expect("Failed to list entries");
 
     if entries.is_empty() {
         eprintln!("Skipping password test: no entries in KDBX3 fixture");
@@ -112,11 +114,15 @@ fn test_list_entries_and_get_entry() {
         .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let entries = service.list_entries(&db_path_str, None).expect("Failed to list entries");
+    let entries = service
+        .list_entries(&db_path_str, None)
+        .expect("Failed to list entries");
     assert!(!entries.is_empty(), "Fixture should have entries");
 
     let entry_id = entries[0].id.clone();
-    let entry = service.get_entry(&db_path_str, &entry_id).expect("Failed to fetch entry");
+    let entry = service
+        .get_entry(&db_path_str, &entry_id)
+        .expect("Failed to fetch entry");
     assert_eq!(entry.id, entry_id);
     assert_eq!(entry.group_id, entries[0].group_id);
 
@@ -147,7 +153,9 @@ fn test_list_groups_and_get_group() {
         .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let groups = service.list_groups(&db_path_str).expect("Failed to list groups");
+    let groups = service
+        .list_groups(&db_path_str)
+        .expect("Failed to list groups");
     assert!(!groups.is_empty(), "Should have at least the root group");
 
     let root = service
@@ -266,7 +274,9 @@ fn test_get_entry_password_from_keyfile_only_database() {
         .open_with_keyfile_only(&db_path_str, &key_path.to_string_lossy())
         .expect("Failed to open database");
 
-    let entries = service.list_entries(&db_path_str, None).expect("Failed to list entries");
+    let entries = service
+        .list_entries(&db_path_str, None)
+        .expect("Failed to list entries");
     if entries.is_empty() {
         eprintln!("Skipping password test: no entries in keyfile-only fixture");
         return;
@@ -402,7 +412,9 @@ fn test_protected_fields_kdbx4_roundtrip() {
     );
 
     // Verify password
-    let password = service.get_entry_password(&db_path_str, &entry_id).expect("get password");
+    let password = service
+        .get_entry_password(&db_path_str, &entry_id)
+        .expect("get password");
     assert_eq!(
         password, "integration-password",
         "Password should persist in KDBX4"
@@ -520,10 +532,14 @@ fn test_protected_fields_persist_after_save() {
     );
 
     // Verify passwords also persisted
-    let pass1 = service.get_entry_password(&db_path_str, &entry1_id).expect("get pass1");
+    let pass1 = service
+        .get_entry_password(&db_path_str, &entry1_id)
+        .expect("get pass1");
     assert_eq!(pass1, "pass1");
 
-    let pass2 = service.get_entry_password(&db_path_str, &entry2_id).expect("get pass2");
+    let pass2 = service
+        .get_entry_password(&db_path_str, &entry2_id)
+        .expect("get pass2");
     assert_eq!(pass2, "pass2");
 
     // Keep dir in scope

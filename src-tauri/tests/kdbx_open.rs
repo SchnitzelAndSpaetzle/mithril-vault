@@ -168,7 +168,9 @@ fn test_get_info_returns_version() {
         .open(&db_path, "test123")
         .expect("Failed to open database");
 
-    let info = service.get_info(&db_path).expect("Failed to get database info");
+    let info = service
+        .get_info(&db_path)
+        .expect("Failed to get database info");
 
     assert_eq!(info.version, "KDBX 4.0", "get_info() should return version");
 }

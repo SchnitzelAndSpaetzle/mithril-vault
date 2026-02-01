@@ -104,11 +104,7 @@ fn test_save_preserves_keyfile_authentication() {
     let service = KdbxService::new();
 
     service
-        .open_with_keyfile(
-            &db_path_str,
-            "test123",
-            &fixture_key.to_string_lossy(),
-        )
+        .open_with_keyfile(&db_path_str, "test123", &fixture_key.to_string_lossy())
         .expect("Failed to open with keyfile");
 
     service.save(&db_path_str).expect("Failed to save");
@@ -121,11 +117,7 @@ fn test_save_preserves_keyfile_authentication() {
     );
 
     service
-        .open_with_keyfile(
-            &db_path_str,
-            "test123",
-            &fixture_key.to_string_lossy(),
-        )
+        .open_with_keyfile(&db_path_str, "test123", &fixture_key.to_string_lossy())
         .expect("Should still open with keyfile after save");
 }
 
@@ -220,11 +212,7 @@ fn test_save_as_preserves_keyfile_plus_password_authentication() {
     let service = KdbxService::new();
 
     service
-        .open_with_keyfile(
-            &db_path_str,
-            "test123",
-            &fixture_key.to_string_lossy(),
-        )
+        .open_with_keyfile(&db_path_str, "test123", &fixture_key.to_string_lossy())
         .expect("Failed to open with password + keyfile");
 
     service
@@ -239,11 +227,7 @@ fn test_save_as_preserves_keyfile_plus_password_authentication() {
     );
 
     service
-        .open_with_keyfile(
-            &new_path_str,
-            "test123",
-            &fixture_key.to_string_lossy(),
-        )
+        .open_with_keyfile(&new_path_str, "test123", &fixture_key.to_string_lossy())
         .expect("New file should open with password + keyfile");
 }
 
@@ -266,11 +250,7 @@ fn test_save_as_with_new_password_on_keyfile_database() {
     let service = KdbxService::new();
 
     service
-        .open_with_keyfile(
-            &db_path_str,
-            "test123",
-            &fixture_key.to_string_lossy(),
-        )
+        .open_with_keyfile(&db_path_str, "test123", &fixture_key.to_string_lossy())
         .expect("Failed to open with password + keyfile");
 
     service
@@ -278,11 +258,8 @@ fn test_save_as_with_new_password_on_keyfile_database() {
         .expect("Failed to save as with new password");
     service.close(&new_path_str).expect("Failed to close");
 
-    let result = service.open_with_keyfile(
-        &new_path_str,
-        "test123",
-        &fixture_key.to_string_lossy(),
-    );
+    let result =
+        service.open_with_keyfile(&new_path_str, "test123", &fixture_key.to_string_lossy());
     assert!(
         matches!(result, Err(AppError::InvalidPassword)),
         "Old password should not work on new file"
@@ -410,11 +387,7 @@ fn test_save_preserves_existing_permissions() {
 
     let service = KdbxService::new();
     service
-        .create(
-            &db_path_str,
-            "testpass",
-            "Preserve Perms Test",
-        )
+        .create(&db_path_str, "testpass", "Preserve Perms Test")
         .expect("Failed to create database");
 
     let mut perms = std::fs::metadata(&db_path)
