@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tauri::State;
 
 /// Lists entries, optionally filtered by group.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn list_entries(
     db_id: String,
@@ -16,7 +16,7 @@ pub async fn list_entries(
 }
 
 /// Fetches an entry by ID.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn get_entry(
     db_id: String,
@@ -27,7 +27,7 @@ pub async fn get_entry(
 }
 
 /// Fetches an entry password.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn get_entry_password(
     db_id: String,
@@ -38,7 +38,7 @@ pub async fn get_entry_password(
 }
 
 /// Fetches a protected custom field value.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn get_entry_protected_custom_field(
     db_id: String,
@@ -50,7 +50,7 @@ pub async fn get_entry_protected_custom_field(
 }
 
 /// Creates a new entry in a group.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn create_entry(
     db_id: String,
@@ -62,7 +62,7 @@ pub async fn create_entry(
 }
 
 /// Updates an existing entry.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn update_entry(
     db_id: String,
@@ -74,7 +74,7 @@ pub async fn update_entry(
 }
 
 /// Deletes an entry by ID.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn delete_entry(
     db_id: String,
@@ -85,7 +85,7 @@ pub async fn delete_entry(
 }
 
 /// Moves an entry to another group.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn move_entry(
     db_id: String,

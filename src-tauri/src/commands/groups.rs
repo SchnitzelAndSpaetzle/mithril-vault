@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tauri::State;
 
 /// Lists groups in the database.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn list_groups(
     db_id: String,
@@ -17,7 +17,7 @@ pub async fn list_groups(
 }
 
 /// Fetches a group by ID.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn get_group(
     db_id: String,
@@ -28,7 +28,7 @@ pub async fn get_group(
 }
 
 /// Creates a new group.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 /// `parent_id` is the parent group ID (uses root if None).
 /// Frontend sends `parentId` which Tauri converts to `parent_id`.
 #[tauri::command]
@@ -42,7 +42,7 @@ pub async fn create_group(
 }
 
 /// Updates a group.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn update_group(
     db_id: String,
@@ -54,7 +54,7 @@ pub async fn update_group(
 }
 
 /// Deletes a group (moves to recycle bin).
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 /// Frontend sends just `id`, so `recursive` defaults to false.
 #[tauri::command]
 pub async fn delete_group(
@@ -67,7 +67,7 @@ pub async fn delete_group(
 }
 
 /// Moves a group to a new parent.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn move_group(
     db_id: String,
@@ -79,7 +79,7 @@ pub async fn move_group(
 }
 
 /// Renames a group (convenience wrapper around `update_group`).
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn rename_group(
     db_id: String,

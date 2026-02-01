@@ -21,7 +21,7 @@ pub async fn open_database(
 }
 
 /// Closes a specific open database.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn close_database(
     db_id: String,
@@ -57,7 +57,7 @@ pub async fn create_database(
 }
 
 /// Saves a specific open database.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
 pub async fn save_database(
     db_id: String,
@@ -156,7 +156,7 @@ pub async fn get_database_config(
 }
 
 /// Gets info about a specific open database.
-/// The db_id is the path to the database file.
+/// The `db_id` is the path to the database file.
 /// Returns None if the database is not open.
 #[tauri::command]
 pub async fn get_database_info(

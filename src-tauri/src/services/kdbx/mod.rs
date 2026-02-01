@@ -28,16 +28,15 @@ impl KdbxService {
         }
     }
 
-    /// Normalizes a database path for consistent HashMap keys.
+    /// Normalizes a database path for consistent `HashMap` keys.
     /// Uses canonical path when possible, falls back to the original path.
     pub fn normalize_path(path: &str) -> String {
         Path::new(path)
             .canonicalize()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| path.to_string())
+            .map_or_else(|_| path.to_string(), |p| p.to_string_lossy().to_string())
     }
 
-    /// Acquires a lock on the databases HashMap.
+    /// Acquires a lock on the databases `HashMap`.
     pub(crate) fn lock_databases(
         &self,
     ) -> Result<MutexGuard<'_, HashMap<String, OpenDatabase>>, AppError> {
