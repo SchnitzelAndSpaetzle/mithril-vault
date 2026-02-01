@@ -16,13 +16,14 @@ interface UseDatabaseInfoResult {
  * Hook to fetch the currently open database info.
  * Returns null if no database is open.
  */
-export function useDatabaseInfo(): UseDatabaseInfoResult {
+export function useDatabaseInfo(dbId: string | null): UseDatabaseInfoResult {
   const { data, isLoading, error, refetch } = useQuery<
     DatabaseInfo | null,
     Error
   >({
-    queryKey: queryKeys.database.info(),
-    queryFn: () => database.getInfo(),
+    queryKey: queryKeys.database.info(dbId ?? "none"),
+    queryFn: () => (dbId ? database.getInfo(dbId) : Promise.resolve(null)),
+    enabled: Boolean(dbId),
     retry: false,
     refetchOnWindowFocus: true,
   });

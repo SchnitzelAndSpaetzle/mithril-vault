@@ -29,6 +29,11 @@ import { database, settings } from "@/lib/tauri.ts";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { toast } from "sonner";
+import {
+  type DatabaseTabsState,
+  useDatabaseTabs,
+} from "@/stores/database-tabs";
+import { useActiveDatabase } from "@/hooks/use-active-database";
 
 interface UnlockDbFormProps {
   initialPath?: string | undefined;
@@ -75,7 +80,21 @@ function mapErrorToMessage(error: unknown): string {
 }
 
 export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
-  const navigate = useNavigate({ from: "/unlock" });
+  const navigate = useNavigate();
+  const { tab } = useActiveDatabase();
+  const addTab = useDatabaseTabs((state: DatabaseTabsState) => state.addTab);
+  const updateTabInfo = useDatabaseTabs(
+    (state: DatabaseTabsState) => state.updateTabInfo
+  );
+  const updateTabState = useDatabaseTabs(
+    (state: DatabaseTabsState) => state.updateTabState
+  );
+  const setActiveTab = useDatabaseTabs(
+    (state: DatabaseTabsState) => state.setActiveTab
+  );
+  const activeTabId = useDatabaseTabs(
+    (state: DatabaseTabsState) => state.activeTabId
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
@@ -95,13 +114,27 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
     name: ["filePath", "keyfilePath"],
   });
 
+  useEffect(() => {
+    if (initialPath && (!tab || tab.path !== initialPath)) {
+      addTab(initialPath);
+    }
+  }, [addTab, initialPath, tab]);
+
+  useEffect(() => {
+    const currentPath = initialPath ?? tab?.path;
+    if (currentPath) {
+      openDbForm.setValue("filePath", currentPath);
+    }
+  }, [initialPath, openDbForm, tab?.path]);
+
   // Load saved keyfile when a path changes
   useEffect(() => {
     async function loadSavedKeyfile() {
-      if (initialPath) {
+      const currentPath = initialPath ?? tab?.path;
+      if (currentPath) {
         try {
           const savedKeyfile =
-            await settings.getKeyfileForDatabase(initialPath);
+            await settings.getKeyfileForDatabase(currentPath);
           if (savedKeyfile) {
             openDbForm.setValue("keyfilePath", savedKeyfile);
             setRememberKeyfile(true);
@@ -115,7 +148,7 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
       }
     }
     void loadSavedKeyfile();
-  }, [initialPath, openDbForm]);
+  }, [initialPath, openDbForm, tab?.path]);
 
   async function handleSelectDatabase() {
     try {
@@ -126,6 +159,8 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
       if (file) {
         openDbForm.setValue("filePath", file as string);
         setUnlockError(null);
+        const tabId = activeTabId ?? addTab(file as string);
+        updateTabState(tabId, { path: file as string, state: "unlocking" });
 
         // Check for saved keyfile for this database
         try {
@@ -175,21 +210,34 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
     setUnlockError(null);
 
     try {
+      const tabId = activeTabId ?? addTab(data.filePath);
+      updateTabState(tabId, { path: data.filePath, state: "unlocking" });
+
+      let info: Awaited<ReturnType<typeof database.open>> | null = null;
+
       // Determine which unlock method to use
       if (data.keyfilePath && data.password) {
-        await database.openWithKeyfile(
+        info = await database.openWithKeyfile(
           data.filePath,
           data.password,
           data.keyfilePath
         );
       } else if (data.keyfilePath) {
-        await database.openWithKeyfileOnly(data.filePath, data.keyfilePath);
+        info = await database.openWithKeyfileOnly(
+          data.filePath,
+          data.keyfilePath
+        );
       } else if (data.password) {
-        await database.open(data.filePath, data.password);
+        info = await database.open(data.filePath, data.password);
       } else {
         setUnlockError("Please enter a password or select a keyfile.");
         setIsUnlocking(false);
         return;
+      }
+
+      if (info) {
+        updateTabInfo(tabId, info);
+        setActiveTab(tabId);
       }
 
       // Save to recent databases (with keyfile if "remember" is checked)
@@ -203,7 +251,14 @@ export function UnlockDbForm({ initialPath }: UnlockDbFormProps) {
         toast.warning("Failed to update recent database list");
       }
 
-      await navigate({ to: "/dashboard" });
+      if (info) {
+        await navigate({
+          to: "/dashboard/index/$dbId",
+          params: { dbId: info.path },
+        });
+      } else {
+        await navigate({ to: "/" });
+      }
     } catch (error) {
       setUnlockError(mapErrorToMessage(error));
     } finally {

@@ -7,10 +7,14 @@ import {
   ItemTitle,
 } from "@/components/ui/item.tsx";
 import { ChevronRightIcon, FolderOpen, Loader2 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { settings } from "@/lib/tauri.ts";
 import type { RecentDatabase } from "@/lib/types.ts";
+import {
+  type DatabaseTabsState,
+  useDatabaseTabs,
+} from "@/stores/database-tabs";
 
 function getFilenameFromPath(path: string): string {
   const parts = path.split(/[/\\]/);
@@ -18,6 +22,11 @@ function getFilenameFromPath(path: string): string {
 }
 
 export default function RecentOpenedDatabaseItems() {
+  const navigate = useNavigate();
+  const addTab = useDatabaseTabs((state: DatabaseTabsState) => state.addTab);
+  const setActiveTab = useDatabaseTabs(
+    (state: DatabaseTabsState) => state.setActiveTab
+  );
   const [recentDatabases, setRecentDatabases] = useState<RecentDatabase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +75,15 @@ export default function RecentOpenedDatabaseItems() {
     <div className="flex w-full max-w-md flex-col gap-2">
       {recentDatabases.map((item) => (
         <Item key={item.path} variant="outline" size="sm" asChild>
-          <Link to="/unlock" search={{ path: item.path }}>
+          <button
+            type="button"
+            className="w-full text-left"
+            onClick={() => {
+              const id = addTab(item.path);
+              setActiveTab(id);
+              void navigate({ to: "/unlock", search: { path: item.path } });
+            }}
+          >
             <ItemMedia>
               <FolderOpen className="size-5" />
             </ItemMedia>
@@ -79,7 +96,7 @@ export default function RecentOpenedDatabaseItems() {
             <ItemActions>
               <ChevronRightIcon className="size-4" />
             </ItemActions>
-          </Link>
+          </button>
         </Item>
       ))}
     </div>

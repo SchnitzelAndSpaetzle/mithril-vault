@@ -11,9 +11,17 @@ import {
 import { FolderOpen } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "@tanstack/react-router";
+import {
+  type DatabaseTabsState,
+  useDatabaseTabs,
+} from "@/stores/database-tabs";
 
 export default function DropdownMenuOpenDatabase() {
   const navigate = useNavigate();
+  const addTab = useDatabaseTabs((state: DatabaseTabsState) => state.addTab);
+  const setActiveTab = useDatabaseTabs(
+    (state: DatabaseTabsState) => state.setActiveTab
+  );
 
   async function handleSelectLocalFile() {
     try {
@@ -22,6 +30,8 @@ export default function DropdownMenuOpenDatabase() {
         filters: [{ name: "KeePass Database", extensions: ["kdbx"] }],
       });
       if (file) {
+        const id = addTab(file as string);
+        setActiveTab(id);
         await navigate({ to: "/unlock", search: { path: file as string } });
       }
     } catch {

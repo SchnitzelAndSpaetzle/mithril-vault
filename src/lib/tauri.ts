@@ -55,6 +55,10 @@ const GroupIdSchema = z.object({
   groupId: z.uuid(),
 });
 
+const DbIdSchema = z.object({
+  dbId: z.string().min(1),
+});
+
 const CustomFieldKeySchema = z.object({
   key: z.string().min(1),
 });
@@ -90,12 +94,14 @@ export const database = {
     return DatabaseInfoSchema.parse(result);
   },
 
-  async close(): Promise<void> {
-    return invoke("close_database");
+  async close(dbId: string): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    return invoke("close_database", { dbId });
   },
 
-  async save(): Promise<void> {
-    return invoke("save_database");
+  async save(dbId: string): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    return invoke("save_database", { dbId });
   },
 
   /**
@@ -167,8 +173,9 @@ export const database = {
    * Get the cryptographic configuration of the currently open database.
    * Requires the database to be open (authenticated).
    */
-  async getConfig(): Promise<DatabaseConfig> {
-    const result = await invoke("get_database_config");
+  async getConfig(dbId: string): Promise<DatabaseConfig> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_database_config", { dbId });
     return DatabaseConfigSchema.parse(result);
   },
 
@@ -176,9 +183,18 @@ export const database = {
    * Get info about the currently open database.
    * Returns null if no database is open.
    */
-  async getInfo(): Promise<DatabaseInfo | null> {
-    const result = await invoke("get_database_info");
+  async getInfo(dbId: string): Promise<DatabaseInfo | null> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_database_info", { dbId });
     return result === null ? null : DatabaseInfoSchema.parse(result);
+  },
+
+  /**
+   * List all currently open databases.
+   */
+  async listOpen(): Promise<DatabaseInfo[]> {
+    const result = await invoke("list_open_databases");
+    return z.array(DatabaseInfoSchema).parse(result);
   },
 
   /**
@@ -214,56 +230,76 @@ export const database = {
  * Entry CRUD operations (excluding passwords which are fetched separately).
  */
 export const entries = {
-  async list(groupId?: string): Promise<Entry[]> {
+  async list(dbId: string, groupId?: string): Promise<Entry[]> {
+    DbIdSchema.parse({ dbId });
     if (groupId) {
       GroupIdSchema.parse({ groupId });
     }
-    const result = await invoke("list_entries", groupId ? { groupId } : {});
+    const result = await invoke(
+      "list_entries",
+      groupId ? { dbId, groupId } : { dbId }
+    );
     return z.array(EntrySchema).parse(result);
   },
 
-  async get(id: string): Promise<Entry> {
+  async get(dbId: string, id: string): Promise<Entry> {
+    DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    const result = await invoke("get_entry", { id });
+    const result = await invoke("get_entry", { dbId, id });
     return EntrySchema.parse(result);
   },
 
-  async getPassword(id: string): Promise<string> {
+  async getPassword(dbId: string, id: string): Promise<string> {
+    DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    const result = await invoke("get_entry_password", { id });
+    const result = await invoke("get_entry_password", { dbId, id });
     return z.string().parse(result);
   },
 
   async getProtectedCustomField(
+    dbId: string,
     id: string,
     key: string
   ): Promise<CustomFieldValue> {
+    DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
     CustomFieldKeySchema.parse({ key });
     const result = await invoke("get_entry_protected_custom_field", {
+      dbId,
       id,
       key,
     });
     return CustomFieldValueSchema.parse(result);
   },
 
-  async create(groupId: string, data: CreateEntryData): Promise<Entry> {
+  async create(
+    dbId: string,
+    groupId: string,
+    data: CreateEntryData
+  ): Promise<Entry> {
+    DbIdSchema.parse({ dbId });
     GroupIdSchema.parse({ groupId });
     CreateEntryDataSchema.parse(data);
-    const result = await invoke("create_entry", { groupId, data });
+    const result = await invoke("create_entry", { dbId, groupId, data });
     return EntrySchema.parse(result);
   },
 
-  async update(id: string, data: UpdateEntryData): Promise<Entry> {
+  async update(
+    dbId: string,
+    id: string,
+    data: UpdateEntryData
+  ): Promise<Entry> {
+    DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
     UpdateEntryDataSchema.parse(data);
-    const result = await invoke("update_entry", { id, data });
+    const result = await invoke("update_entry", { dbId, id, data });
     return EntrySchema.parse(result);
   },
 
-  async delete(id: string): Promise<void> {
+  async delete(dbId: string, id: string): Promise<void> {
+    DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    return invoke("delete_entry", { id });
+    return invoke("delete_entry", { dbId, id });
   },
 };
 
@@ -271,34 +307,39 @@ export const entries = {
  * Group CRUD operations for organizing entries.
  */
 export const groups = {
-  async list(): Promise<Group[]> {
-    const result = await invoke("list_groups");
+  async list(dbId: string): Promise<Group[]> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("list_groups", { dbId });
     return z.array(GroupSchema).parse(result);
   },
 
-  async get(id: string): Promise<Group> {
+  async get(dbId: string, id: string): Promise<Group> {
+    DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    const result = await invoke("get_group", { id });
+    const result = await invoke("get_group", { dbId, id });
     return GroupSchema.parse(result);
   },
 
-  async create(parentId: string, name: string): Promise<Group> {
+  async create(dbId: string, parentId: string, name: string): Promise<Group> {
+    DbIdSchema.parse({ dbId });
     z.uuid().parse(parentId);
     NameSchema.parse({ name });
-    const result = await invoke("create_group", { parentId, name });
+    const result = await invoke("create_group", { dbId, parentId, name });
     return GroupSchema.parse(result);
   },
 
-  async rename(id: string, name: string): Promise<Group> {
+  async rename(dbId: string, id: string, name: string): Promise<Group> {
+    DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
     NameSchema.parse({ name });
-    const result = await invoke("rename_group", { id, name });
+    const result = await invoke("rename_group", { dbId, id, name });
     return GroupSchema.parse(result);
   },
 
-  async delete(id: string): Promise<void> {
+  async delete(dbId: string, id: string): Promise<void> {
+    DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    return invoke("delete_group", { id });
+    return invoke("delete_group", { dbId, id });
   },
 };
 
