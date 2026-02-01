@@ -41,10 +41,6 @@ export function DatabaseSwitcher() {
   const removeTab = useDatabaseTabs(
     (state: DatabaseTabsState) => state.removeTab
   );
-  const addTab = useDatabaseTabs((state: DatabaseTabsState) => state.addTab);
-  const setActiveTab = useDatabaseTabs(
-    (state: DatabaseTabsState) => state.setActiveTab
-  );
   const { recentDatabases, isLoading: isLoadingRecent } = useRecentDatabases();
 
   const handleLock = async () => {
@@ -62,8 +58,6 @@ export function DatabaseSwitcher() {
   };
 
   const handleSelectDatabase = (path: string) => {
-    const id = addTab(path);
-    setActiveTab(id);
     void navigate({ to: "/unlock", search: { path } });
   };
 
@@ -77,9 +71,6 @@ export function DatabaseSwitcher() {
       if (!file) {
         return;
       }
-
-      const id = addTab(file as string);
-      setActiveTab(id);
       void navigate({ to: "/unlock", search: { path: file as string } });
     } catch {
       // User cancelled or error - ignore

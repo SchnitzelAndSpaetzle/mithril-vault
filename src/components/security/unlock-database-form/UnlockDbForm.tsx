@@ -90,9 +90,6 @@ export function UnlockDbForm({
   const updateTabInfo = useDatabaseTabs(
     (state: DatabaseTabsState) => state.updateTabInfo
   );
-  const updateTabState = useDatabaseTabs(
-    (state: DatabaseTabsState) => state.updateTabState
-  );
   const setActiveTab = useDatabaseTabs(
     (state: DatabaseTabsState) => state.setActiveTab
   );
@@ -142,26 +139,7 @@ export function UnlockDbForm({
         filters: [{ name: "KeePass Database", extensions: ["kdbx"] }],
       });
       if (file) {
-        openDbForm.setValue("filePath", file as string);
-        setUnlockError(null);
-        const tabId = activeTabId ?? addTab(file as string);
-        updateTabState(tabId, { path: file as string, state: "unlocking" });
-
-        // Check for saved keyfile for this database
-        try {
-          const savedKeyfile = await settings.getKeyfileForDatabase(
-            file as string
-          );
-          if (savedKeyfile) {
-            openDbForm.setValue("keyfilePath", savedKeyfile);
-            setRememberKeyfile(true);
-          } else {
-            openDbForm.setValue("keyfilePath", "");
-            setRememberKeyfile(false);
-          }
-        } catch {
-          // Ignore errors
-        }
+        await navigate({ to: "/unlock", search: { path: file as string } });
       }
     } catch {
       // User cancelled or error - ignore
@@ -196,7 +174,6 @@ export function UnlockDbForm({
 
     try {
       const tabId = activeTabId ?? addTab(data.filePath);
-      updateTabState(tabId, { path: data.filePath, state: "unlocking" });
 
       let info: Awaited<ReturnType<typeof database.open>> | null = null;
 

@@ -11,10 +11,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { settings } from "@/lib/tauri.ts";
 import type { RecentDatabase } from "@/lib/types.ts";
-import {
-  type DatabaseTabsState,
-  useDatabaseTabs,
-} from "@/stores/database-tabs";
 
 function getFilenameFromPath(path: string): string {
   const parts = path.split(/[/\\]/);
@@ -23,10 +19,6 @@ function getFilenameFromPath(path: string): string {
 
 export default function RecentOpenedDatabaseItems() {
   const navigate = useNavigate();
-  const addTab = useDatabaseTabs((state: DatabaseTabsState) => state.addTab);
-  const setActiveTab = useDatabaseTabs(
-    (state: DatabaseTabsState) => state.setActiveTab
-  );
   const [recentDatabases, setRecentDatabases] = useState<RecentDatabase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,8 +71,6 @@ export default function RecentOpenedDatabaseItems() {
             type="button"
             className="w-full text-left"
             onClick={() => {
-              const id = addTab(item.path);
-              setActiveTab(id);
               void navigate({ to: "/unlock", search: { path: item.path } });
             }}
           >
