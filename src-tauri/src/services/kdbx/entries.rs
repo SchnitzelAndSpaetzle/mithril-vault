@@ -11,9 +11,12 @@ use super::KdbxService;
 
 impl KdbxService {
     /// Lists entries, optionally filtered by group.
-    pub fn list_entries(&self, group_id: Option<&str>) -> Result<Vec<Entry>, AppError> {
-        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn list_entries(&self, db_id: &str, group_id: Option<&str>) -> Result<Vec<Entry>, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let mut entries = Vec::new();
 
@@ -29,18 +32,24 @@ impl KdbxService {
     }
 
     /// Fetches an entry by ID.
-    pub fn get_entry(&self, id: &str) -> Result<Entry, AppError> {
-        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn get_entry(&self, db_id: &str, id: &str) -> Result<Entry, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         find_entry_by_id(&open_db.db.root, id)
             .ok_or_else(|| AppError::EntryNotFound(id.to_string()))
     }
 
     /// Fetches an entry password.
-    pub fn get_entry_password(&self, id: &str) -> Result<String, AppError> {
-        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn get_entry_password(&self, db_id: &str, id: &str) -> Result<String, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         match find_entry_password(&open_db.db.root, id) {
             PasswordSearchResult::Found(password) => Ok(password),
@@ -51,11 +60,15 @@ impl KdbxService {
     /// Fetches a protected custom field value.
     pub fn get_entry_protected_custom_field(
         &self,
+        db_id: &str,
         entry_id: &str,
         key: &str,
     ) -> Result<CustomFieldValue, AppError> {
-        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let entry = find_entry_by_id_ref(&open_db.db.root, entry_id)
             .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
@@ -79,9 +92,12 @@ impl KdbxService {
     }
 
     /// Creates a new entry in a group.
-    pub fn create_entry(&self, group_id: &str, data: CreateEntryData) -> Result<Entry, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn create_entry(&self, db_id: &str, group_id: &str, data: CreateEntryData) -> Result<Entry, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let group = find_group_by_id_mut(&mut open_db.db.root, group_id)
             .ok_or_else(|| AppError::GroupNotFound(group_id.to_string()))?;
@@ -128,9 +144,12 @@ impl KdbxService {
     }
 
     /// Updates an existing entry.
-    pub fn update_entry(&self, id: &str, data: UpdateEntryData) -> Result<Entry, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn update_entry(&self, db_id: &str, id: &str, data: UpdateEntryData) -> Result<Entry, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let (entry, group_id) = find_entry_by_id_mut(&mut open_db.db.root, id)
             .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
@@ -182,9 +201,12 @@ impl KdbxService {
     }
 
     /// Deletes an entry by moving it to recycle bin.
-    pub fn delete_entry(&self, id: &str) -> Result<(), AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn delete_entry(&self, db_id: &str, id: &str) -> Result<(), AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let mut entry = {
             let root = &mut open_db.db.root;
@@ -205,9 +227,12 @@ impl KdbxService {
     }
 
     /// Moves an entry to another group.
-    pub fn move_entry(&self, id: &str, target_group_id: &str) -> Result<Entry, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn move_entry(&self, db_id: &str, id: &str, target_group_id: &str) -> Result<Entry, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let mut entry = {
             let root = &mut open_db.db.root;

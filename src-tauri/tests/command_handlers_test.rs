@@ -88,15 +88,19 @@ fn database_commands_handle_missing_database() {
     assert!(matches!(err, AppError::InvalidPath(_)));
 
     let info =
-        tauri::async_runtime::block_on(get_database_info(app.state())).expect("get database info");
+        tauri::async_runtime::block_on(get_database_info("missing.kdbx".to_string(), app.state()))
+            .expect("get database info");
     assert!(info.is_none());
 
-    let err =
-        tauri::async_runtime::block_on(lock_database()).expect_err("expected not implemented");
+    let err = tauri::async_runtime::block_on(lock_database("missing.kdbx".to_string()))
+        .expect_err("expected not implemented");
     assert!(matches!(err, AppError::NotImplemented(_)));
 
-    let err = tauri::async_runtime::block_on(unlock_database("password".into()))
-        .expect_err("expected not implemented");
+    let err = tauri::async_runtime::block_on(unlock_database(
+        "missing.kdbx".to_string(),
+        "password".into(),
+    ))
+    .expect_err("expected not implemented");
     assert!(matches!(err, AppError::NotImplemented(_)));
 
     cleanup_app_files(&app);
@@ -106,13 +110,18 @@ fn database_commands_handle_missing_database() {
 fn entries_and_groups_commands_fail_when_not_open() {
     let app = setup_app();
 
-    let entries_err = tauri::async_runtime::block_on(list_entries(None, app.state()))
-        .expect_err("expected database not open");
-    assert!(matches!(entries_err, AppError::DatabaseNotOpen));
+    let entries_err = tauri::async_runtime::block_on(list_entries(
+        "nonexistent.kdbx".to_string(),
+        None,
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(entries_err, AppError::DatabaseNotFound(_)));
 
-    let groups_err = tauri::async_runtime::block_on(list_groups(app.state()))
-        .expect_err("expected database not open");
-    assert!(matches!(groups_err, AppError::DatabaseNotOpen));
+    let groups_err =
+        tauri::async_runtime::block_on(list_groups("nonexistent.kdbx".to_string(), app.state()))
+            .expect_err("expected database not found");
+    assert!(matches!(groups_err, AppError::DatabaseNotFound(_)));
 
     cleanup_app_files(&app);
 }

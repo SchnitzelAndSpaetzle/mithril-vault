@@ -28,6 +28,7 @@ impl KdbxService {
     }
 
     /// Creates a new database with the provided options.
+    /// The new database is automatically opened and added to the list of open databases.
     pub fn create_database(
         &self,
         path: &str,
@@ -36,10 +37,12 @@ impl KdbxService {
         name: &str,
         options: &DatabaseCreationOptions,
     ) -> Result<DatabaseInfo, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let normalized_path = Self::normalize_path(path);
+        let mut databases = self.lock_databases()?;
 
-        if db_lock.is_some() {
-            return Err(AppError::DatabaseAlreadyOpen);
+        // Check if this specific path is already open
+        if databases.contains_key(&normalized_path) {
+            return Err(AppError::DatabaseAlreadyOpen(path.to_string()));
         }
 
         if password.is_none() && keyfile_path.is_none() {
@@ -96,15 +99,19 @@ impl KdbxService {
         let file_lock = FileLockService::try_acquire_lock(path)?;
         let version = String::from("KDBX 4.0");
 
-        *db_lock = Some(OpenDatabase {
-            db,
-            path: path.to_string(),
-            is_modified: false,
-            password: password.map(SecureString::from),
-            keyfile_path: keyfile_path.map(String::from),
-            version: version.clone(),
-            file_lock: Some(file_lock),
-        });
+        let normalized_path = Self::normalize_path(path);
+        databases.insert(
+            normalized_path,
+            OpenDatabase {
+                db,
+                path: path.to_string(),
+                is_modified: false,
+                password: password.map(SecureString::from),
+                keyfile_path: keyfile_path.map(String::from),
+                version: version.clone(),
+                file_lock: Some(file_lock),
+            },
+        );
 
         Ok(DatabaseInfo {
             name: name.to_string(),

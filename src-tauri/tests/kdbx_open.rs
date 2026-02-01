@@ -162,12 +162,13 @@ fn test_get_info_returns_version() {
         return;
     };
 
+    let db_path = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path, "test123")
         .expect("Failed to open database");
 
-    let info = service.get_info().expect("Failed to get database info");
+    let info = service.get_info(&db_path).expect("Failed to get database info");
 
     assert_eq!(info.version, "KDBX 4.0", "get_info() should return version");
 }
@@ -230,21 +231,22 @@ fn test_open_twice_and_close() {
         return;
     };
 
+    let db_path = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path, "test123")
         .expect("Failed to open database");
 
-    let result = service.open(&path.to_string_lossy(), "test123");
+    let result = service.open(&db_path, "test123");
     assert!(
-        matches!(result, Err(AppError::DatabaseAlreadyOpen)),
+        matches!(result, Err(AppError::DatabaseAlreadyOpen(_))),
         "Should not allow opening twice"
     );
 
-    service.close().expect("Failed to close database");
-    let info_after_close = service.get_info();
+    service.close(&db_path).expect("Failed to close database");
+    let info_after_close = service.get_info(&db_path);
     assert!(
-        matches!(info_after_close, Err(AppError::DatabaseNotOpen)),
+        matches!(info_after_close, Err(AppError::DatabaseNotFound(_))),
         "Should not return info after close"
     );
 }
@@ -252,9 +254,9 @@ fn test_open_twice_and_close() {
 #[test]
 fn test_close_without_open() {
     let service = KdbxService::new();
-    let result = service.close();
+    let result = service.close("/nonexistent/db.kdbx");
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
         "Should error when closing without an open database"
     );
 }

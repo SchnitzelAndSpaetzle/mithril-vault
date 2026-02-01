@@ -10,18 +10,24 @@ use super::KdbxService;
 
 impl KdbxService {
     /// Lists groups in a hierarchy.
-    pub fn list_groups(&self) -> Result<Vec<Group>, AppError> {
-        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn list_groups(&self, db_id: &str) -> Result<Vec<Group>, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let root = convert_group(&open_db.db.root, None);
         Ok(vec![root])
     }
 
     /// Fetches a group by ID.
-    pub fn get_group(&self, id: &str) -> Result<Group, AppError> {
-        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn get_group(&self, db_id: &str, id: &str) -> Result<Group, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         find_group_by_id(&open_db.db.root, id)
             .map(|g| convert_group(g, None))
@@ -31,12 +37,16 @@ impl KdbxService {
     /// Creates a new group.
     pub fn create_group(
         &self,
+        db_id: &str,
         parent_id: Option<&str>,
         name: &str,
         icon: Option<u32>,
     ) -> Result<Group, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         // Find the parent group (root if parent_id is None)
         let (parent, parent_uuid) = if let Some(pid) = parent_id {
@@ -63,9 +73,12 @@ impl KdbxService {
     }
 
     /// Updates an existing group.
-    pub fn update_group(&self, id: &str, data: UpdateGroupData) -> Result<Group, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn update_group(&self, db_id: &str, id: &str, data: UpdateGroupData) -> Result<Group, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         // Find parent ID before mutating (for return value)
         let parent_id = find_parent_group_id(&open_db.db.root, id);
@@ -89,9 +102,12 @@ impl KdbxService {
     /// Deletes a group.
     /// If `recursive` is false and the group has children, returns an error.
     /// If `permanent` is true, the group is permanently deleted; otherwise moved to recycle bin.
-    pub fn delete_group(&self, id: &str, recursive: bool, permanent: bool) -> Result<(), AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn delete_group(&self, db_id: &str, id: &str, recursive: bool, permanent: bool) -> Result<(), AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         // Cannot delete root group
         if open_db.db.root.uuid.to_string() == id {
@@ -132,9 +148,12 @@ impl KdbxService {
 
     /// Moves a group to a new parent.
     /// If `target_parent_id` is None, moves to root.
-    pub fn move_group(&self, id: &str, target_parent_id: Option<&str>) -> Result<Group, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_mut().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn move_group(&self, db_id: &str, id: &str, target_parent_id: Option<&str>) -> Result<Group, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let root_id = open_db.db.root.uuid.to_string();
 

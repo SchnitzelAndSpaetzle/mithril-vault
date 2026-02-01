@@ -35,13 +35,14 @@ fn test_kdbx3_list_entries() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open KDBX3 database");
 
     let entries = service
-        .list_entries(None)
+        .list_entries(&db_path_str, None)
         .expect("Failed to list entries from KDBX3");
 
     assert!(!entries.is_empty(), "KDBX3 fixture should have entries");
@@ -54,12 +55,13 @@ fn test_kdbx3_get_entry_password() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open KDBX3 database");
 
-    let entries = service.list_entries(None).expect("Failed to list entries");
+    let entries = service.list_entries(&db_path_str, None).expect("Failed to list entries");
 
     if entries.is_empty() {
         eprintln!("Skipping password test: no entries in KDBX3 fixture");
@@ -68,7 +70,7 @@ fn test_kdbx3_get_entry_password() {
 
     let entry_id = &entries[0].id;
     let password = service
-        .get_entry_password(entry_id)
+        .get_entry_password(&db_path_str, entry_id)
         .expect("Failed to get entry password from KDBX3");
 
     assert!(!password.is_empty(), "KDBX3 entry should have a password");
@@ -81,13 +83,14 @@ fn test_kdbx3_list_groups() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open KDBX3 database");
 
     let groups = service
-        .list_groups()
+        .list_groups(&db_path_str)
         .expect("Failed to list groups from KDBX3");
 
     assert!(
@@ -103,21 +106,22 @@ fn test_list_entries_and_get_entry() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     let info = service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let entries = service.list_entries(None).expect("Failed to list entries");
+    let entries = service.list_entries(&db_path_str, None).expect("Failed to list entries");
     assert!(!entries.is_empty(), "Fixture should have entries");
 
     let entry_id = entries[0].id.clone();
-    let entry = service.get_entry(&entry_id).expect("Failed to fetch entry");
+    let entry = service.get_entry(&db_path_str, &entry_id).expect("Failed to fetch entry");
     assert_eq!(entry.id, entry_id);
     assert_eq!(entry.group_id, entries[0].group_id);
 
     let password = service
-        .get_entry_password(&entry_id)
+        .get_entry_password(&db_path_str, &entry_id)
         .expect("Failed to fetch entry password");
     assert!(
         !password.is_empty(),
@@ -125,7 +129,7 @@ fn test_list_entries_and_get_entry() {
     );
 
     let entries_in_root = service
-        .list_entries(Some(&info.root_group_id))
+        .list_entries(&db_path_str, Some(&info.root_group_id))
         .expect("Failed to list entries by group");
     assert!(entries_in_root.len() <= entries.len());
 }
@@ -137,16 +141,17 @@ fn test_list_groups_and_get_group() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     let info = service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let groups = service.list_groups().expect("Failed to list groups");
+    let groups = service.list_groups(&db_path_str).expect("Failed to list groups");
     assert!(!groups.is_empty(), "Should have at least the root group");
 
     let root = service
-        .get_group(&info.root_group_id)
+        .get_group(&db_path_str, &info.root_group_id)
         .expect("Failed to fetch root group");
     assert_eq!(root.id, info.root_group_id);
 }
@@ -158,18 +163,19 @@ fn test_entry_not_found() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let result = service.get_entry("missing-entry-id");
+    let result = service.get_entry(&db_path_str, "missing-entry-id");
     assert!(
         matches!(result, Err(AppError::EntryNotFound(_))),
         "Should error for missing entry"
     );
 
-    let password_result = service.get_entry_password("missing-entry-id");
+    let password_result = service.get_entry_password(&db_path_str, "missing-entry-id");
     assert!(
         matches!(password_result, Err(AppError::EntryNotFound(_))),
         "Should error for missing entry password"
@@ -183,12 +189,13 @@ fn test_group_not_found() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let result = service.get_group("missing-group-id");
+    let result = service.get_group(&db_path_str, "missing-group-id");
     assert!(
         matches!(result, Err(AppError::GroupNotFound(_))),
         "Should error for missing group"
@@ -198,9 +205,9 @@ fn test_group_not_found() {
 #[test]
 fn test_list_entries_without_open() {
     let service = KdbxService::new();
-    let result = service.list_entries(None);
+    let result = service.list_entries("nonexistent.kdbx", None);
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
         "Should error when listing entries without an open database"
     );
 }
@@ -230,13 +237,14 @@ fn test_list_entries_from_keyfile_only_database() {
         return;
     };
 
+    let db_path_str = db_path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open_with_keyfile_only(&db_path.to_string_lossy(), &key_path.to_string_lossy())
+        .open_with_keyfile_only(&db_path_str, &key_path.to_string_lossy())
         .expect("Failed to open database");
 
     let entries = service
-        .list_entries(None)
+        .list_entries(&db_path_str, None)
         .expect("Failed to list entries from keyfile-only database");
 
     assert!(
@@ -252,12 +260,13 @@ fn test_get_entry_password_from_keyfile_only_database() {
         return;
     };
 
+    let db_path_str = db_path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open_with_keyfile_only(&db_path.to_string_lossy(), &key_path.to_string_lossy())
+        .open_with_keyfile_only(&db_path_str, &key_path.to_string_lossy())
         .expect("Failed to open database");
 
-    let entries = service.list_entries(None).expect("Failed to list entries");
+    let entries = service.list_entries(&db_path_str, None).expect("Failed to list entries");
     if entries.is_empty() {
         eprintln!("Skipping password test: no entries in keyfile-only fixture");
         return;
@@ -265,7 +274,7 @@ fn test_get_entry_password_from_keyfile_only_database() {
 
     let entry_id = &entries[0].id;
     let password = service
-        .get_entry_password(entry_id)
+        .get_entry_password(&db_path_str, entry_id)
         .expect("Failed to get entry password");
 
     assert!(
@@ -279,9 +288,10 @@ fn test_get_entry_password_from_keyfile_only_database() {
 // ============================================================================
 
 /// Helper to create a KDBX4 test database
-fn create_kdbx4_database() -> (KdbxService, TempDir) {
+fn create_kdbx4_database() -> (KdbxService, TempDir, String) {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("protected-fields.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: false,
@@ -294,7 +304,7 @@ fn create_kdbx4_database() -> (KdbxService, TempDir) {
     let service = KdbxService::new();
     service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpass"),
             None,
             "Protected Fields Test",
@@ -302,13 +312,14 @@ fn create_kdbx4_database() -> (KdbxService, TempDir) {
         )
         .expect("Failed to create test database");
 
-    (service, dir)
+    (service, dir, db_path_str)
 }
 
 #[test]
 fn test_protected_fields_kdbx4_roundtrip() {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("kdbx4-protected.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: false,
@@ -322,7 +333,7 @@ fn test_protected_fields_kdbx4_roundtrip() {
     let service = KdbxService::new();
     service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpass"),
             None,
             "KDBX4 Protected Test",
@@ -330,7 +341,7 @@ fn test_protected_fields_kdbx4_roundtrip() {
         )
         .expect("Failed to create database");
 
-    let info = service.get_info().expect("database info");
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Category".to_string(), "Test".to_string());
@@ -347,6 +358,7 @@ fn test_protected_fields_kdbx4_roundtrip() {
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Integration Test Entry".to_string(),
@@ -365,17 +377,17 @@ fn test_protected_fields_kdbx4_roundtrip() {
     let entry_id = entry.id.clone();
 
     // Save and close
-    service.save().expect("save database");
-    let _ = service.close();
+    service.save(&db_path_str).expect("save database");
+    let _ = service.close(&db_path_str);
 
     // Reopen and verify all protected fields
     service
-        .open(&db_path.to_string_lossy(), "testpass")
+        .open(&db_path_str, "testpass")
         .expect("reopen database");
 
     // Verify entry exists
     let reopened_entry = service
-        .get_entry(&entry_id)
+        .get_entry(&db_path_str, &entry_id)
         .expect("get entry after reopen");
     assert_eq!(reopened_entry.title, "Integration Test Entry");
 
@@ -390,7 +402,7 @@ fn test_protected_fields_kdbx4_roundtrip() {
     );
 
     // Verify password
-    let password = service.get_entry_password(&entry_id).expect("get password");
+    let password = service.get_entry_password(&db_path_str, &entry_id).expect("get password");
     assert_eq!(
         password, "integration-password",
         "Password should persist in KDBX4"
@@ -398,7 +410,7 @@ fn test_protected_fields_kdbx4_roundtrip() {
 
     // Verify protected custom fields
     let api_key = service
-        .get_entry_protected_custom_field(&entry_id, "APIKey")
+        .get_entry_protected_custom_field(&db_path_str, &entry_id, "APIKey")
         .expect("get APIKey");
     assert_eq!(
         api_key.value, "secret-api-key-12345",
@@ -406,7 +418,7 @@ fn test_protected_fields_kdbx4_roundtrip() {
     );
 
     let secret_token = service
-        .get_entry_protected_custom_field(&entry_id, "SecretToken")
+        .get_entry_protected_custom_field(&db_path_str, &entry_id, "SecretToken")
         .expect("get SecretToken");
     assert_eq!(
         secret_token.value, "bearer-token-xyz",
@@ -428,9 +440,8 @@ fn test_protected_fields_kdbx4_roundtrip() {
 
 #[test]
 fn test_protected_fields_persist_after_save() {
-    let (service, dir) = create_kdbx4_database();
-    let db_path = dir.path().join("protected-fields.kdbx");
-    let info = service.get_info().expect("database info");
+    let (service, dir, db_path_str) = create_kdbx4_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     // Create first entry with protected field
     let mut protected1: BTreeMap<String, SecureString> = BTreeMap::new();
@@ -438,6 +449,7 @@ fn test_protected_fields_persist_after_save() {
 
     let entry1 = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Entry 1".to_string(),
@@ -454,7 +466,7 @@ fn test_protected_fields_persist_after_save() {
         .expect("create entry 1");
 
     // Save database
-    service.save().expect("first save");
+    service.save(&db_path_str).expect("first save");
 
     // Create second entry with protected field (after first save)
     let mut protected2: BTreeMap<String, SecureString> = BTreeMap::new();
@@ -462,6 +474,7 @@ fn test_protected_fields_persist_after_save() {
 
     let entry2 = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Entry 2".to_string(),
@@ -478,20 +491,20 @@ fn test_protected_fields_persist_after_save() {
         .expect("create entry 2");
 
     // Save again
-    service.save().expect("second save");
+    service.save(&db_path_str).expect("second save");
 
     let entry1_id = entry1.id.clone();
     let entry2_id = entry2.id.clone();
 
     // Close and reopen
-    let _ = service.close();
+    let _ = service.close(&db_path_str);
     service
-        .open(&db_path.to_string_lossy(), "testpass")
+        .open(&db_path_str, "testpass")
         .expect("reopen database");
 
     // Verify both entries and their protected fields
     let secret1 = service
-        .get_entry_protected_custom_field(&entry1_id, "Secret1")
+        .get_entry_protected_custom_field(&db_path_str, &entry1_id, "Secret1")
         .expect("get Secret1");
     assert_eq!(
         secret1.value, "value1",
@@ -499,7 +512,7 @@ fn test_protected_fields_persist_after_save() {
     );
 
     let secret2 = service
-        .get_entry_protected_custom_field(&entry2_id, "Secret2")
+        .get_entry_protected_custom_field(&db_path_str, &entry2_id, "Secret2")
         .expect("get Secret2");
     assert_eq!(
         secret2.value, "value2",
@@ -507,9 +520,12 @@ fn test_protected_fields_persist_after_save() {
     );
 
     // Verify passwords also persisted
-    let pass1 = service.get_entry_password(&entry1_id).expect("get pass1");
+    let pass1 = service.get_entry_password(&db_path_str, &entry1_id).expect("get pass1");
     assert_eq!(pass1, "pass1");
 
-    let pass2 = service.get_entry_password(&entry2_id).expect("get pass2");
+    let pass2 = service.get_entry_password(&db_path_str, &entry2_id).expect("get pass2");
     assert_eq!(pass2, "pass2");
+
+    // Keep dir in scope
+    let _ = dir;
 }

@@ -172,12 +172,13 @@ fn test_get_config_after_open() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let config = service.get_config().expect("Failed to get config");
+    let config = service.get_config(&db_path_str).expect("Failed to get config");
 
     assert!(
         config.version.starts_with("KDBX 4."),
@@ -203,12 +204,13 @@ fn test_get_config_kdbx3_uses_aes_kdf() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let config = service.get_config().expect("Failed to get config");
+    let config = service.get_config(&db_path_str).expect("Failed to get config");
 
     if !config.version.starts_with("KDBX 3.") {
         eprintln!(
@@ -230,11 +232,11 @@ fn test_get_config_kdbx3_uses_aes_kdf() {
 #[test]
 fn test_get_config_without_open() {
     let service = KdbxService::new();
-    let result = service.get_config();
+    let result = service.get_config("nonexistent.kdbx");
 
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
-        "Should fail with DatabaseNotOpen when no database is open, got: {result:?}"
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when no database is open, got: {result:?}"
     );
 }
 
@@ -242,13 +244,14 @@ fn test_get_config_without_open() {
 fn test_created_database_config() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("config-test.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     service
-        .create(&db_path.to_string_lossy(), "testpassword", "Config Test")
+        .create(&db_path_str, "testpassword", "Config Test")
         .expect("Failed to create database");
 
-    let config = service.get_config().expect("Failed to get config");
+    let config = service.get_config(&db_path_str).expect("Failed to get config");
 
     // Newly created databases should be KDBX 4.0
     assert_eq!(
@@ -283,6 +286,7 @@ fn test_created_database_config() {
 fn test_created_database_custom_kdf_params() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("custom-kdf-test.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
 
@@ -296,7 +300,7 @@ fn test_created_database_custom_kdf_params() {
 
     service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpassword"),
             None,
             "Custom KDF Test",
@@ -304,7 +308,7 @@ fn test_created_database_custom_kdf_params() {
         )
         .expect("Failed to create database with custom KDF");
 
-    let config = service.get_config().expect("Failed to get config");
+    let config = service.get_config(&db_path_str).expect("Failed to get config");
 
     // Verify custom KDF parameters
     match config.kdf {
@@ -332,22 +336,23 @@ fn test_inspect_then_open_then_config() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
 
     // Step 1: Inspect without credentials
     let header_info = service
-        .inspect(&path.to_string_lossy())
+        .inspect(&db_path_str)
         .expect("Failed to inspect database");
     assert!(header_info.is_valid_kdbx);
     assert!(header_info.is_supported);
 
     // Step 2: Open with credentials
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
     // Step 3: Get full config
-    let config = service.get_config().expect("Failed to get config");
+    let config = service.get_config(&db_path_str).expect("Failed to get config");
     assert_eq!(
         header_info.version, config.version,
         "Version from inspect should match version from config"
@@ -361,22 +366,23 @@ fn test_get_config_after_close_fails() {
         return;
     };
 
+    let db_path_str = path.to_string_lossy().to_string();
     let service = KdbxService::new();
 
     service
-        .open(&path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
     // Config should work while open
-    service.get_config().expect("Should get config while open");
+    service.get_config(&db_path_str).expect("Should get config while open");
 
     // Close the database
-    service.close().expect("Failed to close database");
+    service.close(&db_path_str).expect("Failed to close database");
 
     // Config should fail after close
-    let result = service.get_config();
+    let result = service.get_config(&db_path_str);
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
-        "Should fail with DatabaseNotOpen after close, got: {result:?}"
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound after close, got: {result:?}"
     );
 }
