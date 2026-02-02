@@ -4,7 +4,7 @@ use crate::dto::error::AppError;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::fmt::Write as FmtWrite;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
@@ -88,20 +88,78 @@ pub fn generate_keyfile(output_path: &str) -> Result<(), AppError> {
     );
 
     // Write to file
-    let mut file = File::create(path).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::PermissionDenied {
-            AppError::InvalidPath(format!("Permission denied: {output_path}"))
-        } else {
-            AppError::Io(e.to_string())
-        }
-    })?;
+    let mut file = create_keyfile_file(path, output_path)?;
 
     file.write_all(xml.as_bytes())?;
 
     // Ensure data is flushed to disk
     file.sync_all()?;
 
+    set_keyfile_permissions(path, output_path)?;
+
     Ok(())
+}
+
+fn create_keyfile_file(path: &Path, output_path: &str) -> Result<File, AppError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        return OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|e| map_create_error(e, output_path));
+    }
+
+    #[cfg(not(unix))]
+    {
+        return OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)
+            .map_err(|e| map_create_error(e, output_path));
+    }
+}
+
+fn map_create_error(error: std::io::Error, output_path: &str) -> AppError {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        AppError::InvalidPath(format!("Permission denied: {output_path}"))
+    } else {
+        AppError::Io(error.to_string())
+    }
+}
+
+fn set_keyfile_permissions(path: &Path, output_path: &str) -> Result<(), AppError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let permissions = std::fs::Permissions::from_mode(0o400);
+        std::fs::set_permissions(path, permissions).map_err(|e| {
+            AppError::Io(format!(
+                "Failed to set keyfile permissions for {output_path}: {e}"
+            ))
+        })?;
+        return Ok(());
+    }
+
+    #[cfg(not(unix))]
+    {
+        let mut permissions = std::fs::metadata(path)
+            .map_err(|e| AppError::Io(format!("Failed to read keyfile metadata: {e}")))?
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(path, permissions).map_err(|e| {
+            AppError::Io(format!(
+                "Failed to set keyfile permissions for {output_path}: {e}"
+            ))
+        })?;
+        return Ok(());
+    }
 }
 
 #[cfg(test)]
@@ -233,5 +291,25 @@ mod tests {
         let result = generate_keyfile("/nonexistent/directory/test.keyx");
         assert!(result.is_err());
         assert!(matches!(result, Err(AppError::InvalidPath(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_generate_keyfile_sets_readonly_permissions() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new()?;
+        let keyfile_path = temp_dir.path().join("test-perms.keyx");
+        let path_str = keyfile_path
+            .to_str()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
+
+        generate_keyfile(path_str).map_err(|err| std::io::Error::other(err.to_string()))?;
+
+        let metadata = fs::metadata(&keyfile_path)?;
+        let mode = metadata.permissions().mode() & 0o777;
+        assert_eq!(mode, 0o400, "Keyfile should have 0400 permissions");
+
+        Ok(())
     }
 }
