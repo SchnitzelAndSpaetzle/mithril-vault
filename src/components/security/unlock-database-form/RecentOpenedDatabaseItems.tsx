@@ -6,10 +6,8 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item.tsx";
-import { ChevronRightIcon, FolderOpen, Loader2 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { settings } from "@/lib/tauri.ts";
+import { ChevronRightIcon, FolderOpen } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import type { RecentDatabase } from "@/lib/types.ts";
 
 function getFilenameFromPath(path: string): string {
@@ -17,40 +15,14 @@ function getFilenameFromPath(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-export default function RecentOpenedDatabaseItems() {
-  const [recentDatabases, setRecentDatabases] = useState<RecentDatabase[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface RecentOpenedDatabaseItemsProps {
+  recentDatabases: RecentDatabase[];
+}
 
-  useEffect(() => {
-    async function loadRecentDatabases() {
-      try {
-        const appSettings = await settings.get();
-        setRecentDatabases(appSettings.recentDatabases);
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    void loadRecentDatabases();
-  }, []);
-
-  if (isLoading) {
-    return (
-      <div className="flex w-full max-w-md items-center justify-center py-8">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex w-full max-w-md flex-col items-center justify-center py-8 text-muted-foreground">
-        <p className="text-sm">Failed to load recent databases</p>
-      </div>
-    );
-  }
+export default function RecentOpenedDatabaseItems({
+  recentDatabases,
+}: RecentOpenedDatabaseItemsProps) {
+  const navigate = useNavigate();
 
   if (recentDatabases.length === 0) {
     return (
@@ -66,7 +38,13 @@ export default function RecentOpenedDatabaseItems() {
     <div className="flex w-full max-w-md flex-col gap-2">
       {recentDatabases.map((item) => (
         <Item key={item.path} variant="outline" size="sm" asChild>
-          <Link to="/unlock" search={{ path: item.path }}>
+          <button
+            type="button"
+            className="w-full text-left"
+            onClick={() => {
+              void navigate({ to: "/unlock", search: { path: item.path } });
+            }}
+          >
             <ItemMedia>
               <FolderOpen className="size-5" />
             </ItemMedia>
@@ -79,7 +57,7 @@ export default function RecentOpenedDatabaseItems() {
             <ItemActions>
               <ChevronRightIcon className="size-4" />
             </ItemActions>
-          </Link>
+          </button>
         </Item>
       ))}
     </div>

@@ -13,9 +13,10 @@ use mithril_vault_lib::services::kdbx::KdbxService;
 use std::collections::BTreeMap;
 
 /// Helper to create a test database with minimal KDF settings for fast tests
-fn create_test_database() -> (KdbxService, tempfile::TempDir) {
+fn create_test_database() -> (KdbxService, tempfile::TempDir, String) {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("secure-memory-test.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: false,
@@ -28,7 +29,7 @@ fn create_test_database() -> (KdbxService, tempfile::TempDir) {
     let service = KdbxService::new();
     service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("test-secure-password"),
             None,
             "Secure Memory Test",
@@ -36,13 +37,14 @@ fn create_test_database() -> (KdbxService, tempfile::TempDir) {
         )
         .expect("Failed to create test database");
 
-    (service, dir)
+    (service, dir, db_path_str)
 }
 
 #[test]
 fn test_create_database_with_secure_password() {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("secure-create.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: false,
@@ -56,7 +58,7 @@ fn test_create_database_with_secure_password() {
 
     // Create database with password
     let result = service.create_database(
-        &db_path.to_string_lossy(),
+        &db_path_str,
         Some("secure-password-123"),
         None,
         "Secure Database",
@@ -66,9 +68,9 @@ fn test_create_database_with_secure_password() {
     assert!(result.is_ok(), "Database creation should succeed");
 
     // Close and reopen with the same password
-    let _ = service.close();
+    let _ = service.close(&db_path_str);
 
-    let reopen_result = service.open(&db_path.to_string_lossy(), "secure-password-123");
+    let reopen_result = service.open(&db_path_str, "secure-password-123");
     assert!(
         reopen_result.is_ok(),
         "Should be able to reopen with correct password"
@@ -77,13 +79,13 @@ fn test_create_database_with_secure_password() {
 
 #[test]
 fn test_save_reopen_with_secure_password() {
-    let (service, dir) = create_test_database();
-    let db_path = dir.path().join("secure-memory-test.kdbx");
-    let info = service.get_info().expect("database info");
+    let (service, dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     // Create an entry with a secure password
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Secure Entry".to_string(),
@@ -102,20 +104,25 @@ fn test_save_reopen_with_secure_password() {
     let entry_id = entry.id.clone();
 
     // Save the database
-    service.save().expect("save database");
+    service.save(&db_path_str).expect("save database");
 
     // Close and reopen
-    let _ = service.close();
+    let _ = service.close(&db_path_str);
     service
-        .open(&db_path.to_string_lossy(), "test-secure-password")
+        .open(&db_path_str, "test-secure-password")
         .expect("reopen database");
 
     // Verify the entry password persisted correctly
-    let password = service.get_entry_password(&entry_id).expect("get password");
+    let password = service
+        .get_entry_password(&db_path_str, &entry_id)
+        .expect("get password");
     assert_eq!(
         password, "entry-secure-password",
         "Entry password should persist after save/reopen"
     );
+
+    // Keep dir in scope
+    let _ = dir;
 }
 
 #[test]
@@ -152,8 +159,8 @@ fn test_secure_string_display_does_not_leak() {
 
 #[test]
 fn test_protected_custom_fields_with_secure_string() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut protected_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     protected_fields.insert("APIKey".to_string(), SecureString::from("secret-api-key"));
@@ -161,6 +168,7 @@ fn test_protected_custom_fields_with_secure_string() {
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "API Entry".to_string(),
@@ -178,12 +186,12 @@ fn test_protected_custom_fields_with_secure_string() {
 
     // Verify protected fields are retrievable
     let api_key = service
-        .get_entry_protected_custom_field(&entry.id, "APIKey")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "APIKey")
         .expect("get APIKey");
     assert_eq!(api_key.value, "secret-api-key");
 
     let token = service
-        .get_entry_protected_custom_field(&entry.id, "Token")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "Token")
         .expect("get Token");
     assert_eq!(token.value, "secret-token");
 }

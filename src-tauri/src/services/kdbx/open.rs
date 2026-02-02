@@ -15,11 +15,14 @@ use super::KdbxService;
 
 impl KdbxService {
     /// Opens a database with a password.
+    /// Returns the database info. If the database is already open, returns an error.
     pub fn open(&self, path: &str, password: &str) -> Result<DatabaseInfo, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let normalized_path = Self::normalize_path(path);
+        let mut databases = self.lock_databases()?;
 
-        if db_lock.is_some() {
-            return Err(AppError::DatabaseAlreadyOpen);
+        // Check if this specific database is already open
+        if databases.contains_key(&normalized_path) {
+            return Err(AppError::DatabaseAlreadyOpen(path.to_string()));
         }
 
         // Acquire file lock before opening database
@@ -34,15 +37,18 @@ impl KdbxService {
         let name = db.root.name.clone();
         let version = format_database_version(&db.config.version);
 
-        *db_lock = Some(OpenDatabase {
-            db,
-            path: path.to_string(),
-            is_modified: false,
-            password: Some(SecureString::from(password)),
-            keyfile_path: None,
-            version: version.clone(),
-            file_lock: Some(file_lock),
-        });
+        databases.insert(
+            normalized_path,
+            OpenDatabase {
+                db,
+                path: path.to_string(),
+                is_modified: false,
+                password: Some(SecureString::from(password)),
+                keyfile_path: None,
+                version: version.clone(),
+                file_lock: Some(file_lock),
+            },
+        );
 
         Ok(DatabaseInfo {
             name,
@@ -61,10 +67,12 @@ impl KdbxService {
         password: &str,
         keyfile_path: &str,
     ) -> Result<DatabaseInfo, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let normalized_path = Self::normalize_path(path);
+        let mut databases = self.lock_databases()?;
 
-        if db_lock.is_some() {
-            return Err(AppError::DatabaseAlreadyOpen);
+        // Check if this specific database is already open
+        if databases.contains_key(&normalized_path) {
+            return Err(AppError::DatabaseAlreadyOpen(path.to_string()));
         }
 
         // Acquire file lock before opening database
@@ -85,15 +93,18 @@ impl KdbxService {
         let name = db.root.name.clone();
         let version = format_database_version(&db.config.version);
 
-        *db_lock = Some(OpenDatabase {
-            db,
-            path: path.to_string(),
-            is_modified: false,
-            password: Some(SecureString::from(password)),
-            keyfile_path: Some(keyfile_path.to_string()),
-            version: version.clone(),
-            file_lock: Some(file_lock),
-        });
+        databases.insert(
+            normalized_path,
+            OpenDatabase {
+                db,
+                path: path.to_string(),
+                is_modified: false,
+                password: Some(SecureString::from(password)),
+                keyfile_path: Some(keyfile_path.to_string()),
+                version: version.clone(),
+                file_lock: Some(file_lock),
+            },
+        );
 
         Ok(DatabaseInfo {
             name,
@@ -111,10 +122,12 @@ impl KdbxService {
         path: &str,
         keyfile_path: &str,
     ) -> Result<DatabaseInfo, AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+        let normalized_path = Self::normalize_path(path);
+        let mut databases = self.lock_databases()?;
 
-        if db_lock.is_some() {
-            return Err(AppError::DatabaseAlreadyOpen);
+        // Check if this specific database is already open
+        if databases.contains_key(&normalized_path) {
+            return Err(AppError::DatabaseAlreadyOpen(path.to_string()));
         }
 
         // Acquire file lock before opening database
@@ -133,15 +146,18 @@ impl KdbxService {
         let name = db.root.name.clone();
         let version = format_database_version(&db.config.version);
 
-        *db_lock = Some(OpenDatabase {
-            db,
-            path: path.to_string(),
-            is_modified: false,
-            password: None,
-            keyfile_path: Some(keyfile_path.to_string()),
-            version: version.clone(),
-            file_lock: Some(file_lock),
-        });
+        databases.insert(
+            normalized_path,
+            OpenDatabase {
+                db,
+                path: path.to_string(),
+                is_modified: false,
+                password: None,
+                keyfile_path: Some(keyfile_path.to_string()),
+                version: version.clone(),
+                file_lock: Some(file_lock),
+            },
+        );
 
         Ok(DatabaseInfo {
             name,
@@ -153,22 +169,25 @@ impl KdbxService {
         })
     }
 
-    /// Closes the active database.
-    pub fn close(&self) -> Result<(), AppError> {
-        let mut db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
+    /// Closes a specific database by its path.
+    pub fn close(&self, db_id: &str) -> Result<(), AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
 
-        if db_lock.is_none() {
-            return Err(AppError::DatabaseNotOpen);
+        if databases.remove(&normalized_path).is_none() {
+            return Err(AppError::DatabaseNotFound(db_id.to_string()));
         }
 
-        *db_lock = None;
         Ok(())
     }
 
-    /// Returns metadata for the open database.
-    pub fn get_info(&self) -> Result<DatabaseInfo, AppError> {
-        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+    /// Returns metadata for a specific open database.
+    pub fn get_info(&self, db_id: &str) -> Result<DatabaseInfo, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         Ok(DatabaseInfo {
             name: open_db.db.root.name.clone(),

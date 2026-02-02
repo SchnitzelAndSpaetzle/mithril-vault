@@ -84,20 +84,21 @@ fn test_close_database_success() {
         return;
     };
 
+    let db_path_str = db_path.to_string_lossy().to_string();
     let service = KdbxService::new();
 
     service
-        .open(&db_path.to_string_lossy(), "test123")
+        .open(&db_path_str, "test123")
         .expect("Failed to open database");
 
-    let result = service.close();
+    let result = service.close(&db_path_str);
 
     assert!(result.is_ok(), "Should successfully close database");
 
     // Verify database is closed by checking get_info fails
-    let info_result = service.get_info();
+    let info_result = service.get_info(&db_path_str);
     assert!(
-        matches!(info_result, Err(AppError::DatabaseNotOpen)),
+        matches!(info_result, Err(AppError::DatabaseNotFound(_))),
         "Database should be closed"
     );
 }
@@ -106,11 +107,11 @@ fn test_close_database_success() {
 fn test_close_database_not_open() {
     let service = KdbxService::new();
 
-    let result = service.close();
+    let result = service.close("nonexistent.kdbx");
 
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
-        "Should fail with DatabaseNotOpen error when no database is open"
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound error when no database is open"
     );
 }
 
@@ -139,21 +140,22 @@ fn test_create_database_success() {
 }
 
 #[test]
-fn test_create_database_already_open() {
+fn test_create_database_same_path_already_open() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path1 = dir.path().join("first.kdbx");
-    let db_path2 = dir.path().join("second.kdbx");
+    let db_path1_str = db_path1.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     service
-        .create(&db_path1.to_string_lossy(), "pass1", "First DB")
+        .create(&db_path1_str, "pass1", "First DB")
         .expect("Failed to create first database");
 
-    let result = service.create(&db_path2.to_string_lossy(), "pass2", "Second DB");
+    // Try to create/open the same database again
+    let result = service.create(&db_path1_str, "pass1", "First DB Again");
 
     assert!(
-        matches!(result, Err(AppError::DatabaseAlreadyOpen)),
-        "Should fail with DatabaseAlreadyOpen when trying to create while one is open"
+        matches!(result, Err(AppError::DatabaseAlreadyOpen(_))),
+        "Should fail with DatabaseAlreadyOpen when trying to create same database while one is open"
     );
 }
 
@@ -165,19 +167,20 @@ fn test_create_database_already_open() {
 fn test_save_database_success() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("save-test.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     service
-        .create(&db_path.to_string_lossy(), "savepass", "Save Test DB")
+        .create(&db_path_str, "savepass", "Save Test DB")
         .expect("Failed to create database");
 
-    let result = service.save();
+    let result = service.save(&db_path_str);
 
     assert!(result.is_ok(), "Should successfully save database");
 
     // Verify file can be reopened
-    service.close().expect("Failed to close");
-    let reopen_result = service.open(&db_path.to_string_lossy(), "savepass");
+    service.close(&db_path_str).expect("Failed to close");
+    let reopen_result = service.open(&db_path_str, "savepass");
     assert!(
         reopen_result.is_ok(),
         "Should be able to reopen saved database"
@@ -188,11 +191,11 @@ fn test_save_database_success() {
 fn test_save_database_not_open() {
     let service = KdbxService::new();
 
-    let result = service.save();
+    let result = service.save("nonexistent.kdbx");
 
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
-        "Should fail with DatabaseNotOpen when no database is open"
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when no database is open"
     );
 }
 
@@ -201,22 +204,22 @@ fn test_save_as_moves_lock_file() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("original.kdbx");
     let new_path = dir.path().join("moved.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let new_path_str = new_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     service
-        .create(&db_path.to_string_lossy(), "savepass", "Save Test DB")
+        .create(&db_path_str, "savepass", "Save Test DB")
         .expect("Failed to create database");
 
-    let db_path_str = db_path.to_string_lossy();
-    let old_lock_path = FileLockService::lock_file_path(db_path_str.as_ref());
+    let old_lock_path = FileLockService::lock_file_path(&db_path_str);
     assert!(old_lock_path.exists(), "Original lock file should exist");
 
     service
-        .save_as(&new_path.to_string_lossy(), None)
+        .save_as(&db_path_str, &new_path_str, None)
         .expect("Failed to save database as new path");
 
-    let new_path_str = new_path.to_string_lossy();
-    let new_lock_path = FileLockService::lock_file_path(new_path_str.as_ref());
+    let new_lock_path = FileLockService::lock_file_path(&new_path_str);
     assert!(
         !old_lock_path.exists(),
         "Old lock file should be removed after save_as"
@@ -226,7 +229,10 @@ fn test_save_as_moves_lock_file() {
         "New lock file should exist after save_as"
     );
 
-    service.close().expect("Failed to close database");
+    // After save_as, the database is now at new_path
+    service
+        .close(&new_path_str)
+        .expect("Failed to close database");
     assert!(
         !new_lock_path.exists(),
         "Lock file should be removed after close"

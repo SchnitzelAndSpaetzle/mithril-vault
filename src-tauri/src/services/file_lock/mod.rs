@@ -141,7 +141,7 @@ impl FileLockService {
         match Self::check_lock_status(db_path)? {
             LockStatus::Available => {}
             LockStatus::LockedByCurrentProcess => {
-                return Err(AppError::DatabaseAlreadyOpen);
+                return Err(AppError::DatabaseAlreadyOpen(db_path.to_string()));
             }
             LockStatus::LockedByOtherProcess(info) => {
                 return Err(AppError::DatabaseLocked(format!(
@@ -469,7 +469,10 @@ mod tests {
         // Try to acquire second lock - should fail
         let result = FileLockService::try_acquire_lock(db_path_str);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AppError::DatabaseAlreadyOpen));
+        assert!(matches!(
+            result.unwrap_err(),
+            AppError::DatabaseAlreadyOpen(_)
+        ));
     }
 
     #[test]

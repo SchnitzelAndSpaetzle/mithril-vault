@@ -13,10 +13,10 @@ use commands::{
     force_unlock_database, generate_passphrase, generate_password, get_database_config,
     get_database_info, get_entry, get_entry_password, get_entry_protected_custom_field, get_group,
     get_keyfile_for_database, get_lock_status, get_settings, has_session_key, inspect_database,
-    list_entries, list_groups, lock_database, move_entry, move_group, open_database,
-    open_database_with_keyfile, open_database_with_keyfile_only, remove_recent_database,
-    rename_group, save_database, store_session_key, unlock_database, update_entry, update_group,
-    update_settings,
+    list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
+    open_database, open_database_with_keyfile, open_database_with_keyfile_only,
+    remove_recent_database, rename_group, save_database, store_session_key, unlock_database,
+    update_entry, update_group, update_settings,
 };
 use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
@@ -44,6 +44,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             inspect_database,
             get_database_config,
             get_database_info,
+            list_open_databases,
             list_entries,
             get_entry,
             get_entry_password,

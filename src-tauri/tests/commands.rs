@@ -35,13 +35,14 @@ fn copy_fixture_to_temp(filename: &str) -> Option<(TempDir, PathBuf)> {
     Some((temp_dir, dest))
 }
 
-fn open_test_database() -> Option<(KdbxService, TempDir)> {
+fn open_test_database() -> Option<(KdbxService, TempDir, String)> {
     let (temp_dir, db_path) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx")?;
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
-    let result = service.open(&db_path.to_string_lossy(), "test123");
+    let result = service.open(&db_path_str, "test123");
     assert!(result.is_ok(), "Failed to open test database");
-    Some((service, temp_dir))
+    Some((service, temp_dir, db_path_str))
 }
 
 #[path = "commands/database_test.rs"]

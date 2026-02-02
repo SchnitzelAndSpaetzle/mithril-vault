@@ -18,12 +18,18 @@ import { Plus } from "lucide-react";
 import DropdownMenuMoreOptions from "@/components/security/unlock-database-form/DropdownMenuMoreOptions.tsx";
 import RecentOpenedDatabaseItems from "@/components/security/unlock-database-form/RecentOpenedDatabaseItems.tsx";
 import { type ComponentProps } from "react";
+import type { RecentDatabase } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
+
+interface OpenOrCreateDatabaseProps extends ComponentProps<"div"> {
+  recentDatabases: RecentDatabase[];
+}
 
 export default function OpenOrCreateDatabase({
   className,
+  recentDatabases,
   ...props
-}: ComponentProps<"div">) {
+}: OpenOrCreateDatabaseProps) {
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
@@ -48,7 +54,7 @@ export default function OpenOrCreateDatabase({
               Recent databases
             </FieldSeparator>
             <ScrollArea className="h-44">
-              <RecentOpenedDatabaseItems />
+              <RecentOpenedDatabaseItems recentDatabases={recentDatabases} />
             </ScrollArea>
           </FieldGroup>
         </CardContent>

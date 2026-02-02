@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-import { useEffect } from "react";
 import { ChevronDown, Database, Loader2, Lock, Settings } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import {
   DropdownMenu,
@@ -18,34 +18,39 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { useDatabaseInfo } from "@/hooks/use-database-info.ts";
+import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useRecentDatabases } from "@/hooks/use-recent-databases.ts";
 import { database } from "@/lib/tauri.ts";
+import {
+  type DatabaseTabsState,
+  useDatabaseTabs,
+} from "@/stores/database-tabs";
 
 /**
  * Extracts the filename from a full file path.
  */
-function getFilename(path: string): string {
+function getFilename(path?: string): string {
+  if (!path) return "New Database";
   const parts = path.split(/[/\\]/);
   return parts[parts.length - 1] || path;
 }
 
 export function DatabaseSwitcher() {
   const navigate = useNavigate();
-  const { databaseInfo, isLoading: isLoadingDb } = useDatabaseInfo();
+  const { tab, dbId } = useActiveDatabase();
+  const removeTab = useDatabaseTabs(
+    (state: DatabaseTabsState) => state.removeTab
+  );
   const { recentDatabases, isLoading: isLoadingRecent } = useRecentDatabases();
 
-  // Redirect to home if no database is open (after loading completes)
-  useEffect(() => {
-    if (!isLoadingDb && !databaseInfo) {
-      void navigate({ to: "/" });
-    }
-  }, [isLoadingDb, databaseInfo, navigate]);
-
   const handleLock = async () => {
+    if (!tab?.id || !dbId) {
+      return;
+    }
+
     try {
-      await database.close();
+      await database.close(dbId);
+      removeTab(tab.id);
       void navigate({ to: "/" });
     } catch (error) {
       console.error("Failed to close database:", error);
@@ -56,27 +61,27 @@ export function DatabaseSwitcher() {
     void navigate({ to: "/unlock", search: { path } });
   };
 
+  const handleOpenAnotherDatabase = async () => {
+    try {
+      const file = await open({
+        title: "Open Database",
+        filters: [{ name: "KeePass Database", extensions: ["kdbx"] }],
+      });
+
+      if (!file) {
+        return;
+      }
+      void navigate({ to: "/unlock", search: { path: file as string } });
+    } catch {
+      // User cancelled or error - ignore
+    }
+  };
+
   // Filter out the currently open database from a recent list
-  const otherDatabases = recentDatabases.filter(
-    (db) => db.path !== databaseInfo?.path
-  );
+  const otherDatabases = recentDatabases.filter((db) => db.path !== tab?.path);
 
-  // Show loading state
-  if (isLoadingDb) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem className="flex items-center gap-2">
-          <div className="flex grow items-center gap-2 px-1.5">
-            <Skeleton className="size-5 rounded-md" />
-            <Skeleton className="h-4 w-24" />
-          </div>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
-  }
-
-  // If no database is open, don't render (redirect will happen)
-  if (!databaseInfo) {
+  // If no database is open, don't render
+  if (!tab) {
     return null;
   }
 
@@ -91,7 +96,7 @@ export function DatabaseSwitcher() {
                   <Database className="size-3" />
                 </div>
                 <span className="truncate font-medium">
-                  {databaseInfo.name || getFilename(databaseInfo.path)}
+                  {tab.info?.name || getFilename(tab.path)}
                 </span>
                 <ChevronDown className="opacity-50" />
               </SidebarMenuButton>
@@ -129,7 +134,7 @@ export function DatabaseSwitcher() {
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => void navigate({ to: "/" })}
+                onClick={() => void handleOpenAnotherDatabase()}
                 className="gap-2 p-2"
               >
                 <div className="bg-background flex size-6 items-center justify-center rounded-md border">

@@ -11,6 +11,8 @@ import { UnlockDbForm } from "@/components/security/unlock-database-form/UnlockD
 
 interface UnlockViewProps extends React.ComponentProps<"div"> {
   initialPath?: string | undefined;
+  initialKeyfile?: string | undefined;
+  rememberKeyfile?: boolean | undefined;
 }
 
 function getFilenameFromPath(path: string | undefined): string {
@@ -29,6 +31,8 @@ function getDirectoryFromPath(path: string | undefined): string {
 export function UnlockView({
   className,
   initialPath,
+  initialKeyfile,
+  rememberKeyfile,
   ...props
 }: UnlockViewProps) {
   const filename = getFilenameFromPath(initialPath);
@@ -50,7 +54,11 @@ export function UnlockView({
           )}
         </CardHeader>
         <CardContent>
-          <UnlockDbForm initialPath={initialPath} />
+          <UnlockDbForm
+            initialPath={initialPath}
+            initialKeyfile={initialKeyfile}
+            rememberKeyfile={rememberKeyfile}
+          />
         </CardContent>
       </Card>
     </div>

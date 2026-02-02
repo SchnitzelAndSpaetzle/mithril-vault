@@ -20,9 +20,10 @@ use tempfile::TempDir;
 use super::open_test_database;
 
 /// Helper to create a new database with default groups for CRUD tests
-fn create_test_database() -> (KdbxService, TempDir) {
+fn create_test_database() -> (KdbxService, TempDir, String) {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("entry-crud.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: true,
@@ -34,16 +35,10 @@ fn create_test_database() -> (KdbxService, TempDir) {
 
     let service = KdbxService::new();
     service
-        .create_database(
-            &db_path.to_string_lossy(),
-            Some("testpass"),
-            None,
-            "Entry CRUD",
-            &options,
-        )
+        .create_database(&db_path_str, Some("testpass"), None, "Entry CRUD", &options)
         .expect("Failed to create test database");
 
-    (service, dir)
+    (service, dir, db_path_str)
 }
 
 // ============================================================================
@@ -52,12 +47,12 @@ fn create_test_database() -> (KdbxService, TempDir) {
 
 #[test]
 fn test_list_entries_all() {
-    let Some((service, _temp_dir)) = open_test_database() else {
+    let Some((service, _temp_dir, db_path_str)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
 
-    let result = service.list_entries(None);
+    let result = service.list_entries(&db_path_str, None);
 
     assert!(result.is_ok(), "Should successfully list all entries");
     let entries = result.expect("entries");
@@ -74,22 +69,24 @@ fn test_list_entries_all() {
 
 #[test]
 fn test_list_entries_by_group() {
-    let Some((service, _temp_dir)) = open_test_database() else {
+    let Some((service, _temp_dir, db_path_str)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
 
     // Get the root group ID
-    let info = service.get_info().expect("database info");
+    let info = service.get_info(&db_path_str).expect("database info");
     let root_group_id = info.root_group_id;
 
-    let result = service.list_entries(Some(&root_group_id));
+    let result = service.list_entries(&db_path_str, Some(&root_group_id));
 
     assert!(result.is_ok(), "Should successfully list entries by group");
     let entries = result.expect("entries");
 
     // Entries in root may be fewer than all entries (if subgroups exist)
-    let all_entries = service.list_entries(None).expect("all entries");
+    let all_entries = service
+        .list_entries(&db_path_str, None)
+        .expect("all entries");
     assert!(
         entries.len() <= all_entries.len(),
         "Group-filtered entries should not exceed total entries"
@@ -100,11 +97,11 @@ fn test_list_entries_by_group() {
 fn test_list_entries_database_not_open() {
     let service = KdbxService::new();
 
-    let result = service.list_entries(None);
+    let result = service.list_entries("nonexistent.kdbx", None);
 
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
-        "Should fail with DatabaseNotOpen when no database is open"
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when no database is open"
     );
 }
 
@@ -114,17 +111,17 @@ fn test_list_entries_database_not_open() {
 
 #[test]
 fn test_get_entry_success() {
-    let Some((service, _temp_dir)) = open_test_database() else {
+    let Some((service, _temp_dir, db_path_str)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
 
     // First get an entry ID from the list
-    let entries = service.list_entries(None).expect("entries");
+    let entries = service.list_entries(&db_path_str, None).expect("entries");
     assert!(!entries.is_empty(), "Need at least one entry for test");
     let entry_id = &entries[0].id;
 
-    let result = service.get_entry(entry_id);
+    let result = service.get_entry(&db_path_str, entry_id);
 
     assert!(result.is_ok(), "Should successfully get entry by ID");
     let entry = result.expect("entry");
@@ -137,12 +134,12 @@ fn test_get_entry_success() {
 
 #[test]
 fn test_get_entry_not_found() {
-    let Some((service, _temp_dir)) = open_test_database() else {
+    let Some((service, _temp_dir, db_path_str)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
 
-    let result = service.get_entry("nonexistent-entry-id");
+    let result = service.get_entry(&db_path_str, "nonexistent-entry-id");
 
     assert!(
         matches!(result, Err(AppError::EntryNotFound(_))),
@@ -154,11 +151,11 @@ fn test_get_entry_not_found() {
 fn test_get_entry_database_not_open() {
     let service = KdbxService::new();
 
-    let result = service.get_entry("some-id");
+    let result = service.get_entry("nonexistent.kdbx", "some-id");
 
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
-        "Should fail with DatabaseNotOpen when no database is open"
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when no database is open"
     );
 }
 
@@ -168,17 +165,17 @@ fn test_get_entry_database_not_open() {
 
 #[test]
 fn test_get_entry_password_success() {
-    let Some((service, _temp_dir)) = open_test_database() else {
+    let Some((service, _temp_dir, db_path_str)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
 
     // First get an entry ID from the list
-    let entries = service.list_entries(None).expect("entries");
+    let entries = service.list_entries(&db_path_str, None).expect("entries");
     assert!(!entries.is_empty(), "Need at least one entry for test");
     let entry_id = &entries[0].id;
 
-    let result = service.get_entry_password(entry_id);
+    let result = service.get_entry_password(&db_path_str, entry_id);
 
     assert!(result.is_ok(), "Should successfully get entry password");
     let password = result.expect("password");
@@ -191,12 +188,12 @@ fn test_get_entry_password_success() {
 
 #[test]
 fn test_get_entry_password_not_found() {
-    let Some((service, _temp_dir)) = open_test_database() else {
+    let Some((service, _temp_dir, db_path_str)) = open_test_database() else {
         eprintln!("Skipping test: fixture not found");
         return;
     };
 
-    let result = service.get_entry_password("nonexistent-entry-id");
+    let result = service.get_entry_password(&db_path_str, "nonexistent-entry-id");
 
     assert!(
         matches!(result, Err(AppError::EntryNotFound(_))),
@@ -208,11 +205,11 @@ fn test_get_entry_password_not_found() {
 fn test_get_entry_password_database_not_open() {
     let service = KdbxService::new();
 
-    let result = service.get_entry_password("some-id");
+    let result = service.get_entry_password("nonexistent.kdbx", "some-id");
 
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
-        "Should fail with DatabaseNotOpen when no database is open"
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when no database is open"
     );
 }
 
@@ -222,8 +219,8 @@ fn test_get_entry_password_database_not_open() {
 
 #[test]
 fn test_create_entry_success() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Account".to_string(), "Personal".to_string());
@@ -243,7 +240,7 @@ fn test_create_entry_success() {
     };
 
     let entry = service
-        .create_entry(&info.root_group_id, data)
+        .create_entry(&db_path_str, &info.root_group_id, data)
         .expect("create entry");
 
     assert_eq!(entry.title, "New Entry");
@@ -267,19 +264,19 @@ fn test_create_entry_success() {
     );
 
     let password = service
-        .get_entry_password(&entry.id)
+        .get_entry_password(&db_path_str, &entry.id)
         .expect("entry password");
     assert_eq!(password, "secret");
 
     let protected = service
-        .get_entry_protected_custom_field(&entry.id, "PIN")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "PIN")
         .expect("protected custom field");
     assert_eq!(protected.value, "1234");
 }
 
 #[test]
 fn test_create_entry_group_not_found() {
-    let (service, _dir) = create_test_database();
+    let (service, _dir, db_path_str) = create_test_database();
 
     let data = CreateEntryData {
         title: "New Entry".to_string(),
@@ -293,7 +290,7 @@ fn test_create_entry_group_not_found() {
         protected_custom_fields: None,
     };
 
-    let result = service.create_entry("missing-group", data);
+    let result = service.create_entry(&db_path_str, "missing-group", data);
 
     assert!(
         matches!(result, Err(AppError::GroupNotFound(_))),
@@ -303,14 +300,15 @@ fn test_create_entry_group_not_found() {
 
 #[test]
 fn test_get_entry_protected_custom_field_requires_protection() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Hint".to_string(), "Visible".to_string());
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Entry".to_string(),
@@ -326,7 +324,7 @@ fn test_get_entry_protected_custom_field_requires_protection() {
         )
         .expect("create entry");
 
-    let result = service.get_entry_protected_custom_field(&entry.id, "Hint");
+    let result = service.get_entry_protected_custom_field(&db_path_str, &entry.id, "Hint");
 
     assert!(
         matches!(result, Err(AppError::CustomFieldNotProtected(_))),
@@ -340,8 +338,8 @@ fn test_get_entry_protected_custom_field_requires_protection() {
 
 #[test]
 fn test_update_entry_success() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let data = CreateEntryData {
         title: "Original".to_string(),
@@ -356,7 +354,7 @@ fn test_update_entry_success() {
     };
 
     let entry = service
-        .create_entry(&info.root_group_id, data)
+        .create_entry(&db_path_str, &info.root_group_id, data)
         .expect("create entry");
     let original_modified = entry.modified_at.clone();
 
@@ -369,6 +367,7 @@ fn test_update_entry_success() {
 
     let updated = service
         .update_entry(
+            &db_path_str,
             &entry.id,
             UpdateEntryData {
                 title: Some("Updated".to_string()),
@@ -401,21 +400,22 @@ fn test_update_entry_success() {
     );
 
     let password = service
-        .get_entry_password(&entry.id)
+        .get_entry_password(&db_path_str, &entry.id)
         .expect("updated password");
     assert_eq!(password, "new-secret");
 
     let protected = service
-        .get_entry_protected_custom_field(&entry.id, "PIN")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "PIN")
         .expect("protected custom field");
     assert_eq!(protected.value, "5678");
 }
 
 #[test]
 fn test_update_entry_not_found() {
-    let (service, _dir) = create_test_database();
+    let (service, _dir, db_path_str) = create_test_database();
 
     let result = service.update_entry(
+        &db_path_str,
         "missing-entry",
         UpdateEntryData {
             title: Some("Updated".to_string()),
@@ -442,11 +442,12 @@ fn test_update_entry_not_found() {
 
 #[test]
 fn test_delete_entry_moves_to_recycle_bin() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Disposable".to_string(),
@@ -463,30 +464,36 @@ fn test_delete_entry_moves_to_recycle_bin() {
         .expect("create entry");
 
     let root_entries = service
-        .list_entries(Some(&info.root_group_id))
+        .list_entries(&db_path_str, Some(&info.root_group_id))
         .expect("root entries");
     assert!(
         root_entries.iter().any(|item| item.id == entry.id),
         "Entry should exist in root before delete"
     );
 
-    service.delete_entry(&entry.id).expect("delete entry");
+    service
+        .delete_entry(&db_path_str, &entry.id)
+        .expect("delete entry");
 
     let root_entries_after = service
-        .list_entries(Some(&info.root_group_id))
+        .list_entries(&db_path_str, Some(&info.root_group_id))
         .expect("root entries after");
     assert!(
         !root_entries_after.iter().any(|item| item.id == entry.id),
         "Entry should be removed from root after delete"
     );
 
-    let all_entries = service.list_entries(None).expect("all entries");
+    let all_entries = service
+        .list_entries(&db_path_str, None)
+        .expect("all entries");
     assert!(
         all_entries.iter().any(|item| item.id == entry.id),
         "Entry should remain in database after delete"
     );
 
-    let moved_entry = service.get_entry(&entry.id).expect("moved entry");
+    let moved_entry = service
+        .get_entry(&db_path_str, &entry.id)
+        .expect("moved entry");
     assert_ne!(
         moved_entry.group_id, info.root_group_id,
         "Deleted entry should move to a different group"
@@ -495,9 +502,9 @@ fn test_delete_entry_moves_to_recycle_bin() {
 
 #[test]
 fn test_delete_entry_not_found() {
-    let (service, _dir) = create_test_database();
+    let (service, _dir, db_path_str) = create_test_database();
 
-    let result = service.delete_entry("missing-entry");
+    let result = service.delete_entry(&db_path_str, "missing-entry");
 
     assert!(
         matches!(result, Err(AppError::EntryNotFound(_))),
@@ -511,8 +518,8 @@ fn test_delete_entry_not_found() {
 
 #[test]
 fn test_move_entry_success() {
-    let (service, _dir) = create_test_database();
-    let groups = service.list_groups().expect("groups");
+    let (service, _dir, db_path_str) = create_test_database();
+    let groups = service.list_groups(&db_path_str).expect("groups");
     let root_group = &groups[0];
     let target_group = root_group
         .children
@@ -521,6 +528,7 @@ fn test_move_entry_success() {
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &root_group.id,
             CreateEntryData {
                 title: "Movable".to_string(),
@@ -537,12 +545,12 @@ fn test_move_entry_success() {
         .expect("create entry");
 
     let moved = service
-        .move_entry(&entry.id, &target_group.id)
+        .move_entry(&db_path_str, &entry.id, &target_group.id)
         .expect("move entry");
     assert_eq!(moved.group_id, target_group.id);
 
     let root_entries = service
-        .list_entries(Some(&root_group.id))
+        .list_entries(&db_path_str, Some(&root_group.id))
         .expect("root entries");
     assert!(
         !root_entries.iter().any(|item| item.id == entry.id),
@@ -550,7 +558,7 @@ fn test_move_entry_success() {
     );
 
     let target_entries = service
-        .list_entries(Some(&target_group.id))
+        .list_entries(&db_path_str, Some(&target_group.id))
         .expect("target entries");
     assert!(
         target_entries.iter().any(|item| item.id == entry.id),
@@ -566,6 +574,7 @@ fn test_move_entry_success() {
 fn test_protected_custom_field_roundtrip_save_reopen() {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("roundtrip.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: false,
@@ -579,7 +588,7 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
     let service = KdbxService::new();
     service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpass"),
             None,
             "Roundtrip Test",
@@ -587,7 +596,7 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
         )
         .expect("Failed to create test database");
 
-    let info = service.get_info().expect("database info");
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     protected_custom_fields.insert(
@@ -597,6 +606,7 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Roundtrip Entry".to_string(),
@@ -615,19 +625,19 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
     let entry_id = entry.id.clone();
 
     // Save database
-    service.save().expect("save database");
+    service.save(&db_path_str).expect("save database");
 
     // Close database
-    let _ = service.close();
+    let _ = service.close(&db_path_str);
 
     // Reopen database
     service
-        .open(&db_path.to_string_lossy(), "testpass")
+        .open(&db_path_str, "testpass")
         .expect("reopen database");
 
     // Verify protected field persisted
     let protected = service
-        .get_entry_protected_custom_field(&entry_id, "SecretKey")
+        .get_entry_protected_custom_field(&db_path_str, &entry_id, "SecretKey")
         .expect("get protected field after reopen");
 
     assert_eq!(
@@ -638,14 +648,15 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
 
 #[test]
 fn test_protected_custom_field_empty_value() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     protected_custom_fields.insert("EmptySecret".to_string(), SecureString::from(""));
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Empty Protected Field".to_string(),
@@ -662,7 +673,7 @@ fn test_protected_custom_field_empty_value() {
         .expect("create entry");
 
     let protected = service
-        .get_entry_protected_custom_field(&entry.id, "EmptySecret")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "EmptySecret")
         .expect("get empty protected field");
 
     assert_eq!(
@@ -673,8 +684,8 @@ fn test_protected_custom_field_empty_value() {
 
 #[test]
 fn test_protected_custom_field_unicode_value() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     // Test with emojis, CJK characters, and other Unicode
@@ -685,6 +696,7 @@ fn test_protected_custom_field_unicode_value() {
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Unicode Protected Field".to_string(),
@@ -701,7 +713,7 @@ fn test_protected_custom_field_unicode_value() {
         .expect("create entry");
 
     let protected = service
-        .get_entry_protected_custom_field(&entry.id, "UnicodeSecret")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "UnicodeSecret")
         .expect("get unicode protected field");
 
     assert_eq!(
@@ -712,8 +724,8 @@ fn test_protected_custom_field_unicode_value() {
 
 #[test]
 fn test_protected_custom_field_special_characters() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     // Test with XML special chars and other special characters
@@ -724,6 +736,7 @@ fn test_protected_custom_field_special_characters() {
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Special Chars Protected Field".to_string(),
@@ -740,7 +753,7 @@ fn test_protected_custom_field_special_characters() {
         .expect("create entry");
 
     let protected = service
-        .get_entry_protected_custom_field(&entry.id, "SpecialSecret")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "SpecialSecret")
         .expect("get special chars protected field");
 
     assert_eq!(
@@ -751,12 +764,13 @@ fn test_protected_custom_field_special_characters() {
 
 #[test]
 fn test_update_entry_add_protected_custom_field() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     // Create entry without protected fields
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Entry Without Protected".to_string(),
@@ -778,6 +792,7 @@ fn test_update_entry_add_protected_custom_field() {
 
     let updated = service
         .update_entry(
+            &db_path_str,
             &entry.id,
             UpdateEntryData {
                 title: None,
@@ -802,7 +817,7 @@ fn test_update_entry_add_protected_custom_field() {
     );
 
     let protected = service
-        .get_entry_protected_custom_field(&entry.id, "NewSecret")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "NewSecret")
         .expect("get new protected field");
 
     assert_eq!(
@@ -813,14 +828,15 @@ fn test_update_entry_add_protected_custom_field() {
 
 #[test]
 fn test_update_entry_modify_protected_custom_field() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     protected_custom_fields.insert("ModifyMe".to_string(), SecureString::from("original-value"));
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Entry To Modify".to_string(),
@@ -838,7 +854,7 @@ fn test_update_entry_modify_protected_custom_field() {
 
     // Verify original value
     let original = service
-        .get_entry_protected_custom_field(&entry.id, "ModifyMe")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "ModifyMe")
         .expect("get original protected field");
     assert_eq!(original.value, "original-value");
 
@@ -848,6 +864,7 @@ fn test_update_entry_modify_protected_custom_field() {
 
     service
         .update_entry(
+            &db_path_str,
             &entry.id,
             UpdateEntryData {
                 title: None,
@@ -864,7 +881,7 @@ fn test_update_entry_modify_protected_custom_field() {
         .expect("update entry");
 
     let updated = service
-        .get_entry_protected_custom_field(&entry.id, "ModifyMe")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "ModifyMe")
         .expect("get updated protected field");
 
     assert_eq!(
@@ -875,8 +892,8 @@ fn test_update_entry_modify_protected_custom_field() {
 
 #[test]
 fn test_multiple_protected_custom_fields() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     protected_custom_fields.insert("APIKey".to_string(), SecureString::from("api-key-value"));
@@ -888,6 +905,7 @@ fn test_multiple_protected_custom_fields() {
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Multiple Protected Fields".to_string(),
@@ -905,17 +923,17 @@ fn test_multiple_protected_custom_fields() {
 
     // Verify all three fields are retrievable independently
     let api_key = service
-        .get_entry_protected_custom_field(&entry.id, "APIKey")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "APIKey")
         .expect("get APIKey");
     assert_eq!(api_key.value, "api-key-value");
 
     let secret_token = service
-        .get_entry_protected_custom_field(&entry.id, "SecretToken")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "SecretToken")
         .expect("get SecretToken");
     assert_eq!(secret_token.value, "token-value");
 
     let private_key = service
-        .get_entry_protected_custom_field(&entry.id, "PrivateKey")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "PrivateKey")
         .expect("get PrivateKey");
     assert_eq!(private_key.value, "private-key-value");
 
@@ -934,8 +952,8 @@ fn test_multiple_protected_custom_fields() {
 
 #[test]
 fn test_mixed_protected_and_unprotected_fields() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut custom_fields = BTreeMap::new();
     custom_fields.insert("Category".to_string(), "Work".to_string());
@@ -947,6 +965,7 @@ fn test_mixed_protected_and_unprotected_fields() {
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Mixed Fields Entry".to_string(),
@@ -986,12 +1005,12 @@ fn test_mixed_protected_and_unprotected_fields() {
 
     // Verify protected fields are retrievable via lazy decryption
     let api_key = service
-        .get_entry_protected_custom_field(&entry.id, "APIKey")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "APIKey")
         .expect("get APIKey");
     assert_eq!(api_key.value, "secret-api-key");
 
     let pin = service
-        .get_entry_protected_custom_field(&entry.id, "PIN")
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "PIN")
         .expect("get PIN");
     assert_eq!(pin.value, "1234");
 
@@ -1013,9 +1032,10 @@ fn test_mixed_protected_and_unprotected_fields() {
 
 #[test]
 fn test_get_protected_field_entry_not_found() {
-    let (service, _dir) = create_test_database();
+    let (service, _dir, db_path_str) = create_test_database();
 
-    let result = service.get_entry_protected_custom_field("nonexistent-entry-id", "SomeField");
+    let result =
+        service.get_entry_protected_custom_field(&db_path_str, "nonexistent-entry-id", "SomeField");
 
     assert!(
         matches!(result, Err(AppError::EntryNotFound(_))),
@@ -1025,14 +1045,15 @@ fn test_get_protected_field_entry_not_found() {
 
 #[test]
 fn test_get_protected_field_field_not_found() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
     protected_custom_fields.insert("ExistingField".to_string(), SecureString::from("value"));
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Entry".to_string(),
@@ -1048,7 +1069,8 @@ fn test_get_protected_field_field_not_found() {
         )
         .expect("create entry");
 
-    let result = service.get_entry_protected_custom_field(&entry.id, "NonexistentField");
+    let result =
+        service.get_entry_protected_custom_field(&db_path_str, &entry.id, "NonexistentField");
 
     assert!(
         matches!(result, Err(AppError::CustomFieldNotFound(_))),
@@ -1059,12 +1081,13 @@ fn test_get_protected_field_field_not_found() {
 #[test]
 fn test_get_protected_field_database_not_open() {
     let service = KdbxService::new();
+    let db_path_str = "nonexistent.kdbx";
 
-    let result = service.get_entry_protected_custom_field("some-id", "SomeField");
+    let result = service.get_entry_protected_custom_field(db_path_str, "some-id", "SomeField");
 
     assert!(
-        matches!(result, Err(AppError::DatabaseNotOpen)),
-        "Should fail with DatabaseNotOpen when no database is open"
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when database is not open"
     );
 }
 
@@ -1076,6 +1099,7 @@ fn test_get_protected_field_database_not_open() {
 fn test_password_roundtrip_save_reopen() {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("password-roundtrip.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: false,
@@ -1088,7 +1112,7 @@ fn test_password_roundtrip_save_reopen() {
     let service = KdbxService::new();
     service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpass"),
             None,
             "Password Roundtrip",
@@ -1096,10 +1120,11 @@ fn test_password_roundtrip_save_reopen() {
         )
         .expect("Failed to create test database");
 
-    let info = service.get_info().expect("database info");
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Password Test".to_string(),
@@ -1118,16 +1143,16 @@ fn test_password_roundtrip_save_reopen() {
     let entry_id = entry.id.clone();
 
     // Save and close
-    service.save().expect("save database");
-    let _ = service.close();
+    service.save(&db_path_str).expect("save database");
+    let _ = service.close(&db_path_str);
 
     // Reopen and verify password
     service
-        .open(&db_path.to_string_lossy(), "testpass")
+        .open(&db_path_str, "testpass")
         .expect("reopen database");
 
     let password = service
-        .get_entry_password(&entry_id)
+        .get_entry_password(&db_path_str, &entry_id)
         .expect("get password after reopen");
 
     assert_eq!(
@@ -1138,13 +1163,14 @@ fn test_password_roundtrip_save_reopen() {
 
 #[test]
 fn test_password_unicode() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let unicode_password = "密码🔐パスワード🗝️Contraseña";
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Unicode Password".to_string(),
@@ -1161,7 +1187,7 @@ fn test_password_unicode() {
         .expect("create entry");
 
     let retrieved_password = service
-        .get_entry_password(&entry.id)
+        .get_entry_password(&db_path_str, &entry.id)
         .expect("get unicode password");
 
     assert_eq!(
@@ -1172,13 +1198,14 @@ fn test_password_unicode() {
 
 #[test]
 fn test_password_special_characters() {
-    let (service, _dir) = create_test_database();
-    let info = service.get_info().expect("database info");
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
 
     let special_password = "<>&\"'{}[]|\\`~!@#$%^&*()_+-=";
 
     let entry = service
         .create_entry(
+            &db_path_str,
             &info.root_group_id,
             CreateEntryData {
                 title: "Special Chars Password".to_string(),
@@ -1195,7 +1222,7 @@ fn test_password_special_characters() {
         .expect("create entry");
 
     let retrieved_password = service
-        .get_entry_password(&entry.id)
+        .get_entry_password(&db_path_str, &entry.id)
         .expect("get special chars password");
 
     assert_eq!(

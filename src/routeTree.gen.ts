@@ -18,6 +18,7 @@ import { Route as authIndexRouteImport } from './routes/(auth)/index'
 import { Route as authUnlockRouteImport } from './routes/(auth)/unlock'
 import { Route as authNewRouteImport } from './routes/(auth)/new'
 import { Route as authImportFileRouteImport } from './routes/(auth)/import-file'
+import { Route as DashboardIndexDbIdRouteImport } from './routes/dashboard/index.$dbId'
 import { Route as DashboardEntryNewRouteImport } from './routes/dashboard/entry/new'
 import { Route as DashboardEntryEditRouteImport } from './routes/dashboard/entry/edit'
 import { Route as DashboardEntryIdRouteImport } from './routes/dashboard/entry/$id'
@@ -66,6 +67,11 @@ const authImportFileRoute = authImportFileRouteImport.update({
   path: '/import-file',
   getParentRoute: () => authRouteRoute,
 } as any)
+const DashboardIndexDbIdRoute = DashboardIndexDbIdRouteImport.update({
+  id: '/index/$dbId',
+  path: '/index/$dbId',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 const DashboardEntryNewRoute = DashboardEntryNewRouteImport.update({
   id: '/entry/new',
   path: '/entry/new',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/entry/$id': typeof DashboardEntryIdRoute
   '/dashboard/entry/edit': typeof DashboardEntryEditRoute
   '/dashboard/entry/new': typeof DashboardEntryNewRoute
+  '/dashboard/index/$dbId': typeof DashboardIndexDbIdRoute
 }
 export interface FileRoutesByTo {
   '/password-generator': typeof PasswordGeneratorRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/dashboard/entry/$id': typeof DashboardEntryIdRoute
   '/dashboard/entry/edit': typeof DashboardEntryEditRoute
   '/dashboard/entry/new': typeof DashboardEntryNewRoute
+  '/dashboard/index/$dbId': typeof DashboardIndexDbIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/dashboard/entry/$id': typeof DashboardEntryIdRoute
   '/dashboard/entry/edit': typeof DashboardEntryEditRoute
   '/dashboard/entry/new': typeof DashboardEntryNewRoute
+  '/dashboard/index/$dbId': typeof DashboardIndexDbIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/dashboard/entry/$id'
     | '/dashboard/entry/edit'
     | '/dashboard/entry/new'
+    | '/dashboard/index/$dbId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/password-generator'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/dashboard/entry/$id'
     | '/dashboard/entry/edit'
     | '/dashboard/entry/new'
+    | '/dashboard/index/$dbId'
   id:
     | '__root__'
     | '/(auth)'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/dashboard/entry/$id'
     | '/dashboard/entry/edit'
     | '/dashboard/entry/new'
+    | '/dashboard/index/$dbId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -236,6 +248,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authImportFileRouteImport
       parentRoute: typeof authRouteRoute
     }
+    '/dashboard/index/$dbId': {
+      id: '/dashboard/index/$dbId'
+      path: '/index/$dbId'
+      fullPath: '/dashboard/index/$dbId'
+      preLoaderRoute: typeof DashboardIndexDbIdRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/entry/new': {
       id: '/dashboard/entry/new'
       path: '/entry/new'
@@ -283,6 +302,7 @@ interface DashboardRouteRouteChildren {
   DashboardEntryIdRoute: typeof DashboardEntryIdRoute
   DashboardEntryEditRoute: typeof DashboardEntryEditRoute
   DashboardEntryNewRoute: typeof DashboardEntryNewRoute
+  DashboardIndexDbIdRoute: typeof DashboardIndexDbIdRoute
 }
 
 const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
@@ -290,6 +310,7 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardEntryIdRoute: DashboardEntryIdRoute,
   DashboardEntryEditRoute: DashboardEntryEditRoute,
   DashboardEntryNewRoute: DashboardEntryNewRoute,
+  DashboardIndexDbIdRoute: DashboardIndexDbIdRoute,
 }
 
 const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(

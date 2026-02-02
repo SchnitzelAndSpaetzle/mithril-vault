@@ -8,8 +8,11 @@ pub enum AppError {
     #[error("Database not open")]
     DatabaseNotOpen,
 
-    #[error("Database already open")]
-    DatabaseAlreadyOpen,
+    #[error("Database already open: {0}")]
+    DatabaseAlreadyOpen(String),
+
+    #[error("Database not found: {0}")]
+    DatabaseNotFound(String),
 
     #[error("Invalid password")]
     InvalidPassword,

@@ -14,10 +14,11 @@ use support::fixture_path;
 fn test_create_new_database() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("new-database.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     let info = service
-        .create(&db_path.to_string_lossy(), "testpass123", "My New Vault")
+        .create(&db_path_str, "testpass123", "My New Vault")
         .expect("Failed to create database");
 
     assert_eq!(info.name, "My New Vault");
@@ -26,30 +27,31 @@ fn test_create_new_database() {
 
     assert!(db_path.exists(), "Database file should exist");
 
-    service.close().expect("Failed to close");
+    service.close(&db_path_str).expect("Failed to close");
 
     let reopened_info = service
-        .open(&db_path.to_string_lossy(), "testpass123")
+        .open(&db_path_str, "testpass123")
         .expect("Failed to reopen database");
 
     assert_eq!(reopened_info.name, "My New Vault");
 }
 
 #[test]
-fn test_create_fails_when_database_already_open() {
+fn test_create_fails_when_same_database_already_open() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path1 = dir.path().join("db1.kdbx");
-    let db_path2 = dir.path().join("db2.kdbx");
+    let db_path1_str = db_path1.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     service
-        .create(&db_path1.to_string_lossy(), "pass1", "DB1")
+        .create(&db_path1_str, "pass1", "DB1")
         .expect("Failed to create first database");
 
-    let result = service.create(&db_path2.to_string_lossy(), "pass2", "DB2");
+    // Try to create/open the same database again
+    let result = service.create(&db_path1_str, "pass1", "DB1 Again");
     assert!(
-        matches!(result, Err(AppError::DatabaseAlreadyOpen)),
-        "Should not allow creating when database is already open"
+        matches!(result, Err(AppError::DatabaseAlreadyOpen(_))),
+        "Should not allow creating when same database is already open"
     );
 }
 
@@ -57,11 +59,12 @@ fn test_create_fails_when_database_already_open() {
 fn test_create_database_with_default_options() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("default-options.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     let info = service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpassword123"),
             None,
             "Default Options DB",
@@ -73,9 +76,9 @@ fn test_create_database_with_default_options() {
     assert_eq!(info.version, "KDBX 4.0");
     assert!(!info.root_group_id.is_empty());
 
-    service.close().expect("Failed to close");
+    service.close(&db_path_str).expect("Failed to close");
     service
-        .open(&db_path.to_string_lossy(), "testpassword123")
+        .open(&db_path_str, "testpassword123")
         .expect("Failed to reopen database");
 }
 
@@ -83,6 +86,7 @@ fn test_create_database_with_default_options() {
 fn test_create_database_with_keyfile() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("keyfile-create.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
     let keyfile_path = fixture_path("test-keyfile.keyx");
 
     if !keyfile_path.exists() {
@@ -93,7 +97,7 @@ fn test_create_database_with_keyfile() {
     let service = KdbxService::new();
     let info = service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpassword"),
             Some(&keyfile_path.to_string_lossy()),
             "Keyfile DB",
@@ -104,9 +108,9 @@ fn test_create_database_with_keyfile() {
     assert_eq!(info.name, "Keyfile DB");
     assert_eq!(info.version, "KDBX 4.0");
 
-    service.close().expect("Failed to close");
+    service.close(&db_path_str).expect("Failed to close");
 
-    let result = service.open(&db_path.to_string_lossy(), "testpassword");
+    let result = service.open(&db_path_str, "testpassword");
     assert!(
         matches!(result, Err(AppError::InvalidPassword)),
         "Should require keyfile to open: got {result:?}"
@@ -114,7 +118,7 @@ fn test_create_database_with_keyfile() {
 
     service
         .open_with_keyfile(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             "testpassword",
             &keyfile_path.to_string_lossy(),
         )
@@ -125,6 +129,7 @@ fn test_create_database_with_keyfile() {
 fn test_create_database_with_keyfile_only() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("keyfile-only-create.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
     let keyfile_path = fixture_path("test-keyfile.keyx");
 
     if !keyfile_path.exists() {
@@ -135,7 +140,7 @@ fn test_create_database_with_keyfile_only() {
     let service = KdbxService::new();
     let info = service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             None,
             Some(&keyfile_path.to_string_lossy()),
             "Keyfile Only DB",
@@ -145,10 +150,10 @@ fn test_create_database_with_keyfile_only() {
 
     assert_eq!(info.name, "Keyfile Only DB");
 
-    service.close().expect("Failed to close");
+    service.close(&db_path_str).expect("Failed to close");
 
     service
-        .open_with_keyfile_only(&db_path.to_string_lossy(), &keyfile_path.to_string_lossy())
+        .open_with_keyfile_only(&db_path_str, &keyfile_path.to_string_lossy())
         .expect("Should open with keyfile only");
 }
 
@@ -176,6 +181,7 @@ fn test_create_database_fails_without_credentials() {
 fn test_create_database_with_default_groups() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("default-groups.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: true,
@@ -185,7 +191,7 @@ fn test_create_database_with_default_groups() {
     let service = KdbxService::new();
     service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpassword"),
             None,
             "Default Groups DB",
@@ -193,7 +199,9 @@ fn test_create_database_with_default_groups() {
         )
         .expect("Failed to create database with default groups");
 
-    let groups = service.list_groups().expect("Failed to list groups");
+    let groups = service
+        .list_groups(&db_path_str)
+        .expect("Failed to list groups");
 
     assert!(!groups.is_empty(), "Should have at least root group");
 
@@ -219,6 +227,7 @@ fn test_create_database_with_default_groups() {
 fn test_create_database_without_default_groups() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("no-default-groups.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         create_default_groups: false,
@@ -228,7 +237,7 @@ fn test_create_database_without_default_groups() {
     let service = KdbxService::new();
     service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpassword"),
             None,
             "No Default Groups DB",
@@ -236,7 +245,9 @@ fn test_create_database_without_default_groups() {
         )
         .expect("Failed to create database");
 
-    let groups = service.list_groups().expect("Failed to list groups");
+    let groups = service
+        .list_groups(&db_path_str)
+        .expect("Failed to list groups");
     let root = &groups[0];
 
     assert!(
@@ -249,6 +260,7 @@ fn test_create_database_without_default_groups() {
 fn test_create_database_with_description() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("with-description.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         description: Some("This is my test database description".to_string()),
@@ -258,7 +270,7 @@ fn test_create_database_with_description() {
     let service = KdbxService::new();
     let info = service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpassword"),
             None,
             "Description DB",
@@ -268,9 +280,9 @@ fn test_create_database_with_description() {
 
     assert_eq!(info.name, "Description DB");
 
-    service.close().expect("Failed to close");
+    service.close(&db_path_str).expect("Failed to close");
     service
-        .open(&db_path.to_string_lossy(), "testpassword")
+        .open(&db_path_str, "testpassword")
         .expect("Failed to reopen");
 }
 
@@ -278,6 +290,7 @@ fn test_create_database_with_description() {
 fn test_create_database_with_custom_kdf_settings() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("custom-kdf.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let options = DatabaseCreationOptions {
         kdf_memory: Some(16 * 1024 * 1024),
@@ -289,7 +302,7 @@ fn test_create_database_with_custom_kdf_settings() {
     let service = KdbxService::new();
     let info = service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpassword"),
             None,
             "Custom KDF DB",
@@ -299,9 +312,9 @@ fn test_create_database_with_custom_kdf_settings() {
 
     assert_eq!(info.version, "KDBX 4.0");
 
-    service.close().expect("Failed to close");
+    service.close(&db_path_str).expect("Failed to close");
     service
-        .open(&db_path.to_string_lossy(), "testpassword")
+        .open(&db_path_str, "testpassword")
         .expect("Failed to reopen database with custom KDF");
 }
 
@@ -309,6 +322,7 @@ fn test_create_database_with_custom_kdf_settings() {
 fn test_create_database_with_all_options() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("all-options.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
     let keyfile_path = fixture_path("test-keyfile.keyx");
 
     if !keyfile_path.exists() {
@@ -327,7 +341,7 @@ fn test_create_database_with_all_options() {
     let service = KdbxService::new();
     let info = service
         .create_database(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             Some("testpassword"),
             Some(&keyfile_path.to_string_lossy()),
             "Full Featured DB",
@@ -338,14 +352,16 @@ fn test_create_database_with_all_options() {
     assert_eq!(info.name, "Full Featured DB");
     assert_eq!(info.version, "KDBX 4.0");
 
-    let groups = service.list_groups().expect("Failed to list groups");
+    let groups = service
+        .list_groups(&db_path_str)
+        .expect("Failed to list groups");
     let root = &groups[0];
     assert_eq!(root.children.len(), 4, "Should have 4 default groups");
 
-    service.close().expect("Failed to close");
+    service.close(&db_path_str).expect("Failed to close");
     service
         .open_with_keyfile(
-            &db_path.to_string_lossy(),
+            &db_path_str,
             "testpassword",
             &keyfile_path.to_string_lossy(),
         )
@@ -356,18 +372,19 @@ fn test_create_database_with_all_options() {
 fn test_create_database_legacy_api_still_works() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("legacy-api.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     let info = service
-        .create(&db_path.to_string_lossy(), "testpassword", "Legacy DB")
+        .create(&db_path_str, "testpassword", "Legacy DB")
         .expect("Legacy create() should still work");
 
     assert_eq!(info.name, "Legacy DB");
     assert_eq!(info.version, "KDBX 4.0");
 
-    service.close().expect("Failed to close");
+    service.close(&db_path_str).expect("Failed to close");
     service
-        .open(&db_path.to_string_lossy(), "testpassword")
+        .open(&db_path_str, "testpassword")
         .expect("Legacy created DB should reopen");
 }
 

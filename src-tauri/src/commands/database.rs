@@ -20,10 +20,14 @@ pub async fn open_database(
     state.open(&path, &password)
 }
 
-/// Closes the currently open database.
+/// Closes a specific open database.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
-pub async fn close_database(state: State<'_, Arc<KdbxService>>) -> Result<(), AppError> {
-    state.close()
+pub async fn close_database(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.close(&db_id)
 }
 
 /// Create a new KDBX4 database
@@ -52,10 +56,14 @@ pub async fn create_database(
     )
 }
 
-/// Saves the open database.
+/// Saves a specific open database.
+/// The `db_id` is the path to the database file.
 #[tauri::command]
-pub async fn save_database(state: State<'_, Arc<KdbxService>>) -> Result<(), AppError> {
-    state.save()
+pub async fn save_database(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.save(&db_id)
 }
 
 /// Opens a database with password and keyfile.
@@ -84,7 +92,8 @@ pub async fn open_database_with_keyfile_only(
 /// Note: This is for session locking (UI lock), not file locking.
 /// File locking is automatic when opening/closing databases.
 #[tauri::command]
-pub async fn lock_database() -> Result<(), AppError> {
+pub async fn lock_database(db_id: String) -> Result<(), AppError> {
+    let _ = db_id;
     // TODO: Implement session locking (clear decrypted data, keep file lock)
     Err(AppError::NotImplemented(
         "lock_database (session lock)".into(),
@@ -95,8 +104,8 @@ pub async fn lock_database() -> Result<(), AppError> {
 ///
 /// Note: This is for session unlocking (UI unlock), not file unlocking.
 #[tauri::command]
-pub async fn unlock_database(password: String) -> Result<(), AppError> {
-    let _ = password;
+pub async fn unlock_database(db_id: String, password: String) -> Result<(), AppError> {
+    let _ = (db_id, password);
     // TODO: Implement session unlocking (re-decrypt with password)
     Err(AppError::NotImplemented(
         "unlock_database (session unlock)".into(),
@@ -136,23 +145,35 @@ pub async fn inspect_database(
     state.inspect(&path)
 }
 
-/// Returns the cryptographic configuration of the currently open database.
+/// Returns the cryptographic configuration of a specific open database.
 /// Requires the database to be open (authenticated).
 #[tauri::command]
 pub async fn get_database_config(
+    db_id: String,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseConfigDto, AppError> {
-    state.get_config()
+    state.get_config(&db_id)
 }
 
-/// Gets info about the currently open database, or returns None if no database is open.
+/// Gets info about a specific open database.
+/// The `db_id` is the path to the database file.
+/// Returns None if the database is not open.
 #[tauri::command]
 pub async fn get_database_info(
+    db_id: String,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<Option<DatabaseInfo>, AppError> {
-    match state.get_info() {
+    match state.get_info(&db_id) {
         Ok(info) => Ok(Some(info)),
-        Err(AppError::DatabaseNotOpen) => Ok(None),
+        Err(AppError::DatabaseNotFound(_)) => Ok(None),
         Err(e) => Err(e),
     }
+}
+
+/// Lists all currently open databases.
+#[tauri::command]
+pub async fn list_open_databases(
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<Vec<DatabaseInfo>, AppError> {
+    state.list_open_databases()
 }

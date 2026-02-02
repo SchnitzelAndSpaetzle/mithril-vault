@@ -8,9 +8,9 @@ export const Route = createFileRoute("/dashboard")({
 
 function RouteComponent() {
   return (
-    <SidebarProvider>
+    <SidebarProvider className="h-full min-h-0">
       <AppSidebar />
-      <SidebarInset className="flex flex-col h-screen overflow-hidden">
+      <SidebarInset className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Outlet />
       </SidebarInset>
     </SidebarProvider>

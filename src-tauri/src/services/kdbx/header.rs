@@ -36,11 +36,14 @@ impl KdbxService {
         }
     }
 
-    /// Returns the cryptographic configuration of the currently open database.
+    /// Returns the cryptographic configuration of a specific open database.
     /// Requires the database to be open (authenticated).
-    pub fn get_config(&self) -> Result<DatabaseConfigDto, AppError> {
-        let db_lock = self.database.lock().map_err(|_| AppError::Lock)?;
-        let open_db = db_lock.as_ref().ok_or(AppError::DatabaseNotOpen)?;
+    pub fn get_config(&self, db_id: &str) -> Result<DatabaseConfigDto, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let config = &open_db.db.config;
 
