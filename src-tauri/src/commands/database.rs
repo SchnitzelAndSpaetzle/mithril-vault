@@ -177,3 +177,15 @@ pub async fn list_open_databases(
 ) -> Result<Vec<DatabaseInfo>, AppError> {
     state.list_open_databases()
 }
+
+/// Generates a new `KeePass` 2.x compatible keyfile (.keyx format).
+///
+/// The keyfile contains 32 bytes of cryptographically random data
+/// in an XML format compatible with `KeePass` 2.x and other implementations.
+///
+/// # Parameters
+/// - `output_path`: Path where the keyfile will be saved
+#[tauri::command]
+pub async fn generate_keyfile(output_path: String) -> Result<(), AppError> {
+    crate::services::kdbx::keyfile::generate_keyfile(&output_path)
+}

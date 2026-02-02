@@ -1,9 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { CreateDatabaseView } from "@/views/CreateDatabaseView";
 
 export const Route = createFileRoute("/(auth)/new")({
-  component: RouteComponent,
+  component: CreateDatabaseView,
 });
-
-function RouteComponent() {
-  return <div>Hello new-db!</div>;
-}

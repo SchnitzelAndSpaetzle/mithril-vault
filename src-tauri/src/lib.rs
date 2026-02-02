@@ -10,13 +10,14 @@ use crate::dto::error::AppError;
 use commands::{
     add_recent_database, calculate_password_strength, clear_recent_databases, clear_session_key,
     close_database, create_database, create_entry, create_group, delete_entry, delete_group,
-    force_unlock_database, generate_passphrase, generate_password, get_database_config,
-    get_database_info, get_entry, get_entry_password, get_entry_protected_custom_field, get_group,
-    get_keyfile_for_database, get_lock_status, get_settings, has_session_key, inspect_database,
-    list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
-    open_database, open_database_with_keyfile, open_database_with_keyfile_only,
-    remove_recent_database, rename_group, save_database, store_session_key, unlock_database,
-    update_entry, update_group, update_settings,
+    force_unlock_database, generate_keyfile, generate_passphrase, generate_password,
+    get_database_config, get_database_info, get_entry, get_entry_password,
+    get_entry_protected_custom_field, get_group, get_keyfile_for_database, get_lock_status,
+    get_settings, has_session_key, inspect_database, list_entries, list_groups,
+    list_open_databases, lock_database, move_entry, move_group, open_database,
+    open_database_with_keyfile, open_database_with_keyfile_only, remove_recent_database,
+    rename_group, save_database, store_session_key, unlock_database, update_entry, update_group,
+    update_settings,
 };
 use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
@@ -45,6 +46,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             get_database_config,
             get_database_info,
             list_open_databases,
+            generate_keyfile,
             list_entries,
             get_entry,
             get_entry_password,

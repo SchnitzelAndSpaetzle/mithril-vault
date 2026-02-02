@@ -3,6 +3,7 @@ pub mod entries;
 pub mod groups;
 pub mod header;
 pub mod key;
+pub mod keyfile;
 pub mod mapping;
 pub mod open;
 pub mod save;
