@@ -105,27 +105,27 @@ fn create_keyfile_file(path: &Path, output_path: &str) -> Result<File, AppError>
     {
         use std::os::unix::fs::OpenOptionsExt;
 
-        return OpenOptions::new()
+        OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .mode(0o600)
             .open(path)
-            .map_err(|e| map_create_error(e, output_path));
+            .map_err(|e| map_create_error(&e, output_path))
     }
 
     #[cfg(not(unix))]
     {
-        return OpenOptions::new()
+        OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .open(path)
-            .map_err(|e| map_create_error(e, output_path));
+            .map_err(|e| map_create_error(&e, output_path))
     }
 }
 
-fn map_create_error(error: std::io::Error, output_path: &str) -> AppError {
+fn map_create_error(error: &std::io::Error, output_path: &str) -> AppError {
     if error.kind() == std::io::ErrorKind::PermissionDenied {
         AppError::InvalidPath(format!("Permission denied: {output_path}"))
     } else {
@@ -144,7 +144,7 @@ fn set_keyfile_permissions(path: &Path, output_path: &str) -> Result<(), AppErro
                 "Failed to set keyfile permissions for {output_path}: {e}"
             ))
         })?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(unix))]
@@ -158,7 +158,7 @@ fn set_keyfile_permissions(path: &Path, output_path: &str) -> Result<(), AppErro
                 "Failed to set keyfile permissions for {output_path}: {e}"
             ))
         })?;
-        return Ok(());
+        Ok(())
     }
 }
 
