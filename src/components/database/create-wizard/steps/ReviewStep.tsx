@@ -76,7 +76,7 @@ export function ReviewStep({ control, disabled }: ReviewStepProps) {
         <ReviewItem
           icon={<FileText className="size-4" />}
           label="Database Name"
-          value={name || "(empty)"}
+          value={name || "No database name provided"}
         />
 
         {description && (

@@ -23,6 +23,7 @@ const STRENGTH_COLORS = [
   "bg-lime-500",
   "bg-green-500",
 ];
+const STRENGTH_BARS = [0, 1, 2, 3];
 
 function usePasswordStrength(password: string): ZxcvbnResult | null {
   const deferredPassword = useDeferredValue(password);
@@ -81,7 +82,7 @@ export function PasswordStrengthIndicator({
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center gap-2">
         <div className="flex flex-1 gap-1">
-          {[0, 1, 2, 3].map((index) => (
+          {STRENGTH_BARS.map((index) => (
             <div
               key={index}
               className={cn(
