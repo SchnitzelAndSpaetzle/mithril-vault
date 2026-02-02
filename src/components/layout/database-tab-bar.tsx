@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Plus, X } from "lucide-react";
 
@@ -134,12 +134,17 @@ export function DatabaseTabBar() {
 
           if (tab.state === "open" && tabDbId) {
             return (
-              <Link
+              <button
                 key={tab.id}
-                to="/dashboard/index/$dbId"
-                params={{ dbId: tabDbId }}
+                type="button"
                 className={tabClasses}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  void navigate({
+                    to: "/dashboard/index/$dbId",
+                    params: { dbId: tabDbId as string },
+                  });
+                }}
               >
                 <span className="max-w-36 truncate">{tabLabel}</span>
                 <span className="text-xs text-muted-foreground">
@@ -165,7 +170,7 @@ export function DatabaseTabBar() {
                 >
                   <X className="size-3" />
                 </span>
-              </Link>
+              </button>
             );
           }
 

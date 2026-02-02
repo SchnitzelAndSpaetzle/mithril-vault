@@ -1,7 +1,9 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
-import type { CSSProperties } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { type CSSProperties, useEffect } from "react";
 import App from "@/App.tsx";
 import { DatabaseTabBar } from "@/components/layout/database-tab-bar";
+import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 
 export const Route = createRootRoute({
@@ -10,9 +12,15 @@ export const Route = createRootRoute({
 
 function RootRouteComponent() {
   const hasMultipleTabs = useDatabaseTabs((state) => state.tabs.length > 1);
+  const { tab, isUnlocking } = useActiveDatabase();
   const style = {
     "--app-top-offset": hasMultipleTabs ? "48px" : "0px",
   } as CSSProperties;
+
+  useEffect(() => {
+    const title = formatWindowTitle(tab, isUnlocking);
+    void getCurrentWindow().setTitle(title);
+  }, [tab, isUnlocking]);
 
   return (
     <App>
@@ -25,4 +33,35 @@ function RootRouteComponent() {
       {/*<TanStackRouterDevtools />*/}
     </App>
   );
+}
+
+function formatWindowTitle(
+  tab: ReturnType<typeof useActiveDatabase>["tab"],
+  isUnlocking: boolean
+): string {
+  const appTitle = "MithrilVault";
+
+  if (!tab) {
+    return appTitle;
+  }
+
+  const dbLabel = tab.info?.name ?? getFilename(tab.path);
+  if (!dbLabel) {
+    return appTitle;
+  }
+
+  const isLocked =
+    isUnlocking || tab.state === "unlocking" || tab.info?.isLocked;
+  const status = isLocked ? "locked" : "unlocked";
+
+  return `${dbLabel} [${status}] - ${appTitle}`;
+}
+
+function getFilename(path?: string): string | null {
+  if (!path) {
+    return null;
+  }
+
+  const parts = path.split(/[/\\]/);
+  return parts[parts.length - 1] || path;
 }
