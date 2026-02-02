@@ -132,18 +132,21 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_keyfile_creates_valid_xml() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    fn test_generate_keyfile_creates_valid_xml() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
         let keyfile_path = temp_dir.path().join("test.keyx");
-        let path_str = keyfile_path.to_str().expect("Invalid path");
+        let path_str = keyfile_path
+            .to_str()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
 
-        generate_keyfile(path_str).expect("Failed to generate keyfile");
+        generate_keyfile(path_str)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
 
         // Verify file exists
         assert!(keyfile_path.exists());
 
         // Read and verify content
-        let content = fs::read_to_string(&keyfile_path).expect("Failed to read keyfile");
+        let content = fs::read_to_string(&keyfile_path)?;
 
         // Check XML structure
         assert!(content.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
@@ -152,54 +155,81 @@ mod tests {
         assert!(content.contains("<Key>"));
         assert!(content.contains("<Data Hash="));
         assert!(content.contains("</KeyFile>"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_generate_keyfile_hash_matches_first_bytes() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    fn test_generate_keyfile_hash_matches_first_bytes() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
         let keyfile_path = temp_dir.path().join("test.keyx");
-        let path_str = keyfile_path.to_str().expect("Invalid path");
+        let path_str = keyfile_path
+            .to_str()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
 
-        generate_keyfile(path_str).expect("Failed to generate keyfile");
+        generate_keyfile(path_str)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
 
-        let content = fs::read_to_string(&keyfile_path).expect("Failed to read keyfile");
+        let content = fs::read_to_string(&keyfile_path)?;
 
         // Extract hash from Hash attribute
-        let hash_start = content.find("Hash=\"").expect("Hash not found") + 6;
-        let hash_end = content[hash_start..].find('"').expect("Hash end not found") + hash_start;
+        let hash_start = content.find("Hash=\"").ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Hash not found")
+        })? + 6;
+        let hash_end = content[hash_start..].find('"').ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Hash end not found")
+        })? + hash_start;
         let hash = &content[hash_start..hash_end];
 
         // Extract first hex group from data (after the closing > of <Data Hash="...">)
-        let data_tag_end = content.find("Hash=\"").expect("Hash not found");
-        let data_content_start =
-            content[data_tag_end..].find('>').expect("> not found") + data_tag_end + 1;
+        let data_tag_end = content.find("Hash=\"").ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Hash not found")
+        })?;
+        let data_content_start = content[data_tag_end..]
+            .find('>')
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "> not found"))?
+            + data_tag_end
+            + 1;
         let data_content = &content[data_content_start..];
 
         // Find the first hex character
         let hex_start = data_content
             .find(|c: char| c.is_ascii_hexdigit())
-            .expect("Hex not found");
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Hex not found"))?;
         let first_hex = &data_content[hex_start..hex_start + 8];
 
         // Hash should match first 4 bytes (8 hex chars)
         assert_eq!(hash, first_hex);
+
+        Ok(())
     }
 
     #[test]
-    fn test_generate_keyfile_different_each_time() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    fn test_generate_keyfile_different_each_time() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
 
         let path1 = temp_dir.path().join("key1.keyx");
         let path2 = temp_dir.path().join("key2.keyx");
 
-        generate_keyfile(path1.to_str().expect("Invalid path")).expect("Failed to generate");
-        generate_keyfile(path2.to_str().expect("Invalid path")).expect("Failed to generate");
+        let path1_str = path1
+            .to_str()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
+        let path2_str = path2
+            .to_str()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
 
-        let content1 = fs::read_to_string(&path1).expect("Failed to read");
-        let content2 = fs::read_to_string(&path2).expect("Failed to read");
+        generate_keyfile(path1_str)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
+        generate_keyfile(path2_str)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
+
+        let content1 = fs::read_to_string(&path1)?;
+        let content2 = fs::read_to_string(&path2)?;
 
         // Contents should be different (different random keys)
         assert_ne!(content1, content2);
+
+        Ok(())
     }
 
     #[test]
