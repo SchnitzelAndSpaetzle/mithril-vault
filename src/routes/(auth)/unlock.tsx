@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { UnlockView } from "@/views/UnlockView.tsx";
 import { z } from "zod/v4";
 import { settings } from "@/lib/tauri";
@@ -21,11 +21,18 @@ export const Route = createFileRoute("/(auth)/unlock")({
       const existing = state.tabs.find(
         (tab) => tab.path === path || tab.info?.path === path
       );
+
+      if (existing?.state === "open") {
+        state.setActiveTab(existing.id);
+        throw redirect({
+          to: "/dashboard/index/$dbId",
+          params: { dbId: existing.dbId ?? existing.path ?? path },
+        });
+      }
+
       const tabId = existing?.id ?? state.addTab(path);
       state.setActiveTab(tabId);
-      if (!existing || existing.state !== "open") {
-        state.updateTabState(tabId, { path, state: "unlocking" });
-      }
+      state.updateTabState(tabId, { path, state: "unlocking" });
 
       try {
         const savedKeyfile = await settings.getKeyfileForDatabase(path);
