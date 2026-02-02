@@ -139,8 +139,7 @@ mod tests {
             .to_str()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
 
-        generate_keyfile(path_str)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
+        generate_keyfile(path_str).map_err(|err| std::io::Error::other(err.to_string()))?;
 
         // Verify file exists
         assert!(keyfile_path.exists());
@@ -167,8 +166,7 @@ mod tests {
             .to_str()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
 
-        generate_keyfile(path_str)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
+        generate_keyfile(path_str).map_err(|err| std::io::Error::other(err.to_string()))?;
 
         let content = fs::read_to_string(&keyfile_path)?;
 
@@ -218,10 +216,8 @@ mod tests {
             .to_str()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
 
-        generate_keyfile(path1_str)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
-        generate_keyfile(path2_str)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
+        generate_keyfile(path1_str).map_err(|err| std::io::Error::other(err.to_string()))?;
+        generate_keyfile(path2_str).map_err(|err| std::io::Error::other(err.to_string()))?;
 
         let content1 = fs::read_to_string(&path1)?;
         let content2 = fs::read_to_string(&path2)?;
