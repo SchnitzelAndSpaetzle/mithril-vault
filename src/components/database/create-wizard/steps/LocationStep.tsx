@@ -1,5 +1,5 @@
 import { FolderOpen } from "lucide-react";
-import { Controller, type Control } from "react-hook-form";
+import { type Control, Controller } from "react-hook-form";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { CreateDatabaseFormValues } from "@/lib/formTypes";
 import {
@@ -15,16 +15,11 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group";
+import { getFilenameFromPath } from "@/lib/utils";
 
 interface LocationStepProps {
   control: Control<CreateDatabaseFormValues>;
   disabled?: boolean;
-}
-
-function getFilenameFromPath(path: string | undefined): string {
-  if (!path) return "";
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || "";
 }
 
 export function LocationStep({ control, disabled }: LocationStepProps) {

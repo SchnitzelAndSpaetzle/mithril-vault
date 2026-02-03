@@ -1,19 +1,13 @@
-import { KeyRound, FolderOpen, FileText, Settings, Check } from "lucide-react";
-import { Controller, type Control, useWatch } from "react-hook-form";
+import { Check, FileText, FolderOpen, KeyRound, Settings } from "lucide-react";
+import { type Control, Controller, useWatch } from "react-hook-form";
 import type { CreateDatabaseFormValues } from "@/lib/formTypes";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { cn, getFilenameFromPath } from "@/lib/utils";
 
 interface ReviewStepProps {
   control: Control<CreateDatabaseFormValues>;
   disabled?: boolean;
-}
-
-function getFilenameFromPath(path: string | undefined): string {
-  if (!path) return "";
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || "";
 }
 
 interface ReviewItemProps {

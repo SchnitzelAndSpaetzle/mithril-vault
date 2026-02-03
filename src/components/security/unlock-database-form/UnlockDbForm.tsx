@@ -33,17 +33,12 @@ import {
   type DatabaseTabsState,
   useDatabaseTabs,
 } from "@/stores/database-tabs";
+import { getFilenameFromPath } from "@/lib/utils.ts";
 
 interface UnlockDbFormProps {
   initialPath?: string | undefined;
   initialKeyfile?: string | undefined;
   rememberKeyfile?: boolean | undefined;
-}
-
-function getFilenameFromPath(path: string | undefined): string {
-  if (!path) return "";
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || "";
 }
 
 function mapErrorToMessage(error: unknown): string {

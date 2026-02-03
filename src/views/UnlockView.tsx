@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils.ts";
+import { cn, getFilenameFromPath } from "@/lib/utils.ts";
 import {
   Card,
   CardContent,
@@ -13,12 +13,6 @@ interface UnlockViewProps extends React.ComponentProps<"div"> {
   initialPath?: string | undefined;
   initialKeyfile?: string | undefined;
   rememberKeyfile?: boolean | undefined;
-}
-
-function getFilenameFromPath(path: string | undefined): string {
-  if (!path) return "";
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || "";
 }
 
 function getDirectoryFromPath(path: string | undefined): string {

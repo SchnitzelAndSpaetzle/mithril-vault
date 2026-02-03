@@ -1,5 +1,5 @@
-import { KeyRound, Plus, FolderOpen, X, ShieldAlert } from "lucide-react";
-import { Controller, type Control, useWatch } from "react-hook-form";
+import { FolderOpen, KeyRound, Plus, ShieldAlert, X } from "lucide-react";
+import { type Control, Controller, useWatch } from "react-hook-form";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { CreateDatabaseFormValues, KeyfileMode } from "@/lib/formTypes";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { cn } from "@/lib/utils";
+import { cn, getFilenameFromPath } from "@/lib/utils";
 
 interface KeyFileStepProps {
   control: Control<CreateDatabaseFormValues>;
@@ -20,12 +20,6 @@ interface KeyFileStepProps {
     value: KeyfileMode | string
   ) => void;
   disabled?: boolean;
-}
-
-function getFilenameFromPath(path: string | undefined): string {
-  if (!path) return "";
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || "";
 }
 
 interface KeyfileModeOptionProps {
