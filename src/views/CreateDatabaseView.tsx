@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { CreateDatabaseWizard } from "@/components/database/create-wizard/CreateDatabaseWizard";
 
 export function CreateDatabaseView({
@@ -22,7 +23,9 @@ export function CreateDatabaseView({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <CreateDatabaseWizard />
+          <ScrollArea className="h-[60vh] pr-3">
+            <CreateDatabaseWizard />
+          </ScrollArea>
         </CardContent>
       </Card>
     </div>
