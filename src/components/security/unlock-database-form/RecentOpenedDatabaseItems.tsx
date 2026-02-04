@@ -9,11 +9,7 @@ import {
 import { ChevronRightIcon, FolderOpen } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import type { RecentDatabase } from "@/lib/types.ts";
-
-function getFilenameFromPath(path: string): string {
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || path;
-}
+import { getFilenameFromPath } from "@/lib/utils.ts";
 
 interface RecentOpenedDatabaseItemsProps {
   recentDatabases: RecentDatabase[];
@@ -49,7 +45,7 @@ export default function RecentOpenedDatabaseItems({
               <FolderOpen className="size-5" />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>{getFilenameFromPath(item.path)}</ItemTitle>
+              <ItemTitle>{getFilenameFromPath(item.path, item.path)}</ItemTitle>
               <ItemDescription className="line-clamp-1">
                 {item.path}
               </ItemDescription>

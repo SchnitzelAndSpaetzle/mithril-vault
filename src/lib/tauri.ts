@@ -368,6 +368,28 @@ export const clipboard = {
   },
 };
 
+const OutputPathSchema = z.object({
+  outputPath: z.string().min(1),
+});
+
+/**
+ * Keyfile generation commands.
+ */
+export const keyfile = {
+  /**
+   * Generate a new KeePass 2.x compatible keyfile (.keyx format).
+   *
+   * The keyfile contains 32 bytes of cryptographically random data
+   * in an XML format compatible with KeePass 2.x and other implementations.
+   *
+   * @param outputPath - Path where the keyfile will be saved
+   */
+  async generate(outputPath: string): Promise<void> {
+    OutputPathSchema.parse({ outputPath });
+    return invoke("generate_keyfile", { outputPath });
+  },
+};
+
 /**
  * Application settings including recent databases and preferences.
  */

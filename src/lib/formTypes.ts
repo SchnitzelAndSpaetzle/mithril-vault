@@ -7,3 +7,49 @@ export const openDatabaseSchema = z.object({
 });
 
 export type OpenDatabaseFormValues = z.infer<typeof openDatabaseSchema>;
+
+export const keyfileModeSchema = z.enum(["none", "select", "generate"]);
+export type KeyfileMode = z.infer<typeof keyfileModeSchema>;
+
+// Base schema without refinements (used for form type inference)
+const createDatabaseBaseSchema = z.object({
+  filePath: z.string().min(1, "File location is required."),
+  name: z.string().min(1, "Database name is required."),
+  description: z.string().optional(),
+  password: z.string().optional(),
+  confirmPassword: z.string().optional(),
+  keyfileMode: keyfileModeSchema.default("none"),
+  keyfilePath: z.string().optional(),
+  createDefaultGroups: z.boolean().default(true),
+});
+
+// Full schema with refinements (used for validation)
+export const createDatabaseSchema = createDatabaseBaseSchema
+  .refine(
+    (data) => {
+      // Password confirmation must match if password is provided
+      if (data.password && data.password !== data.confirmPassword) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Passwords do not match.",
+      path: ["confirmPassword"],
+    }
+  )
+  .refine(
+    (data) => {
+      // Must have password OR keyfile
+      const hasPassword = data.password && data.password.length > 0;
+      const hasKeyfile = data.keyfileMode !== "none" && data.keyfilePath;
+      return hasPassword || hasKeyfile;
+    },
+    {
+      message: "You must provide a password or a key file.",
+      path: ["password"],
+    }
+  );
+
+// Use the base schema for type inference to avoid type mismatch with react-hook-form
+export type CreateDatabaseFormValues = z.infer<typeof createDatabaseBaseSchema>;

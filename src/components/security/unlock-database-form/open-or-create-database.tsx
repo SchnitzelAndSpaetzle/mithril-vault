@@ -20,6 +20,7 @@ import RecentOpenedDatabaseItems from "@/components/security/unlock-database-for
 import { type ComponentProps } from "react";
 import type { RecentDatabase } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
+import { Link } from "@tanstack/react-router";
 
 interface OpenOrCreateDatabaseProps extends ComponentProps<"div"> {
   recentDatabases: RecentDatabase[];
@@ -43,9 +44,11 @@ export default function OpenOrCreateDatabase({
           <FieldGroup>
             <Field className="grid gap-2 sm:grid-cols-3">
               <DropdownMenuOpenDatabase />
-              <Button variant="outline" type="button">
-                <Plus />
-                New
+              <Button variant="outline" asChild>
+                <Link to="/new">
+                  <Plus />
+                  New
+                </Link>
               </Button>
               <DropdownMenuMoreOptions />
             </Field>
