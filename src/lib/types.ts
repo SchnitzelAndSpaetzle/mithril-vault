@@ -46,6 +46,7 @@ export const EntrySchema = z.object({
   url: z.string().optional(),
   notes: z.string().optional(),
   iconId: z.number().int().optional(),
+  customIconUuid: z.string().nullable().optional(),
   tags: z.array(z.string()),
   customFields: z.record(z.string(), z.string()),
   customFieldMeta: z.array(CustomFieldMetaSchema),
@@ -57,21 +58,26 @@ export type Entry = z.infer<typeof EntrySchema>;
 
 export interface Group {
   id: string;
-  parentId?: string | undefined;
+  parentId: string | null;
   name: string;
-  icon?: string | undefined;
+  icon: string | null;
+  customIconUuid: string | null;
   children: Group[];
 }
 
 export const GroupSchema: z.ZodType<Group> = z.lazy(() =>
   z.object({
     id: z.string(),
-    parentId: z.string().optional(),
+    parentId: z.string().nullable(),
     name: z.string(),
-    icon: z.string().optional(),
+    icon: z.string().nullable(),
+    customIconUuid: z.string().nullable(),
     children: z.array(GroupSchema),
   })
 );
+
+export const CustomIconMapSchema = z.record(z.string(), z.string());
+export type CustomIconMap = z.infer<typeof CustomIconMapSchema>;
 
 export const PasswordGeneratorOptionsSchema = z.object({
   length: z.number().int().min(1).max(128),
@@ -192,3 +198,5 @@ export const AppSettingsSchema = z.object({
   recentDatabases: z.array(RecentDatabaseSchema),
 });
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
+
+export type GroupEntryCounts = Record<string, number>;

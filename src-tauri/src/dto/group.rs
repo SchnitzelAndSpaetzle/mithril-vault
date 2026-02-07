@@ -9,6 +9,7 @@ pub struct Group {
     pub parent_id: Option<String>,
     pub name: String,
     pub icon: Option<String>,
+    pub custom_icon_uuid: Option<String>,
     pub children: Vec<Group>,
 }
 

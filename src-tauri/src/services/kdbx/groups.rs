@@ -1,6 +1,9 @@
 use crate::dto::error::AppError;
 use crate::dto::group::{Group, UpdateGroupData};
-use keepass::db::{Group as KeepassGroup, Times};
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+use keepass::db::{Group as KeepassGroup, Node, Times};
+use std::collections::HashMap;
 
 use super::mapping::{
     convert_group, ensure_recycle_bin, find_group_by_id, find_group_by_id_mut,
@@ -215,4 +218,71 @@ impl KdbxService {
 
         Ok(group_model)
     }
+
+    /// Returns custom icons for the database, keyed by UUID.
+    pub fn get_custom_icons(&self, db_id: &str) -> Result<HashMap<String, String>, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+
+        let mut icons = HashMap::new();
+        for icon in &open_db.db.meta.custom_icons.icons {
+            icons.insert(icon.uuid.to_string(), STANDARD.encode(&icon.data));
+        }
+
+        Ok(icons)
+    }
+
+    /// Returns entry counts per group (direct entries only, not recursive).
+    pub fn get_group_entry_counts(&self, db_id: &str) -> Result<HashMap<String, u32>, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+
+        let mut counts = HashMap::new();
+        collect_entry_counts(&open_db.db.root, &mut counts);
+        Ok(counts)
+    }
+
+    /// Returns the recycle bin group ID if it exists and is set in metadata.
+    pub fn get_recycle_bin_id(&self, db_id: &str) -> Result<Option<String>, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let databases = self.lock_databases()?;
+        let open_db = databases
+            .get(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+
+        // Check if recycle bin is set in metadata and the group actually exists
+        if let Some(recycle_uuid) = open_db.db.meta.recyclebin_uuid {
+            let recycle_id = recycle_uuid.to_string();
+            if find_group_by_id(&open_db.db.root, &recycle_id).is_some() {
+                return Ok(Some(recycle_id));
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+/// Recursively collects entry counts for each group.
+fn collect_entry_counts(group: &KeepassGroup, counts: &mut HashMap<String, u32>) {
+    let group_id = group.uuid.to_string();
+    let mut count = 0u32;
+
+    for node in &group.children {
+        match node {
+            Node::Entry(_) => {
+                count += 1;
+            }
+            Node::Group(child) => {
+                collect_entry_counts(child, counts);
+            }
+        }
+    }
+
+    counts.insert(group_id, count);
 }

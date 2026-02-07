@@ -6,6 +6,7 @@ import type {
   AppSettings,
   CreateEntryData,
   CustomFieldValue,
+  CustomIconMap,
   DatabaseConfig,
   DatabaseCreationOptions,
   DatabaseHeaderInfo,
@@ -20,6 +21,7 @@ import {
   AppSettingsSchema,
   CreateEntryDataSchema,
   CustomFieldValueSchema,
+  CustomIconMapSchema,
   DatabaseConfigSchema,
   DatabaseCreationOptionsSchema,
   DatabaseHeaderInfoSchema,
@@ -190,6 +192,15 @@ export const database = {
   },
 
   /**
+   * Get custom icon data for an open database.
+   */
+  async getCustomIcons(dbId: string): Promise<CustomIconMap> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_custom_icons", { dbId });
+    return CustomIconMapSchema.parse(result);
+  },
+
+  /**
    * List all currently open databases.
    */
   async listOpen(): Promise<DatabaseInfo[]> {
@@ -340,6 +351,32 @@ export const groups = {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
     return invoke("delete_group", { dbId, id });
+  },
+
+  async move(
+    dbId: string,
+    id: string,
+    targetParentId?: string
+  ): Promise<Group> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    if (targetParentId) {
+      z.uuid().parse(targetParentId);
+    }
+    const result = await invoke("move_group", { dbId, id, targetParentId });
+    return GroupSchema.parse(result);
+  },
+
+  async getEntryCounts(dbId: string): Promise<Record<string, number>> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_group_entry_counts", { dbId });
+    return z.record(z.string(), z.number()).parse(result);
+  },
+
+  async getRecycleBinId(dbId: string): Promise<string | null> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_recycle_bin_id", { dbId });
+    return z.string().nullable().parse(result);
   },
 };
 

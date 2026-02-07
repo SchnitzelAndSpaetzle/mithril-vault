@@ -170,6 +170,15 @@ pub async fn get_database_info(
     }
 }
 
+/// Returns custom icons for a specific open database.
+#[tauri::command]
+pub async fn get_custom_icons(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    state.get_custom_icons(&db_id)
+}
+
 /// Lists all currently open databases.
 #[tauri::command]
 pub async fn list_open_databases(

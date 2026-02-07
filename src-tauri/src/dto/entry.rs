@@ -28,6 +28,7 @@ pub struct Entry {
     pub url: Option<String>,
     pub notes: Option<String>,
     pub icon_id: Option<u32>,
+    pub custom_icon_uuid: Option<String>,
     pub tags: Vec<String>,
     pub custom_fields: BTreeMap<String, String>,
     pub custom_field_meta: Vec<CustomFieldMeta>,

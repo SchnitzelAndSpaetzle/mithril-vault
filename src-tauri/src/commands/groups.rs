@@ -96,3 +96,23 @@ pub async fn rename_group(
         },
     )
 }
+
+/// Returns entry counts per group.
+/// The `db_id` is the path to the database file.
+#[tauri::command]
+pub async fn get_group_entry_counts(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<std::collections::HashMap<String, u32>, AppError> {
+    state.get_group_entry_counts(&db_id)
+}
+
+/// Returns the recycle bin group ID if it exists.
+/// The `db_id` is the path to the database file.
+#[tauri::command]
+pub async fn get_recycle_bin_id(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<Option<String>, AppError> {
+    state.get_recycle_bin_id(&db_id)
+}
