@@ -14,10 +14,11 @@ export function NavMain({
 }: {
   items: {
     title: string;
-    url: string;
     icon: LucideIcon;
     isActive?: boolean;
     badge?: React.ReactNode;
+    onSelect?: () => void;
+    disabled?: boolean;
   }[];
 }) {
   return (
@@ -25,11 +26,14 @@ export function NavMain({
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton asChild isActive={item.isActive ?? false}>
-              <a href={item.url}>
-                <item.icon />
-                <span>{item.title}</span>
-              </a>
+            <SidebarMenuButton
+              isActive={item.isActive ?? false}
+              onClick={item.onSelect}
+              disabled={item.disabled}
+              aria-disabled={item.disabled}
+            >
+              <item.icon />
+              <span>{item.title}</span>
             </SidebarMenuButton>
             {item.badge && <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>}
           </SidebarMenuItem>
