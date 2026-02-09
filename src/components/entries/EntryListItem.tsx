@@ -1,5 +1,6 @@
-import type { Entry } from "@/lib";
+import type { CustomIconMap, Entry } from "@/lib/types";
 import { CircleAlert } from "lucide-react";
+import { createElement } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Item,
@@ -11,14 +12,28 @@ import {
 } from "@/components/ui/item";
 import { useNavigate } from "@tanstack/react-router";
 import { useIsMobile } from "@/hooks/use-mobile.ts";
+import { getKeepassIcon } from "@/lib/keepass-icons";
 
-export default function EntryListItem({ username, title }: Entry) {
+interface EntryListItemProps extends Entry {
+  customIcons: CustomIconMap;
+}
+
+export default function EntryListItem({
+  username,
+  title,
+  id,
+  iconId,
+  customIconUuid,
+  customIcons,
+}: EntryListItemProps) {
   const isMobile = useIsMobile();
   const navigate = useNavigate({ from: "/dashboard/entry/$id" });
+  const iconComponent = getKeepassIcon(iconId ?? 0);
+  const customIcon = customIconUuid ? customIcons[customIconUuid] : null;
 
   const handleClick = async () => {
     if (isMobile) {
-      await navigate({ to: "/dashboard/entry/$id", params: { id: "234" } });
+      await navigate({ to: "/dashboard/entry/$id", params: { id } });
     } else {
       //TODO: switch panel for desktop
     }
@@ -29,8 +44,12 @@ export default function EntryListItem({ username, title }: Entry) {
       <a onClick={handleClick}>
         <ItemMedia>
           <Avatar className="size-10">
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>ER</AvatarFallback>
+            {customIcon ? (
+              <AvatarImage src={`data:image/png;base64,${customIcon}`} alt="" />
+            ) : null}
+            <AvatarFallback>
+              {createElement(iconComponent, { className: "h-4 w-4" })}
+            </AvatarFallback>
           </Avatar>
         </ItemMedia>
         <ItemContent className="truncate">

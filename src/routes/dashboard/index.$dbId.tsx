@@ -2,8 +2,13 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useIsMobile } from "@/hooks/use-mobile.ts";
 import MobileContentArea from "@/views/MobileContentArea.tsx";
 import DesktopContentArea from "@/views/DesktopContentArea.tsx";
-import { database } from "@/lib/tauri";
+import { database, KeepassIdSchema } from "@/lib/tauri";
 import { useDatabaseTabs } from "@/stores/database-tabs";
+import { z } from "zod/v4";
+
+const DashboardSearchSchema = z.object({
+  groupId: KeepassIdSchema.optional(),
+});
 
 export const Route = createFileRoute("/dashboard/index/$dbId")({
   beforeLoad: ({ params }) => {
@@ -27,12 +32,17 @@ export const Route = createFileRoute("/dashboard/index/$dbId")({
 
     return { tabId: tab.id };
   },
+  loaderDeps: ({ search }) => ({ groupId: search.groupId ?? null }),
   loader: async ({ params }) => {
     const info = await database.getInfo(params.dbId);
     return { info };
   },
   component: DashboardIndex,
+  validateSearch: DashboardSearchSchema,
   pendingComponent: Loading,
+  errorComponent: ({ error }) => {
+    return <div>{error.message}</div>;
+  },
 });
 
 function DashboardIndex() {

@@ -33,6 +33,8 @@ import {
   UpdateEntryDataSchema,
 } from "./types";
 
+export const KeepassIdSchema = z.guid();
+
 const PathPasswordSchema = z.object({
   path: z.string().min(1),
   password: z.string(),
@@ -50,11 +52,11 @@ const PathPasswordKeyfileSchema = z.object({
 });
 
 const IdSchema = z.object({
-  id: z.uuid(),
+  id: KeepassIdSchema,
 });
 
 const GroupIdSchema = z.object({
-  groupId: z.uuid(),
+  groupId: KeepassIdSchema,
 });
 
 const DbIdSchema = z.object({
@@ -70,7 +72,7 @@ const NameSchema = z.object({
 });
 
 const CopyPasswordSchema = z.object({
-  entryId: z.uuid(),
+  entryId: KeepassIdSchema,
   timeoutMs: z.number().int().positive().optional(),
 });
 
@@ -333,7 +335,7 @@ export const groups = {
 
   async create(dbId: string, parentId: string, name: string): Promise<Group> {
     DbIdSchema.parse({ dbId });
-    z.uuid().parse(parentId);
+    KeepassIdSchema.parse(parentId);
     NameSchema.parse({ name });
     const result = await invoke("create_group", { dbId, parentId, name });
     return GroupSchema.parse(result);
@@ -361,7 +363,7 @@ export const groups = {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
     if (targetParentId) {
-      z.uuid().parse(targetParentId);
+      KeepassIdSchema.parse(targetParentId);
     }
     const result = await invoke("move_group", { dbId, id, targetParentId });
     return GroupSchema.parse(result);
