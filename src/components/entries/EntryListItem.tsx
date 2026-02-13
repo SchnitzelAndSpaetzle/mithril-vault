@@ -60,7 +60,7 @@ export default function EntryListItem({
         <ItemContent className="min-w-0 flex-1 overflow-hidden">
           <ItemTitle className="truncate w-full">{title}</ItemTitle>
           <div className="min-w-0 w-full">
-            <ItemDescription className="line-clamp-1 w-full min-w-0 break-words">
+            <ItemDescription className="line-clamp-1 w-full min-w-0 wrap-break-words">
               {username}
             </ItemDescription>
           </div>
