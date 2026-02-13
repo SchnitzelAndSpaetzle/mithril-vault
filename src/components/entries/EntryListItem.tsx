@@ -40,8 +40,13 @@ export default function EntryListItem({
   };
 
   return (
-    <Item asChild variant="default" size="sm" className="p-2 rounded-none">
-      <a onClick={handleClick}>
+    <Item
+      asChild
+      variant="default"
+      size="sm"
+      className="w-full min-w-0 p-2 rounded-none flex-nowrap"
+    >
+      <a className="w-full min-w-0 overflow-hidden" onClick={handleClick}>
         <ItemMedia>
           <Avatar className="size-10">
             {customIcon ? (
@@ -52,11 +57,15 @@ export default function EntryListItem({
             </AvatarFallback>
           </Avatar>
         </ItemMedia>
-        <ItemContent className="truncate">
-          <ItemTitle className="truncate">{title}</ItemTitle>
-          <ItemDescription className="truncate">{username}</ItemDescription>
+        <ItemContent className="min-w-0 flex-1 overflow-hidden">
+          <ItemTitle className="truncate w-full">{title}</ItemTitle>
+          <div className="min-w-0 w-full">
+            <ItemDescription className="line-clamp-1 w-full min-w-0 break-words">
+              {username}
+            </ItemDescription>
+          </div>
         </ItemContent>
-        <ItemActions>
+        <ItemActions className="shrink-0">
           {/* TODO: show warning icon if password is duplicated or compromised */}
           <CircleAlert className="size-4" />
         </ItemActions>

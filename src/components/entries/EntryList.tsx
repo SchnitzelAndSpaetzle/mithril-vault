@@ -49,9 +49,9 @@ export default function EntryList() {
   }
 
   return (
-    <ItemGroup>
+    <ItemGroup className="w-full min-w-0 items-stretch">
       {entries.map((entry) => (
-        <div key={entry.id}>
+        <div className="w-full min-w-0" key={entry.id}>
           <EntryListItem {...entry} customIcons={customIcons ?? {}} />
           <ItemSeparator />
         </div>
