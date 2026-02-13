@@ -7,7 +7,9 @@
 
 #![allow(clippy::expect_used)] // expect() is acceptable in tests
 
+use mithril_vault_lib::domain::secure::SecureString;
 use mithril_vault_lib::dto::database::DatabaseCreationOptions;
+use mithril_vault_lib::dto::entry::CreateEntryData;
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::dto::group::UpdateGroupData;
 use mithril_vault_lib::services::kdbx::KdbxService;
@@ -642,5 +644,171 @@ fn test_move_group_target_not_found() {
     assert!(
         matches!(result, Err(AppError::GroupNotFound(_))),
         "Should fail with GroupNotFound for invalid target ID"
+    );
+}
+
+#[test]
+fn test_update_group_invalid_icon_clears_icon() {
+    let (service, _dir, db_path_str) = create_test_database();
+
+    let group = service
+        .create_group(&db_path_str, None, "Icon Group", Some(9))
+        .expect("create group");
+
+    let updated = service
+        .update_group(
+            &db_path_str,
+            &group.id,
+            UpdateGroupData {
+                name: None,
+                icon: Some("not-a-number".to_string()),
+            },
+        )
+        .expect("update group");
+
+    assert!(
+        updated.icon.is_none(),
+        "Invalid icon payload should clear icon"
+    );
+}
+
+#[test]
+fn test_get_group_entry_counts_direct_entries_only() {
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
+
+    let child_group = service
+        .create_group(&db_path_str, None, "Child", None)
+        .expect("create child group");
+
+    service
+        .create_entry(
+            &db_path_str,
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Root Entry".to_string(),
+                username: "root-user".to_string(),
+                password: SecureString::from("root-pass"),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields: None,
+            },
+        )
+        .expect("create root entry");
+
+    service
+        .create_entry(
+            &db_path_str,
+            &child_group.id,
+            CreateEntryData {
+                title: "Child Entry".to_string(),
+                username: "child-user".to_string(),
+                password: SecureString::from("child-pass"),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields: None,
+            },
+        )
+        .expect("create child entry");
+
+    let counts = service
+        .get_group_entry_counts(&db_path_str)
+        .expect("group entry counts");
+
+    assert_eq!(
+        counts.get(&info.root_group_id).copied(),
+        Some(1),
+        "Root should count only direct entries"
+    );
+    assert_eq!(
+        counts.get(&child_group.id).copied(),
+        Some(1),
+        "Child should count its direct entries"
+    );
+}
+
+#[test]
+fn test_get_group_entry_counts_database_not_open() {
+    let service = KdbxService::new();
+
+    let result = service.get_group_entry_counts("nonexistent.kdbx");
+
+    assert!(
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when database is not open"
+    );
+}
+
+#[test]
+fn test_get_recycle_bin_id_none_when_not_set() {
+    let (service, _dir, db_path_str) = create_test_database();
+
+    let result = service
+        .get_recycle_bin_id(&db_path_str)
+        .expect("get recycle bin id");
+
+    assert!(result.is_none(), "Recycle bin should not exist initially");
+}
+
+#[test]
+fn test_get_recycle_bin_id_after_soft_delete() {
+    let (service, _dir, db_path_str) = create_test_database();
+
+    let group = service
+        .create_group(&db_path_str, None, "To Bin", None)
+        .expect("create group");
+    service
+        .delete_group(&db_path_str, &group.id, false, false)
+        .expect("soft delete group");
+
+    let recycle_id = service
+        .get_recycle_bin_id(&db_path_str)
+        .expect("get recycle bin id")
+        .expect("recycle bin should exist");
+
+    let recycle_group = service
+        .get_group(&db_path_str, &recycle_id)
+        .expect("fetch recycle bin group");
+    assert_eq!(recycle_group.name, "Recycle Bin");
+}
+
+#[test]
+fn test_get_recycle_bin_id_database_not_open() {
+    let service = KdbxService::new();
+
+    let result = service.get_recycle_bin_id("nonexistent.kdbx");
+
+    assert!(
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when database is not open"
+    );
+}
+
+#[test]
+fn test_get_custom_icons_empty_map() {
+    let (service, _dir, db_path_str) = create_test_database();
+
+    let icons = service
+        .get_custom_icons(&db_path_str)
+        .expect("fetch custom icons");
+
+    assert!(icons.is_empty(), "New database should have no custom icons");
+}
+
+#[test]
+fn test_get_custom_icons_database_not_open() {
+    let service = KdbxService::new();
+
+    let result = service.get_custom_icons("nonexistent.kdbx");
+
+    assert!(
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when database is not open"
     );
 }

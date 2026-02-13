@@ -4,18 +4,26 @@
 #![allow(clippy::expect_used)]
 
 use mithril_vault_lib::commands::database::{
-    get_database_info, lock_database, open_database, unlock_database,
+    close_database, create_database, force_unlock_database, generate_keyfile, get_custom_icons,
+    get_database_config, get_database_info, get_lock_status, inspect_database, list_open_databases,
+    lock_database, open_database, open_database_with_keyfile, open_database_with_keyfile_only,
+    save_database, unlock_database,
 };
 use mithril_vault_lib::commands::entries::list_entries;
 use mithril_vault_lib::commands::generator::{
     calculate_password_strength, generate_passphrase, generate_password,
     PassphraseGeneratorOptions, PasswordGeneratorOptions,
 };
-use mithril_vault_lib::commands::groups::list_groups;
+use mithril_vault_lib::commands::groups::{
+    create_group, delete_group, get_group, get_group_entry_counts, get_recycle_bin_id, list_groups,
+    move_group, rename_group, update_group,
+};
 use mithril_vault_lib::commands::secure_storage::{
     clear_session_key, has_session_key, store_session_key,
 };
 use mithril_vault_lib::dto::error::AppError;
+use mithril_vault_lib::dto::group::UpdateGroupData;
+use mithril_vault_lib::dto::lock::LockStatusDto;
 use mithril_vault_lib::register_services;
 use tauri::test::mock_app;
 use tauri::Manager;
@@ -122,6 +130,213 @@ fn entries_and_groups_commands_fail_when_not_open() {
         tauri::async_runtime::block_on(list_groups("nonexistent.kdbx".to_string(), app.state()))
             .expect_err("expected database not found");
     assert!(matches!(groups_err, AppError::DatabaseNotFound(_)));
+
+    cleanup_app_files(&app);
+}
+
+#[test]
+fn additional_group_and_database_commands_fail_when_not_open() {
+    let app = setup_app();
+
+    let close_err =
+        tauri::async_runtime::block_on(close_database("nonexistent.kdbx".to_string(), app.state()))
+            .expect_err("expected database not found");
+    assert!(matches!(close_err, AppError::DatabaseNotFound(_)));
+
+    let save_err =
+        tauri::async_runtime::block_on(save_database("nonexistent.kdbx".to_string(), app.state()))
+            .expect_err("expected database not found");
+    assert!(matches!(save_err, AppError::DatabaseNotFound(_)));
+
+    let config_err = tauri::async_runtime::block_on(get_database_config(
+        "nonexistent.kdbx".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(config_err, AppError::DatabaseNotFound(_)));
+
+    let icons_err = tauri::async_runtime::block_on(get_custom_icons(
+        "nonexistent.kdbx".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(icons_err, AppError::DatabaseNotFound(_)));
+
+    let open_dbs =
+        tauri::async_runtime::block_on(list_open_databases(app.state())).expect("list open dbs");
+    assert!(open_dbs.is_empty(), "No database should be open");
+
+    let get_group_err = tauri::async_runtime::block_on(get_group(
+        "nonexistent.kdbx".to_string(),
+        "group-id".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(get_group_err, AppError::DatabaseNotFound(_)));
+
+    let create_group_err = tauri::async_runtime::block_on(create_group(
+        "nonexistent.kdbx".to_string(),
+        "parent-id".to_string(),
+        "Test Group".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(create_group_err, AppError::DatabaseNotFound(_)));
+
+    let update_group_err = tauri::async_runtime::block_on(update_group(
+        "nonexistent.kdbx".to_string(),
+        "group-id".to_string(),
+        UpdateGroupData {
+            name: Some("Renamed".to_string()),
+            icon: None,
+        },
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(update_group_err, AppError::DatabaseNotFound(_)));
+
+    let delete_group_err = tauri::async_runtime::block_on(delete_group(
+        "nonexistent.kdbx".to_string(),
+        "group-id".to_string(),
+        Some(false),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(delete_group_err, AppError::DatabaseNotFound(_)));
+
+    let move_group_err = tauri::async_runtime::block_on(move_group(
+        "nonexistent.kdbx".to_string(),
+        "group-id".to_string(),
+        Some("target-id".to_string()),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(move_group_err, AppError::DatabaseNotFound(_)));
+
+    let rename_group_err = tauri::async_runtime::block_on(rename_group(
+        "nonexistent.kdbx".to_string(),
+        "group-id".to_string(),
+        "New Name".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(rename_group_err, AppError::DatabaseNotFound(_)));
+
+    let counts_err = tauri::async_runtime::block_on(get_group_entry_counts(
+        "nonexistent.kdbx".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(counts_err, AppError::DatabaseNotFound(_)));
+
+    let recycle_err = tauri::async_runtime::block_on(get_recycle_bin_id(
+        "nonexistent.kdbx".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(recycle_err, AppError::DatabaseNotFound(_)));
+
+    cleanup_app_files(&app);
+}
+
+#[test]
+fn database_commands_cover_success_paths() {
+    let app = setup_app();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    let db_path = temp_dir.path().join("command-success.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let keyfile_path = temp_dir.path().join("command-success.keyx");
+    let keyfile_path_str = keyfile_path.to_string_lossy().to_string();
+
+    tauri::async_runtime::block_on(generate_keyfile(keyfile_path_str.clone()))
+        .expect("generate keyfile");
+    assert!(keyfile_path.exists(), "Generated keyfile should exist");
+
+    let create_info = tauri::async_runtime::block_on(create_database(
+        db_path_str.clone(),
+        "Command Success Vault".to_string(),
+        Some("password".to_string()),
+        Some(keyfile_path_str.clone()),
+        None,
+        app.state(),
+    ))
+    .expect("create database");
+    assert_eq!(create_info.path, db_path_str);
+
+    let inspect =
+        tauri::async_runtime::block_on(inspect_database(db_path_str.clone(), app.state()))
+            .expect("inspect database");
+    assert!(
+        inspect.version.starts_with("KDBX"),
+        "Inspect should report KDBX version"
+    );
+
+    let lock_status =
+        tauri::async_runtime::block_on(get_lock_status(db_path_str.clone())).expect("lock status");
+    assert!(
+        matches!(lock_status, LockStatusDto::LockedByCurrentProcess),
+        "Open database should be locked by current process"
+    );
+
+    let icons = tauri::async_runtime::block_on(get_custom_icons(db_path_str.clone(), app.state()))
+        .expect("get custom icons");
+    assert!(
+        icons.is_empty(),
+        "Fresh database should have no custom icons"
+    );
+
+    let open_dbs =
+        tauri::async_runtime::block_on(list_open_databases(app.state())).expect("list open dbs");
+    assert_eq!(open_dbs.len(), 1, "One database should be open");
+
+    tauri::async_runtime::block_on(close_database(db_path_str.clone(), app.state()))
+        .expect("close database");
+
+    let info_after_close =
+        tauri::async_runtime::block_on(get_database_info(db_path_str.clone(), app.state()))
+            .expect("database info after close");
+    assert!(info_after_close.is_none(), "Database should be closed");
+
+    tauri::async_runtime::block_on(open_database_with_keyfile(
+        db_path_str.clone(),
+        "password".to_string(),
+        keyfile_path_str.clone(),
+        app.state(),
+    ))
+    .expect("open database with keyfile");
+
+    tauri::async_runtime::block_on(close_database(db_path_str.clone(), app.state()))
+        .expect("close database after keyfile open");
+
+    let key_only_path = temp_dir.path().join("command-key-only.kdbx");
+    let key_only_path_str = key_only_path.to_string_lossy().to_string();
+
+    tauri::async_runtime::block_on(create_database(
+        key_only_path_str.clone(),
+        "Key Only Vault".to_string(),
+        None,
+        Some(keyfile_path_str.clone()),
+        None,
+        app.state(),
+    ))
+    .expect("create keyfile-only database");
+
+    tauri::async_runtime::block_on(close_database(key_only_path_str.clone(), app.state()))
+        .expect("close keyfile-only database");
+
+    tauri::async_runtime::block_on(open_database_with_keyfile_only(
+        key_only_path_str.clone(),
+        keyfile_path_str.clone(),
+        app.state(),
+    ))
+    .expect("open with keyfile only");
+
+    tauri::async_runtime::block_on(close_database(key_only_path_str.clone(), app.state()))
+        .expect("final close");
+
+    tauri::async_runtime::block_on(force_unlock_database(key_only_path_str))
+        .expect("force unlock should succeed");
 
     cleanup_app_files(&app);
 }
