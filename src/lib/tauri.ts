@@ -349,10 +349,10 @@ export const groups = {
     return GroupSchema.parse(result);
   },
 
-  async delete(dbId: string, id: string): Promise<void> {
+  async delete(dbId: string, id: string, recursive = false): Promise<void> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    return invoke("delete_group", { dbId, id });
+    return invoke("delete_group", { dbId, id, recursive });
   },
 
   async move(
