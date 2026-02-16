@@ -4,6 +4,8 @@ export const queryKeys = {
   database: {
     all: ["database"] as const,
     info: (dbId: string) => [...queryKeys.database.all, dbId, "info"] as const,
+    customIcons: (dbId: string) =>
+      [...queryKeys.database.all, dbId, "customIcons"] as const,
   },
   settings: {
     all: ["settings"] as const,
@@ -16,6 +18,7 @@ export const queryKeys = {
       [...queryKeys.entries.all, dbId, "list", groupId ?? null] as const,
     detail: (dbId: string, id: string) =>
       [...queryKeys.entries.all, dbId, "detail", id] as const,
+    tags: (dbId: string) => [...queryKeys.entries.all, dbId, "tags"] as const,
   },
   groups: {
     all: ["groups"] as const,
@@ -23,5 +26,9 @@ export const queryKeys = {
       [...queryKeys.groups.all, dbId, "list", parentId ?? null] as const,
     detail: (dbId: string, id: string) =>
       [...queryKeys.groups.all, dbId, "detail", id] as const,
+    entryCounts: (dbId: string) =>
+      [...queryKeys.groups.all, dbId, "entryCounts"] as const,
+    recycleBinId: (dbId: string) =>
+      [...queryKeys.groups.all, dbId, "recycleBinId"] as const,
   },
 } as const;

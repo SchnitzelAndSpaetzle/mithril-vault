@@ -26,6 +26,7 @@ tauri-plugin-stronghold = { version = "2", features = ["kdf"] }
 iota_stronghold = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+base64 = "0.22"
 thiserror = "2"
 zeroize = { version = "1", features = ["derive"] }
 rand = "0.8"

@@ -16,9 +16,11 @@ export function NavSecondary({
 }: {
   items: {
     title: string;
-    url: string;
     icon: LucideIcon;
     badge?: React.ReactNode;
+    onSelect?: () => void;
+    disabled?: boolean;
+    isActive?: boolean;
   }[];
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   return (
@@ -27,11 +29,14 @@ export function NavSecondary({
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild>
-                <a href={item.url}>
-                  <item.icon />
-                  <span>{item.title}</span>
-                </a>
+              <SidebarMenuButton
+                isActive={item.isActive ?? false}
+                onClick={item.onSelect}
+                disabled={item.disabled}
+                aria-disabled={item.disabled}
+              >
+                <item.icon />
+                <span>{item.title}</span>
               </SidebarMenuButton>
               {item.badge && <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>}
             </SidebarMenuItem>

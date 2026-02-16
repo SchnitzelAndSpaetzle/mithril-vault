@@ -26,8 +26,8 @@ export default function DragRegion() {
       className="h-full min-h-0 w-full"
     >
       {/* Panel 1 - Entry List */}
-      <ResizablePanel defaultSize={40} minSize={250}>
-        <div className="flex h-full min-h-0 flex-col">
+      <ResizablePanel defaultSize={40} minSize={250} className="min-w-0">
+        <div className="flex h-full min-h-0 min-w-0 flex-col">
           <div className="flex h-14 shrink-0 items-center gap-2 border-b">
             <div className="flex flex-1 items-center gap-2 px-3">
               <SidebarTrigger />
@@ -50,7 +50,7 @@ export default function DragRegion() {
             </Button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto scrollbar-hide">
             <EntryList />
           </div>
         </div>

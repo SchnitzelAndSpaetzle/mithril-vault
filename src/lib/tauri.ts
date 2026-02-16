@@ -6,6 +6,7 @@ import type {
   AppSettings,
   CreateEntryData,
   CustomFieldValue,
+  CustomIconMap,
   DatabaseConfig,
   DatabaseCreationOptions,
   DatabaseHeaderInfo,
@@ -20,6 +21,7 @@ import {
   AppSettingsSchema,
   CreateEntryDataSchema,
   CustomFieldValueSchema,
+  CustomIconMapSchema,
   DatabaseConfigSchema,
   DatabaseCreationOptionsSchema,
   DatabaseHeaderInfoSchema,
@@ -30,6 +32,8 @@ import {
   PasswordGeneratorOptionsSchema,
   UpdateEntryDataSchema,
 } from "./types";
+
+export const KeepassIdSchema = z.guid();
 
 const PathPasswordSchema = z.object({
   path: z.string().min(1),
@@ -48,11 +52,11 @@ const PathPasswordKeyfileSchema = z.object({
 });
 
 const IdSchema = z.object({
-  id: z.uuid(),
+  id: KeepassIdSchema,
 });
 
 const GroupIdSchema = z.object({
-  groupId: z.uuid(),
+  groupId: KeepassIdSchema,
 });
 
 const DbIdSchema = z.object({
@@ -68,7 +72,7 @@ const NameSchema = z.object({
 });
 
 const CopyPasswordSchema = z.object({
-  entryId: z.uuid(),
+  entryId: KeepassIdSchema,
   timeoutMs: z.number().int().positive().optional(),
 });
 
@@ -187,6 +191,15 @@ export const database = {
     DbIdSchema.parse({ dbId });
     const result = await invoke("get_database_info", { dbId });
     return result === null ? null : DatabaseInfoSchema.parse(result);
+  },
+
+  /**
+   * Get custom icon data for an open database.
+   */
+  async getCustomIcons(dbId: string): Promise<CustomIconMap> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_custom_icons", { dbId });
+    return CustomIconMapSchema.parse(result);
   },
 
   /**
@@ -322,7 +335,7 @@ export const groups = {
 
   async create(dbId: string, parentId: string, name: string): Promise<Group> {
     DbIdSchema.parse({ dbId });
-    z.uuid().parse(parentId);
+    KeepassIdSchema.parse(parentId);
     NameSchema.parse({ name });
     const result = await invoke("create_group", { dbId, parentId, name });
     return GroupSchema.parse(result);
@@ -336,10 +349,36 @@ export const groups = {
     return GroupSchema.parse(result);
   },
 
-  async delete(dbId: string, id: string): Promise<void> {
+  async delete(dbId: string, id: string, recursive = false): Promise<void> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    return invoke("delete_group", { dbId, id });
+    return invoke("delete_group", { dbId, id, recursive });
+  },
+
+  async move(
+    dbId: string,
+    id: string,
+    targetParentId?: string
+  ): Promise<Group> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    if (targetParentId) {
+      KeepassIdSchema.parse(targetParentId);
+    }
+    const result = await invoke("move_group", { dbId, id, targetParentId });
+    return GroupSchema.parse(result);
+  },
+
+  async getEntryCounts(dbId: string): Promise<Record<string, number>> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_group_entry_counts", { dbId });
+    return z.record(z.string(), z.number()).parse(result);
+  },
+
+  async getRecycleBinId(dbId: string): Promise<string | null> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_recycle_bin_id", { dbId });
+    return z.string().nullable().parse(result);
   },
 };
 

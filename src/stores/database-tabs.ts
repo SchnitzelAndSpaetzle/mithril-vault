@@ -13,6 +13,7 @@ export interface DatabaseTab {
   state: DatabaseTabState;
   selectedGroupId: string | null;
   selectedEntryId: string | null;
+  expandedGroupIds: string[];
 }
 
 export interface DatabaseTabsState {
@@ -72,6 +73,7 @@ export const useDatabaseTabs = create<DatabaseTabsState>(
         state: "unlocking",
         selectedGroupId: null,
         selectedEntryId: null,
+        expandedGroupIds: [],
       };
 
       set((state: DatabaseTabsState) => ({

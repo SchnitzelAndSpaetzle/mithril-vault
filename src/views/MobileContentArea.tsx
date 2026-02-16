@@ -6,7 +6,7 @@ import { ArrowDownAZ, Plus } from "lucide-react";
 
 export default function MobileContentArea() {
   return (
-    <div className="h-full w-full overflow-auto scrollbar-hide">
+    <div className="h-full w-full min-w-0 overflow-auto overflow-x-hidden scrollbar-hide">
       <NavEntries>
         <div className="flex flex-col">
           <p className="text-sm">All</p>

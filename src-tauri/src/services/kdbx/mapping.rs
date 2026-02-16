@@ -56,6 +56,7 @@ pub(crate) fn convert_entry(entry: &keepass::db::Entry, group_id: &str) -> Entry
         url: entry.get_url().map(std::string::ToString::to_string),
         notes: entry.get("Notes").map(std::string::ToString::to_string),
         icon_id: entry.icon_id.and_then(|id| u32::try_from(id).ok()),
+        custom_icon_uuid: entry.custom_icon_uuid.map(|uuid| uuid.to_string()),
         tags: entry.tags.clone(),
         custom_fields,
         custom_field_meta,
@@ -89,6 +90,7 @@ pub(crate) fn convert_group(group: &keepass::db::Group, parent_id: Option<&str>)
         parent_id: parent_id.map(std::string::ToString::to_string),
         name: group.name.clone(),
         icon: group.icon_id.map(|i| i.to_string()),
+        custom_icon_uuid: group.custom_icon_uuid.map(|uuid| uuid.to_string()),
         children,
     }
 }
