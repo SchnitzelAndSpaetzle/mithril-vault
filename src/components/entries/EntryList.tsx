@@ -14,7 +14,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 
 const EMPTY_ICONS: Record<string, string> = {};
-const ITEM_HEIGHT = 57;
+const ESTIMATED_ITEM_HEIGHT = 65;
 
 export default function EntryList() {
   const { dbId, tab } = useActiveDatabase();
@@ -40,7 +40,8 @@ export default function EntryList() {
   const virtualizer = useVirtualizer({
     count: sortedEntries.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ITEM_HEIGHT,
+    estimateSize: () => ESTIMATED_ITEM_HEIGHT,
+    measureElement: (el) => el.getBoundingClientRect().height,
     overscan: 10,
   });
 
@@ -137,10 +138,11 @@ export default function EntryList() {
           return (
             <div
               key={entry.id}
+              ref={virtualizer.measureElement}
+              data-index={virtualItem.index}
               data-entry-id={entry.id}
               className="absolute left-0 w-full"
               style={{
-                height: `${virtualItem.size}px`,
                 transform: `translateY(${virtualItem.start}px)`,
               }}
             >
