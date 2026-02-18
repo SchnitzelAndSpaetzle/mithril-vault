@@ -9,7 +9,6 @@ import { SearchForm } from "@/components/search-form.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
 import {
-  ArrowDownAZ,
   Dices,
   EllipsisVertical,
   Pencil,
@@ -18,8 +17,12 @@ import {
   Trash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
+import SortDropdown from "@/components/entries/sort-dropdown";
+import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 
 export default function DragRegion() {
+  const { groupName, entryCount } = useEntryListHeader();
+
   return (
     <ResizablePanelGroup
       orientation="horizontal"
@@ -36,21 +39,19 @@ export default function DragRegion() {
                 className="data-[orientation=vertical]:h-6 mr-2"
               />
               <div className="flex flex-col">
-                <p className="text-sm">All</p>
+                <p className="text-sm">{groupName}</p>
                 <small className="text-muted-foreground text-xs">
-                  124 Items
+                  {entryCount} {entryCount === 1 ? "Item" : "Items"}
                 </small>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2 p-2">
             <SearchForm className="w-full" />
-            <Button variant="outline" size="icon-sm" className="">
-              <ArrowDownAZ />
-            </Button>
+            <SortDropdown />
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-auto scrollbar-hide">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <EntryList />
           </div>
         </div>

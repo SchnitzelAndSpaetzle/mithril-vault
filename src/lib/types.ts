@@ -200,3 +200,15 @@ export const AppSettingsSchema = z.object({
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 
 export type GroupEntryCounts = Record<string, number>;
+
+export const EntrySortFieldSchema = z.enum([
+  "title",
+  "username",
+  "url",
+  "modifiedAt",
+  "createdAt",
+]);
+export type EntrySortField = z.infer<typeof EntrySortFieldSchema>;
+
+export const SortOrderSchema = z.enum(["asc", "desc"]);
+export type SortOrder = z.infer<typeof SortOrderSchema>;

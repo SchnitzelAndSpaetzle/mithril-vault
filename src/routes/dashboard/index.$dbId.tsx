@@ -5,9 +5,12 @@ import DesktopContentArea from "@/views/DesktopContentArea.tsx";
 import { database, KeepassIdSchema } from "@/lib/tauri";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { z } from "zod/v4";
+import { EntrySortFieldSchema, SortOrderSchema } from "@/lib/types";
 
 const DashboardSearchSchema = z.object({
   groupId: KeepassIdSchema.optional(),
+  sortBy: EntrySortFieldSchema.optional().default("title"),
+  sortOrder: SortOrderSchema.optional().default("asc"),
 });
 
 export const Route = createFileRoute("/dashboard/index/$dbId")({

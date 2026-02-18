@@ -2,15 +2,21 @@ import EntryList from "@/components/entries/EntryList.tsx";
 import NavEntries from "@/components/entries/nav-entries.tsx";
 import { SearchForm } from "@/components/search-form.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { ArrowDownAZ, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import SortDropdown from "@/components/entries/sort-dropdown";
+import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 
 export default function MobileContentArea() {
+  const { groupName, entryCount } = useEntryListHeader();
+
   return (
     <div className="h-full w-full min-w-0 overflow-auto overflow-x-hidden scrollbar-hide">
       <NavEntries>
         <div className="flex flex-col">
-          <p className="text-sm">All</p>
-          <small className="text-muted-foreground text-xs">124 Items</small>
+          <p className="text-sm">{groupName}</p>
+          <small className="text-muted-foreground text-xs">
+            {entryCount} {entryCount === 1 ? "Item" : "Items"}
+          </small>
         </div>
       </NavEntries>
       <EntryList />
@@ -20,9 +26,7 @@ export default function MobileContentArea() {
             <Plus />
           </Button>
           <SearchForm className="w-full" />
-          <Button variant="outline" size="icon-sm" className="">
-            <ArrowDownAZ />
-          </Button>
+          <SortDropdown />
         </div>
       </div>
     </div>
