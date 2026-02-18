@@ -58,12 +58,10 @@ const EntryListItem = memo(function EntryListItem({
           </Avatar>
         </ItemMedia>
         <ItemContent className="min-w-0 flex-1 overflow-hidden">
-          <ItemTitle className="truncate w-full">{title}</ItemTitle>
-          <div className="min-w-0 w-full">
-            <ItemDescription className="line-clamp-1 w-full min-w-0 wrap-break-words">
-              {username}
-            </ItemDescription>
-          </div>
+          <ItemTitle className="block truncate w-full">{title}</ItemTitle>
+          <ItemDescription className="line-clamp-none truncate w-full min-w-0">
+            {username}
+          </ItemDescription>
         </ItemContent>
         <ItemActions className="shrink-0">
           {/* TODO: show warning icon if password is duplicated or compromised */}
