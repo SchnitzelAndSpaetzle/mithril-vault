@@ -7,6 +7,7 @@ import { useEntryListKeyboard } from "@/hooks/use-entry-list-keyboard";
 import { useSortedEntries } from "@/hooks/use-sorted-entries";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useCallback, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -22,7 +23,17 @@ export default function EntryList() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const updateTabState = useDatabaseTabs((s) => s.updateTabState);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
+    if (node) {
+      const viewport = node.querySelector<HTMLDivElement>(
+        '[data-slot="scroll-area-viewport"]'
+      );
+      scrollRef.current = viewport;
+    } else {
+      scrollRef.current = null;
+    }
+  }, []);
 
   const sortBy: EntrySortField = search.sortBy ?? "title";
   const sortOrder: SortOrder = search.sortOrder ?? "asc";
@@ -119,9 +130,9 @@ export default function EntryList() {
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="min-h-0 flex-1 overflow-auto scrollbar-hide focus:outline-none"
+    <ScrollArea
+      ref={scrollAreaRef}
+      className="min-h-0 flex-1 focus:outline-none"
       role="listbox"
       tabIndex={0}
       onKeyDown={onKeyDown}
@@ -154,6 +165,6 @@ export default function EntryList() {
           );
         })}
       </div>
-    </div>
+    </ScrollArea>
   );
 }

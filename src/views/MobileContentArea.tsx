@@ -10,7 +10,7 @@ export default function MobileContentArea() {
   const { groupName, entryCount } = useEntryListHeader();
 
   return (
-    <div className="h-full w-full min-w-0 overflow-auto overflow-x-hidden scrollbar-hide">
+    <div className="flex h-full w-full min-w-0 flex-col">
       <NavEntries>
         <div className="flex flex-col">
           <p className="text-sm">{groupName}</p>
@@ -19,10 +19,12 @@ export default function MobileContentArea() {
           </small>
         </div>
       </NavEntries>
-      <EntryList />
-      <div className="sticky bottom-0 z-10">
-        <div className="flex items-center gap-2 p-4 border-t backdrop-blur-2xl">
-          <Button variant="outline" size="icon-sm" className="">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <EntryList />
+      </div>
+      <div className="shrink-0 border-t backdrop-blur-2xl">
+        <div className="flex items-center gap-2 p-4">
+          <Button variant="outline" size="icon-sm">
             <Plus />
           </Button>
           <SearchForm className="w-full" />
