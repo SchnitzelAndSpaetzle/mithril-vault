@@ -37,6 +37,7 @@ export default function EntryList() {
 
   const sortedEntries = useSortedEntries(entries, sortBy, sortOrder);
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer is not passed to memoized components
   const virtualizer = useVirtualizer({
     count: sortedEntries.length,
     getScrollElement: () => scrollRef.current,
