@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import type React from "react";
 import { useCallback } from "react";
 import type { Entry } from "@/lib/types";
 
@@ -56,8 +57,9 @@ export function useEntryListKeyboard({
           return;
       }
 
-      if (nextIndex !== null && entries[nextIndex]) {
-        onSelect(entries[nextIndex].id);
+      const nextEntry = nextIndex !== null ? entries[nextIndex] : undefined;
+      if (nextEntry) {
+        onSelect(nextEntry.id);
         scrollToIndex(nextIndex);
       }
     },

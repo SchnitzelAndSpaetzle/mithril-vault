@@ -136,6 +136,6 @@ describe("sortEntries", () => {
     const entries = [makeEntry({ title: "Only" })];
     const sorted = sortEntries(entries, "title", "asc");
     expect(sorted).toHaveLength(1);
-    expect(sorted[0].title).toBe("Only");
+    expect(sorted[0]?.title).toBe("Only");
   });
 });
