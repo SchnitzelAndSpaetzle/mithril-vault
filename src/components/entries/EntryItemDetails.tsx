@@ -60,9 +60,10 @@ export default function EntryItemDetails({
       {/* Title section */}
       <div className="flex items-center gap-4 px-4">
         <Avatar>
-          {customIcon ? (
-            <AvatarImage src={`data:image/png;base64,${customIcon}`} alt="" />
-          ) : null}
+          <AvatarImage
+            src={customIcon ? `data:image/png;base64,${customIcon}` : undefined}
+            alt=""
+          />
           <AvatarFallback>
             {createElement(iconComponent, { className: "h-4 w-4" })}
           </AvatarFallback>
