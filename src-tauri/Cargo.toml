@@ -38,6 +38,10 @@ keepass = { version = "0.8", features = ["save_kdbx4"] }
 rust-argon2 = "3.0"
 secstr = "0.5"
 
+# Clipboard support
+arboard = "3"
+tokio = { version = "1", features = ["time", "rt"] }
+
 # File locking support
 fs4 = "0.12"                                         # Cross-platform file locking (flock/LockFileEx)
 hostname = "0.4"                                     # Get machine hostname for lock file metadata

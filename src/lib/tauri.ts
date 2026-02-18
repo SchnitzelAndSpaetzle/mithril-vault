@@ -72,8 +72,9 @@ const NameSchema = z.object({
 });
 
 const CopyPasswordSchema = z.object({
+  dbId: z.string().min(1),
   entryId: KeepassIdSchema,
-  timeoutMs: z.number().int().positive().optional(),
+  timeoutSecs: z.number().int().positive().optional(),
 });
 
 const CreateDatabaseSchema = z.object({
@@ -397,9 +398,13 @@ export const generator = {
  * Clipboard actions for sensitive data (copy and clear).
  */
 export const clipboard = {
-  async copyPassword(entryId: string, timeoutMs?: number): Promise<void> {
-    CopyPasswordSchema.parse({ entryId, timeoutMs });
-    return invoke("copy_password_to_clipboard", { entryId, timeoutMs });
+  async copyPassword(
+    dbId: string,
+    entryId: string,
+    timeoutSecs?: number
+  ): Promise<void> {
+    CopyPasswordSchema.parse({ dbId, entryId, timeoutSecs });
+    return invoke("copy_password_to_clipboard", { dbId, entryId, timeoutSecs });
   },
 
   async clear(): Promise<void> {
