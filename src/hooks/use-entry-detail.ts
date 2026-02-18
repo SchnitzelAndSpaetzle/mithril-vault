@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useCallback, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import { entries } from "@/lib/tauri";
 
@@ -17,6 +17,8 @@ export function useEntryDetail(entryId: string | null, dbId: string | null) {
     queryKey: queryKeys.entries.detail(dbId ?? "none", entryId ?? "none"),
     queryFn: () => entries.get(dbId!, entryId!),
     enabled: Boolean(dbId) && Boolean(entryId),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 
   // Clear password when entry changes (security requirement)

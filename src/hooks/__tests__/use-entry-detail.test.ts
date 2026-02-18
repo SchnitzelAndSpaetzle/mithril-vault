@@ -35,6 +35,7 @@ vi.mock("@/lib/tauri", () => ({
 }));
 
 vi.mock("@tanstack/react-query", () => ({
+  keepPreviousData: Symbol("keepPreviousData"),
   useQuery: vi.fn(({ enabled }: { enabled: boolean }) => {
     if (!enabled) {
       return { data: undefined, isLoading: false, isError: false };
