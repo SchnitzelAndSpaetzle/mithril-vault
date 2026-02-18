@@ -24,16 +24,6 @@ export default function EntryList() {
   const navigate = useNavigate();
   const updateTabState = useDatabaseTabs((s) => s.updateTabState);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
-    if (node) {
-      const viewport = node.querySelector<HTMLDivElement>(
-        '[data-slot="scroll-area-viewport"]'
-      );
-      scrollRef.current = viewport;
-    } else {
-      scrollRef.current = null;
-    }
-  }, []);
 
   const sortBy: EntrySortField = search.sortBy ?? "title";
   const sortOrder: SortOrder = search.sortOrder ?? "asc";
@@ -131,8 +121,8 @@ export default function EntryList() {
 
   return (
     <ScrollArea
-      ref={scrollAreaRef}
-      className="min-h-0 flex-1 focus:outline-none"
+      viewportRef={scrollRef}
+      className="min-h-0 flex-1 overflow-hidden focus:outline-none"
       role="listbox"
       tabIndex={0}
       onKeyDown={onKeyDown}
