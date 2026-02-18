@@ -1,6 +1,6 @@
 import type { CustomIconMap, Entry } from "@/lib/types";
 import { CircleAlert } from "lucide-react";
-import { createElement } from "react";
+import { createElement, memo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Item,
@@ -10,33 +10,30 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
-import { useNavigate } from "@tanstack/react-router";
-import { useIsMobile } from "@/hooks/use-mobile.ts";
 import { getKeepassIcon } from "@/lib/keepass-icons";
+import { cn } from "@/lib/utils";
 
 interface EntryListItemProps extends Entry {
   customIcons: CustomIconMap;
+  isSelected?: boolean;
+  onClick?: (id: string) => void;
 }
 
-export default function EntryListItem({
+const EntryListItem = memo(function EntryListItem({
   username,
   title,
   id,
   iconId,
   customIconUuid,
   customIcons,
+  isSelected,
+  onClick,
 }: EntryListItemProps) {
-  const isMobile = useIsMobile();
-  const navigate = useNavigate({ from: "/dashboard/entry/$id" });
   const iconComponent = getKeepassIcon(iconId ?? 0);
   const customIcon = customIconUuid ? customIcons[customIconUuid] : null;
 
-  const handleClick = async () => {
-    if (isMobile) {
-      await navigate({ to: "/dashboard/entry/$id", params: { id } });
-    } else {
-      //TODO: switch panel for desktop
-    }
+  const handleClick = () => {
+    onClick?.(id);
   };
 
   return (
@@ -44,7 +41,10 @@ export default function EntryListItem({
       asChild
       variant="default"
       size="sm"
-      className="w-full min-w-0 p-2 rounded-none flex-nowrap"
+      className={cn(
+        "w-full min-w-0 p-2 rounded-none flex-nowrap",
+        isSelected && "bg-accent"
+      )}
     >
       <a className="w-full min-w-0 overflow-hidden" onClick={handleClick}>
         <ItemMedia>
@@ -58,12 +58,10 @@ export default function EntryListItem({
           </Avatar>
         </ItemMedia>
         <ItemContent className="min-w-0 flex-1 overflow-hidden">
-          <ItemTitle className="truncate w-full">{title}</ItemTitle>
-          <div className="min-w-0 w-full">
-            <ItemDescription className="line-clamp-1 w-full min-w-0 wrap-break-words">
-              {username}
-            </ItemDescription>
-          </div>
+          <ItemTitle className="block truncate w-full">{title}</ItemTitle>
+          <ItemDescription className="line-clamp-none truncate w-full min-w-0">
+            {username}
+          </ItemDescription>
         </ItemContent>
         <ItemActions className="shrink-0">
           {/* TODO: show warning icon if password is duplicated or compromised */}
@@ -72,4 +70,6 @@ export default function EntryListItem({
       </a>
     </Item>
   );
-}
+});
+
+export default EntryListItem;
