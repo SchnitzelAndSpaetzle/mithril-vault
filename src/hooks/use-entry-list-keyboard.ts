@@ -48,7 +48,7 @@ export function useEntryListKeyboard({
           nextIndex = entries.length - 1;
           break;
         case "Enter":
-          if (selectedEntryId) {
+          if (selectedEntryId && currentIndex !== -1) {
             e.preventDefault();
             onActivate(selectedEntryId);
           }
