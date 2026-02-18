@@ -132,6 +132,7 @@ export default function EntryList() {
       >
         {virtualizer.getVirtualItems().map((virtualItem) => {
           const entry = sortedEntries[virtualItem.index];
+          if (!entry) return null;
           return (
             <div
               key={entry.id}
