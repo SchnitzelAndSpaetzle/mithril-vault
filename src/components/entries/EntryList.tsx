@@ -18,7 +18,7 @@ const ESTIMATED_ITEM_HEIGHT = 65;
 
 export default function EntryList() {
   const { dbId, tab } = useActiveDatabase();
-  const search = useSearch({ from: "/dashboard/index/$dbId" });
+  const search = useSearch({ strict: false });
   const { data: customIcons } = useCustomIcons(dbId);
   const isMobile = useIsMobile();
   const navigate = useNavigate();

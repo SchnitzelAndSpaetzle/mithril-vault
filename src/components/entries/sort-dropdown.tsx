@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowDownAZ, ArrowUpAZ } from "lucide-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useTransition } from "react";
+import { useActiveDatabase } from "@/hooks/use-active-database";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 
 const SORT_FIELD_LABELS: Record<EntrySortField, string> = {
@@ -30,24 +31,31 @@ function isDateField(field: EntrySortField): boolean {
 }
 
 export default function SortDropdown() {
-  const search = useSearch({ from: "/dashboard/index/$dbId" });
-  const navigate = useNavigate({ from: "/dashboard/index/$dbId" });
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
+  const { dbId } = useActiveDatabase();
   const [, startTransition] = useTransition();
 
   const sortBy = search.sortBy ?? "title";
   const sortOrder = search.sortOrder ?? "asc";
 
   const handleSortByChange = (value: string) => {
+    if (!dbId) return;
     startTransition(() => {
       void navigate({
+        to: "/dashboard/index/$dbId",
+        params: { dbId },
         search: (prev) => ({ ...prev, sortBy: value as EntrySortField }),
       });
     });
   };
 
   const handleSortOrderChange = (value: string) => {
+    if (!dbId) return;
     startTransition(() => {
       void navigate({
+        to: "/dashboard/index/$dbId",
+        params: { dbId },
         search: (prev) => ({ ...prev, sortOrder: value as SortOrder }),
       });
     });
