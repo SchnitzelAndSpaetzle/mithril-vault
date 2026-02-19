@@ -77,6 +77,11 @@ const CopyPasswordSchema = z.object({
   timeoutSecs: z.number().int().positive().optional(),
 });
 
+const CopyTextSchema = z.object({
+  text: z.string(),
+  timeoutSecs: z.number().int().positive().optional(),
+});
+
 const CreateDatabaseSchema = z.object({
   path: z.string().min(1),
   name: z.string().min(1),
@@ -398,6 +403,11 @@ export const generator = {
  * Clipboard actions for sensitive data (copy and clear).
  */
 export const clipboard = {
+  async copyText(text: string, timeoutSecs?: number): Promise<void> {
+    CopyTextSchema.parse({ text, timeoutSecs });
+    return invoke("copy_text_to_clipboard", { text, timeoutSecs });
+  },
+
   async copyPassword(
     dbId: string,
     entryId: string,

@@ -53,3 +53,31 @@ export const createDatabaseSchema = createDatabaseBaseSchema
 
 // Use the base schema for type inference to avoid type mismatch with react-hook-form
 export type CreateDatabaseFormValues = z.infer<typeof createDatabaseBaseSchema>;
+
+// Entry edit/create form schemas
+export const entryCustomFieldSchema = z.object({
+  key: z.string().min(1, "Field name is required."),
+  value: z.string(),
+  isProtected: z.boolean(),
+});
+
+export type EntryCustomField = z.infer<typeof entryCustomFieldSchema>;
+
+const entryFormBaseSchema = z.object({
+  title: z.string().min(1, "Title is required."),
+  username: z.string(),
+  password: z.string(),
+  url: z.string(),
+  notes: z.string(),
+  iconId: z.number().int(),
+  tags: z.array(z.string()),
+  customFields: z.array(entryCustomFieldSchema),
+});
+
+export const entryFormSchema = entryFormBaseSchema.refine(
+  (data) => data.url === "" || /^https?:\/\/.+/.test(data.url),
+  { message: "Must be a valid URL.", path: ["url"] }
+);
+
+// Use the base schema for type inference to avoid type mismatch with react-hook-form
+export type EntryFormValues = z.infer<typeof entryFormBaseSchema>;

@@ -20,6 +20,15 @@ pub async fn copy_password_to_clipboard(
     clipboard.copy(&password, timeout_secs)
 }
 
+#[tauri::command]
+pub async fn copy_text_to_clipboard(
+    text: String,
+    timeout_secs: Option<u32>,
+    clipboard: State<'_, Arc<ClipboardService>>,
+) -> Result<(), AppError> {
+    clipboard.copy(&text, timeout_secs)
+}
+
 /// Clears the clipboard.
 #[tauri::command]
 pub async fn clear_clipboard(clipboard: State<'_, Arc<ClipboardService>>) -> Result<(), AppError> {
