@@ -12,8 +12,56 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { EntryEditForm } from "../EntryEditForm";
 import type { Entry } from "@/lib/types";
 
-const mockCreateEntry = vi.fn();
-const mockUpdateEntry = vi.fn();
+const {
+  mockCreateEntry,
+  mockUpdateEntry,
+  mockListEntries,
+  mockGetPassword,
+  mockGetProtectedCustomField,
+} = vi.hoisted(() => ({
+  mockCreateEntry: vi.fn(),
+  mockUpdateEntry: vi.fn(),
+  mockListEntries: vi.fn(() =>
+    Promise.resolve([
+      {
+        id: "entry-a",
+        groupId: "group-1",
+        title: "Entry A",
+        username: "alice@example.com",
+        url: null,
+        notes: null,
+        iconId: 0,
+        customIconUuid: null,
+        tags: [],
+        customFields: {},
+        customFieldMeta: [],
+        createdAt: "2024-02-17T15:56:34Z",
+        modifiedAt: "2024-02-17T15:58:43Z",
+        accessedAt: "2024-02-17T15:58:43Z",
+      },
+      {
+        id: "entry-b",
+        groupId: "group-1",
+        title: "Entry B",
+        username: "bob@example.com",
+        url: null,
+        notes: null,
+        iconId: 0,
+        customIconUuid: null,
+        tags: [],
+        customFields: {},
+        customFieldMeta: [],
+        createdAt: "2024-02-17T15:56:34Z",
+        modifiedAt: "2024-02-17T15:58:43Z",
+        accessedAt: "2024-02-17T15:58:43Z",
+      },
+    ])
+  ),
+  mockGetPassword: vi.fn(() => Promise.resolve("existing-password")),
+  mockGetProtectedCustomField: vi.fn(() =>
+    Promise.resolve({ key: "secret", value: "secret-value" })
+  ),
+}));
 
 vi.mock("@/hooks/use-entry-mutations", () => ({
   useEntryMutations: vi.fn(() => ({
@@ -25,46 +73,9 @@ vi.mock("@/hooks/use-entry-mutations", () => ({
 
 vi.mock("@/lib/tauri", () => ({
   entries: {
-    list: vi.fn(() =>
-      Promise.resolve([
-        {
-          id: "entry-a",
-          groupId: "group-1",
-          title: "Entry A",
-          username: "alice@example.com",
-          url: null,
-          notes: null,
-          iconId: 0,
-          customIconUuid: null,
-          tags: [],
-          customFields: {},
-          customFieldMeta: [],
-          createdAt: "2024-02-17T15:56:34Z",
-          modifiedAt: "2024-02-17T15:58:43Z",
-          accessedAt: "2024-02-17T15:58:43Z",
-        },
-        {
-          id: "entry-b",
-          groupId: "group-1",
-          title: "Entry B",
-          username: "bob@example.com",
-          url: null,
-          notes: null,
-          iconId: 0,
-          customIconUuid: null,
-          tags: [],
-          customFields: {},
-          customFieldMeta: [],
-          createdAt: "2024-02-17T15:56:34Z",
-          modifiedAt: "2024-02-17T15:58:43Z",
-          accessedAt: "2024-02-17T15:58:43Z",
-        },
-      ])
-    ),
-    getPassword: vi.fn(() => Promise.resolve("existing-password")),
-    getProtectedCustomField: vi.fn(() =>
-      Promise.resolve({ key: "secret", value: "secret-value" })
-    ),
+    list: mockListEntries,
+    getPassword: mockGetPassword,
+    getProtectedCustomField: mockGetProtectedCustomField,
   },
   generator: {
     generate: vi.fn(() => Promise.resolve("generated-pw-123")),
@@ -284,6 +295,42 @@ describe("EntryEditForm", () => {
         })
       );
       expect(onSave).toHaveBeenCalledWith(mockResult);
+    });
+  });
+
+  it("blocks save and supports retry when protected values fail to load", async () => {
+    mockGetPassword.mockRejectedValueOnce(new Error("secret load failed"));
+
+    render(
+      <EntryEditForm
+        entry={mockEntry}
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Protected values could not be loaded.")
+      ).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("Protected values could not be loaded.")
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Save Changes" })
+      ).not.toBeDisabled();
     });
   });
 

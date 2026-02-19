@@ -12,7 +12,7 @@ import { EntryActions } from "@/components/entries/EntryActions.tsx";
 import { SearchForm } from "@/components/search-form.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
-import { Dices, EllipsisVertical, Share } from "lucide-react";
+import { Dices, EllipsisVertical, Loader2, Share } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import SortDropdown from "@/components/entries/sort-dropdown";
 import { useEntryListHeader } from "@/hooks/use-entry-list-header";
@@ -37,7 +37,11 @@ export default function DragRegion() {
   const rootGroupId = tab?.info?.rootGroupId ?? "";
   const groupId = selectedGroupId ?? rootGroupId;
 
-  const { entry: editEntry } = useEntryDetail(
+  const {
+    entry: editEntry,
+    isLoading: isEditEntryLoading,
+    isTransitioning: isEditEntryTransitioning,
+  } = useEntryDetail(
     editMode === "edit" && selectedEntryId ? selectedEntryId : "",
     editMode === "edit" && dbId ? dbId : ""
   );
@@ -200,14 +204,22 @@ export default function DragRegion() {
           <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
             <div className="flex flex-col gap-4 p-4 pb-0 md:pb-20">
               {editMode === "edit" && selectedEntryId && dbId ? (
-                <EntryEditForm
-                  entry={editEntry ?? null}
-                  dbId={dbId}
-                  groupId={groupId}
-                  onSave={handleSave}
-                  onCancel={handleCancel}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+                isEditEntryLoading || isEditEntryTransitioning ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : editEntry ? (
+                  <EntryEditForm
+                    entry={editEntry}
+                    dbId={dbId}
+                    groupId={groupId}
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                    onDirtyChange={setHasUnsavedChanges}
+                  />
+                ) : (
+                  <EntryItemDetailsEmpty />
+                )
               ) : editMode === "create" && dbId ? (
                 <EntryEditForm
                   dbId={dbId}

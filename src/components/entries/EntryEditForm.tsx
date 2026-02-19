@@ -87,6 +87,8 @@ export function EntryEditForm({
   const isEditMode = !!entry;
   const [showPassword, setShowPassword] = useState(false);
   const [isLoadingSecrets, setIsLoadingSecrets] = useState(isEditMode);
+  const [secretLoadError, setSecretLoadError] = useState<string | null>(null);
+  const [secretReloadToken, setSecretReloadToken] = useState(0);
   const [isUsernameFocused, setIsUsernameFocused] = useState(false);
   const [activeUsernameSuggestionIndex, setActiveUsernameSuggestionIndex] =
     useState(-1);
@@ -126,6 +128,7 @@ export function EntryEditForm({
     setShowPassword(false);
     setIsUsernameFocused(false);
     setActiveUsernameSuggestionIndex(-1);
+    setSecretLoadError(null);
     setIsLoadingSecrets(Boolean(entryId));
   }, [dbId, entryId, form]);
 
@@ -136,6 +139,7 @@ export function EntryEditForm({
   // Fetch password and protected custom fields for edit mode
   useEffect(() => {
     if (!entry) return;
+    let cancelled = false;
 
     async function loadSecrets() {
       try {
@@ -150,7 +154,12 @@ export function EntryEditForm({
             ),
         ]);
 
+        if (cancelled) {
+          return;
+        }
+
         form.setValue("password", password, { shouldDirty: false });
+        setSecretLoadError(null);
 
         for (const pv of protectedValues) {
           const fieldIndex = entry!.customFieldMeta.findIndex(
@@ -162,16 +171,34 @@ export function EntryEditForm({
             });
           }
         }
+      } catch (error) {
+        if (!cancelled) {
+          setSecretLoadError(
+            `Failed to load protected values: ${String(error)}`
+          );
+          toast.error("Failed to load protected values for this entry.");
+        }
       } finally {
-        setIsLoadingSecrets(false);
+        if (!cancelled) {
+          setIsLoadingSecrets(false);
+        }
       }
     }
 
     void loadSecrets();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when entry ID changes, not on every entry object update
-  }, [entry?.id, dbId, form]);
+  }, [entry?.id, dbId, form, secretReloadToken]);
 
   async function onSubmit(values: EntryFormValues) {
+    if (isEditMode && secretLoadError) {
+      toast.error("Retry loading protected values before saving.");
+      return;
+    }
+
     const customFields: Record<string, string> = {};
     const protectedCustomFields: Record<string, string> = {};
 
@@ -240,6 +267,8 @@ export function EntryEditForm({
   }
 
   const isPending = createEntry.isPending || updateEntry.isPending;
+  const isSubmitDisabled =
+    isPending || (isEditMode && Boolean(secretLoadError));
   const watchedPassword = form.watch("password");
   const watchedUsername = form.watch("username");
   const normalizedUsernameInput = watchedUsername.trim().toLowerCase();
@@ -529,7 +558,7 @@ export function EntryEditForm({
 
         {/* Actions */}
         <div className="flex items-center gap-2 pt-2">
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isSubmitDisabled}>
             {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
             {isEditMode ? "Save Changes" : "Create Entry"}
           </Button>
@@ -542,6 +571,24 @@ export function EntryEditForm({
             Cancel
           </Button>
         </div>
+        {secretLoadError && (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
+            <span>Protected values could not be loaded.</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSecretLoadError(null);
+                setIsLoadingSecrets(true);
+                setSecretReloadToken((prev) => prev + 1);
+              }}
+              disabled={isPending}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
       </FieldGroup>
     </form>
   );
