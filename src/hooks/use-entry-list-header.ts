@@ -17,7 +17,7 @@ function findGroupById(groups: Group[], id: string): Group | null {
 
 export function useEntryListHeader() {
   const { dbId } = useActiveDatabase();
-  const search = useSearch({ from: "/dashboard/index/$dbId" });
+  const search = useSearch({ strict: false });
   const { data: entries } = useEntries(dbId, search.groupId);
   const { data: groups } = useGroups(dbId);
 

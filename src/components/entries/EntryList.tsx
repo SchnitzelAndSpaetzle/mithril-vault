@@ -16,9 +16,13 @@ import type { EntrySortField, SortOrder } from "@/lib/types";
 const EMPTY_ICONS: Record<string, string> = {};
 const ESTIMATED_ITEM_HEIGHT = 65;
 
-export default function EntryList() {
+interface EntryListProps {
+  onEntrySelect?: (id: string) => Promise<void> | void;
+}
+
+export default function EntryList({ onEntrySelect }: EntryListProps) {
   const { dbId, tab } = useActiveDatabase();
-  const search = useSearch({ from: "/dashboard/index/$dbId" });
+  const search = useSearch({ strict: false });
   const { data: customIcons } = useCustomIcons(dbId);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -49,12 +53,17 @@ export default function EntryList() {
   const selectedEntryId = tab?.selectedEntryId ?? null;
 
   const handleEntryClick = useCallback(
-    (id: string) => {
+    async (id: string) => {
+      if (onEntrySelect) {
+        await onEntrySelect(id);
+        return;
+      }
+
       if (tab) {
         updateTabState(tab.id, { selectedEntryId: id });
       }
     },
-    [tab, updateTabState]
+    [onEntrySelect, tab, updateTabState]
   );
 
   const handleEntryActivate = useCallback(
@@ -68,8 +77,10 @@ export default function EntryList() {
 
   const handleItemClick = useCallback(
     (id: string) => {
-      handleEntryClick(id);
-      handleEntryActivate(id);
+      void (async () => {
+        await handleEntryClick(id);
+        handleEntryActivate(id);
+      })();
     },
     [handleEntryClick, handleEntryActivate]
   );
@@ -84,7 +95,9 @@ export default function EntryList() {
   const { onKeyDown } = useEntryListKeyboard({
     entries: sortedEntries,
     selectedEntryId,
-    onSelect: handleEntryClick,
+    onSelect: (id) => {
+      void handleEntryClick(id);
+    },
     onActivate: handleEntryActivate,
     scrollToIndex,
   });

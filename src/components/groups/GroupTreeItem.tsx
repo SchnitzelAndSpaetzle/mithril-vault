@@ -68,7 +68,7 @@ export function GroupTreeItem({
   depth = 0,
 }: GroupTreeItemProps) {
   const navigate = useNavigate();
-  const search = useSearch({ from: "/dashboard/index/$dbId" });
+  const search = useSearch({ strict: false });
   const { createGroup, renameGroup, deleteGroup } = useGroupMutations(dbId);
 
   const tab = useDatabaseTabs((state) =>
