@@ -23,7 +23,7 @@ import { PasswordStrengthIndicator } from "@/components/database/create-wizard/P
 import { TagInput } from "@/components/entries/TagInput";
 import { IconPickerPopover } from "@/components/entries/IconPickerPopover";
 import { PasswordGeneratorPopover } from "@/components/entries/PasswordGeneratorPopover";
-import { CustomFieldsEditor } from "@/components/entries/CustomFieldsEditor";
+import { CustomFieldsEditor } from "@/components/entries/custom-fields-editor";
 import { useEntries } from "@/hooks/use-entries";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
 import { useTags } from "@/hooks/use-tags";
