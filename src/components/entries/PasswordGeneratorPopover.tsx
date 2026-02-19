@@ -43,6 +43,7 @@ export function PasswordGeneratorPopover({
     useState<PasswordGeneratorOptions>(DEFAULT_OPTIONS);
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const latestGenerationRequestRef = useRef(0);
 
@@ -55,6 +56,14 @@ export function PasswordGeneratorPopover({
       const pw = await generator.generate(opts);
       if (requestId === latestGenerationRequestRef.current) {
         setGeneratedPassword(pw);
+        setGenerationError(null);
+      }
+    } catch (error) {
+      if (requestId === latestGenerationRequestRef.current) {
+        setGeneratedPassword("");
+        setGenerationError(
+          error instanceof Error ? error.message : String(error)
+        );
       }
     } finally {
       if (requestId === latestGenerationRequestRef.current) {
@@ -131,6 +140,9 @@ export function PasswordGeneratorPopover({
         </div>
 
         <PasswordStrengthIndicator password={generatedPassword} />
+        {generationError && (
+          <p className="text-xs text-destructive">{generationError}</p>
+        )}
 
         {/* Length control */}
         <div className="flex items-center gap-3">
