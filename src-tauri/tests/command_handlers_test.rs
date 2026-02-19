@@ -43,11 +43,11 @@ fn cleanup_app_files(app: &tauri::App<tauri::test::MockRuntime>) {
 }
 
 #[test]
-fn generator_commands_return_not_implemented() {
-    let password_err =
+fn generator_commands_match_current_implementation() {
+    let password =
         tauri::async_runtime::block_on(generate_password(PasswordGeneratorOptions::default()))
-            .expect_err("expected not implemented");
-    assert!(matches!(password_err, AppError::NotImplemented(_)));
+            .expect("expected generated password");
+    assert_eq!(password.len(), PasswordGeneratorOptions::default().length);
 
     let passphrase_err =
         tauri::async_runtime::block_on(generate_passphrase(PassphraseGeneratorOptions::default()))
