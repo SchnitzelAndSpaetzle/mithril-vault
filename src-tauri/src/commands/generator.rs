@@ -159,7 +159,12 @@ mod tests {
             ..Default::default()
         };
 
-        let password = generate_password_value(&options).expect("password generation should work");
+        let password_result = generate_password_value(&options);
+        assert!(
+            password_result.is_ok(),
+            "password generation should work: {password_result:?}"
+        );
+        let password = password_result.unwrap_or_default();
         assert_eq!(password.len(), 32);
     }
 
@@ -185,7 +190,12 @@ mod tests {
             ..Default::default()
         };
 
-        let password = generate_password_value(&options).expect("password generation should work");
+        let password_result = generate_password_value(&options);
+        assert!(
+            password_result.is_ok(),
+            "password generation should work: {password_result:?}"
+        );
+        let password = password_result.unwrap_or_default();
         assert!(password.chars().all(|ch| !AMBIGUOUS_CHARS.contains(&ch)));
     }
 
@@ -197,7 +207,12 @@ mod tests {
             ..Default::default()
         };
 
-        let password = generate_password_value(&options).expect("password generation should work");
+        let password_result = generate_password_value(&options);
+        assert!(
+            password_result.is_ok(),
+            "password generation should work: {password_result:?}"
+        );
+        let password = password_result.unwrap_or_default();
         assert!(password
             .chars()
             .all(|ch| !['a', 'b', 'c', 'X', 'Y', 'Z', '1', '2', '3'].contains(&ch)));
