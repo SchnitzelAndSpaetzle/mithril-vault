@@ -38,9 +38,19 @@ vi.mock("@tanstack/react-query", () => ({
   keepPreviousData: Symbol("keepPreviousData"),
   useQuery: vi.fn(({ enabled }: { enabled: boolean }) => {
     if (!enabled) {
-      return { data: undefined, isLoading: false, isError: false };
+      return {
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        isPlaceholderData: false,
+      };
     }
-    return { data: makeMockEntry(), isLoading: false, isError: false };
+    return {
+      data: makeMockEntry(),
+      isLoading: false,
+      isError: false,
+      isPlaceholderData: false,
+    };
   }),
 }));
 
@@ -66,6 +76,12 @@ describe("useEntryDetail", () => {
     const { result } = renderHook(() => useEntryDetail("entry-1", "db-1"));
     expect(result.current.entry).toEqual(makeMockEntry());
     expect(result.current.isLoading).toBe(false);
+    expect(result.current.isTransitioning).toBe(false);
+  });
+
+  it("marks transition while detail data still belongs to another entry", () => {
+    const { result } = renderHook(() => useEntryDetail("entry-2", "db-1"));
+    expect(result.current.isTransitioning).toBe(true);
   });
 
   it("password is hidden by default", () => {

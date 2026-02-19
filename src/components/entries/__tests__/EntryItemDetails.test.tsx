@@ -30,6 +30,7 @@ vi.mock("@/hooks/use-entry-detail", () => ({
     password: null,
     isPasswordVisible: false,
     isPasswordLoading: false,
+    isTransitioning: false,
     revealPassword: vi.fn(),
     hidePassword: vi.fn(),
   })),
@@ -101,6 +102,7 @@ describe("EntryItemDetails", () => {
       password: null,
       isPasswordVisible: false,
       isPasswordLoading: false,
+      isTransitioning: false,
       revealPassword: vi.fn(),
       hidePassword: vi.fn(),
     });
@@ -110,5 +112,26 @@ describe("EntryItemDetails", () => {
     );
     const skeletons = container.querySelectorAll('[data-slot="skeleton"]');
     expect(skeletons.length).toBeGreaterThan(0);
+  });
+
+  it("disables sensitive actions while transitioning between entries", async () => {
+    const { useEntryDetail } = await import("@/hooks/use-entry-detail");
+    vi.mocked(useEntryDetail).mockReturnValueOnce({
+      entry: mockEntry,
+      isLoading: false,
+      isError: false,
+      password: null,
+      isPasswordVisible: false,
+      isPasswordLoading: false,
+      isTransitioning: true,
+      revealPassword: vi.fn(),
+      hidePassword: vi.fn(),
+    });
+
+    render(<EntryItemDetails entryId="entry-2" dbId="db-1" />);
+    expect(
+      screen.getByRole("button", { name: "reveal password" })
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "open url" })).toBeDisabled();
   });
 });
