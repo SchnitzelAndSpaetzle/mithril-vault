@@ -49,9 +49,12 @@ const EntryListItem = memo(function EntryListItem({
       <a className="w-full min-w-0 overflow-hidden" onClick={handleClick}>
         <ItemMedia>
           <Avatar className="size-10">
-            {customIcon ? (
-              <AvatarImage src={`data:image/png;base64,${customIcon}`} alt="" />
-            ) : null}
+            <AvatarImage
+              src={
+                customIcon ? `data:image/png;base64,${customIcon}` : undefined
+              }
+              alt=""
+            />
             <AvatarFallback>
               {createElement(iconComponent, { className: "h-4 w-4" })}
             </AvatarFallback>

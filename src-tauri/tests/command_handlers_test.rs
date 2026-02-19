@@ -3,6 +3,7 @@
 
 #![allow(clippy::expect_used)]
 
+use mithril_vault_lib::commands::clipboard::{clear_clipboard, copy_password_to_clipboard};
 use mithril_vault_lib::commands::database::{
     close_database, create_database, force_unlock_database, generate_keyfile, get_custom_icons,
     get_database_config, get_database_info, get_lock_status, inspect_database, list_open_databases,
@@ -79,6 +80,36 @@ fn secure_storage_commands_roundtrip() {
     let has_key =
         tauri::async_runtime::block_on(has_session_key(app.state())).expect("check session key");
     assert!(!has_key);
+
+    cleanup_app_files(&app);
+}
+
+#[test]
+fn clipboard_copy_command_fails_when_database_is_not_open() {
+    let app = setup_app();
+
+    let err = tauri::async_runtime::block_on(copy_password_to_clipboard(
+        "nonexistent.kdbx".to_string(),
+        "entry-id".to_string(),
+        Some(30),
+        app.state(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(err, AppError::DatabaseNotFound(_)));
+
+    cleanup_app_files(&app);
+}
+
+#[test]
+fn clear_clipboard_command_returns_expected_result_shape() {
+    let app = setup_app();
+
+    let result = tauri::async_runtime::block_on(clear_clipboard(app.state()));
+    assert!(
+        result.is_ok() || matches!(result, Err(AppError::Io(_))),
+        "clear_clipboard should either succeed or return IO error"
+    );
 
     cleanup_app_files(&app);
 }

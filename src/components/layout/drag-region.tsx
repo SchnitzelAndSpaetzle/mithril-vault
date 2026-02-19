@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/resizable";
 import EntryList from "@/components/entries/EntryList.tsx";
 import EntryItemDetails from "@/components/entries/EntryItemDetails.tsx";
+import { EntryItemDetailsEmpty } from "@/components/entries/EntryItemDetailsEmpty.tsx";
 import { SearchForm } from "@/components/search-form.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
@@ -19,9 +20,12 @@ import {
 import { Button } from "@/components/ui/button.tsx";
 import SortDropdown from "@/components/entries/sort-dropdown";
 import { useEntryListHeader } from "@/hooks/use-entry-list-header";
+import { useActiveDatabase } from "@/hooks/use-active-database";
 
 export default function DragRegion() {
   const { groupName, entryCount } = useEntryListHeader();
+  const { tab, dbId } = useActiveDatabase();
+  const selectedEntryId = tab?.selectedEntryId ?? null;
 
   return (
     <ResizablePanelGroup
@@ -99,7 +103,11 @@ export default function DragRegion() {
           </div>
           <div className="min-h-0 flex-1 overflow-auto scrollbar-hide">
             <div className="flex flex-col gap-4 p-4 pb-0 md:pb-20">
-              <EntryItemDetails />
+              {selectedEntryId && dbId ? (
+                <EntryItemDetails entryId={selectedEntryId} dbId={dbId} />
+              ) : (
+                <EntryItemDetailsEmpty />
+              )}
             </div>
           </div>
         </div>
