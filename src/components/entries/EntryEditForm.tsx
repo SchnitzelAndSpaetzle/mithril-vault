@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState } from "react";
+import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { Controller, type Resolver, useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -24,6 +24,7 @@ import { TagInput } from "@/components/entries/TagInput";
 import { IconPickerPopover } from "@/components/entries/IconPickerPopover";
 import { PasswordGeneratorPopover } from "@/components/entries/PasswordGeneratorPopover";
 import { CustomFieldsEditor } from "@/components/entries/CustomFieldsEditor";
+import { useEntries } from "@/hooks/use-entries";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
 import { useTags } from "@/hooks/use-tags";
 import { entries as entriesApi } from "@/lib/tauri";
@@ -42,6 +43,37 @@ interface EntryEditFormProps {
   onSave: (entry: Entry) => void;
   /** Called when user cancels (after unsaved changes check) */
   onCancel: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+}
+
+function getEntryFormDefaults(entry?: Entry | null): EntryFormValues {
+  if (!entry) {
+    return {
+      title: "",
+      username: "",
+      password: "",
+      url: "",
+      notes: "",
+      iconId: 0,
+      tags: [],
+      customFields: [],
+    };
+  }
+
+  return {
+    title: entry.title,
+    username: entry.username,
+    password: "",
+    url: entry.url ?? "",
+    notes: entry.notes ?? "",
+    iconId: entry.iconId ?? 0,
+    tags: [...entry.tags],
+    customFields: entry.customFieldMeta.map((meta) => ({
+      key: meta.key,
+      value: meta.isProtected ? "" : (entry.customFields[meta.key] ?? ""),
+      isProtected: meta.isProtected,
+    })),
+  };
 }
 
 export function EntryEditForm({
@@ -50,44 +82,56 @@ export function EntryEditForm({
   groupId,
   onSave,
   onCancel,
+  onDirtyChange,
 }: EntryEditFormProps) {
   const isEditMode = !!entry;
   const [showPassword, setShowPassword] = useState(false);
   const [isLoadingSecrets, setIsLoadingSecrets] = useState(isEditMode);
+  const [isUsernameFocused, setIsUsernameFocused] = useState(false);
+  const [activeUsernameSuggestionIndex, setActiveUsernameSuggestionIndex] =
+    useState(-1);
+  const entryRef = useRef<Entry | null | undefined>(entry);
+  const entryId = entry?.id ?? null;
 
   const { createEntry, updateEntry } = useEntryMutations(dbId);
   const { data: availableTags } = useTags(dbId);
+  const { data: allEntries } = useEntries(dbId);
+  const usernameSuggestionsAll = useMemo(() => {
+    const usernames = new Set<string>();
+    for (const existingEntry of allEntries ?? []) {
+      const normalizedUsername = existingEntry.username.trim();
+      if (normalizedUsername.length > 0) {
+        usernames.add(normalizedUsername);
+      }
+    }
+    return Array.from(usernames).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    );
+  }, [allEntries]);
 
   const form = useForm<EntryFormValues>({
     resolver: standardSchemaResolver(
       entryFormSchema
     ) as Resolver<EntryFormValues>,
-    defaultValues: entry
-      ? {
-          title: entry.title,
-          username: entry.username,
-          password: "",
-          url: entry.url ?? "",
-          notes: entry.notes ?? "",
-          iconId: entry.iconId ?? 0,
-          tags: [...entry.tags],
-          customFields: entry.customFieldMeta.map((meta) => ({
-            key: meta.key,
-            value: meta.isProtected ? "" : (entry.customFields[meta.key] ?? ""),
-            isProtected: meta.isProtected,
-          })),
-        }
-      : {
-          title: "",
-          username: "",
-          password: "",
-          url: "",
-          notes: "",
-          iconId: 0,
-          tags: [],
-          customFields: [],
-        },
+    defaultValues: getEntryFormDefaults(entry),
   });
+
+  useEffect(() => {
+    entryRef.current = entry;
+  }, [entry]);
+
+  useEffect(() => {
+    const currentEntry = entryRef.current ?? null;
+    form.reset(getEntryFormDefaults(currentEntry));
+    setShowPassword(false);
+    setIsUsernameFocused(false);
+    setActiveUsernameSuggestionIndex(-1);
+    setIsLoadingSecrets(Boolean(entryId));
+  }, [dbId, entryId, form]);
+
+  useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
 
   // Fetch password and protected custom fields for edit mode
   useEffect(() => {
@@ -197,6 +241,23 @@ export function EntryEditForm({
 
   const isPending = createEntry.isPending || updateEntry.isPending;
   const watchedPassword = form.watch("password");
+  const watchedUsername = form.watch("username");
+  const normalizedUsernameInput = watchedUsername.trim().toLowerCase();
+  const usernameSuggestions = useMemo(() => {
+    const selectedUsername = watchedUsername.trim().toLowerCase();
+    return usernameSuggestionsAll.filter((username) => {
+      const normalized = username.toLowerCase();
+      if (normalized === selectedUsername) {
+        return false;
+      }
+      return (
+        normalizedUsernameInput.length > 0 &&
+        normalized.includes(normalizedUsernameInput)
+      );
+    });
+  }, [normalizedUsernameInput, usernameSuggestionsAll, watchedUsername]);
+  const showUsernameSuggestions =
+    isUsernameFocused && !isPending && usernameSuggestions.length > 0;
 
   if (isLoadingSecrets) {
     return (
@@ -262,13 +323,88 @@ export function EntryEditForm({
             name="username"
             control={form.control}
             render={({ field }) => (
-              <Input
-                {...field}
-                id="username"
-                placeholder="Username or email"
-                autoComplete="username"
-                disabled={isPending}
-              />
+              <div className="relative">
+                <Input
+                  {...field}
+                  id="username"
+                  placeholder="Username or email"
+                  autoComplete="username"
+                  disabled={isPending}
+                  onFocus={() => {
+                    setIsUsernameFocused(true);
+                    setActiveUsernameSuggestionIndex(-1);
+                  }}
+                  onBlur={(event) => {
+                    field.onBlur();
+                    if (
+                      event.relatedTarget instanceof HTMLElement &&
+                      event.relatedTarget.dataset["usernameSuggestion"] ===
+                        "true"
+                    ) {
+                      return;
+                    }
+                    setIsUsernameFocused(false);
+                    setActiveUsernameSuggestionIndex(-1);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown" && showUsernameSuggestions) {
+                      event.preventDefault();
+                      setActiveUsernameSuggestionIndex((prev) =>
+                        prev < usernameSuggestions.length - 1 ? prev + 1 : 0
+                      );
+                      return;
+                    }
+
+                    if (event.key === "ArrowUp" && showUsernameSuggestions) {
+                      event.preventDefault();
+                      setActiveUsernameSuggestionIndex((prev) =>
+                        prev > 0 ? prev - 1 : usernameSuggestions.length - 1
+                      );
+                      return;
+                    }
+
+                    if (event.key === "Enter" && showUsernameSuggestions) {
+                      const selectedSuggestion =
+                        activeUsernameSuggestionIndex >= 0
+                          ? usernameSuggestions[activeUsernameSuggestionIndex]
+                          : usernameSuggestions[0];
+                      if (selectedSuggestion) {
+                        event.preventDefault();
+                        field.onChange(selectedSuggestion);
+                        setIsUsernameFocused(false);
+                        setActiveUsernameSuggestionIndex(-1);
+                      }
+                    }
+                  }}
+                />
+
+                {showUsernameSuggestions && (
+                  <div
+                    role="listbox"
+                    className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-44 w-full overflow-y-auto rounded-md border shadow-md"
+                  >
+                    {usernameSuggestions.map((username, index) => (
+                      <button
+                        key={username}
+                        type="button"
+                        role="option"
+                        data-username-suggestion="true"
+                        aria-selected={index === activeUsernameSuggestionIndex}
+                        className="hover:bg-accent hover:text-accent-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground block w-full px-3 py-2 text-left text-sm"
+                        data-active={index === activeUsernameSuggestionIndex}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          field.onChange(username);
+                          setIsUsernameFocused(false);
+                          setActiveUsernameSuggestionIndex(-1);
+                        }}
+                      >
+                        {username}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           />
         </Field>

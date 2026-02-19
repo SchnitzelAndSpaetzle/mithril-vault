@@ -25,6 +25,42 @@ vi.mock("@/hooks/use-entry-mutations", () => ({
 
 vi.mock("@/lib/tauri", () => ({
   entries: {
+    list: vi.fn(() =>
+      Promise.resolve([
+        {
+          id: "entry-a",
+          groupId: "group-1",
+          title: "Entry A",
+          username: "alice@example.com",
+          url: null,
+          notes: null,
+          iconId: 0,
+          customIconUuid: null,
+          tags: [],
+          customFields: {},
+          customFieldMeta: [],
+          createdAt: "2024-02-17T15:56:34Z",
+          modifiedAt: "2024-02-17T15:58:43Z",
+          accessedAt: "2024-02-17T15:58:43Z",
+        },
+        {
+          id: "entry-b",
+          groupId: "group-1",
+          title: "Entry B",
+          username: "bob@example.com",
+          url: null,
+          notes: null,
+          iconId: 0,
+          customIconUuid: null,
+          tags: [],
+          customFields: {},
+          customFieldMeta: [],
+          createdAt: "2024-02-17T15:56:34Z",
+          modifiedAt: "2024-02-17T15:58:43Z",
+          accessedAt: "2024-02-17T15:58:43Z",
+        },
+      ])
+    ),
     getPassword: vi.fn(() => Promise.resolve("existing-password")),
     getProtectedCustomField: vi.fn(() =>
       Promise.resolve({ key: "secret", value: "secret-value" })
@@ -63,6 +99,23 @@ const mockEntry: Entry = {
   tags: ["work"],
   customFields: { "Custom Key": "custom value" },
   customFieldMeta: [{ key: "Custom Key", isProtected: false }],
+  createdAt: "2024-02-17T15:56:34Z",
+  modifiedAt: "2024-02-17T15:58:43Z",
+  accessedAt: "2024-02-17T15:58:43Z",
+};
+
+const mockEntryTwo: Entry = {
+  id: "entry-2",
+  groupId: "group-1",
+  title: "Second Entry",
+  username: "second@example.com",
+  url: "https://second.example.com",
+  notes: "Second notes",
+  iconId: 1,
+  customIconUuid: null,
+  tags: ["personal"],
+  customFields: { "API Key": "public" },
+  customFieldMeta: [{ key: "API Key", isProtected: false }],
   createdAt: "2024-02-17T15:56:34Z",
   modifiedAt: "2024-02-17T15:58:43Z",
   accessedAt: "2024-02-17T15:58:43Z",
@@ -297,5 +350,105 @@ describe("EntryEditForm", () => {
     });
 
     expect(passwordInput).toHaveAttribute("type", "text");
+  });
+
+  it("renders and applies username suggestions from dropdown", async () => {
+    render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText("Username or email")
+      ).toBeInTheDocument();
+    });
+
+    const usernameInput = screen.getByPlaceholderText("Username or email");
+    await act(async () => {
+      fireEvent.focus(usernameInput);
+      fireEvent.change(usernameInput, { target: { value: "ali" } });
+    });
+
+    expect(
+      screen.getByRole("option", { name: "alice@example.com" })
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.keyDown(usernameInput, { key: "ArrowDown" });
+      fireEvent.keyDown(usernameInput, { key: "Enter" });
+    });
+
+    expect(usernameInput).toHaveValue("alice@example.com");
+  });
+
+  it("resets non-secret fields when switching edited entry", async () => {
+    const { rerender } = render(
+      <EntryEditForm
+        entry={mockEntry}
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Entry title")).toHaveValue(
+        "Test Entry"
+      );
+    });
+
+    rerender(
+      <EntryEditForm
+        entry={mockEntryTwo}
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Entry title")).toHaveValue(
+        "Second Entry"
+      );
+      expect(screen.getByPlaceholderText("Username or email")).toHaveValue(
+        "second@example.com"
+      );
+      expect(screen.getByPlaceholderText("https://example.com")).toHaveValue(
+        "https://second.example.com"
+      );
+    });
+  });
+
+  it("emits dirty state when form changes", async () => {
+    const onDirtyChange = vi.fn();
+    render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        onDirtyChange={onDirtyChange}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Entry title"), {
+        target: { value: "Dirty title" },
+      });
+    });
+
+    await waitFor(() => {
+      expect(onDirtyChange).toHaveBeenCalledWith(true);
+    });
   });
 });
