@@ -132,7 +132,7 @@ export default function EntryItemDetails({
       {entry.customFieldMeta.length > 0 && (
         <div className="border rounded-md">
           {entry.customFieldMeta.map((meta, index) => (
-            <div key={meta.key}>
+            <div key={`${entry.id}:${meta.key}`}>
               {index > 0 && <Separator />}
               {meta.isProtected ? (
                 <ProtectedCustomFieldRow
