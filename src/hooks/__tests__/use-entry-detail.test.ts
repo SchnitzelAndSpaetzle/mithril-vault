@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useEntryDetail } from "../use-entry-detail";
+import { useQuery } from "@tanstack/react-query";
 import type { Entry } from "@/lib/types";
 
 function makeMockEntry(): Entry {
@@ -84,6 +85,18 @@ describe("useEntryDetail", () => {
     expect(result.current.isTransitioning).toBe(true);
   });
 
+  it("marks transition while placeholder data is active", () => {
+    vi.mocked(useQuery).mockReturnValueOnce({
+      data: makeMockEntry(),
+      isLoading: false,
+      isError: false,
+      isPlaceholderData: true,
+    } as ReturnType<typeof useQuery>);
+
+    const { result } = renderHook(() => useEntryDetail("entry-1", "db-1"));
+    expect(result.current.isTransitioning).toBe(true);
+  });
+
   it("password is hidden by default", () => {
     const { result } = renderHook(() => useEntryDetail("entry-1", "db-1"));
     expect(result.current.password).toBeNull();
@@ -128,5 +141,16 @@ describe("useEntryDetail", () => {
 
     expect(result.current.password).toBeNull();
     expect(result.current.isPasswordVisible).toBe(false);
+  });
+
+  it("does not fetch password when ids are missing", async () => {
+    const { result } = renderHook(() => useEntryDetail(null, "db-1"));
+
+    await act(async () => {
+      await result.current.revealPassword();
+    });
+
+    expect(mockGetPassword).not.toHaveBeenCalled();
+    expect(result.current.isPasswordLoading).toBe(false);
   });
 });

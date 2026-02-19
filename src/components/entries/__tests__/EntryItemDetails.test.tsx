@@ -1,8 +1,17 @@
 // SPDX-License-Identifier: MIT
 
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import EntryItemDetails from "../EntryItemDetails";
+import { useEntryDetail } from "@/hooks/use-entry-detail";
+import { clipboard, entries as entriesApi } from "@/lib/tauri";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Entry } from "@/lib/types";
 
 const mockEntry: Entry = {
@@ -49,7 +58,29 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
 }));
 
+function makeHookResult(
+  overrides: Partial<ReturnType<typeof useEntryDetail>> = {}
+) {
+  return {
+    entry: mockEntry,
+    isLoading: false,
+    isError: false,
+    password: null,
+    isPasswordVisible: false,
+    isPasswordLoading: false,
+    isTransitioning: false,
+    revealPassword: vi.fn(),
+    hidePassword: vi.fn(),
+    ...overrides,
+  };
+}
+
 describe("EntryItemDetails", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useEntryDetail).mockReturnValue(makeHookResult());
+  });
+
   it("renders entry title", () => {
     render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
     expect(screen.getByText("Test Entry")).toBeInTheDocument();
@@ -94,17 +125,10 @@ describe("EntryItemDetails", () => {
   });
 
   it("shows skeleton when loading", async () => {
-    const { useEntryDetail } = await import("@/hooks/use-entry-detail");
     vi.mocked(useEntryDetail).mockReturnValueOnce({
+      ...makeHookResult(),
       entry: null,
       isLoading: true,
-      isError: false,
-      password: null,
-      isPasswordVisible: false,
-      isPasswordLoading: false,
-      isTransitioning: false,
-      revealPassword: vi.fn(),
-      hidePassword: vi.fn(),
     });
 
     const { container } = render(
@@ -114,18 +138,86 @@ describe("EntryItemDetails", () => {
     expect(skeletons.length).toBeGreaterThan(0);
   });
 
-  it("disables sensitive actions while transitioning between entries", async () => {
-    const { useEntryDetail } = await import("@/hooks/use-entry-detail");
+  it("copies password via backend clipboard command", async () => {
+    vi.mocked(clipboard.copyPassword).mockResolvedValueOnce(undefined);
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const passwordText = screen.getByText("••••••••");
+    await act(async () => {
+      fireEvent.click(passwordText.closest("button") as HTMLButtonElement);
+    });
+    expect(clipboard.copyPassword).toHaveBeenCalledWith("db-1", "entry-1", 30);
+  });
+
+  it("calls reveal and hide handlers from useEntryDetail", () => {
+    const revealPassword = vi.fn();
+    const hidePassword = vi.fn();
+
+    vi.mocked(useEntryDetail)
+      .mockReturnValueOnce(
+        makeHookResult({
+          revealPassword,
+          hidePassword,
+          isPasswordVisible: false,
+          password: null,
+        })
+      )
+      .mockReturnValueOnce(
+        makeHookResult({
+          revealPassword,
+          hidePassword,
+          isPasswordVisible: true,
+          password: "super-secret",
+        })
+      );
+
+    const { rerender } = render(
+      <EntryItemDetails entryId="entry-1" dbId="db-1" />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "reveal password" }));
+    expect(revealPassword).toHaveBeenCalledTimes(1);
+
+    rerender(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "hide password" }));
+    expect(hidePassword).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens URL through tauri opener", () => {
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "open url" }));
+    expect(openUrl).toHaveBeenCalledWith("https://example.com");
+  });
+
+  it("reveals protected custom field value through backend API", async () => {
+    const protectedEntry: Entry = {
+      ...mockEntry,
+      customFields: {},
+      customFieldMeta: [{ key: "API Token", isProtected: true }],
+    };
+    vi.mocked(useEntryDetail).mockReturnValueOnce(
+      makeHookResult({ entry: protectedEntry })
+    );
+    vi.mocked(entriesApi.getProtectedCustomField).mockResolvedValueOnce({
+      key: "API Token",
+      value: "token-123",
+    });
+
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "reveal API Token" }));
+
+    await waitFor(() => {
+      expect(entriesApi.getProtectedCustomField).toHaveBeenCalledWith(
+        "db-1",
+        "entry-1",
+        "API Token"
+      );
+      expect(screen.getByText("token-123")).toBeInTheDocument();
+    });
+  });
+
+  it("disables sensitive actions while transitioning between entries", () => {
     vi.mocked(useEntryDetail).mockReturnValueOnce({
-      entry: mockEntry,
-      isLoading: false,
-      isError: false,
-      password: null,
-      isPasswordVisible: false,
-      isPasswordLoading: false,
+      ...makeHookResult(),
       isTransitioning: true,
-      revealPassword: vi.fn(),
-      hidePassword: vi.fn(),
     });
 
     render(<EntryItemDetails entryId="entry-2" dbId="db-1" />);
