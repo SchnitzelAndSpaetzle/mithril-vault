@@ -5,8 +5,9 @@ import { type Resolver, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
 import { useTags } from "@/hooks/use-tags";
+import { PASSWORD_GENERATOR_DEFAULTS } from "@/lib/constants";
 import { entryFormSchema, type EntryFormValues } from "@/lib/formTypes";
-import { entries as entriesApi } from "@/lib/tauri";
+import { entries as entriesApi, generator } from "@/lib/tauri";
 import type { Entry } from "@/lib/types";
 
 interface UseEntryEditFormOptions {
@@ -18,7 +19,10 @@ interface UseEntryEditFormOptions {
   onDirtyChange?: ((isDirty: boolean) => void) | undefined;
 }
 
-function getEntryFormDefaults(entry?: Entry | null): EntryFormValues {
+function getEntryFormDefaults(
+  entry?: Entry | null,
+  defaultGroupId?: string
+): EntryFormValues {
   if (!entry) {
     return {
       title: "",
@@ -29,6 +33,7 @@ function getEntryFormDefaults(entry?: Entry | null): EntryFormValues {
       iconId: 0,
       tags: [],
       customFields: [],
+      groupId: defaultGroupId,
     };
   }
 
@@ -85,7 +90,7 @@ export function useEntryEditForm({
     resolver: standardSchemaResolver(
       entryFormSchema
     ) as Resolver<EntryFormValues>,
-    defaultValues: getEntryFormDefaults(entry),
+    defaultValues: getEntryFormDefaults(entry, groupId),
   });
 
   useEffect(() => {
@@ -94,10 +99,10 @@ export function useEntryEditForm({
 
   useEffect(() => {
     const currentEntry = entryRef.current ?? null;
-    form.reset(getEntryFormDefaults(currentEntry));
+    form.reset(getEntryFormDefaults(currentEntry, groupId));
     setSecretLoadError(null);
     setIsLoadingSecrets(Boolean(entryId));
-  }, [dbId, entryId, form]);
+  }, [dbId, entryId, groupId, form]);
 
   useEffect(() => {
     onDirtyChange?.(form.formState.isDirty);
@@ -157,6 +162,14 @@ export function useEntryEditForm({
     };
   }, [entry, entry?.id, dbId, form, secretReloadToken]);
 
+  // Auto-generate password when creating a new entry
+  useEffect(() => {
+    if (!isEditMode) {
+      void generateNewPassword();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode]);
+
   async function onSubmit(values: EntryFormValues) {
     if (isEditMode && secretLoadError) {
       toast.error("Retry loading protected values before saving.");
@@ -190,7 +203,7 @@ export function useEntryEditForm({
 
       const result = await createEntry.mutateAsync({
         dbId,
-        groupId,
+        groupId: values.groupId ?? groupId,
         data: {
           title: values.title,
           username: values.username,
@@ -227,6 +240,48 @@ export function useEntryEditForm({
     onCancel();
   }
 
+  async function generateNewPassword() {
+    try {
+      const password = await generator.generate(PASSWORD_GENERATOR_DEFAULTS);
+      form.setValue("password", password, { shouldDirty: false });
+    } catch {
+      // User can still type or use the generator popover
+    }
+  }
+
+  async function saveAndCreateAnother() {
+    const valid = await form.trigger();
+    if (!valid) return;
+
+    const values = form.getValues();
+    const { customFields, protectedCustomFields } =
+      toCustomFieldPayload(values);
+
+    try {
+      await createEntry.mutateAsync({
+        dbId,
+        groupId: values.groupId ?? groupId,
+        data: {
+          title: values.title,
+          username: values.username,
+          password: values.password,
+          url: values.url || undefined,
+          notes: values.notes || undefined,
+          iconId: values.iconId,
+          tags: values.tags,
+          customFields,
+          protectedCustomFields,
+        },
+      });
+      toast.success("Entry created");
+      form.reset(getEntryFormDefaults(null, values.groupId ?? groupId));
+      void generateNewPassword();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Failed to create entry: ${message}`);
+    }
+  }
+
   function retrySecretLoad() {
     setSecretLoadError(null);
     setIsLoadingSecrets(true);
@@ -254,6 +309,7 @@ export function useEntryEditForm({
     watchedUsername: form.watch("username"),
     onSubmit,
     handleCancel,
+    saveAndCreateAnother,
     retrySecretLoad,
     setGeneratedPassword,
   };
