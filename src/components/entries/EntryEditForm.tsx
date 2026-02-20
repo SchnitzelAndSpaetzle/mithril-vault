@@ -3,6 +3,7 @@ import { CustomFieldsEditor } from "@/components/entries/custom-fields-editor";
 import { FieldGroup } from "@/components/ui/field";
 import {
   EntryFormActions,
+  EntryGroupField,
   EntryNotesField,
   EntryPasswordField,
   EntryTagsField,
@@ -48,6 +49,7 @@ export function EntryEditForm({
     watchedUsername,
     onSubmit,
     handleCancel,
+    saveAndCreateAnother,
     retrySecretLoad,
     setGeneratedPassword,
   } = useEntryEditForm({
@@ -83,7 +85,16 @@ export function EntryEditForm({
   return (
     <form onSubmit={form.handleSubmit(onSubmit)}>
       <FieldGroup>
-        <EntryTitleField control={form.control} isPending={isPending} />
+        <EntryGroupField
+          control={form.control}
+          dbId={dbId}
+          isPending={isPending}
+        />
+        <EntryTitleField
+          control={form.control}
+          isPending={isPending}
+          autoFocus={!isEditMode}
+        />
         <EntryUsernameField
           control={form.control}
           isPending={isPending}
@@ -119,6 +130,7 @@ export function EntryEditForm({
           secretLoadError={secretLoadError}
           onCancel={handleCancel}
           onRetrySecretLoad={retrySecretLoad}
+          onSaveAndNew={!isEditMode ? saveAndCreateAnother : undefined}
         />
       </FieldGroup>
     </form>

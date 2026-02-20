@@ -315,6 +315,13 @@ export const entries = {
     return EntrySchema.parse(result);
   },
 
+  async move(dbId: string, id: string, targetGroupId: string): Promise<Entry> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("move_entry", { dbId, id, targetGroupId });
+    return EntrySchema.parse(result);
+  },
+
   async delete(dbId: string, id: string): Promise<void> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });

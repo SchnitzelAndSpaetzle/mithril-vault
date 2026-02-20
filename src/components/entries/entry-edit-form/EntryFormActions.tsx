@@ -8,7 +8,7 @@ interface EntryFormActionsProps {
   secretLoadError: string | null;
   onCancel: () => void;
   onRetrySecretLoad: () => void;
-  onSaveAndNew?: () => void;
+  onSaveAndNew?: (() => void) | undefined;
 }
 
 export function EntryFormActions({

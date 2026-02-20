@@ -50,6 +50,7 @@ function getEntryFormDefaults(
       value: meta.isProtected ? "" : (entry.customFields[meta.key] ?? ""),
       isProtected: meta.isProtected,
     })),
+    groupId: entry.groupId,
   };
 }
 
@@ -181,7 +182,7 @@ export function useEntryEditForm({
 
     try {
       if (isEditMode && entry) {
-        const result = await updateEntry.mutateAsync({
+        let result = await updateEntry.mutateAsync({
           dbId,
           id: entry.id,
           data: {
@@ -196,6 +197,11 @@ export function useEntryEditForm({
             protectedCustomFields,
           },
         });
+
+        if (values.groupId && values.groupId !== entry.groupId) {
+          result = await entriesApi.move(dbId, entry.id, values.groupId);
+        }
+
         toast.success("Entry updated");
         onSave(result);
         return;
