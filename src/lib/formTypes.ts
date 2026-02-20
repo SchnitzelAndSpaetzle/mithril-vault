@@ -72,6 +72,7 @@ const entryFormBaseSchema = z.object({
   iconId: z.number().int(),
   tags: z.array(z.string()),
   customFields: z.array(entryCustomFieldSchema),
+  groupId: z.string().optional(),
 });
 
 export const entryFormSchema = entryFormBaseSchema.refine(

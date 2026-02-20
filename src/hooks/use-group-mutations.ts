@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
-import { groups } from "@/lib/tauri";
+import { database, groups } from "@/lib/tauri";
 import type { Group } from "@/lib/types";
 
 interface CreateGroupParams {
@@ -56,23 +56,35 @@ export function useGroupMutations(dbId: string | null) {
   const createGroup = useMutation<Group, Error, CreateGroupParams>({
     mutationFn: ({ dbId, parentId, name }) =>
       groups.create(dbId, parentId, name),
-    onSuccess: invalidateAfterGroupMutation,
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterGroupMutation();
+    },
   });
 
   const renameGroup = useMutation<Group, Error, RenameGroupParams>({
     mutationFn: ({ dbId, id, name }) => groups.rename(dbId, id, name),
-    onSuccess: invalidateAfterGroupMutation,
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterGroupMutation();
+    },
   });
 
   const deleteGroup = useMutation<void, Error, DeleteGroupParams>({
     mutationFn: ({ dbId, id }) => groups.delete(dbId, id, true),
-    onSuccess: invalidateAfterGroupMutation,
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterGroupMutation();
+    },
   });
 
   const moveGroup = useMutation<Group, Error, MoveGroupParams>({
     mutationFn: ({ dbId, id, targetParentId }) =>
       groups.move(dbId, id, targetParentId),
-    onSuccess: invalidateAfterGroupMutation,
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterGroupMutation();
+    },
   });
 
   return {

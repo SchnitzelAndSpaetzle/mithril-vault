@@ -8,6 +8,7 @@ interface EntryFormActionsProps {
   secretLoadError: string | null;
   onCancel: () => void;
   onRetrySecretLoad: () => void;
+  onSaveAndNew?: () => void;
 }
 
 export function EntryFormActions({
@@ -17,6 +18,7 @@ export function EntryFormActions({
   secretLoadError,
   onCancel,
   onRetrySecretLoad,
+  onSaveAndNew,
 }: EntryFormActionsProps) {
   return (
     <>
@@ -25,6 +27,17 @@ export function EntryFormActions({
           {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
           {isEditMode ? "Save Changes" : "Create Entry"}
         </Button>
+        {!isEditMode && onSaveAndNew && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitDisabled}
+            onClick={onSaveAndNew}
+          >
+            {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Save & New
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"

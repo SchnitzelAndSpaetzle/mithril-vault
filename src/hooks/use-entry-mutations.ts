@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
-import { entries } from "@/lib/tauri";
+import { database, entries } from "@/lib/tauri";
 import type { CreateEntryData, Entry, UpdateEntryData } from "@/lib/types";
 
 interface CreateEntryParams {
@@ -44,17 +44,26 @@ export function useEntryMutations(dbId: string | null) {
   const createEntry = useMutation<Entry, Error, CreateEntryParams>({
     mutationFn: ({ dbId, groupId, data }) =>
       entries.create(dbId, groupId, data),
-    onSuccess: invalidateAfterEntryMutation,
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterEntryMutation();
+    },
   });
 
   const updateEntry = useMutation<Entry, Error, UpdateEntryParams>({
     mutationFn: ({ dbId, id, data }) => entries.update(dbId, id, data),
-    onSuccess: invalidateAfterEntryMutation,
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterEntryMutation();
+    },
   });
 
   const deleteEntry = useMutation<void, Error, DeleteEntryParams>({
     mutationFn: ({ dbId, id }) => entries.delete(dbId, id),
-    onSuccess: invalidateAfterEntryMutation,
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterEntryMutation();
+    },
   });
 
   return {

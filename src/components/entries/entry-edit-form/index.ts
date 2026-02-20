@@ -1,3 +1,4 @@
+export { EntryGroupField } from "./EntryGroupField";
 export { EntryTitleField } from "./EntryTitleField";
 export { EntryUsernameField } from "./EntryUsernameField";
 export { EntryPasswordField } from "./EntryPasswordField";

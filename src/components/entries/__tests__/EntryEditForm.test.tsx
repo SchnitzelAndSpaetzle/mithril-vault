@@ -243,7 +243,7 @@ describe("EntryEditForm", () => {
           data: expect.objectContaining({
             title: "New Entry",
             username: "",
-            password: "",
+            password: "generated-pw-123",
           }),
         })
       );

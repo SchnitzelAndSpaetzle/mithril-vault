@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { Controller, type Control } from "react-hook-form";
+import { type Control, Controller } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
@@ -10,9 +10,14 @@ import type { EntryFormValues } from "@/lib/formTypes";
 interface EntryTitleFieldProps {
   control: Control<EntryFormValues>;
   isPending: boolean;
+  autoFocus?: boolean;
 }
 
-export function EntryTitleField({ control, isPending }: EntryTitleFieldProps) {
+export function EntryTitleField({
+  control,
+  isPending,
+  autoFocus,
+}: EntryTitleFieldProps) {
   return (
     <Field>
       <FieldLabel htmlFor="title">Title</FieldLabel>
@@ -46,6 +51,7 @@ export function EntryTitleField({ control, isPending }: EntryTitleFieldProps) {
               <Input
                 {...field}
                 id="title"
+                autoFocus={autoFocus}
                 aria-invalid={fieldState.invalid}
                 placeholder="Entry title"
                 disabled={isPending}
