@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { useCreateEntryShortcut } from "@/hooks/use-create-entry-shortcut";
 import EntryList from "@/components/entries/EntryList.tsx";
 import EntryItemDetails from "@/components/entries/EntryItemDetails.tsx";
 import { EntryItemDetailsEmpty } from "@/components/entries/EntryItemDetailsEmpty.tsx";
@@ -116,6 +117,9 @@ export default function DragRegion() {
   };
 
   const isEditing = editMode !== "view";
+
+  const openCreateMode = useCallback(() => setEditMode("create"), []);
+  useCreateEntryShortcut(openCreateMode, Boolean(dbId) && !isEditing);
 
   return (
     <ResizablePanelGroup

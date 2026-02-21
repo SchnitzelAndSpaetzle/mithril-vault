@@ -242,6 +242,7 @@ export function UnlockDbForm({
                   type={showPassword ? "text" : "password"}
                   placeholder="enter password here..."
                   autoComplete="off"
+                  autoFocus
                   className="relative flex"
                   disabled={isUnlocking}
                 />

@@ -1,15 +1,23 @@
+import { useCallback } from "react";
 import EntryList from "@/components/entries/EntryList.tsx";
 import NavEntries from "@/components/entries/nav-entries.tsx";
 import { SearchForm } from "@/components/search-form.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Plus } from "lucide-react";
 import SortDropdown from "@/components/entries/sort-dropdown";
+import { useCreateEntryShortcut } from "@/hooks/use-create-entry-shortcut";
 import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 import { useNavigate } from "@tanstack/react-router";
 
 export default function MobileContentArea() {
   const { groupName, entryCount } = useEntryListHeader();
   const navigate = useNavigate();
+
+  const openCreateEntry = useCallback(
+    () => void navigate({ to: "/dashboard/entry/new" }),
+    [navigate]
+  );
+  useCreateEntryShortcut(openCreateEntry, true);
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col">
