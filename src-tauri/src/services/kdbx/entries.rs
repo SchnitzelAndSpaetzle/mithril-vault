@@ -242,12 +242,7 @@ impl KdbxService {
 
     /// Renames a tag across all entries in the database.
     /// Returns the number of entries that were modified.
-    pub fn rename_tag(
-        &self,
-        db_id: &str,
-        old_name: &str,
-        new_name: &str,
-    ) -> Result<u32, AppError> {
+    pub fn rename_tag(&self, db_id: &str, old_name: &str, new_name: &str) -> Result<u32, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
@@ -440,7 +435,10 @@ fn collect_all_entries(group: &keepass::db::Group, entries: &mut Vec<Entry>) {
     }
 }
 
-fn modify_tags_in_group(group: &mut keepass::db::Group, modify_fn: &dyn Fn(&mut Vec<String>) -> bool) -> u32 {
+fn modify_tags_in_group(
+    group: &mut keepass::db::Group,
+    modify_fn: &dyn Fn(&mut Vec<String>) -> bool,
+) -> u32 {
     let mut count = 0u32;
     for node in &mut group.children {
         match node {
