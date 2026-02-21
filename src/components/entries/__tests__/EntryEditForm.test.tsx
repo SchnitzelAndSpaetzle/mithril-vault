@@ -15,12 +15,14 @@ import type { Entry } from "@/lib/types";
 const {
   mockCreateEntry,
   mockUpdateEntry,
+  mockMoveEntry,
   mockListEntries,
   mockGetPassword,
   mockGetProtectedCustomField,
 } = vi.hoisted(() => ({
   mockCreateEntry: vi.fn(),
   mockUpdateEntry: vi.fn(),
+  mockMoveEntry: vi.fn(),
   mockListEntries: vi.fn(() =>
     Promise.resolve([
       {
@@ -67,6 +69,7 @@ vi.mock("@/hooks/use-entry-mutations", () => ({
   useEntryMutations: vi.fn(() => ({
     createEntry: { mutateAsync: mockCreateEntry, isPending: false },
     updateEntry: { mutateAsync: mockUpdateEntry, isPending: false },
+    moveEntry: { mutateAsync: mockMoveEntry, isPending: false },
     deleteEntry: { mutateAsync: vi.fn(), isPending: false },
   })),
 }));
@@ -473,6 +476,37 @@ describe("EntryEditForm", () => {
         "https://second.example.com"
       );
     });
+  });
+
+  it("keeps create form values when selected group changes", async () => {
+    const { rerender } = render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Entry title"), {
+        target: { value: "Draft title" },
+      });
+    });
+
+    rerender(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-2"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByPlaceholderText("Entry title")).toHaveValue(
+      "Draft title"
+    );
   });
 
   it("emits dirty state when form changes", async () => {

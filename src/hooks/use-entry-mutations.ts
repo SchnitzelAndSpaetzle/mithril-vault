@@ -17,6 +17,12 @@ interface UpdateEntryParams {
   data: UpdateEntryData;
 }
 
+interface MoveEntryParams {
+  dbId: string;
+  id: string;
+  targetGroupId: string;
+}
+
 interface DeleteEntryParams {
   dbId: string;
   id: string;
@@ -58,6 +64,15 @@ export function useEntryMutations(dbId: string | null) {
     },
   });
 
+  const moveEntry = useMutation<Entry, Error, MoveEntryParams>({
+    mutationFn: ({ dbId, id, targetGroupId }) =>
+      entries.move(dbId, id, targetGroupId),
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterEntryMutation();
+    },
+  });
+
   const deleteEntry = useMutation<void, Error, DeleteEntryParams>({
     mutationFn: ({ dbId, id }) => entries.delete(dbId, id),
     onSuccess: (_data, variables) => {
@@ -69,6 +84,7 @@ export function useEntryMutations(dbId: string | null) {
   return {
     createEntry,
     updateEntry,
+    moveEntry,
     deleteEntry,
   };
 }

@@ -80,11 +80,12 @@ export function useEntryEditForm({
   const isEditMode = Boolean(entry);
   const entryId = entry?.id ?? null;
   const entryRef = useRef<Entry | null | undefined>(entry);
+  const groupIdRef = useRef(groupId);
   const [isLoadingSecrets, setIsLoadingSecrets] = useState(isEditMode);
   const [secretLoadError, setSecretLoadError] = useState<string | null>(null);
   const [secretReloadToken, setSecretReloadToken] = useState(0);
 
-  const { createEntry, updateEntry } = useEntryMutations(dbId);
+  const { createEntry, updateEntry, moveEntry } = useEntryMutations(dbId);
   const { data: availableTags } = useTags(dbId);
 
   const form = useForm<EntryFormValues>({
@@ -99,11 +100,15 @@ export function useEntryEditForm({
   }, [entry]);
 
   useEffect(() => {
+    groupIdRef.current = groupId;
+  }, [groupId]);
+
+  useEffect(() => {
     const currentEntry = entryRef.current ?? null;
-    form.reset(getEntryFormDefaults(currentEntry, groupId));
+    form.reset(getEntryFormDefaults(currentEntry, groupIdRef.current));
     setSecretLoadError(null);
     setIsLoadingSecrets(Boolean(entryId));
-  }, [dbId, entryId, groupId, form]);
+  }, [dbId, entryId, form]);
 
   useEffect(() => {
     onDirtyChange?.(form.formState.isDirty);
@@ -199,7 +204,11 @@ export function useEntryEditForm({
         });
 
         if (values.groupId && values.groupId !== entry.groupId) {
-          result = await entriesApi.move(dbId, entry.id, values.groupId);
+          result = await moveEntry.mutateAsync({
+            dbId,
+            id: entry.id,
+            targetGroupId: values.groupId,
+          });
         }
 
         toast.success("Entry updated");
@@ -298,7 +307,8 @@ export function useEntryEditForm({
     form.setValue("password", password, { shouldDirty: true });
   }
 
-  const isPending = createEntry.isPending || updateEntry.isPending;
+  const isPending =
+    createEntry.isPending || updateEntry.isPending || moveEntry.isPending;
   const isSubmitDisabled =
     isPending || (isEditMode && Boolean(secretLoadError));
 
