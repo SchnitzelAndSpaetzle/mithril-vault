@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { type Resolver, useForm } from "react-hook-form";
+import { type Resolver, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
 import { useTags } from "@/hooks/use-tags";
@@ -311,6 +311,10 @@ export function useEntryEditForm({
     createEntry.isPending || updateEntry.isPending || moveEntry.isPending;
   const isSubmitDisabled =
     isPending || (isEditMode && Boolean(secretLoadError));
+  const watchedPassword =
+    useWatch({ control: form.control, name: "password" }) ?? "";
+  const watchedUsername =
+    useWatch({ control: form.control, name: "username" }) ?? "";
 
   return {
     form,
@@ -321,8 +325,8 @@ export function useEntryEditForm({
     isPending,
     isSubmitDisabled,
     availableTags,
-    watchedPassword: form.watch("password"),
-    watchedUsername: form.watch("username"),
+    watchedPassword,
+    watchedUsername,
     onSubmit,
     handleCancel,
     saveAndCreateAnother,
