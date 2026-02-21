@@ -22,13 +22,11 @@ import {
 import { Separator } from "@/components/ui/separator.tsx";
 import { GroupTree } from "@/components/groups/GroupTree";
 import { useActiveDatabase } from "@/hooks/use-active-database";
-import { useTags } from "@/hooks/use-tags";
 import NavTags from "@/components/layout/nav-tags.tsx";
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate();
   const { dbId } = useActiveDatabase();
-  const { data: tags } = useTags(dbId);
 
   if (!dbId) {
     return null;
@@ -81,7 +79,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <NavMain items={navMain} />
         <Separator />
-        <NavTags tags={tags ?? []} />
+        <NavTags dbId={dbId} />
         <SidebarGroup>
           <SidebarGroupLabel>Groups</SidebarGroupLabel>
           <SidebarGroupContent>

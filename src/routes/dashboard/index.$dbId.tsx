@@ -11,6 +11,7 @@ const DashboardSearchSchema = z.object({
   groupId: KeepassIdSchema.optional(),
   sortBy: EntrySortFieldSchema.optional().default("title"),
   sortOrder: SortOrderSchema.optional().default("asc"),
+  tag: z.string().optional(),
 });
 
 export const Route = createFileRoute("/dashboard/index/$dbId")({

@@ -9,7 +9,7 @@ import { useDatabaseTabs } from "@/stores/database-tabs";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 
@@ -41,9 +41,18 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
 
   const sortedEntries = useSortedEntries(entries, sortBy, sortOrder);
 
+  const tagFilter = search.tag as string | undefined;
+  const displayEntries = useMemo(
+    () =>
+      tagFilter
+        ? sortedEntries.filter((e) => e.tags.includes(tagFilter))
+        : sortedEntries,
+    [sortedEntries, tagFilter]
+  );
+
   // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer is not passed to memoized components
   const virtualizer = useVirtualizer({
-    count: sortedEntries.length,
+    count: displayEntries.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ESTIMATED_ITEM_HEIGHT,
     measureElement: (el) => el.getBoundingClientRect().height,
@@ -93,7 +102,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   );
 
   const { onKeyDown } = useEntryListKeyboard({
-    entries: sortedEntries,
+    entries: displayEntries,
     selectedEntryId,
     onSelect: (id) => {
       void handleEntryClick(id);
@@ -126,10 +135,12 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
     );
   }
 
-  if (sortedEntries.length === 0) {
+  if (displayEntries.length === 0) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
-        No entries found.
+        {tagFilter
+          ? `No entries with tag "${tagFilter}".`
+          : "No entries found."}
       </div>
     );
   }
@@ -147,7 +158,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
         style={{ height: `${virtualizer.getTotalSize()}px` }}
       >
         {virtualizer.getVirtualItems().map((virtualItem) => {
-          const entry = sortedEntries[virtualItem.index];
+          const entry = displayEntries[virtualItem.index];
           if (!entry) return null;
           return (
             <div

@@ -240,6 +240,63 @@ impl KdbxService {
         Ok(())
     }
 
+    /// Renames a tag across all entries in the database.
+    /// Returns the number of entries that were modified.
+    pub fn rename_tag(
+        &self,
+        db_id: &str,
+        old_name: &str,
+        new_name: &str,
+    ) -> Result<u32, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+
+        let count = modify_tags_in_group(&mut open_db.db.root, &|tags| {
+            if let Some(pos) = tags.iter().position(|t| t == old_name) {
+                if tags.iter().any(|t| t == new_name) {
+                    // new_name already exists, just remove old_name
+                    tags.remove(pos);
+                } else {
+                    tags[pos] = new_name.to_string();
+                }
+                true
+            } else {
+                false
+            }
+        });
+
+        if count > 0 {
+            open_db.is_modified = true;
+        }
+
+        Ok(count)
+    }
+
+    /// Deletes a tag from all entries in the database.
+    /// Returns the number of entries that were modified.
+    pub fn delete_tag(&self, db_id: &str, tag_name: &str) -> Result<u32, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+
+        let count = modify_tags_in_group(&mut open_db.db.root, &|tags| {
+            let len_before = tags.len();
+            tags.retain(|t| t != tag_name);
+            tags.len() != len_before
+        });
+
+        if count > 0 {
+            open_db.is_modified = true;
+        }
+
+        Ok(count)
+    }
+
     /// Moves an entry to another group.
     pub fn move_entry(
         &self,
@@ -381,6 +438,24 @@ fn collect_all_entries(group: &keepass::db::Group, entries: &mut Vec<Entry>) {
             }
         }
     }
+}
+
+fn modify_tags_in_group(group: &mut keepass::db::Group, modify_fn: &dyn Fn(&mut Vec<String>) -> bool) -> u32 {
+    let mut count = 0u32;
+    for node in &mut group.children {
+        match node {
+            Node::Entry(entry) => {
+                if modify_fn(&mut entry.tags) {
+                    entry.times.set_last_modification(Times::now());
+                    count += 1;
+                }
+            }
+            Node::Group(child) => {
+                count += modify_tags_in_group(child, modify_fn);
+            }
+        }
+    }
+    count
 }
 
 fn remove_entry_by_id(group: &mut keepass::db::Group, id: &str) -> Option<KeepassEntry> {

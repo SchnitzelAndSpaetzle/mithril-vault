@@ -407,6 +407,27 @@ export const groups = {
 };
 
 /**
+ * Bulk tag operations across all entries in the database.
+ */
+export const tags = {
+  async rename(
+    dbId: string,
+    oldName: string,
+    newName: string
+  ): Promise<number> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("rename_tag", { dbId, oldName, newName });
+    return z.number().parse(result);
+  },
+
+  async delete(dbId: string, tagName: string): Promise<number> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("delete_tag", { dbId, tagName });
+    return z.number().parse(result);
+  },
+};
+
+/**
  * Password generation commands backed by the Rust generator.
  */
 export const generator = {
