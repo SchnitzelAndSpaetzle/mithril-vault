@@ -354,6 +354,17 @@ export const groups = {
     return GroupSchema.parse(result);
   },
 
+  async update(
+    dbId: string,
+    id: string,
+    data: { name?: string; icon?: string }
+  ): Promise<Group> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("update_group", { dbId, id, data });
+    return GroupSchema.parse(result);
+  },
+
   async rename(dbId: string, id: string, name: string): Promise<Group> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
