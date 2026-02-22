@@ -607,7 +607,10 @@ fn test_rename_tag_updates_entry_tags_and_custom_tag_fields() {
     let updated_entry = service
         .get_entry(&db_path_str, &entry.id)
         .expect("updated entry");
-    assert_eq!(updated_entry.tags, vec!["omega".to_string(), "beta".to_string()]);
+    assert_eq!(
+        updated_entry.tags,
+        vec!["omega".to_string(), "beta".to_string()]
+    );
     assert_eq!(
         updated_entry.custom_fields.get("Tags").map(String::as_str),
         Some("omega; gamma; beta")
@@ -648,7 +651,9 @@ fn test_delete_tag_updates_entry_tags_and_custom_tag_fields() {
         )
         .expect("create entry");
 
-    let deleted_count = service.delete_tag(&db_path_str, "beta").expect("delete tag");
+    let deleted_count = service
+        .delete_tag(&db_path_str, "beta")
+        .expect("delete tag");
     assert_eq!(deleted_count, 1, "One entry should be updated");
 
     let updated_entry = service
