@@ -6,6 +6,7 @@ import { useGroups } from "@/hooks/use-groups";
 import { useSearch } from "@tanstack/react-router";
 import { useMemo } from "react";
 import type { Group } from "@/lib/types";
+import { entryHasTag } from "@/lib/tag-utils";
 
 function findGroupById(groups: Group[], id: string): Group | null {
   for (const group of groups) {
@@ -27,7 +28,7 @@ export function useEntryListHeader() {
   const entryCount = useMemo(() => {
     if (!entries) return 0;
     if (activeTag) {
-      return entries.filter((e) => e.tags.includes(activeTag)).length;
+      return entries.filter((e) => entryHasTag(e, activeTag)).length;
     }
     return entries.length;
   }, [entries, activeTag]);

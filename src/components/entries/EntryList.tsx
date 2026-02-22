@@ -12,6 +12,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useCallback, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
+import { entryHasTag } from "@/lib/tag-utils";
 
 const EMPTY_ICONS: Record<string, string> = {};
 const ESTIMATED_ITEM_HEIGHT = 65;
@@ -45,7 +46,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   const displayEntries = useMemo(
     () =>
       tagFilter
-        ? sortedEntries.filter((e) => e.tags.includes(tagFilter))
+        ? sortedEntries.filter((e) => entryHasTag(e, tagFilter))
         : sortedEntries,
     [sortedEntries, tagFilter]
   );

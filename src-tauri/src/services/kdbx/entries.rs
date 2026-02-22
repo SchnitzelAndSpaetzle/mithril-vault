@@ -243,24 +243,18 @@ impl KdbxService {
     /// Renames a tag across all entries in the database.
     /// Returns the number of entries that were modified.
     pub fn rename_tag(&self, db_id: &str, old_name: &str, new_name: &str) -> Result<u32, AppError> {
+        if old_name == new_name {
+            return Ok(0);
+        }
+
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
-        let count = modify_tags_in_group(&mut open_db.db.root, &|tags| {
-            if let Some(pos) = tags.iter().position(|t| t == old_name) {
-                if tags.iter().any(|t| t == new_name) {
-                    // new_name already exists, just remove old_name
-                    tags.remove(pos);
-                } else {
-                    tags[pos] = new_name.to_string();
-                }
-                true
-            } else {
-                false
-            }
+        let count = modify_tags_in_group(&mut open_db.db.root, &|entry| {
+            rename_tag_in_entry(entry, old_name, new_name)
         });
 
         if count > 0 {
@@ -279,10 +273,8 @@ impl KdbxService {
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
-        let count = modify_tags_in_group(&mut open_db.db.root, &|tags| {
-            let len_before = tags.len();
-            tags.retain(|t| t != tag_name);
-            tags.len() != len_before
+        let count = modify_tags_in_group(&mut open_db.db.root, &|entry| {
+            delete_tag_in_entry(entry, tag_name)
         });
 
         if count > 0 {
@@ -437,13 +429,13 @@ fn collect_all_entries(group: &keepass::db::Group, entries: &mut Vec<Entry>) {
 
 fn modify_tags_in_group(
     group: &mut keepass::db::Group,
-    modify_fn: &dyn Fn(&mut Vec<String>) -> bool,
+    modify_fn: &dyn Fn(&mut KeepassEntry) -> bool,
 ) -> u32 {
     let mut count = 0u32;
     for node in &mut group.children {
         match node {
             Node::Entry(entry) => {
-                if modify_fn(&mut entry.tags) {
+                if modify_fn(entry) {
                     entry.times.set_last_modification(Times::now());
                     count += 1;
                 }
@@ -454,6 +446,144 @@ fn modify_tags_in_group(
         }
     }
     count
+}
+
+fn rename_tag_in_entry(entry: &mut KeepassEntry, old_name: &str, new_name: &str) -> bool {
+    let mut modified = rename_tag_in_list(&mut entry.tags, old_name, new_name);
+    modified |= rename_tag_in_custom_field(entry, "Tags", old_name, new_name);
+    modified |= rename_tag_in_custom_field(entry, "tags", old_name, new_name);
+    modified
+}
+
+fn delete_tag_in_entry(entry: &mut KeepassEntry, tag_name: &str) -> bool {
+    let mut modified = delete_tag_in_list(&mut entry.tags, tag_name);
+    modified |= delete_tag_in_custom_field(entry, "Tags", tag_name);
+    modified |= delete_tag_in_custom_field(entry, "tags", tag_name);
+    modified
+}
+
+fn rename_tag_in_custom_field(
+    entry: &mut KeepassEntry,
+    key: &str,
+    old_name: &str,
+    new_name: &str,
+) -> bool {
+    let Some(value) = entry.fields.get_mut(key) else {
+        return false;
+    };
+
+    match value {
+        Value::Unprotected(text) => rename_tag_in_tag_text(text, old_name, new_name),
+        Value::Protected(secret) => {
+            let mut text = String::from_utf8_lossy(secret.unsecure()).to_string();
+            if !rename_tag_in_tag_text(&mut text, old_name, new_name) {
+                return false;
+            }
+            *secret = SecStr::new(text.into_bytes());
+            true
+        }
+        Value::Bytes(_) => false,
+    }
+}
+
+fn delete_tag_in_custom_field(entry: &mut KeepassEntry, key: &str, tag_name: &str) -> bool {
+    let Some(value) = entry.fields.get_mut(key) else {
+        return false;
+    };
+
+    match value {
+        Value::Unprotected(text) => delete_tag_in_tag_text(text, tag_name),
+        Value::Protected(secret) => {
+            let mut text = String::from_utf8_lossy(secret.unsecure()).to_string();
+            if !delete_tag_in_tag_text(&mut text, tag_name) {
+                return false;
+            }
+            *secret = SecStr::new(text.into_bytes());
+            true
+        }
+        Value::Bytes(_) => false,
+    }
+}
+
+fn rename_tag_in_tag_text(text: &mut String, old_name: &str, new_name: &str) -> bool {
+    let mut tags = split_tag_values(text);
+    if !rename_tag_in_list(&mut tags, old_name, new_name) {
+        return false;
+    }
+    *text = join_tag_values(&tags);
+    true
+}
+
+fn delete_tag_in_tag_text(text: &mut String, tag_name: &str) -> bool {
+    let mut tags = split_tag_values(text);
+    if !delete_tag_in_list(&mut tags, tag_name) {
+        return false;
+    }
+    *text = join_tag_values(&tags);
+    true
+}
+
+fn rename_tag_in_list(tags: &mut Vec<String>, old_name: &str, new_name: &str) -> bool {
+    let mut normalized = normalize_tag_list(tags);
+    let mut replaced = false;
+
+    for tag in &mut normalized {
+        if tag == old_name {
+            *tag = new_name.to_string();
+            replaced = true;
+        }
+    }
+
+    if !replaced {
+        return false;
+    }
+
+    dedupe_preserving_order(&mut normalized);
+    *tags = normalized;
+    true
+}
+
+fn delete_tag_in_list(tags: &mut Vec<String>, tag_name: &str) -> bool {
+    let mut normalized = normalize_tag_list(tags);
+    let len_before = normalized.len();
+    normalized.retain(|tag| tag != tag_name);
+
+    if normalized.len() == len_before {
+        return false;
+    }
+
+    *tags = normalized;
+    true
+}
+
+fn normalize_tag_list(tags: &[String]) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for tag in tags {
+        normalized.extend(split_tag_values(tag));
+    }
+    normalized
+}
+
+fn split_tag_values(raw: &str) -> Vec<String> {
+    raw.split([',', ';'])
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(std::string::ToString::to_string)
+        .collect()
+}
+
+fn join_tag_values(tags: &[String]) -> String {
+    tags.join("; ")
+}
+
+fn dedupe_preserving_order(tags: &mut Vec<String>) {
+    let mut deduped = Vec::with_capacity(tags.len());
+    for tag in tags.drain(..) {
+        if !deduped.contains(&tag) {
+            deduped.push(tag);
+        }
+    }
+    *tags = deduped;
 }
 
 fn remove_entry_by_id(group: &mut keepass::db::Group, id: &str) -> Option<KeepassEntry> {
