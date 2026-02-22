@@ -10,7 +10,7 @@ use mithril_vault_lib::commands::database::{
     lock_database, open_database, open_database_with_keyfile, open_database_with_keyfile_only,
     save_database, unlock_database,
 };
-use mithril_vault_lib::commands::entries::list_entries;
+use mithril_vault_lib::commands::entries::{delete_tag, list_entries, rename_tag};
 use mithril_vault_lib::commands::generator::{
     calculate_password_strength, generate_passphrase, generate_password,
     PassphraseGeneratorOptions, PasswordGeneratorOptions,
@@ -156,6 +156,23 @@ fn entries_and_groups_commands_fail_when_not_open() {
     ))
     .expect_err("expected database not found");
     assert!(matches!(entries_err, AppError::DatabaseNotFound(_)));
+
+    let rename_tag_err = tauri::async_runtime::block_on(rename_tag(
+        "nonexistent.kdbx".to_string(),
+        "old".to_string(),
+        "new".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(rename_tag_err, AppError::DatabaseNotFound(_)));
+
+    let delete_tag_err = tauri::async_runtime::block_on(delete_tag(
+        "nonexistent.kdbx".to_string(),
+        "tag".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(delete_tag_err, AppError::DatabaseNotFound(_)));
 
     let groups_err =
         tauri::async_runtime::block_on(list_groups("nonexistent.kdbx".to_string(), app.state()))
