@@ -708,6 +708,18 @@ fn test_rename_tag_returns_zero_for_same_old_and_new_name() {
     assert_eq!(updated_entry.tags, vec!["alpha".to_string()]);
 }
 
+#[test]
+fn test_rename_tag_same_name_still_requires_open_database() {
+    let service = KdbxService::new();
+
+    let result = service.rename_tag("nonexistent.kdbx", "alpha", "alpha");
+
+    assert!(
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when database is not open"
+    );
+}
+
 // ============================================================================
 // Protected custom field tests
 // ============================================================================

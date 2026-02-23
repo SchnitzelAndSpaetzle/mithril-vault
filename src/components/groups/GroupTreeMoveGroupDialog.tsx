@@ -42,6 +42,13 @@ export function GroupTreeMoveGroupDialog({
   const [targetParentId, setTargetParentId] = useState("");
   const { data: allGroups } = useGroups(open ? dbId : null);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setTargetParentId("");
+    }
+    onOpenChange(nextOpen);
+  };
+
   const excludedIds = new Set([group.id, ...getDescendantIds(group)]);
   const moveTargets = allGroups
     ? flattenGroups(allGroups).filter(
@@ -55,11 +62,11 @@ export function GroupTreeMoveGroupDialog({
     }
     onMove(targetParentId);
     setTargetParentId("");
-    onOpenChange(false);
+    handleOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Move Group</DialogTitle>
@@ -87,7 +94,7 @@ export function GroupTreeMoveGroupDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button

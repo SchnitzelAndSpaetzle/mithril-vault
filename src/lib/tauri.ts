@@ -71,6 +71,17 @@ const NameSchema = z.object({
   name: z.string().min(1),
 });
 
+const UpdateGroupDataSchema = z
+  .object({
+    name: z.string().trim().min(1).optional(),
+    icon: z.string().regex(/^\d+$/).optional(),
+  })
+  .refine((data) => data.name !== undefined || data.icon !== undefined, {
+    message: "At least one field must be provided",
+  });
+
+const TagNameSchema = z.string().trim().min(1);
+
 const CopyPasswordSchema = z.object({
   dbId: z.string().min(1),
   entryId: KeepassIdSchema,
@@ -361,7 +372,8 @@ export const groups = {
   ): Promise<Group> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    const result = await invoke("update_group", { dbId, id, data });
+    const parsedData = UpdateGroupDataSchema.parse(data);
+    const result = await invoke("update_group", { dbId, id, data: parsedData });
     return GroupSchema.parse(result);
   },
 
@@ -416,13 +428,20 @@ export const tags = {
     newName: string
   ): Promise<number> {
     DbIdSchema.parse({ dbId });
-    const result = await invoke("rename_tag", { dbId, oldName, newName });
+    const parsedOldName = TagNameSchema.parse(oldName);
+    const parsedNewName = TagNameSchema.parse(newName);
+    const result = await invoke("rename_tag", {
+      dbId,
+      oldName: parsedOldName,
+      newName: parsedNewName,
+    });
     return z.number().parse(result);
   },
 
   async delete(dbId: string, tagName: string): Promise<number> {
     DbIdSchema.parse({ dbId });
-    const result = await invoke("delete_tag", { dbId, tagName });
+    const parsedTagName = TagNameSchema.parse(tagName);
+    const result = await invoke("delete_tag", { dbId, tagName: parsedTagName });
     return z.number().parse(result);
   },
 };

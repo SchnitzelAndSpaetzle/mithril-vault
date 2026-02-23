@@ -243,15 +243,15 @@ impl KdbxService {
     /// Renames a tag across all entries in the database.
     /// Returns the number of entries that were modified.
     pub fn rename_tag(&self, db_id: &str, old_name: &str, new_name: &str) -> Result<u32, AppError> {
-        if old_name == new_name {
-            return Ok(0);
-        }
-
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+
+        if old_name == new_name {
+            return Ok(0);
+        }
 
         let count = modify_tags_in_group(&mut open_db.db.root, &|entry| {
             rename_tag_in_entry(entry, old_name, new_name)

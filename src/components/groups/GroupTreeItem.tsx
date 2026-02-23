@@ -110,13 +110,25 @@ export function GroupTreeItem({
       { dbId, parentId: group.id, name },
       {
         onSuccess: (newGroup) => {
-          // Set icon if non-default
           if (iconId !== 48) {
-            updateGroup.mutate({
-              dbId,
-              id: newGroup.id,
-              data: { icon: String(iconId) },
-            });
+            updateGroup.mutate(
+              {
+                dbId,
+                id: newGroup.id,
+                data: { icon: String(iconId) },
+              },
+              {
+                onSuccess: () => {
+                  toast.success(`Group "${name}" created`);
+                },
+                onError: (error) => {
+                  toast.error(
+                    `Group "${name}" created, but failed to set icon: ${error.message}`
+                  );
+                },
+              }
+            );
+            return;
           }
           toast.success(`Group "${name}" created`);
         },

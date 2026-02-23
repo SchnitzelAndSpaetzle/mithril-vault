@@ -144,24 +144,31 @@ export default function DragRegion() {
                   <p className="text-sm">{groupName}</p>
                   {activeTag && (
                     <Badge
+                      asChild
                       variant="secondary"
-                      className="cursor-pointer gap-1 text-xs"
-                      onClick={() => {
-                        if (!dbId) {
-                          return;
-                        }
-                        void navigate({
-                          to: "/dashboard/index/$dbId",
-                          params: { dbId },
-                          search: (prev) => {
-                            const { tag: _tag, ...rest } = prev;
-                            return rest;
-                          },
-                        });
-                      }}
+                      className="gap-1 text-xs"
                     >
-                      {activeTag}
-                      <X className="size-3" />
+                      <button
+                        type="button"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          if (!dbId) {
+                            return;
+                          }
+                          void navigate({
+                            to: "/dashboard/index/$dbId",
+                            params: { dbId },
+                            search: (prev) => {
+                              const { tag: _tag, ...rest } = prev;
+                              return rest;
+                            },
+                          });
+                        }}
+                        aria-label={`Clear tag filter ${activeTag}`}
+                      >
+                        {activeTag}
+                        <X className="size-3" />
+                      </button>
                     </Badge>
                   )}
                 </div>
