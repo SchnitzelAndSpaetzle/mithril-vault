@@ -2,6 +2,7 @@
 
 import { ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   Collapsible,
   CollapsibleContent,
@@ -69,7 +70,8 @@ export function GroupTreeItem({
 }: GroupTreeItemProps) {
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
-  const { createGroup, renameGroup, deleteGroup } = useGroupMutations(dbId);
+  const { createGroup, updateGroup, deleteGroup, moveGroup } =
+    useGroupMutations(dbId);
 
   const tab = useDatabaseTabs((state) =>
     state.tabs.find((t) => t.dbId === dbId || t.path === dbId)
@@ -103,16 +105,94 @@ export function GroupTreeItem({
     updateTabState(tab.id, { expandedGroupIds: newExpandedIds });
   };
 
-  const handleCreateSubgroup = (name: string) => {
-    createGroup.mutate({ dbId, parentId: group.id, name });
+  const handleCreateSubgroup = (name: string, iconId: number) => {
+    createGroup.mutate(
+      { dbId, parentId: group.id, name },
+      {
+        onSuccess: (newGroup) => {
+          if (iconId !== 48) {
+            updateGroup.mutate(
+              {
+                dbId,
+                id: newGroup.id,
+                data: { icon: String(iconId) },
+              },
+              {
+                onSuccess: () => {
+                  toast.success(`Group "${name}" created`);
+                },
+                onError: (error) => {
+                  toast.error(
+                    `Group "${name}" created, but failed to set icon: ${error.message}`
+                  );
+                },
+              }
+            );
+            return;
+          }
+          toast.success(`Group "${name}" created`);
+        },
+        onError: (error) => {
+          toast.error(`Failed to create group: ${error.message}`);
+        },
+      }
+    );
   };
 
-  const handleRename = (name: string) => {
-    renameGroup.mutate({ dbId, id: group.id, name });
+  const handleUpdateGroup = (data: { name?: string; icon?: string }) => {
+    updateGroup.mutate(
+      { dbId, id: group.id, data },
+      {
+        onSuccess: () => {
+          toast.success("Group updated");
+        },
+        onError: (error) => {
+          toast.error(`Failed to update group: ${error.message}`);
+        },
+      }
+    );
   };
 
   const handleDelete = () => {
-    deleteGroup.mutate({ dbId, id: group.id });
+    deleteGroup.mutate(
+      { dbId, id: group.id },
+      {
+        onSuccess: () => {
+          toast.success(`Group "${group.name}" moved to Recycle Bin`);
+        },
+        onError: (error) => {
+          toast.error(`Failed to delete group: ${error.message}`);
+        },
+      }
+    );
+  };
+
+  const handleMove = (targetParentId: string) => {
+    moveGroup.mutate(
+      { dbId, id: group.id, targetParentId },
+      {
+        onSuccess: () => {
+          toast.success(`Group "${group.name}" moved`);
+        },
+        onError: (error) => {
+          toast.error(`Failed to move group: ${error.message}`);
+        },
+      }
+    );
+  };
+
+  const actionsProps = {
+    group,
+    dbId,
+    isRoot,
+    onCreateSubgroup: handleCreateSubgroup,
+    onUpdateGroup: handleUpdateGroup,
+    onDelete: handleDelete,
+    onMove: handleMove,
+    isCreatePending: createGroup.isPending,
+    isUpdatePending: updateGroup.isPending,
+    isDeletePending: deleteGroup.isPending,
+    isMovePending: moveGroup.isPending,
   };
 
   if (hasChildren) {
@@ -141,14 +221,7 @@ export function GroupTreeItem({
               <ChevronRight className="h-3 w-3" />
             </SidebarMenuAction>
           </CollapsibleTrigger>
-          <GroupTreeItemActions
-            groupId={group.id}
-            groupName={group.name}
-            isRoot={isRoot}
-            onCreateSubgroup={handleCreateSubgroup}
-            onRename={handleRename}
-            onDelete={handleDelete}
-          />
+          <GroupTreeItemActions {...actionsProps} />
           <CollapsibleContent>
             <SidebarMenuSub>
               {group.children.map((child) => (
@@ -182,15 +255,7 @@ export function GroupTreeItem({
         />
         <span className="truncate">{group.name}</span>
       </SidebarMenuButton>
-      {/*{entryCount > 0 && <SidebarMenuBadge>{entryCount}</SidebarMenuBadge>}*/}
-      <GroupTreeItemActions
-        groupId={group.id}
-        groupName={group.name}
-        isRoot={isRoot}
-        onCreateSubgroup={handleCreateSubgroup}
-        onRename={handleRename}
-        onDelete={handleDelete}
-      />
+      <GroupTreeItemActions {...actionsProps} />
     </SidebarMenuItem>
   );
 }

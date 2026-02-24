@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  FolderInput,
+  FolderPlus,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,60 +15,44 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SidebarMenuAction } from "@/components/ui/sidebar";
+import type { Group } from "@/lib/types";
+import { GroupTreeCreateSubgroupDialog } from "./GroupTreeCreateSubgroupDialog";
+import { GroupTreeEditGroupDialog } from "./GroupTreeEditGroupDialog";
+import { GroupTreeDeleteGroupDialog } from "./GroupTreeDeleteGroupDialog";
+import { GroupTreeMoveGroupDialog } from "./GroupTreeMoveGroupDialog";
 
 interface GroupTreeItemActionsProps {
-  groupId: string;
-  groupName: string;
+  group: Group;
+  dbId: string;
   isRoot: boolean;
-  onCreateSubgroup: (name: string) => void;
-  onRename: (name: string) => void;
+  onCreateSubgroup: (name: string, iconId: number) => void;
+  onUpdateGroup: (data: { name?: string; icon?: string }) => void;
   onDelete: () => void;
+  onMove: (targetParentId: string) => void;
+  isCreatePending: boolean;
+  isUpdatePending: boolean;
+  isDeletePending: boolean;
+  isMovePending: boolean;
 }
 
 export function GroupTreeItemActions({
-  groupName,
+  group,
+  dbId,
   isRoot,
   onCreateSubgroup,
-  onRename,
+  onUpdateGroup,
   onDelete,
+  onMove,
+  isCreatePending,
+  isUpdatePending,
+  isDeletePending,
+  isMovePending,
 }: GroupTreeItemActionsProps) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [editedName, setEditedName] = useState(groupName);
-
-  const handleCreateSubmit = () => {
-    if (newGroupName.trim()) {
-      onCreateSubgroup(newGroupName.trim());
-      setNewGroupName("");
-      setCreateDialogOpen(false);
-    }
-  };
-
-  const handleRenameSubmit = () => {
-    if (editedName.trim() && editedName.trim() !== groupName) {
-      onRename(editedName.trim());
-      setRenameDialogOpen(false);
-    }
-  };
-
-  const handleDeleteConfirm = () => {
-    onDelete();
-    setDeleteDialogOpen(false);
-  };
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
 
   return (
     <>
@@ -80,9 +70,13 @@ export function GroupTreeItemActions({
           </DropdownMenuItem>
           {!isRoot && (
             <>
-              <DropdownMenuItem onSelect={() => setRenameDialogOpen(true)}>
+              <DropdownMenuItem onSelect={() => setEditDialogOpen(true)}>
                 <Pencil className="mr-2 h-4 w-4" />
-                Rename
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>
+                <FolderInput className="mr-2 h-4 w-4" />
+                Move to...
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -97,109 +91,37 @@ export function GroupTreeItemActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Group</DialogTitle>
-            <DialogDescription>
-              Create a new subgroup inside &ldquo;{groupName}&rdquo;.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="new-group-name">Name</Label>
-              <Input
-                id="new-group-name"
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="Enter group name"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleCreateSubmit();
-                  }
-                }}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCreateDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateSubmit}
-              disabled={!newGroupName.trim()}
-            >
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Group</DialogTitle>
-            <DialogDescription>
-              Enter a new name for &ldquo;{groupName}&rdquo;.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-group-name">Name</Label>
-              <Input
-                id="edit-group-name"
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleRenameSubmit();
-                  }
-                }}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRenameDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleRenameSubmit}
-              disabled={!editedName.trim() || editedName.trim() === groupName}
-            >
-              Rename
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Group</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &ldquo;{groupName}&rdquo;? This
-              will move the group and all its contents to the Recycle Bin.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <GroupTreeCreateSubgroupDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        parentName={group.name}
+        onCreateSubgroup={onCreateSubgroup}
+        isPending={isCreatePending}
+      />
+      <GroupTreeEditGroupDialog
+        key={`${group.id}-${editDialogOpen ? "open" : "closed"}`}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        group={group}
+        onUpdateGroup={onUpdateGroup}
+        isPending={isUpdatePending}
+      />
+      <GroupTreeDeleteGroupDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        group={group}
+        dbId={dbId}
+        onDelete={onDelete}
+        isPending={isDeletePending}
+      />
+      <GroupTreeMoveGroupDialog
+        open={moveDialogOpen}
+        onOpenChange={setMoveDialogOpen}
+        group={group}
+        dbId={dbId}
+        onMove={onMove}
+        isPending={isMovePending}
+      />
     </>
   );
 }

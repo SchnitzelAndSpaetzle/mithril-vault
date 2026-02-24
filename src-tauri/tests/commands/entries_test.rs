@@ -567,6 +567,160 @@ fn test_move_entry_success() {
 }
 
 // ============================================================================
+// tag mutation command tests
+// ============================================================================
+
+#[test]
+fn test_rename_tag_updates_entry_tags_and_custom_tag_fields() {
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
+
+    let mut custom_fields = BTreeMap::new();
+    custom_fields.insert("Tags".to_string(), "alpha, gamma, beta".to_string());
+
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("tags".to_string(), SecureString::from("alpha; beta; delta"));
+
+    let entry = service
+        .create_entry(
+            &db_path_str,
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Tagged".to_string(),
+                username: "user".to_string(),
+                password: SecureString::from("secret"),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: Some(vec!["alpha; beta".to_string(), "beta".to_string()]),
+                custom_fields: Some(custom_fields),
+                protected_custom_fields: Some(protected_custom_fields),
+            },
+        )
+        .expect("create entry");
+
+    let renamed_count = service
+        .rename_tag(&db_path_str, "alpha", "omega")
+        .expect("rename tag");
+    assert_eq!(renamed_count, 1, "One entry should be updated");
+
+    let updated_entry = service
+        .get_entry(&db_path_str, &entry.id)
+        .expect("updated entry");
+    assert_eq!(
+        updated_entry.tags,
+        vec!["omega".to_string(), "beta".to_string()]
+    );
+    assert_eq!(
+        updated_entry.custom_fields.get("Tags").map(String::as_str),
+        Some("omega; gamma; beta")
+    );
+
+    let protected = service
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "tags")
+        .expect("protected custom field");
+    assert_eq!(protected.value, "omega; beta; delta");
+}
+
+#[test]
+fn test_delete_tag_updates_entry_tags_and_custom_tag_fields() {
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
+
+    let mut custom_fields = BTreeMap::new();
+    custom_fields.insert("Tags".to_string(), "alpha, beta, gamma".to_string());
+
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("tags".to_string(), SecureString::from("beta; delta"));
+
+    let entry = service
+        .create_entry(
+            &db_path_str,
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Tagged".to_string(),
+                username: "user".to_string(),
+                password: SecureString::from("secret"),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: Some(vec!["alpha".to_string(), "beta; epsilon".to_string()]),
+                custom_fields: Some(custom_fields),
+                protected_custom_fields: Some(protected_custom_fields),
+            },
+        )
+        .expect("create entry");
+
+    let deleted_count = service
+        .delete_tag(&db_path_str, "beta")
+        .expect("delete tag");
+    assert_eq!(deleted_count, 1, "One entry should be updated");
+
+    let updated_entry = service
+        .get_entry(&db_path_str, &entry.id)
+        .expect("updated entry");
+    assert_eq!(
+        updated_entry.tags,
+        vec!["alpha".to_string(), "epsilon".to_string()]
+    );
+    assert_eq!(
+        updated_entry.custom_fields.get("Tags").map(String::as_str),
+        Some("alpha; gamma")
+    );
+
+    let protected = service
+        .get_entry_protected_custom_field(&db_path_str, &entry.id, "tags")
+        .expect("protected custom field");
+    assert_eq!(protected.value, "delta");
+}
+
+#[test]
+fn test_rename_tag_returns_zero_for_same_old_and_new_name() {
+    let (service, _dir, db_path_str) = create_test_database();
+    let info = service.get_info(&db_path_str).expect("database info");
+
+    let entry = service
+        .create_entry(
+            &db_path_str,
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Tagged".to_string(),
+                username: "user".to_string(),
+                password: SecureString::from("secret"),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: Some(vec!["alpha".to_string()]),
+                custom_fields: None,
+                protected_custom_fields: None,
+            },
+        )
+        .expect("create entry");
+
+    let renamed_count = service
+        .rename_tag(&db_path_str, "alpha", "alpha")
+        .expect("rename tag no-op");
+    assert_eq!(renamed_count, 0);
+
+    let updated_entry = service
+        .get_entry(&db_path_str, &entry.id)
+        .expect("updated entry");
+    assert_eq!(updated_entry.tags, vec!["alpha".to_string()]);
+}
+
+#[test]
+fn test_rename_tag_same_name_still_requires_open_database() {
+    let service = KdbxService::new();
+
+    let result = service.rename_tag("nonexistent.kdbx", "alpha", "alpha");
+
+    assert!(
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "Should fail with DatabaseNotFound when database is not open"
+    );
+}
+
+// ============================================================================
 // Protected custom field tests
 // ============================================================================
 

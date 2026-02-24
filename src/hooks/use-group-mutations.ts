@@ -22,6 +22,12 @@ interface DeleteGroupParams {
   id: string;
 }
 
+interface UpdateGroupParams {
+  dbId: string;
+  id: string;
+  data: { name?: string; icon?: string };
+}
+
 interface MoveGroupParams {
   dbId: string;
   id: string;
@@ -62,6 +68,14 @@ export function useGroupMutations(dbId: string | null) {
     },
   });
 
+  const updateGroup = useMutation<Group, Error, UpdateGroupParams>({
+    mutationFn: ({ dbId, id, data }) => groups.update(dbId, id, data),
+    onSuccess: (_data, variables) => {
+      void database.save(variables.dbId);
+      invalidateAfterGroupMutation();
+    },
+  });
+
   const renameGroup = useMutation<Group, Error, RenameGroupParams>({
     mutationFn: ({ dbId, id, name }) => groups.rename(dbId, id, name),
     onSuccess: (_data, variables) => {
@@ -89,6 +103,7 @@ export function useGroupMutations(dbId: string | null) {
 
   return {
     createGroup,
+    updateGroup,
     renameGroup,
     deleteGroup,
     moveGroup,

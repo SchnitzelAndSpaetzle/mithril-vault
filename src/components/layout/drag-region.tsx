@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -13,7 +14,7 @@ import { EntryActions } from "@/components/entries/EntryActions.tsx";
 import { SearchForm } from "@/components/search-form.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
-import { Dices, EllipsisVertical, Loader2, Share } from "lucide-react";
+import { Dices, EllipsisVertical, Loader2, Share, X } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import SortDropdown from "@/components/entries/sort-dropdown";
 import { useEntryListHeader } from "@/hooks/use-entry-list-header";
@@ -23,12 +24,14 @@ import { useEntryMutations } from "@/hooks/use-entry-mutations";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import type { Entry } from "@/lib/types";
 
 type EditMode = "view" | "edit" | "create";
 
 export default function DragRegion() {
-  const { groupName, entryCount } = useEntryListHeader();
+  const { groupName, entryCount, activeTag } = useEntryListHeader();
+  const navigate = useNavigate();
   const { tab, dbId } = useActiveDatabase();
   const selectedEntryId = tab?.selectedEntryId ?? null;
   const [editMode, setEditMode] = useState<EditMode>("view");
@@ -137,7 +140,38 @@ export default function DragRegion() {
                 className="data-[orientation=vertical]:h-6 mr-2"
               />
               <div className="flex flex-col">
-                <p className="text-sm">{groupName}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm">{groupName}</p>
+                  {activeTag && (
+                    <Badge
+                      asChild
+                      variant="secondary"
+                      className="gap-1 text-xs"
+                    >
+                      <button
+                        type="button"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          if (!dbId) {
+                            return;
+                          }
+                          void navigate({
+                            to: "/dashboard/index/$dbId",
+                            params: { dbId },
+                            search: (prev) => {
+                              const { tag: _tag, ...rest } = prev;
+                              return rest;
+                            },
+                          });
+                        }}
+                        aria-label={`Clear tag filter ${activeTag}`}
+                      >
+                        {activeTag}
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  )}
+                </div>
                 <small className="text-muted-foreground text-xs">
                   {entryCount} {entryCount === 1 ? "Item" : "Items"}
                 </small>

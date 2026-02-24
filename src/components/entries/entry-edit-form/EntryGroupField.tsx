@@ -9,29 +9,12 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { useGroups } from "@/hooks/use-groups";
 import type { EntryFormValues } from "@/lib/formTypes";
-import type { Group } from "@/lib/types";
+import { flattenGroups } from "@/lib/group-utils";
 
 interface EntryGroupFieldProps {
   control: Control<EntryFormValues>;
   dbId: string;
   isPending: boolean;
-}
-
-interface FlatGroup {
-  id: string;
-  name: string;
-  depth: number;
-}
-
-function flattenGroups(groups: Group[], depth = 0): FlatGroup[] {
-  const result: FlatGroup[] = [];
-  for (const group of groups) {
-    result.push({ id: group.id, name: group.name, depth });
-    if (group.children.length > 0) {
-      result.push(...flattenGroups(group.children, depth + 1));
-    }
-  }
-  return result;
 }
 
 export function EntryGroupField({

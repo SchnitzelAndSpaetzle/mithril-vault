@@ -84,6 +84,29 @@ pub async fn delete_entry(
     state.delete_entry(&db_id, &id)
 }
 
+/// Renames a tag across all entries in the database.
+/// Returns the number of entries that were modified.
+#[tauri::command]
+pub async fn rename_tag(
+    db_id: String,
+    old_name: String,
+    new_name: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<u32, AppError> {
+    state.rename_tag(&db_id, &old_name, &new_name)
+}
+
+/// Deletes a tag from all entries in the database.
+/// Returns the number of entries that were modified.
+#[tauri::command]
+pub async fn delete_tag(
+    db_id: String,
+    tag_name: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<u32, AppError> {
+    state.delete_tag(&db_id, &tag_name)
+}
+
 /// Moves an entry to another group.
 /// The `db_id` is the path to the database file.
 #[tauri::command]
