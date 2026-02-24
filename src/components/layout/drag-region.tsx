@@ -1,17 +1,20 @@
-import { useCallback, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useCallback, useRef, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { useCreateEntryShortcut } from "@/hooks/use-create-entry-shortcut";
+import { useSearchEntries } from "@/hooks/use-search-entries";
+import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import EntryList from "@/components/entries/EntryList.tsx";
 import EntryItemDetails from "@/components/entries/EntryItemDetails.tsx";
 import { EntryItemDetailsEmpty } from "@/components/entries/EntryItemDetailsEmpty.tsx";
 import { EntryEditForm } from "@/components/entries/EntryEditForm.tsx";
 import { EntryActions } from "@/components/entries/EntryActions.tsx";
 import { SearchForm } from "@/components/search-form.tsx";
+import SearchResultsList from "@/components/search/SearchResultsList.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
 import { Dices, EllipsisVertical, Loader2, Share, X } from "lucide-react";
@@ -41,6 +44,13 @@ export default function DragRegion() {
   const rootGroupId = tab?.info?.rootGroupId ?? "";
   const groupId = selectedGroupId ?? rootGroupId;
 
+  const search = useSearch({ strict: false });
+  const searchGroupId = (search.groupId as string | undefined) ?? null;
+  const searchTag = (search.tag as string | undefined) ?? null;
+
+  const searchState = useSearchEntries(dbId, searchGroupId, searchTag);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const {
     entry: editEntry,
     isLoading: isEditEntryLoading,
@@ -52,6 +62,8 @@ export default function DragRegion() {
 
   const updateTabState = useDatabaseTabs((s) => s.updateTabState);
   const { deleteEntry } = useEntryMutations(dbId ?? null);
+
+  const isEditing = editMode !== "view";
 
   function handleSave(saved: Entry) {
     setEditMode("view");
@@ -119,10 +131,18 @@ export default function DragRegion() {
     );
   };
 
-  const isEditing = editMode !== "view";
-
   const openCreateMode = useCallback(() => setEditMode("create"), []);
   useCreateEntryShortcut(openCreateMode, Boolean(dbId) && !isEditing);
+
+  const focusSearchInput = useCallback(() => {
+    searchInputRef.current?.focus();
+  }, []);
+  useSearchShortcut(focusSearchInput, Boolean(dbId) && !isEditing);
+
+  const handleSearchEscape = useCallback(() => {
+    searchState.clearSearch();
+    searchInputRef.current?.blur();
+  }, [searchState]);
 
   return (
     <ResizablePanelGroup
@@ -140,51 +160,85 @@ export default function DragRegion() {
                 className="data-[orientation=vertical]:h-6 mr-2"
               />
               <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm">{groupName}</p>
-                  {activeTag && (
-                    <Badge
-                      asChild
-                      variant="secondary"
-                      className="gap-1 text-xs"
-                    >
-                      <button
-                        type="button"
-                        className="cursor-pointer"
-                        onClick={() => {
-                          if (!dbId) {
-                            return;
-                          }
-                          void navigate({
-                            to: "/dashboard/index/$dbId",
-                            params: { dbId },
-                            search: (prev) => {
-                              const { tag: _tag, ...rest } = prev;
-                              return rest;
-                            },
-                          });
-                        }}
-                        aria-label={`Clear tag filter ${activeTag}`}
-                      >
-                        {activeTag}
-                        <X className="size-3" />
-                      </button>
-                    </Badge>
-                  )}
-                </div>
-                <small className="text-muted-foreground text-xs">
-                  {entryCount} {entryCount === 1 ? "Item" : "Items"}
-                </small>
+                {searchState.isSearchActive ? (
+                  <>
+                    <p className="text-sm">
+                      {activeTag
+                        ? `Search in #${activeTag}`
+                        : groupName !== "All"
+                          ? `Search in ${groupName}`
+                          : "Search Results"}
+                    </p>
+                    <small className="text-muted-foreground text-xs">
+                      {searchState.results.length}{" "}
+                      {searchState.results.length === 1 ? "match" : "matches"}
+                    </small>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm">{groupName}</p>
+                      {activeTag && (
+                        <Badge
+                          asChild
+                          variant="secondary"
+                          className="gap-1 text-xs"
+                        >
+                          <button
+                            type="button"
+                            className="cursor-pointer"
+                            onClick={() => {
+                              if (!dbId) {
+                                return;
+                              }
+                              void navigate({
+                                to: "/dashboard/index/$dbId",
+                                params: { dbId },
+                                search: (prev) => {
+                                  const { tag: _tag, ...rest } = prev;
+                                  return rest;
+                                },
+                              });
+                            }}
+                            aria-label={`Clear tag filter ${activeTag}`}
+                          >
+                            {activeTag}
+                            <X className="size-3" />
+                          </button>
+                        </Badge>
+                      )}
+                    </div>
+                    <small className="text-muted-foreground text-xs">
+                      {entryCount} {entryCount === 1 ? "Item" : "Items"}
+                    </small>
+                  </>
+                )}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2 p-2">
-            <SearchForm className="w-full" />
-            <SortDropdown />
+            <SearchForm
+              className="w-full"
+              query={searchState.query}
+              onQueryChange={searchState.setQuery}
+              onClear={searchState.clearSearch}
+              onEscape={handleSearchEscape}
+              inputRef={searchInputRef}
+              autoFocus
+            />
+            {!searchState.isSearchActive && <SortDropdown />}
           </div>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <EntryList onEntrySelect={handleEntrySelect} />
+            {searchState.isSearchActive ? (
+              <SearchResultsList
+                results={searchState.results}
+                query={searchState.query}
+                onEntrySelect={handleEntrySelect}
+              />
+            ) : (
+              <EntryList onEntrySelect={handleEntrySelect} />
+            )}
           </div>
         </div>
       </ResizablePanel>
