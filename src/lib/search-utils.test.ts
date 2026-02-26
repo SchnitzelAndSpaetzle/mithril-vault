@@ -199,4 +199,22 @@ describe("highlightMatches", () => {
       { text: "test", highlighted: true },
     ]);
   });
+
+  it("treats special characters in query as literal text", () => {
+    expect(
+      highlightMatches("prefix .*+?^${}()|[]\\ suffix", ".*+?^${}()|[]\\")
+    ).toEqual([
+      { text: "prefix ", highlighted: false },
+      { text: ".*+?^${}()|[]\\", highlighted: true },
+      { text: " suffix", highlighted: false },
+    ]);
+  });
+
+  it("uses non-overlapping matching for repeated patterns", () => {
+    expect(highlightMatches("banana", "ana")).toEqual([
+      { text: "b", highlighted: false },
+      { text: "ana", highlighted: true },
+      { text: "na", highlighted: false },
+    ]);
+  });
 });
