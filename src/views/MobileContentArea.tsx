@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import EntryList from "@/components/entries/EntryList.tsx";
 import NavEntries from "@/components/entries/nav-entries.tsx";
 import { SearchForm } from "@/components/search-form.tsx";
@@ -13,6 +13,8 @@ import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
+const MOBILE_SEARCH_INPUT_ID = "mobile-global-search-input";
+
 export default function MobileContentArea() {
   const { groupName, entryCount, activeTag } = useEntryListHeader();
   const navigate = useNavigate();
@@ -23,7 +25,6 @@ export default function MobileContentArea() {
   const searchTag = (search.tag as string | undefined) ?? null;
 
   const searchState = useSearchEntries(dbId, searchGroupId, searchTag);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const openCreateEntry = useCallback(
     () => void navigate({ to: "/dashboard/entry/new" }),
@@ -32,13 +33,15 @@ export default function MobileContentArea() {
   useCreateEntryShortcut(openCreateEntry, true);
 
   const focusSearchInput = useCallback(() => {
-    searchInputRef.current?.focus();
+    const input = document.getElementById(MOBILE_SEARCH_INPUT_ID);
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+    }
   }, []);
   useSearchShortcut(focusSearchInput, Boolean(dbId));
 
   const handleSearchEscape = useCallback(() => {
     searchState.clearSearch();
-    searchInputRef.current?.blur();
   }, [searchState]);
 
   return (
@@ -94,7 +97,7 @@ export default function MobileContentArea() {
             onQueryChange={searchState.setQuery}
             onClear={searchState.clearSearch}
             onEscape={handleSearchEscape}
-            inputRef={searchInputRef}
+            inputId={MOBILE_SEARCH_INPUT_ID}
             autoFocus
           />
           {!searchState.isSearchActive && <SortDropdown />}

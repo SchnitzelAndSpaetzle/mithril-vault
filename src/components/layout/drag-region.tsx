@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ResizableHandle,
@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import type { Entry } from "@/lib/types";
 
 type EditMode = "view" | "edit" | "create";
+const DESKTOP_SEARCH_INPUT_ID = "desktop-global-search-input";
 
 export default function DragRegion() {
   const { groupName, entryCount, activeTag } = useEntryListHeader();
@@ -49,7 +50,6 @@ export default function DragRegion() {
   const searchTag = (search.tag as string | undefined) ?? null;
 
   const searchState = useSearchEntries(dbId, searchGroupId, searchTag);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const {
     entry: editEntry,
@@ -135,13 +135,15 @@ export default function DragRegion() {
   useCreateEntryShortcut(openCreateMode, Boolean(dbId) && !isEditing);
 
   const focusSearchInput = useCallback(() => {
-    searchInputRef.current?.focus();
+    const input = document.getElementById(DESKTOP_SEARCH_INPUT_ID);
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+    }
   }, []);
   useSearchShortcut(focusSearchInput, Boolean(dbId) && !isEditing);
 
   const handleSearchEscape = useCallback(() => {
     searchState.clearSearch();
-    searchInputRef.current?.blur();
   }, [searchState]);
 
   return (
@@ -223,7 +225,7 @@ export default function DragRegion() {
               onQueryChange={searchState.setQuery}
               onClear={searchState.clearSearch}
               onEscape={handleSearchEscape}
-              inputRef={searchInputRef}
+              inputId={DESKTOP_SEARCH_INPUT_ID}
               autoFocus
             />
             {!searchState.isSearchActive && <SortDropdown />}

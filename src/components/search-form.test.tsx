@@ -88,4 +88,20 @@ describe("SearchForm", () => {
     const prevented = !form.dispatchEvent(submitEvent);
     expect(prevented).toBe(true);
   });
+
+  it("applies custom input id", () => {
+    render(
+      <SearchForm
+        query=""
+        onQueryChange={vi.fn()}
+        onClear={vi.fn()}
+        inputId="custom-search-input"
+      />
+    );
+
+    expect(screen.getByLabelText("Search")).toHaveAttribute(
+      "id",
+      "custom-search-input"
+    );
+  });
 });

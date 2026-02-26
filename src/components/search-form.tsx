@@ -11,7 +11,7 @@ interface SearchFormProps extends Omit<
   onQueryChange: (query: string) => void;
   onClear: () => void;
   onEscape?: () => void;
-  inputRef?: React.Ref<HTMLInputElement>;
+  inputId?: string;
   autoFocus?: boolean;
 }
 
@@ -20,19 +20,18 @@ export function SearchForm({
   onQueryChange,
   onClear,
   onEscape,
-  inputRef,
+  inputId = "global-search-input",
   autoFocus,
   ...props
 }: SearchFormProps) {
   return (
     <form {...props} onSubmit={(e) => e.preventDefault()}>
       <div className="relative">
-        <Label htmlFor="search" className="sr-only">
+        <Label htmlFor={inputId} className="sr-only">
           Search
         </Label>
         <SidebarInput
-          ref={inputRef}
-          id="search"
+          id={inputId}
           placeholder="Search entries... (Ctrl+K)"
           autoFocus={autoFocus}
           className="h-8 pl-7 pr-7"
@@ -40,6 +39,7 @@ export function SearchForm({
           onChange={(e) => onQueryChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
+              e.currentTarget.blur();
               onEscape?.();
             }
           }}

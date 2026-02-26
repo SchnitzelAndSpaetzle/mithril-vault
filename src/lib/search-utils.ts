@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { Entry, Group } from "@/lib/types";
+import { getNormalizedEntryTags } from "@/lib/tag-utils";
 
 export type MatchedField = "title" | "username" | "url" | "notes" | "tags";
 
@@ -40,7 +41,11 @@ export function searchEntries(entries: Entry[], query: string): SearchResult[] {
     if (entry.notes?.toLowerCase().includes(trimmed)) {
       matchedFields.push("notes");
     }
-    if (entry.tags.some((tag) => tag.toLowerCase().includes(trimmed))) {
+    if (
+      getNormalizedEntryTags(entry).some((tag) =>
+        tag.toLowerCase().includes(trimmed)
+      )
+    ) {
       matchedFields.push("tags");
     }
 

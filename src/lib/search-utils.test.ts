@@ -85,6 +85,15 @@ describe("searchEntries", () => {
     expect(results[0]!.matchedFields).toContain("tags");
   });
 
+  it("matches tags from custom fields", () => {
+    const entries = [
+      makeEntry({ tags: [], customFields: { Tags: "work;important" } }),
+    ];
+    const results = searchEntries(entries, "important");
+    expect(results).toHaveLength(1);
+    expect(results[0]!.matchedFields).toContain("tags");
+  });
+
   it("does not match entries without query in any field", () => {
     const entries = [
       makeEntry({ title: "GitHub", username: "admin", url: "https://gh.com" }),
