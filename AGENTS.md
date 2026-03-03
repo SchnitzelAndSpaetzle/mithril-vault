@@ -95,6 +95,16 @@ MithrilVault is a cross-platform password manager that:
 3. **IPC is the boundary** - All communication goes through typed Tauri commands
 4. **State is derived** - Frontend state reflects backend state, not the other way around
 
+### Settings Split (Current Implementation)
+
+- **Application preferences** are persisted in Rust (`SettingsService`) and exposed via:
+  - `get_app_preferences`
+  - `update_app_preferences`
+  - `reset_app_preferences`
+- **Database settings** are currently read-only in UI and loaded from `get_database_config`.
+- `reset_app_preferences` resets only preference fields and preserves `recent_databases`.
+- Do not add a separate frontend settings store; use Tauri commands + React Query hooks (`useAppPreferences`).
+
 ---
 
 ## Tech Stack
@@ -173,9 +183,7 @@ mithril-vault/
 │   │   └── ...
 │   │
 │   ├── stores/                  # Zustand state stores
-│   │   ├── databaseStore.ts     # Database state
-│   │   ├── uiStore.ts           # UI state (theme, sidebar, etc.)
-│   │   └── settingsStore.ts     # User preferences
+│   │   └── database-tabs.ts     # Open database tabs and per-tab selection state
 │   │
 │   ├── lib/                     # Utility functions
 │   │   ├── tauri.ts             # Tauri command wrappers
