@@ -344,9 +344,7 @@ fn app_preferences_roundtrip_and_reset_preserves_recents() {
     prefs.browser_integration.allowed_sites = vec!["example.org".into()];
     prefs.advanced.debug_mode = true;
 
-    service
-        .update_app_preferences(prefs.clone())
-        .expect("update prefs");
+    service.update_app_preferences(&prefs).expect("update prefs");
 
     let refreshed = service.get_app_preferences().expect("get prefs");
     assert_eq!(refreshed.general.language, "es");

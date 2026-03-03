@@ -75,7 +75,7 @@ impl SettingsService {
         ))
     }
 
-    pub fn update_app_preferences(&self, new_preferences: AppPreferences) -> Result<(), AppError> {
+    pub fn update_app_preferences(&self, new_preferences: &AppPreferences) -> Result<(), AppError> {
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         new_preferences.apply_to_settings(&mut settings);
         self.save(&settings)

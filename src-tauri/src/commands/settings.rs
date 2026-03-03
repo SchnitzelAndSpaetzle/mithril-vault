@@ -25,6 +25,7 @@ pub enum StartupBehavior {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct EntryListColumns {
     pub username: bool,
     pub url: bool,
@@ -96,6 +97,7 @@ pub struct AppPreferences {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AppSettings {
     pub language: String,
     pub startup_behavior: StartupBehavior,
@@ -179,22 +181,26 @@ impl AppPreferences {
     }
 
     pub fn apply_to_settings(&self, settings: &mut AppSettings) {
-        settings.language = self.general.language.clone();
+        settings.language.clone_from(&self.general.language);
         settings.startup_behavior = self.general.startup_behavior.clone();
-        settings.default_database_path = self.general.default_database_path.clone();
+        settings
+            .default_database_path
+            .clone_from(&self.general.default_database_path);
         settings.auto_lock_timeout = self.security.auto_lock_timeout;
         settings.clipboard_clear_timeout = self.security.clipboard_clear_timeout;
         settings.show_password_by_default = self.security.show_password_by_default;
         settings.minimize_to_tray = self.security.minimize_to_tray;
         settings.start_minimized = self.security.start_minimized;
-        settings.theme = self.appearance.theme.clone();
+        settings.theme.clone_from(&self.appearance.theme);
         settings.font_size = self.appearance.font_size;
         settings.entry_list_show_username = self.appearance.entry_list_columns.username;
         settings.entry_list_show_url = self.appearance.entry_list_columns.url;
         settings.entry_list_show_modified_at = self.appearance.entry_list_columns.modified_at;
         settings.entry_list_show_tags = self.appearance.entry_list_columns.tags;
         settings.browser_integration_enabled = self.browser_integration.enabled;
-        settings.browser_allowed_sites = self.browser_integration.allowed_sites.clone();
+        settings
+            .browser_allowed_sites
+            .clone_from(&self.browser_integration.allowed_sites);
         settings.debug_mode = self.advanced.debug_mode;
     }
 }
@@ -228,7 +234,7 @@ pub async fn update_app_preferences(
     new_preferences: AppPreferences,
     settings_service: State<'_, Arc<SettingsService>>,
 ) -> Result<(), AppError> {
-    settings_service.update_app_preferences(new_preferences)
+    settings_service.update_app_preferences(&new_preferences)
 }
 
 #[tauri::command]
