@@ -1,208 +1,239 @@
-# Research: Global Search Implementation — Codebase Analysis
+# Research: Issue #32 Settings/Preferences (App + Database Split)
 
-## Current State of Search
+## 1. Executive Summary
 
-### SearchForm Stub (`src/components/search-form.tsx`)
+Issue #32 requested a full settings/preferences page with persistence, categories, reset behavior, and a clear structure
+for future growth.
 
-A purely visual stub — renders a `SidebarInput` with a `Search` icon but has **zero state, zero handlers, zero filtering
-logic**. It's placed in two locations:
+This repository now implements a real settings system with a strict split:
 
-- Desktop: `src/components/layout/drag-region.tsx` line 182 (left panel, between header and EntryList)
-- Mobile: `src/views/MobileContentArea.tsx` line 44 (bottom sticky bar)
+1. **Application settings**: editable and persisted through Rust `SettingsService`
+2. **Database settings**: read-only view from `get_database_config`, with explicit TODOs for missing mutation flows
 
-### No Backend Search
+The implementation intentionally keeps Rust as the source of truth and does not migrate to `tauri-plugin-store`.
 
-No `search_entries` or `filter_entries` Tauri command exists. The only listing command is
-`list_entries(db_id, group_id?)`:
+## 2. Architecture Findings (Before)
 
-- `group_id = None` → `collect_all_entries()` — recursively walks entire tree, returns every entry
-- `group_id = Some(id)` → direct children of that group only (non-recursive)
+### 2.1 Backend state
 
-The full `Entry` struct is returned (not `EntryListItem`), including: title, username, url, notes, tags, customFields,
-timestamps.
+Before this issue:
 
-### No Search State
+- `src-tauri/src/services/settings.rs` already persisted `settings.json`
+- Existing settings focused on:
+  - `auto_lock_timeout`
+  - `clipboard_clear_timeout`
+  - `show_password_by_default`
+  - `minimize_to_tray`
+  - `start_minimized`
+  - `theme`
+  - `recent_databases`
+- Tests existed for persistence/recent-database behavior and IO error handling
 
-- Zustand store (`src/stores/database-tabs.ts`): holds `selectedGroupId`, `selectedEntryId`, `expandedGroupIds` — no
-  search query
-- URL search params (`DashboardSearchSchema` in `src/routes/dashboard/index.$dbId.tsx`): `groupId`, `sortBy`,
-  `sortOrder`, `tag` — no `q` param
-- No search-related query key in `src/lib/query-keys.ts`
+### 2.2 Frontend state
 
-### No Search Keyboard Shortcut
+Before this issue:
 
-Existing shortcut infrastructure: `useCreateEntryShortcut` (`src/hooks/use-create-entry-shortcut.ts`) registers
-`Ctrl/Cmd+N` via `window.addEventListener("keydown", ...)`. This is the exact pattern to replicate for search shortcuts.
+- `/settings` route existed but was placeholder scaffolding
+- `AppSettingsSidebar` and `SiteSettingsHeader` were demo/template content
+- No `SettingsView` or settings sections
+- No dedicated frontend settings tests
+- Clipboard timeout behavior in UI was hardcoded (`30`) in multiple components
 
----
+### 2.3 Split gap
 
-## Data Model Analysis
+A true split between app-level and database-level settings was not represented in UI, even though backend already
+exposed read-only DB cryptographic config.
 
-### Entry Type (`src/lib/types.ts`)
+## 3. Implementation Completed
 
-```typescript
-{
-  id: string; groupId: string; title: string; username: string;
-  url: string | null | undefined; notes: string | null | undefined;
-  iconId?: number; customIconUuid?: string | null;
-  tags: string[]; customFields: Record<string, string>;
-  customFieldMeta: CustomFieldMeta[];
-  createdAt: string; modifiedAt: string; accessedAt: string;
-}
-```
+## 3.1 Rust: expanded settings domain and preference commands
 
-**Searchable fields**: title, username, url, notes, tags. Notes that `customFields` contains only non-protected values —
-protected fields are excluded (security pattern).
+Updated files:
 
-### Group Type (`src/lib/types.ts`)
+- `src-tauri/src/commands/settings.rs`
+- `src-tauri/src/services/settings.rs`
+- `src-tauri/src/lib.rs`
 
-```typescript
-{
-  id: string; parentId: string | null; name: string;
-  icon: string | null; customIconUuid: string | null;
-  children: Group[];  // recursive tree
-}
-```
+Key additions:
 
-Groups form a recursive tree. `list_groups(dbId)` returns one root with all children nested. The `findGroupById` utility
-exists in `src/hooks/use-entry-list-header.ts` line 11 but only returns the group, not the full path.
+- New typed preference structures:
+  - `GeneralSettings`
+  - `SecuritySettings`
+  - `AppearanceSettings`
+  - `BrowserIntegrationSettings`
+  - `AdvancedSettings`
+  - `AppPreferences`
+- Added `StartupBehavior` enum
+- Expanded persisted `AppSettings` fields with defaults
+- Added preference-focused commands:
+  - `get_app_preferences`
+  - `update_app_preferences`
+  - `reset_app_preferences`
 
-### Tag Handling (`src/lib/tag-utils.ts`)
+Design choice:
 
-Tags can be semicolon or comma-separated. `getNormalizedEntryTags(entry)` splits `entry.tags` and also checks
-`customFields["Tags"]`/`customFields["tags"]`. Search should use normalized tags.
+- `AppSettings` remains flat for robust compatibility with existing persisted shape.
+- `AppPreferences` is a structured view mapped to/from `AppSettings`.
+- `reset_app_preferences` preserves `recent_databases`.
 
----
+## 3.2 Frontend: typed settings interfaces and wrappers
 
-## Frontend Architecture
+Updated files:
 
-### Layout Structure
+- `src/lib/types.ts`
+- `src/lib/tauri.ts`
+- `src/lib/query-keys.ts`
 
-```
-__root__ → App (ThemeProvider + Toaster)
-  DatabaseTabBar (root-level, shown for 2+ tabs)
-  /dashboard/route → SidebarProvider
-    AppSidebar (groups, tags, nav)
-    SidebarInset → /dashboard/index/$dbId
-      useIsMobile() →
-        DesktopContentArea → DragRegion (two resizable panels)
-        MobileContentArea (single column)
-```
+Key additions:
 
-### Desktop Layout (`DragRegion` — `src/components/layout/drag-region.tsx`)
+- `AppPreferencesSchema` + nested schemas
+- New setting-related types:
+  - startup behavior
+  - appearance/list-column settings
+  - browser integration settings
+  - advanced settings
+- New wrappers:
+  - `settings.getPreferences()`
+  - `settings.updatePreferences()`
+  - `settings.resetPreferences()`
+- Query keys for:
+  - app preferences
+  - database config snapshot
 
-Two-panel `ResizablePanelGroup`:
+## 3.3 Frontend: settings UI and split
 
-- **Left panel**: Header (SidebarTrigger + group name + tag badge) → SearchForm + SortDropdown → EntryList
-- **Right panel**: EntryActions toolbar → EntryItemDetails | EntryEditForm | EntryItemDetailsEmpty
+New/updated files:
 
-State machine: `editMode: "view" | "edit" | "create"` with unsaved-change guard via `ask()` dialog.
+- `src/views/SettingsView.tsx` (new)
+- `src/components/settings/SettingsSection.tsx` (new)
+- `src/routes/settings/index.tsx` (real settings route)
+- `src/components/layout/app-settings-sidebar.tsx` (real section nav)
+- `src/components/layout/site-settings-header.tsx` (real header)
 
-The search integration point is the left panel body (line 186-188) where `EntryList` renders. When search is active,
-`SearchResultsList` replaces `EntryList`.
+Categories implemented:
 
-### Mobile Layout (`MobileContentArea` — `src/views/MobileContentArea.tsx`)
+- General
+- Security
+- Appearance
+- Browser Integration
+- Advanced
+- Database Settings (read-only section)
 
-Single column: NavEntries header → EntryList → sticky bottom bar (Plus + SearchForm + SortDropdown).
+Behavior implemented:
 
-### Entry List (`src/components/entries/EntryList.tsx`)
+- Save settings
+- Reset to defaults (preferences only)
+- Database config read-only rendering when DB is open
+- TODO markers for unimplemented runtime behavior
 
-- Fetches entries via `useEntries(dbId, search.groupId)`
-- Sorts via `useSortedEntries(entries, sortBy, sortOrder)`
-- Filters by tag via `entryHasTag()`
-- Virtualized via `@tanstack/react-virtual` (`useVirtualizer`, estimated 65px rows, overscan 10)
-- Wrapped in `ScrollArea` with `viewportRef` for the virtualizer's scroll element
-- Keyboard navigation via `useEntryListKeyboard`
+## 3.4 Immediate-effect wiring
 
-### Entry List Item (`src/components/entries/EntryListItem.tsx`)
+Updated files:
 
-- `memo`-ized functional component
-- Uses Item primitives from `src/components/ui/item.tsx`: `Item`, `ItemMedia`, `ItemContent`, `ItemTitle`,
-  `ItemDescription`, `ItemActions`
-- Shows KeePass icon (custom base64 or default) in Avatar, title, username
-- Props extend `Entry` with `customIcons`, `isSelected`, `onClick`
+- `src/App.tsx`
+- `src/components/theme-provider.tsx`
+- `src/components/ui/sonner.tsx`
+- `src/hooks/use-app-preferences.ts` (new)
+- `src/hooks/use-clipboard-timeout.ts` (new)
+- `src/hooks/use-database-config.ts` (new)
+- `src/components/entries/EntryItemDetails.tsx`
+- `src/components/entries/PasswordGeneratorPopover.tsx`
+- `src/components/layout/database-switcher.tsx`
 
-### Query Keys (`src/lib/query-keys.ts`)
+Improvements:
 
-```typescript
-entries.list(dbId, groupId)  // existing
-entries.detail(dbId, id)     // existing
-// No search-specific key needed — search is computed from cached entries.list(dbId, null)
-```
+- Theme provider now uses a stable app-specific storage key
+- Sonner now uses local theme provider context
+- Clipboard timeout in entry/password generator uses settings value (not hardcoded)
+- Database switcher settings button now routes to `/settings`
 
-### Hooks Pattern
+## 4. Testing and Coverage Findings
 
-- `useEntries(dbId, groupId)` — `useQuery` with `staleTime: 30_000`
-- `useGroups(dbId)` — `useQuery` with `staleTime: 30_000`
-- `useCustomIcons(dbId)` — `useQuery` for base64 icon map
-- `useSortedEntries(entries, sortBy, sortOrder)` — pure `useMemo` sort
-- `useEntryListKeyboard(...)` — Arrow/Home/End/Enter key handler returning `{ onKeyDown }`
-- `useCreateEntryShortcut(callback, enabled)` — global keydown listener in `useEffect`
+### 4.1 Rust tests
 
----
+Expanded and passing:
 
-## Design Decisions
+- command tests for new preference commands
+- service tests for preference mapping/reset + preservation of recents
 
-### Client-side filtering (no backend search)
+Command used:
 
-`list_entries(dbId, null)` already loads all entries into react-query cache. For typical KeePass databases (hundreds to
-low thousands of entries), client-side filtering is instant (<1ms). A backend `search_entries` command would add
-complexity with negligible benefit.
+- `cd src-tauri && cargo test --test services --test commands settings`
 
-### Local state over URL params
+Result: all targeted settings tests passed.
 
-Search is ephemeral — refreshing should not preserve a half-typed query. Using component-local state (lifted to
-`DragRegion`/`MobileContentArea`) is simpler than adding a `q` URL param and avoids polluting the URL.
+### 4.2 Frontend tests
 
-### Replacing EntryList vs overlaying
+New tests:
 
-When search is active, `SearchResultsList` replaces `EntryList` in the same DOM slot. This avoids z-index/overlay
-complexity and feels natural — the list area shows either group entries or search results.
+- `src/components/settings/__tests__/SettingsSection.test.tsx`
+- `src/components/settings/__tests__/SettingsView.test.tsx`
+- `src/hooks/__tests__/use-app-settings.test.tsx`
+- `src/components/entries/__tests__/PasswordGeneratorPopover.test.tsx`
 
-### Group path building
+Updated tests:
 
-A `buildGroupPathMap(groups)` utility traverses the tree once and returns `Map<groupId, pathString>`. This is `O(n)`
-where n = number of groups, computed once per render via `useMemo`. Individual `SearchResultItem` components look up
-their path in O(1).
+- `src/lib/tauri.test.ts`
+- `src/components/entries/__tests__/EntryItemDetails.test.tsx`
 
-### Reusing existing virtualizer pattern
+Coverage snapshot after implementation:
 
-`SearchResultsList` follows the exact same `useVirtualizer` + `ScrollArea` + absolute positioning pattern as
-`EntryList.tsx`. Same estimated height, same overscan, same `measureElement` callback.
+- `views/SettingsView.tsx`: **93.93% statements**, **78.26% branches**, **93.90% lines**
+- New settings hooks/components added for this feature are heavily covered
 
----
+Commands used:
 
-## Testing Strategy
+- `bun run typecheck`
+- `bun run test`
+- `bun run test:coverage`
 
-### Priority 1 (must have, >70% coverage):
+All passed.
 
-- `src/lib/__tests__/search-utils.test.ts` — Pure function tests for `searchEntries`, `buildGroupPathMap`,
-  `highlightMatches`. Target 100%.
-- `src/hooks/__tests__/use-debounce.test.ts` — Timer-based tests.
-- `src/components/__tests__/search-form.test.tsx` — Controlled input behavior, clear button, Escape key.
+## 5. KeepassXC-Inspired Settings Split Mapping
 
-### Priority 2 (important):
+Target split inspired by KeePassXC principles:
 
-- `src/hooks/__tests__/use-search-entries.test.ts` — Hook integration with mocked useEntries.
-- `src/components/search/__tests__/SearchResultItem.test.tsx` — Rendering, highlighting, click.
-- `src/components/search/__tests__/SearchResultsList.test.tsx` — Empty state, results, selection.
+- **Application settings**: UX and app runtime defaults
+- **Database settings**: properties tied to a specific database file/security profile
 
-### Testing patterns from codebase:
+Implemented mapping:
 
-- vitest + @testing-library/react
-- No shared test-utils wrapper — tests create their own `QueryClientProvider` inline
-- Mock `@tauri-apps/plugin-dialog` at module level
-- `fireEvent.change` works for controlled inputs but NOT for RHF dirty state detection
-- Mock `PasswordStrengthIndicator` to avoid zxcvbn dictionary loading
+- App side: General, Security, Appearance, Browser, Advanced (persisted)
+- Database side: cryptographic configuration read-only summary (version/ciphers/compression/KDF)
 
----
+Deferred mapping:
 
-## Performance Considerations
+- Database mutation workflows (KDF/cipher/history/recycle bin/security policy)
 
-- **200ms debounce** prevents filtering on every keystroke
-- **`useMemo`** on search results recomputes only when entries or debounced query change
-- **`useEntries(dbId, null)`** reuses react-query cache (`staleTime: 30_000`) — no extra network call
-- **Virtual scrolling** handles large result sets efficiently
-- **`memo` on `SearchResultItem`** prevents re-renders of unchanged rows
-- **Group path map** computed once per group tree change, O(1) per lookup
-- **Linear scan** of entries for search is adequate — sub-1ms for <10k entries
+## 6. Issue #32 Checklist Status
+
+1. Create `SettingsView`: **Done**
+2. Create `SettingsSection`: **Done**
+3. Implement categories: **Done**
+4. General settings: **Done** (with TODOs for runtime wiring)
+5. Security settings: **Done**
+6. Appearance settings: **Done**
+7. Browser integration settings: **Done** (persisted; runtime wiring TODO)
+8. Persist settings to backend: **Done** (Rust service)
+9. Reset defaults: **Done** (preferences only; recents preserved)
+
+## 7. TODO Inventory (Explicit and Persisted in Design)
+
+1. Auto-lock behavior integration on inactivity/OS lock/focus events
+2. Minimize-to-tray and start-minimized runtime window behavior wiring
+3. Startup behavior execution (`open last/default database`) at app launch
+4. Language/i18n runtime integration
+5. Browser integration enforcement and native messaging policy execution
+6. Entry list column preferences wired into actual list rendering
+7. Database settings mutation commands and UI for editable DB security/config settings
+
+## 8. Risks and Tradeoffs
+
+1. Persisted settings now include richer fields; runtime behavior is intentionally partial for several categories.
+2. Current approach prioritizes schema + persistence + explicit TODO visibility over speculative behavior wiring.
+3. Rust remains the settings source of truth; this avoids split-brain between frontend storage and backend state.
+
+## 9. Conclusion
+
+Issue #32 is implemented with production-usable settings UI and persistence, strict app/database split, strong test
+coverage for the new feature surface, and clear TODO boundaries for the next settings expansion phase.
