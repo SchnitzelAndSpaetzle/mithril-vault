@@ -73,7 +73,7 @@ function SettingsEditor({
   isDatabaseConfigLoading,
   databaseConfigError,
 }: Readonly<SettingsEditorProps>) {
-  const { theme, setTheme } = useTheme();
+  const { setTheme } = useTheme();
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [draft, setDraft] = useState<AppPreferences>(initialPreferences);
   const [allowedSitesInput, setAllowedSitesInput] = useState<string>(() =>
@@ -81,10 +81,8 @@ function SettingsEditor({
   );
 
   useEffect(() => {
-    if (theme !== initialPreferences.appearance.theme) {
-      setTheme(initialPreferences.appearance.theme);
-    }
-  }, [initialPreferences.appearance.theme, setTheme, theme]);
+    setTheme(initialPreferences.appearance.theme);
+  }, [initialPreferences.appearance.theme, setTheme]);
 
   const hasChanges = useMemo(() => {
     const normalizedDraft: AppPreferences = {
@@ -670,7 +668,17 @@ export function SettingsView() {
     error: databaseConfigError,
   } = useDatabaseConfig(dbId);
 
-  if (isLoading || !preferences) {
+  if (error) {
+    return (
+      <div className="p-4 md:p-6">
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
+          Failed to load settings: {String(error)}
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
     return (
       <div className="p-4 md:p-6">
         <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
@@ -680,11 +688,11 @@ export function SettingsView() {
     );
   }
 
-  if (error) {
+  if (!preferences) {
     return (
       <div className="p-4 md:p-6">
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
-          Failed to load settings: {String(error)}
+        <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+          Settings are unavailable.
         </div>
       </div>
     );

@@ -145,7 +145,7 @@ describe("SettingsView", () => {
 
   it("renders top-level load error state", () => {
     mockUseAppPreferences.mockReturnValue({
-      preferences: makePreferences(),
+      preferences: null,
       isLoading: false,
       error: new Error("boom"),
       updatePreferences: vi.fn().mockResolvedValue(undefined),
@@ -383,6 +383,7 @@ describe("SettingsView", () => {
     });
 
     expect(setTheme).toHaveBeenCalledWith("dark");
+    expect(setTheme).toHaveBeenLastCalledWith("dark");
     expect(updatePreferences).toHaveBeenCalledWith(
       expect.objectContaining({
         general: expect.objectContaining({
