@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { PasswordStrengthIndicator } from "@/components/database/create-wizard/PasswordStrengthIndicator";
 import { clipboard, generator } from "@/lib/tauri";
 import type { PasswordGeneratorOptions } from "@/lib/types";
+import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 
 interface PasswordGeneratorPopoverProps {
   onUsePassword: (password: string) => void;
@@ -38,6 +39,7 @@ export function PasswordGeneratorPopover({
   onUsePassword,
   children,
 }: PasswordGeneratorPopoverProps) {
+  const clipboardClearTimeout = useClipboardTimeout();
   const [open, setOpen] = useState(false);
   const [options, setOptions] =
     useState<PasswordGeneratorOptions>(DEFAULT_OPTIONS);
@@ -95,7 +97,7 @@ export function PasswordGeneratorPopover({
       return;
     }
 
-    await clipboard.copyText(generatedPassword, 30);
+    await clipboard.copyText(generatedPassword, clipboardClearTimeout);
     setIsCopied(true);
     window.setTimeout(() => setIsCopied(false), 2000);
   }

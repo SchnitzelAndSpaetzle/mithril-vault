@@ -60,7 +60,7 @@ fn save_and_load_roundtrip() {
         minimize_to_tray: false,
         start_minimized: true,
         theme: "dark".into(),
-        recent_databases: Vec::new(),
+        ..AppSettings::default()
     };
 
     service.update_settings(settings).expect("save settings");

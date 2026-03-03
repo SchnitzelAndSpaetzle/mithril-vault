@@ -4,11 +4,14 @@ export const queryKeys = {
   database: {
     all: ["database"] as const,
     info: (dbId: string) => [...queryKeys.database.all, dbId, "info"] as const,
+    config: (dbId: string) =>
+      [...queryKeys.database.all, dbId, "config"] as const,
     customIcons: (dbId: string) =>
       [...queryKeys.database.all, dbId, "customIcons"] as const,
   },
   settings: {
     all: ["settings"] as const,
+    preferences: () => [...queryKeys.settings.all, "preferences"] as const,
     recentDatabases: () =>
       [...queryKeys.settings.all, "recentDatabases"] as const,
   },

@@ -49,6 +49,10 @@ vi.mock("@/hooks/use-custom-icons", () => ({
   useCustomIcons: vi.fn(() => ({ data: {} })),
 }));
 
+vi.mock("@/hooks/use-clipboard-timeout", () => ({
+  useClipboardTimeout: vi.fn(() => 45),
+}));
+
 vi.mock("@/lib/tauri", () => ({
   clipboard: { copyPassword: vi.fn() },
   entries: { getProtectedCustomField: vi.fn() },
@@ -145,7 +149,7 @@ describe("EntryItemDetails", () => {
     await act(async () => {
       fireEvent.click(passwordText.closest("button") as HTMLButtonElement);
     });
-    expect(clipboard.copyPassword).toHaveBeenCalledWith("db-1", "entry-1", 30);
+    expect(clipboard.copyPassword).toHaveBeenCalledWith("db-1", "entry-1", 45);
   });
 
   it("calls reveal and hide handlers from useEntryDetail", () => {

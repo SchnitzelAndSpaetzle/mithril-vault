@@ -5,18 +5,16 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 import type { CSSProperties } from "react";
+import { useTheme } from "@/hooks/use-theme";
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme();
 
   return (
-    // @ts-expect-error sonner types are wrong
-    // TODO: check what needs to be fixed in sonner after theme provider add
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={theme}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

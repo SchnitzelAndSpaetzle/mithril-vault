@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
+  AppPreferences,
   AppSettings,
   CreateEntryData,
   CustomFieldValue,
@@ -18,6 +19,7 @@ import type {
   UpdateEntryData,
 } from "./types";
 import {
+  AppPreferencesSchema,
   AppSettingsSchema,
   CreateEntryDataSchema,
   CustomFieldValueSchema,
@@ -514,6 +516,21 @@ export const settings = {
   async update(newSettings: AppSettings): Promise<void> {
     AppSettingsSchema.parse(newSettings);
     return invoke("update_settings", { newSettings });
+  },
+
+  async getPreferences(): Promise<AppPreferences> {
+    const result = await invoke("get_app_preferences");
+    return AppPreferencesSchema.parse(result);
+  },
+
+  async updatePreferences(newPreferences: AppPreferences): Promise<void> {
+    AppPreferencesSchema.parse(newPreferences);
+    return invoke("update_app_preferences", { newPreferences });
+  },
+
+  async resetPreferences(): Promise<AppPreferences> {
+    const result = await invoke("reset_app_preferences");
+    return AppPreferencesSchema.parse(result);
   },
 
   async addRecentDatabase(path: string, keyfilePath?: string): Promise<void> {

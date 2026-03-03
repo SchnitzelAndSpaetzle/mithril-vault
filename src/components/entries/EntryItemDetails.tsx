@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useEntryDetail } from "@/hooks/use-entry-detail";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
+import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
 import { getKeepassIcon } from "@/lib/keepass-icons";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -218,11 +219,12 @@ function PasswordRow({
   onReveal: () => void;
   onHide: () => void;
 }) {
+  const clipboardClearTimeout = useClipboardTimeout();
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = async () => {
     if (isDisabled) return;
-    await clipboard.copyPassword(dbId, entryId, 30);
+    await clipboard.copyPassword(dbId, entryId, clipboardClearTimeout);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -282,6 +284,11 @@ function PasswordRow({
 function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
   const { copy, isCopied } = useCopyToClipboard();
 
+  const handleCopy = () => {
+    if (isDisabled) return;
+    void copy(url);
+  };
+
   const handleOpen = async () => {
     if (isDisabled) return;
     await openUrl(url);
@@ -292,10 +299,7 @@ function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
       <small className="shrink-0 text-sm font-medium">URL</small>
       <div className="flex w-0 min-w-0 flex-1 items-center justify-end-safe gap-2">
         <button
-          onClick={() => {
-            if (isDisabled) return;
-            copy(url);
-          }}
+          onClick={handleCopy}
           disabled={isDisabled}
           className="group flex min-w-0 max-w-full flex-1 items-center justify-end gap-2 overflow-hidden rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent"
         >
@@ -396,15 +400,17 @@ function EntryFieldRow({
 }) {
   const { copy, isCopied } = useCopyToClipboard();
 
+  const handleCopy = () => {
+    if (isDisabled) return;
+    void copy(value);
+  };
+
   return (
     <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
       <small className="shrink-0 text-sm font-medium">{label}</small>
       <div className="flex w-0 min-w-0 flex-1 items-center justify-end-safe gap-2">
         <button
-          onClick={() => {
-            if (isDisabled) return;
-            copy(value);
-          }}
+          onClick={handleCopy}
           disabled={isDisabled}
           className="group flex min-w-0 max-w-full flex-1 items-center justify-end gap-2 overflow-hidden rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent"
         >
