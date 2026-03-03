@@ -4,6 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -66,6 +74,7 @@ function SettingsEditor({
   databaseConfigError,
 }: Readonly<SettingsEditorProps>) {
   const { theme, setTheme } = useTheme();
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [draft, setDraft] = useState<AppPreferences>(initialPreferences);
   const [allowedSitesInput, setAllowedSitesInput] = useState<string>(() =>
     formatAllowedSites(initialPreferences.browserIntegration.allowedSites)
@@ -126,10 +135,6 @@ function SettingsEditor({
   };
 
   const resetToDefaults = async () => {
-    if (!window.confirm("Reset all preferences to defaults?")) {
-      return;
-    }
-
     try {
       const reset = await onResetPreferences();
       setDraft(reset);
@@ -137,6 +142,7 @@ function SettingsEditor({
         formatAllowedSites(reset.browserIntegration.allowedSites)
       );
       setTheme(reset.appearance.theme);
+      setIsResetDialogOpen(false);
       toast.success("Preferences reset to defaults");
     } catch (resetError) {
       toast.error(String(resetError));
@@ -156,7 +162,7 @@ function SettingsEditor({
           <Button
             type="button"
             variant="outline"
-            onClick={() => void resetToDefaults()}
+            onClick={() => setIsResetDialogOpen(true)}
             disabled={isBusy}
           >
             <RotateCcw className="size-4" />
@@ -172,6 +178,42 @@ function SettingsEditor({
           </Button>
         </div>
       </div>
+      <Dialog
+        open={isResetDialogOpen}
+        onOpenChange={(open) => {
+          if (!isBusy) {
+            setIsResetDialogOpen(open);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset preferences?</DialogTitle>
+            <DialogDescription>
+              Reset all application preferences to defaults. Recent databases
+              will be preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsResetDialogOpen(false)}
+              disabled={isBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void resetToDefaults()}
+              disabled={isBusy}
+            >
+              Reset preferences
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <SettingsSection
         id="general"

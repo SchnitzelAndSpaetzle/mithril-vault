@@ -100,11 +100,6 @@ describe("SettingsView", () => {
       resetPreferences: vi.fn().mockResolvedValue(makePreferences()),
       isResetting: false,
     });
-
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => true)
-    );
   });
 
   it("renders settings sections", () => {
@@ -217,6 +212,7 @@ describe("SettingsView", () => {
     render(<SettingsView />);
 
     fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset preferences" }));
 
     await waitFor(() => {
       expect(resetPreferences).toHaveBeenCalledTimes(1);
@@ -314,11 +310,7 @@ describe("SettingsView", () => {
     expect(toastError).toHaveBeenCalledWith("Error: update failed");
   });
 
-  it("does not reset when confirmation is cancelled", async () => {
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => false)
-    );
+  it("does not reset when reset dialog is cancelled", async () => {
     const resetPreferences = vi.fn().mockResolvedValue(makePreferences());
     mockUseAppPreferences.mockReturnValue({
       preferences: makePreferences(),
@@ -332,6 +324,7 @@ describe("SettingsView", () => {
 
     render(<SettingsView />);
     fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     await waitFor(() => {
       expect(resetPreferences).not.toHaveBeenCalled();
