@@ -77,6 +77,7 @@ describe("SettingsView", () => {
     mockUseTheme.mockReturnValue({
       theme: "system",
       setTheme: vi.fn(),
+      setThemePreview: vi.fn(),
     });
 
     mockUseActiveDatabase.mockReturnValue({
@@ -198,7 +199,11 @@ describe("SettingsView", () => {
   it("resets preferences to defaults", async () => {
     const resetPreferences = vi.fn().mockResolvedValue(makePreferences());
     const setTheme = vi.fn();
-    mockUseTheme.mockReturnValue({ theme: "dark", setTheme });
+    mockUseTheme.mockReturnValue({
+      theme: "dark",
+      setTheme,
+      setThemePreview: vi.fn(),
+    });
     mockUseAppPreferences.mockReturnValue({
       preferences: makePreferences(),
       isLoading: false,
@@ -334,7 +339,12 @@ describe("SettingsView", () => {
   it("updates core preference toggles and numeric fields", async () => {
     const updatePreferences = vi.fn().mockResolvedValue(undefined);
     const setTheme = vi.fn();
-    mockUseTheme.mockReturnValue({ theme: "system", setTheme });
+    const setThemePreview = vi.fn();
+    mockUseTheme.mockReturnValue({
+      theme: "system",
+      setTheme,
+      setThemePreview,
+    });
     mockUseAppPreferences.mockReturnValue({
       preferences: makePreferences(),
       isLoading: false,
@@ -382,6 +392,7 @@ describe("SettingsView", () => {
       expect(updatePreferences).toHaveBeenCalledTimes(1);
     });
 
+    expect(setThemePreview).toHaveBeenCalledWith("dark");
     expect(setTheme).toHaveBeenCalledWith("dark");
     expect(setTheme).toHaveBeenLastCalledWith("dark");
     expect(updatePreferences).toHaveBeenCalledWith(

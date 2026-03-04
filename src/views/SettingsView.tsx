@@ -73,7 +73,7 @@ function SettingsEditor({
   isDatabaseConfigLoading,
   databaseConfigError,
 }: Readonly<SettingsEditorProps>) {
-  const { setTheme } = useTheme();
+  const { setTheme, setThemePreview } = useTheme();
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [draft, setDraft] = useState<AppPreferences>(initialPreferences);
   const [allowedSitesInput, setAllowedSitesInput] = useState<string>(() =>
@@ -125,6 +125,7 @@ function SettingsEditor({
 
     try {
       await onUpdatePreferences(nextDraft);
+      setTheme(nextDraft.appearance.theme);
       setDraft(nextDraft);
       toast.success("Settings updated");
     } catch (updateError) {
@@ -406,7 +407,7 @@ function SettingsEditor({
                     theme: nextTheme,
                   },
                 }));
-                setTheme(nextTheme);
+                setThemePreview(nextTheme);
               }}
             >
               {THEME_OPTIONS.map((option) => (

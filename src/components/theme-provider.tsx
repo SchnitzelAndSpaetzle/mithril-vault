@@ -11,6 +11,7 @@ interface ThemeProviderProps {
 export interface ThemeProviderState {
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  setThemePreview: (theme: Theme) => void;
 }
 
 export const ThemeProviderContext = createContext<
@@ -23,7 +24,7 @@ export function ThemeProvider({
   storageKey = "vite-ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(
+  const [theme, setThemeState] = useState<Theme>(
     () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
   );
 
@@ -49,7 +50,10 @@ export function ThemeProvider({
     theme,
     setTheme: (theme: Theme) => {
       localStorage.setItem(storageKey, theme);
-      setTheme(theme);
+      setThemeState(theme);
+    },
+    setThemePreview: (theme: Theme) => {
+      setThemeState(theme);
     },
   };
 
