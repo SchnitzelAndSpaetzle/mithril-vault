@@ -9,7 +9,7 @@ interface AppProps {
 }
 function App({ children }: Readonly<AppProps>) {
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+    <ThemeProvider defaultTheme="system" storageKey="mithril-vault-theme">
       <main>{children}</main>
       <Toaster />
     </ThemeProvider>

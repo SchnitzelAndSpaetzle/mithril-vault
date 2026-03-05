@@ -188,13 +188,88 @@ export const RecentDatabaseSchema = z.object({
 });
 export type RecentDatabase = z.infer<typeof RecentDatabaseSchema>;
 
+export const StartupBehaviorSchema = z.enum([
+  "showUnlockScreen",
+  "openLastDatabase",
+  "openDefaultDatabase",
+]);
+export type StartupBehavior = z.infer<typeof StartupBehaviorSchema>;
+
+export const ThemePreferenceSchema = z.enum(["system", "light", "dark"]);
+export type ThemePreference = z.infer<typeof ThemePreferenceSchema>;
+
+export const EntryListColumnsSchema = z.object({
+  username: z.boolean(),
+  url: z.boolean(),
+  modifiedAt: z.boolean(),
+  tags: z.boolean(),
+});
+export type EntryListColumns = z.infer<typeof EntryListColumnsSchema>;
+
+export const GeneralSettingsSchema = z.object({
+  language: z.string().min(1),
+  startupBehavior: StartupBehaviorSchema,
+  defaultDatabasePath: z.string().nullable(),
+});
+export type GeneralSettings = z.infer<typeof GeneralSettingsSchema>;
+
+export const SecuritySettingsSchema = z.object({
+  autoLockTimeout: z.number().int().positive(),
+  clipboardClearTimeout: z.number().int().positive(),
+  showPasswordByDefault: z.boolean(),
+  minimizeToTray: z.boolean(),
+  startMinimized: z.boolean(),
+});
+export type SecuritySettings = z.infer<typeof SecuritySettingsSchema>;
+
+export const AppearanceSettingsSchema = z.object({
+  theme: ThemePreferenceSchema,
+  fontSize: z.number().int().min(10).max(24),
+  entryListColumns: EntryListColumnsSchema,
+});
+export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
+
+export const BrowserIntegrationSettingsSchema = z.object({
+  enabled: z.boolean(),
+  allowedSites: z.array(z.string().min(1)),
+});
+export type BrowserIntegrationSettings = z.infer<
+  typeof BrowserIntegrationSettingsSchema
+>;
+
+export const AdvancedSettingsSchema = z.object({
+  debugMode: z.boolean(),
+  dataLocation: z.string(),
+});
+export type AdvancedSettings = z.infer<typeof AdvancedSettingsSchema>;
+
+export const AppPreferencesSchema = z.object({
+  general: GeneralSettingsSchema,
+  security: SecuritySettingsSchema,
+  appearance: AppearanceSettingsSchema,
+  browserIntegration: BrowserIntegrationSettingsSchema,
+  advanced: AdvancedSettingsSchema,
+});
+export type AppPreferences = z.infer<typeof AppPreferencesSchema>;
+
 export const AppSettingsSchema = z.object({
+  language: z.string().min(1),
+  startupBehavior: StartupBehaviorSchema,
+  defaultDatabasePath: z.string().nullable(),
   autoLockTimeout: z.number().int(),
   clipboardClearTimeout: z.number().int(),
   showPasswordByDefault: z.boolean(),
   minimizeToTray: z.boolean(),
   startMinimized: z.boolean(),
-  theme: z.string(),
+  theme: ThemePreferenceSchema,
+  fontSize: z.number().int().min(10).max(24),
+  entryListShowUsername: z.boolean(),
+  entryListShowUrl: z.boolean(),
+  entryListShowModifiedAt: z.boolean(),
+  entryListShowTags: z.boolean(),
+  browserIntegrationEnabled: z.boolean(),
+  browserAllowedSites: z.array(z.string()),
+  debugMode: z.boolean(),
   recentDatabases: z.array(RecentDatabaseSchema),
 });
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

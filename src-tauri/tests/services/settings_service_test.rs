@@ -3,7 +3,7 @@
 
 #![allow(clippy::expect_used)]
 
-use mithril_vault_lib::commands::settings::AppSettings;
+use mithril_vault_lib::commands::settings::{AppSettings, StartupBehavior};
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::settings::SettingsService;
 use tauri::test::mock_app;
@@ -116,7 +116,7 @@ fn load_settings_from_existing_file() {
         minimize_to_tray: false,
         start_minimized: true,
         theme: "dark".into(),
-        recent_databases: Vec::new(),
+        ..AppSettings::default()
     };
     let content = serde_json::to_string_pretty(&settings).expect("serialize settings");
     std::fs::write(&settings_path, content).expect("write settings");
@@ -321,4 +321,66 @@ fn clear_recent_databases_surfaces_save_error() {
     assert!(matches!(err, AppError::Io(_)));
 
     cleanup_settings_dir(settings_path);
+}
+
+#[test]
+fn app_preferences_roundtrip_and_reset_preserves_recents() {
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let service = new_service(&app);
+    service
+        .add_recent_database("db-1.kdbx", Some("key-1.key"))
+        .expect("add recent database");
+
+    let mut prefs = service.get_app_preferences().expect("get prefs");
+    prefs.general.language = "es".into();
+    prefs.general.startup_behavior = StartupBehavior::OpenDefaultDatabase;
+    prefs.general.default_database_path = Some("/tmp/vault.kdbx".into());
+    prefs.security.auto_lock_timeout = 120;
+    prefs.appearance.theme = "dark".into();
+    prefs.browser_integration.enabled = true;
+    prefs.browser_integration.allowed_sites = vec!["example.org".into()];
+    prefs.advanced.debug_mode = true;
+
+    service
+        .update_app_preferences(&prefs)
+        .expect("update prefs");
+
+    let refreshed = service.get_app_preferences().expect("get prefs");
+    assert_eq!(refreshed.general.language, "es");
+    assert_eq!(
+        refreshed.general.startup_behavior,
+        StartupBehavior::OpenDefaultDatabase
+    );
+    assert_eq!(
+        refreshed.general.default_database_path.as_deref(),
+        Some("/tmp/vault.kdbx")
+    );
+    assert_eq!(refreshed.security.auto_lock_timeout, 120);
+    assert_eq!(refreshed.appearance.theme, "dark");
+    assert!(refreshed.browser_integration.enabled);
+    assert_eq!(
+        refreshed.browser_integration.allowed_sites,
+        vec!["example.org"]
+    );
+    assert!(refreshed.advanced.debug_mode);
+
+    let reset = service.reset_app_preferences().expect("reset prefs");
+    assert_eq!(reset.general.language, "en");
+    assert_eq!(
+        reset.general.startup_behavior,
+        StartupBehavior::ShowUnlockScreen
+    );
+    assert_eq!(reset.security.auto_lock_timeout, 300);
+    assert_eq!(reset.appearance.theme, "system");
+    assert!(!reset.browser_integration.enabled);
+    assert!(!reset.advanced.debug_mode);
+
+    let settings = service.get_settings().expect("get settings");
+    assert_eq!(settings.recent_databases.len(), 1);
+    assert_eq!(settings.recent_databases[0].path, "db-1.kdbx");
+
+    cleanup_settings_file(&app);
 }

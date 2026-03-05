@@ -121,6 +121,17 @@ The application uses a responsive layout system that adapts between desktop and 
 - Focus on structure/behavior tests rather than full rendering due to complex dependencies
 - See `src/components/layout/*.test.tsx` for examples
 
+#### Settings Architecture
+
+- Settings persistence is backend-owned via `SettingsService` (`src-tauri/src/services/settings.rs`)
+- Frontend reads/writes through Tauri commands, not local plugin-store
+- Split model:
+  - App preferences: editable (`get_app_preferences`, `update_app_preferences`, `reset_app_preferences`)
+  - Database settings: read-only snapshot from `get_database_config`
+- `reset_app_preferences` resets preferences only and preserves `recent_databases`
+- Clipboard timeout in UI should come from preferences (`useClipboardTimeout`), not hardcoded values
+- Theme is managed through `ThemeProvider` + persisted preference sync from settings view
+
 ### Backend (src-tauri/src/)
 
 - **Tauri v2** with security-hardened capabilities

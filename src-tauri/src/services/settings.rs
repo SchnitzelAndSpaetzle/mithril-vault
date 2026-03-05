@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::commands::settings::{AppSettings, RecentDatabase};
+use crate::commands::settings::{AppPreferences, AppSettings, RecentDatabase};
 use crate::dto::error::AppError;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -67,6 +67,34 @@ impl SettingsService {
         self.save(&settings)
     }
 
+    pub fn get_app_preferences(&self) -> Result<AppPreferences, AppError> {
+        let settings = self.settings.lock().map_err(|_| AppError::Lock)?;
+        Ok(AppPreferences::from_settings(
+            &settings,
+            self.data_location_display(),
+        ))
+    }
+
+    pub fn update_app_preferences(&self, new_preferences: &AppPreferences) -> Result<(), AppError> {
+        let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
+        new_preferences.apply_to_settings(&mut settings);
+        self.save(&settings)
+    }
+
+    pub fn reset_app_preferences(&self) -> Result<AppPreferences, AppError> {
+        let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
+        let recent_databases = settings.recent_databases.clone();
+        *settings = AppSettings {
+            recent_databases,
+            ..AppSettings::default()
+        };
+        self.save(&settings)?;
+        Ok(AppPreferences::from_settings(
+            &settings,
+            self.data_location_display(),
+        ))
+    }
+
     pub fn add_recent_database(
         &self,
         path: &str,
@@ -112,5 +140,12 @@ impl SettingsService {
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.recent_databases.clear();
         self.save(&settings)
+    }
+
+    fn data_location_display(&self) -> String {
+        self.settings_path
+            .parent()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default()
     }
 }

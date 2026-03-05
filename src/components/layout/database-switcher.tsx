@@ -149,11 +149,11 @@ export function DatabaseSwitcher() {
         </div>
 
         <div className="flex items-center gap-2" data-collapsible="icon">
-          {/*TODO: database settings page*/}
           <Button
             size="icon"
             className="size-8 group-data-[collapsible=icon]:opacity-0"
             variant="ghost"
+            onClick={() => void navigate({ to: "/settings" })}
           >
             <Settings />
             <span className="sr-only">Settings</span>

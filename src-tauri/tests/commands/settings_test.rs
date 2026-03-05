@@ -4,8 +4,9 @@
 #![allow(clippy::expect_used)]
 
 use mithril_vault_lib::commands::settings::{
-    add_recent_database, clear_recent_databases, get_keyfile_for_database, get_settings,
-    remove_recent_database, update_settings,
+    add_recent_database, clear_recent_databases, get_app_preferences, get_keyfile_for_database,
+    get_settings, remove_recent_database, reset_app_preferences, update_app_preferences,
+    update_settings, StartupBehavior,
 };
 use mithril_vault_lib::services::settings::SettingsService;
 use std::sync::Arc;
@@ -79,6 +80,66 @@ fn recent_database_commands() {
 
     let settings = tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
     assert!(settings.recent_databases.is_empty());
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn app_preferences_commands() {
+    let app = setup_app();
+
+    tauri::async_runtime::block_on(add_recent_database(
+        "db-1.kdbx".into(),
+        Some("key-1.key".into()),
+        app.state(),
+    ))
+    .expect("add recent database");
+
+    let mut prefs =
+        tauri::async_runtime::block_on(get_app_preferences(app.state())).expect("get preferences");
+    assert_eq!(prefs.security.clipboard_clear_timeout, 30);
+    assert_eq!(
+        prefs.general.startup_behavior,
+        StartupBehavior::ShowUnlockScreen
+    );
+    assert!(!prefs.advanced.data_location.is_empty());
+
+    prefs.general.language = "de".into();
+    prefs.general.startup_behavior = StartupBehavior::OpenLastDatabase;
+    prefs.security.clipboard_clear_timeout = 12;
+    prefs.appearance.theme = "light".into();
+    prefs.browser_integration.enabled = true;
+    prefs.browser_integration.allowed_sites = vec!["example.com".into()];
+    prefs.advanced.debug_mode = true;
+
+    tauri::async_runtime::block_on(update_app_preferences(prefs.clone(), app.state()))
+        .expect("update preferences");
+
+    let refreshed =
+        tauri::async_runtime::block_on(get_app_preferences(app.state())).expect("get preferences");
+    assert_eq!(refreshed.general.language, "de");
+    assert_eq!(
+        refreshed.general.startup_behavior,
+        StartupBehavior::OpenLastDatabase
+    );
+    assert_eq!(refreshed.security.clipboard_clear_timeout, 12);
+    assert_eq!(refreshed.appearance.theme, "light");
+    assert!(refreshed.browser_integration.enabled);
+    assert_eq!(
+        refreshed.browser_integration.allowed_sites,
+        vec!["example.com"]
+    );
+    assert!(refreshed.advanced.debug_mode);
+
+    let reset =
+        tauri::async_runtime::block_on(reset_app_preferences(app.state())).expect("reset prefs");
+    assert_eq!(reset.general.language, "en");
+    assert_eq!(reset.security.clipboard_clear_timeout, 30);
+    assert_eq!(reset.appearance.theme, "system");
+    assert!(!reset.advanced.debug_mode);
+
+    let settings = tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
+    assert_eq!(settings.recent_databases.len(), 1);
 
     cleanup_settings_file(&app);
 }

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar.tsx";
 import { AppSettingsSidebar } from "@/components/layout/app-settings-sidebar.tsx";
 import { SiteSettingsHeader } from "@/components/layout/site-settings-header.tsx";
+import { SettingsView } from "@/views/SettingsView";
 
 export const Route = createFileRoute("/settings/")({
   component: RouteComponent,
@@ -9,17 +10,12 @@ export const Route = createFileRoute("/settings/")({
 
 function RouteComponent() {
   return (
-    <SidebarProvider>
+    <SidebarProvider className="h-full min-h-0">
       <AppSettingsSidebar />
-      <SidebarInset>
+      <SidebarInset className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <SiteSettingsHeader />
-        <div className="flex flex-1 flex-col gap-4 p-4">
-          <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-            <div className="bg-muted/50 aspect-video rounded-xl" />
-            <div className="bg-muted/50 aspect-video rounded-xl" />
-            <div className="bg-muted/50 aspect-video rounded-xl" />
-          </div>
-          <div className="bg-muted/50 min-h-screen flex-1 rounded-xl md:min-h-min" />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SettingsView />
         </div>
       </SidebarInset>
     </SidebarProvider>
