@@ -1,4 +1,5 @@
 import { useFieldArray } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomFieldRow } from "./CustomFieldRow";
@@ -8,6 +9,7 @@ export function CustomFieldsEditor({
   control,
   disabled = false,
 }: CustomFieldsEditorProps) {
+  const { t } = useTranslation();
   const { fields, append, remove } = useFieldArray({
     control,
     name: "customFields",
@@ -16,7 +18,9 @@ export function CustomFieldsEditor({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Custom Fields</span>
+        <span className="text-sm font-medium">
+          {t("entries.form.customFields")}
+        </span>
         <Button
           type="button"
           variant="outline"
@@ -25,7 +29,7 @@ export function CustomFieldsEditor({
           disabled={disabled}
         >
           <Plus className="mr-1 size-3.5" />
-          Add Field
+          {t("entries.form.addField")}
         </Button>
       </div>
 
@@ -40,7 +44,9 @@ export function CustomFieldsEditor({
       ))}
 
       {fields.length === 0 && (
-        <p className="text-xs text-muted-foreground">No custom fields.</p>
+        <p className="text-xs text-muted-foreground">
+          {t("entries.form.noCustomFields")}
+        </p>
       )}
     </div>
   );

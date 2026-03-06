@@ -1,5 +1,6 @@
 import type { FocusEvent, KeyboardEvent } from "react";
-import { Controller, type Control } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { type Control, Controller } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import type { EntryFormValues } from "@/lib/formTypes";
@@ -33,9 +34,11 @@ export function EntryUsernameField({
   onKeyDown,
   onSelectSuggestion,
 }: EntryUsernameFieldProps) {
+  const { t } = useTranslation();
+
   return (
     <Field>
-      <FieldLabel htmlFor="username">Username</FieldLabel>
+      <FieldLabel htmlFor="username">{t("entries.form.username")}</FieldLabel>
       <Controller
         name="username"
         control={control}
@@ -44,7 +47,7 @@ export function EntryUsernameField({
             <Input
               {...field}
               id="username"
-              placeholder="Username or email"
+              placeholder={t("entries.form.usernamePlaceholder")}
               autoComplete="username"
               disabled={isPending}
               onFocus={onFocus}

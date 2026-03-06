@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { type Control, Controller } from "react-hook-form";
 import {
   Select,
@@ -22,6 +23,7 @@ export function EntryGroupField({
   dbId,
   isPending,
 }: EntryGroupFieldProps) {
+  const { t } = useTranslation();
   const { data: groups } = useGroups(dbId);
   const flatGroups = groups ? flattenGroups(groups) : [];
 
@@ -29,7 +31,7 @@ export function EntryGroupField({
 
   return (
     <Field>
-      <FieldLabel htmlFor="groupId">Group</FieldLabel>
+      <FieldLabel htmlFor="groupId">{t("entries.form.group")}</FieldLabel>
       <Controller
         name="groupId"
         control={control}
@@ -40,7 +42,7 @@ export function EntryGroupField({
             disabled={isPending}
           >
             <SelectTrigger className="w-full" id="groupId">
-              <SelectValue placeholder="Select a group" />
+              <SelectValue placeholder={t("entries.form.selectGroup")} />
             </SelectTrigger>
             <SelectContent>
               {flatGroups.map((group) => (

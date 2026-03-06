@@ -1,4 +1,5 @@
-import { Controller, type Control } from "react-hook-form";
+import { type Control, Controller } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import type { CreateDatabaseFormValues } from "@/lib/formTypes";
 import {
   Field,
@@ -16,12 +17,16 @@ interface DatabaseInfoStepProps {
 }
 
 export function DatabaseInfoStep({ control, disabled }: DatabaseInfoStepProps) {
+  const { t } = useTranslation();
+
   return (
     <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="name">Database Name</FieldLabel>
+        <FieldLabel htmlFor="name">
+          {t("createDatabase.info.nameLabel")}
+        </FieldLabel>
         <FieldDescription>
-          A name to identify your database. This will be displayed in the app.
+          {t("createDatabase.info.nameDescription")}
         </FieldDescription>
 
         <Controller
@@ -33,7 +38,7 @@ export function DatabaseInfoStep({ control, disabled }: DatabaseInfoStepProps) {
                 {...field}
                 id={field.name}
                 aria-invalid={fieldState.invalid}
-                placeholder="e.g., Personal, Work, Family..."
+                placeholder={t("createDatabase.info.namePlaceholder")}
                 disabled={disabled}
               />
               {fieldState.error && (
@@ -46,11 +51,13 @@ export function DatabaseInfoStep({ control, disabled }: DatabaseInfoStepProps) {
 
       <Field>
         <FieldLabel htmlFor="description">
-          Description{" "}
-          <span className="text-muted-foreground font-normal">(optional)</span>
+          {t("createDatabase.info.descriptionLabel")}{" "}
+          <span className="text-muted-foreground font-normal">
+            {t("createDatabase.info.descriptionOptional")}
+          </span>
         </FieldLabel>
         <FieldDescription>
-          Add a description to help you remember the purpose of this database.
+          {t("createDatabase.info.descriptionDescription")}
         </FieldDescription>
 
         <Controller
@@ -60,7 +67,7 @@ export function DatabaseInfoStep({ control, disabled }: DatabaseInfoStepProps) {
             <Textarea
               {...field}
               id={field.name}
-              placeholder="e.g., Contains all my personal accounts..."
+              placeholder={t("createDatabase.info.descriptionPlaceholder")}
               disabled={disabled}
               rows={3}
             />

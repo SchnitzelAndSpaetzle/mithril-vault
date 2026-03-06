@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,12 +14,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "@tanstack/react-router";
 
 export default function DropdownMenuOpenDatabase() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   async function handleSelectLocalFile() {
     try {
       const file = await open({
-        title: "Open Database",
+        title: t("databaseSwitcher.openDatabase"),
         filters: [{ name: "KeePass Database", extensions: ["kdbx"] }],
       });
       if (file) {
@@ -34,18 +36,18 @@ export default function DropdownMenuOpenDatabase() {
       <DropdownMenuTrigger asChild>
         <Button variant="outline">
           <FolderOpen />
-          Open
+          {t("welcome.open")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="start">
-        <DropdownMenuLabel>Offline</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("welcome.openMenu.offline")}</DropdownMenuLabel>
         <DropdownMenuGroup>
           <DropdownMenuItem onSelect={handleSelectLocalFile}>
-            Local file
+            {t("welcome.openMenu.localFile")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Online</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("welcome.openMenu.online")}</DropdownMenuLabel>
         <DropdownMenuGroup>
           <DropdownMenuItem disabled>Google Drive</DropdownMenuItem>
           <DropdownMenuItem disabled>OneDrive</DropdownMenuItem>

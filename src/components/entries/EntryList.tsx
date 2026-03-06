@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import EntryListItem from "@/components/entries/EntryListItem";
 import { ItemSeparator } from "@/components/ui/item";
 import { useActiveDatabase } from "@/hooks/use-active-database";
@@ -22,6 +23,7 @@ interface EntryListProps {
 }
 
 export default function EntryList({ onEntrySelect }: EntryListProps) {
+  const { t } = useTranslation();
   const { dbId, tab } = useActiveDatabase();
   const search = useSearch({ strict: false });
   const { data: customIcons } = useCustomIcons(dbId);
@@ -115,7 +117,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   if (!dbId) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
-        Open a database to view entries.
+        {t("entries.openDatabase")}
       </div>
     );
   }
@@ -123,7 +125,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   if (isLoading) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
-        Loading entries...
+        {t("entries.loading")}
       </div>
     );
   }
@@ -131,7 +133,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   if (isError) {
     return (
       <div className="px-3 py-2 text-sm text-destructive">
-        Failed to load entries: {error.message}
+        {t("entries.loadError", { error: error.message })}
       </div>
     );
   }
@@ -140,8 +142,8 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
         {tagFilter
-          ? `No entries with tag "${tagFilter}".`
-          : "No entries found."}
+          ? t("entries.noEntriesWithTag", { tag: tagFilter })
+          : t("entries.noEntries")}
       </div>
     );
   }

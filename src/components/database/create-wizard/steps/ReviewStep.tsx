@@ -1,5 +1,6 @@
 import { Check, FileText, FolderOpen, KeyRound, Settings } from "lucide-react";
 import { type Control, Controller, useWatch } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import type { CreateDatabaseFormValues } from "@/lib/formTypes";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -44,6 +45,7 @@ function ReviewItem({
 }
 
 export function ReviewStep({ control, disabled }: ReviewStepProps) {
+  const { t } = useTranslation();
   const filePath = useWatch({ control, name: "filePath" });
   const name = useWatch({ control, name: "name" });
   const description = useWatch({ control, name: "description" });
@@ -59,7 +61,7 @@ export function ReviewStep({ control, disabled }: ReviewStepProps) {
       <div className="rounded-lg border divide-y">
         <ReviewItem
           icon={<FolderOpen className="size-4" />}
-          label="Location"
+          label={t("createDatabase.review.location")}
           value={
             <span className="font-mono text-sm">
               {getFilenameFromPath(filePath)}
@@ -69,38 +71,44 @@ export function ReviewStep({ control, disabled }: ReviewStepProps) {
 
         <ReviewItem
           icon={<FileText className="size-4" />}
-          label="Database Name"
-          value={name || "No database name provided"}
+          label={t("createDatabase.review.databaseName")}
+          value={name || t("createDatabase.review.noName")}
         />
 
         {description && (
           <ReviewItem
             icon={<FileText className="size-4" />}
-            label="Description"
+            label={t("createDatabase.review.description")}
             value={description}
           />
         )}
 
         <ReviewItem
           icon={<Check className="size-4" />}
-          label="Master Password"
-          value={hasPassword ? "Password set" : "No password"}
+          label={t("createDatabase.review.masterPassword")}
+          value={
+            hasPassword
+              ? t("createDatabase.review.passwordSet")
+              : t("createDatabase.review.noPassword")
+          }
           variant={hasPassword ? "success" : "default"}
         />
 
         <ReviewItem
           icon={<KeyRound className="size-4" />}
-          label="Key File"
+          label={t("createDatabase.review.keyFile")}
           value={
             hasKeyfile ? (
               <span className="flex items-center gap-2">
-                {keyfileMode === "generate" ? "Will generate: " : ""}
+                {keyfileMode === "generate"
+                  ? t("createDatabase.review.willGenerate")
+                  : ""}
                 <span className="font-mono text-sm">
                   {getFilenameFromPath(keyfilePath)}
                 </span>
               </span>
             ) : (
-              "No key file"
+              t("createDatabase.review.noKeyFile")
             )
           }
           variant={hasKeyfile ? "success" : "default"}
@@ -114,9 +122,11 @@ export function ReviewStep({ control, disabled }: ReviewStepProps) {
           </div>
           <div className="flex-1 space-y-4">
             <div>
-              <div className="font-medium">Additional Options</div>
+              <div className="font-medium">
+                {t("createDatabase.review.additionalOptions")}
+              </div>
               <div className="text-sm text-muted-foreground">
-                Configure how your database is created
+                {t("createDatabase.review.configureDescription")}
               </div>
             </div>
 
@@ -137,8 +147,7 @@ export function ReviewStep({ control, disabled }: ReviewStepProps) {
                     htmlFor="createDefaultGroups"
                     className="text-sm font-normal cursor-pointer"
                   >
-                    Create default groups (General, Email, Banking, Social,
-                    Work)
+                    {t("createDatabase.review.createDefaultGroups")}
                   </Label>
                 </div>
               )}
@@ -149,15 +158,15 @@ export function ReviewStep({ control, disabled }: ReviewStepProps) {
 
       <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
         <p>
-          <strong>Security Summary:</strong> Your database will be encrypted
-          using{" "}
+          <strong>{t("createDatabase.review.securitySummary")}</strong>{" "}
+          {t("createDatabase.review.encryptedWith")}{" "}
           {hasPassword && hasKeyfile
-            ? "both a password and key file (two-factor)"
+            ? t("createDatabase.review.twoFactor")
             : hasPassword
-              ? "your master password"
+              ? t("createDatabase.review.passwordOnly")
               : hasKeyfile
-                ? "your key file only"
-                : "no credentials (please go back and set a password or key file)"}
+                ? t("createDatabase.review.keyFileOnly")
+                : t("createDatabase.review.noCredentials")}
           .
         </p>
       </div>

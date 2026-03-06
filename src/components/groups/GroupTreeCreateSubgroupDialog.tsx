@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createElement, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ export function GroupTreeCreateSubgroupDialog({
   onCreateSubgroup,
   isPending,
 }: GroupTreeCreateSubgroupDialogProps) {
+  const { t } = useTranslation();
   const [groupName, setGroupName] = useState("");
   const [iconId, setIconId] = useState(DEFAULT_FOLDER_ICON);
 
@@ -49,14 +51,14 @@ export function GroupTreeCreateSubgroupDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Group</DialogTitle>
+          <DialogTitle>{t("groups.createTitle")}</DialogTitle>
           <DialogDescription>
-            Create a new subgroup inside &ldquo;{parentName}&rdquo;.
+            {t("groups.createDescription", { parentName })}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="new-group-name">Name</Label>
+            <Label htmlFor="new-group-name">{t("common.name")}</Label>
             <div className="flex gap-2">
               <IconPickerPopover selectedIconId={iconId} onSelect={setIconId}>
                 <Button
@@ -74,7 +76,7 @@ export function GroupTreeCreateSubgroupDialog({
                 id="new-group-name"
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
-                placeholder="Enter group name"
+                placeholder={t("groups.enterGroupName")}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleSubmit();
@@ -86,13 +88,13 @@ export function GroupTreeCreateSubgroupDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={!groupName.trim() || isPending}
           >
-            {isPending ? "Creating..." : "Create"}
+            {isPending ? t("groups.creating") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

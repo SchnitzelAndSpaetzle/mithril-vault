@@ -1,4 +1,5 @@
-import { Controller, type Control } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { type Control, Controller } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import type { EntryFormValues } from "@/lib/formTypes";
@@ -9,9 +10,11 @@ interface EntryUrlFieldProps {
 }
 
 export function EntryUrlField({ control, isPending }: EntryUrlFieldProps) {
+  const { t } = useTranslation();
+
   return (
     <Field>
-      <FieldLabel htmlFor="url">URL</FieldLabel>
+      <FieldLabel htmlFor="url">{t("entries.form.url")}</FieldLabel>
       <Controller
         name="url"
         control={control}
@@ -21,7 +24,7 @@ export function EntryUrlField({ control, isPending }: EntryUrlFieldProps) {
               {...field}
               id="url"
               aria-invalid={fieldState.invalid}
-              placeholder="https://example.com"
+              placeholder={t("entries.form.urlPlaceholder")}
               disabled={isPending}
             />
             {fieldState.error && (

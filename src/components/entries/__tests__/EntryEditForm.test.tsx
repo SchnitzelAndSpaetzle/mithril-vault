@@ -163,9 +163,13 @@ describe("EntryEditForm", () => {
       { wrapper: createWrapper() }
     );
 
-    expect(screen.getByPlaceholderText("Entry title")).toHaveValue("");
-    expect(screen.getByPlaceholderText("Username or email")).toHaveValue("");
-    expect(screen.getByText("Create Entry")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("entries.form.titlePlaceholder")
+    ).toHaveValue("");
+    expect(
+      screen.getByPlaceholderText("entries.form.usernamePlaceholder")
+    ).toHaveValue("");
+    expect(screen.getByText("entries.form.createEntry")).toBeInTheDocument();
   });
 
   it("renders pre-filled form in edit mode", async () => {
@@ -182,15 +186,15 @@ describe("EntryEditForm", () => {
 
     // Wait for secrets to load
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Entry title")).toHaveValue(
-        "Test Entry"
-      );
+      expect(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder")
+      ).toHaveValue("Test Entry");
     });
 
-    expect(screen.getByPlaceholderText("Username or email")).toHaveValue(
-      "user@example.com"
-    );
-    expect(screen.getByText("Save Changes")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("entries.form.usernamePlaceholder")
+    ).toHaveValue("user@example.com");
+    expect(screen.getByText("entries.form.saveChanges")).toBeInTheDocument();
   });
 
   it("shows title validation error on empty submit", async () => {
@@ -205,7 +209,7 @@ describe("EntryEditForm", () => {
     );
 
     await act(async () => {
-      fireEvent.click(screen.getByText("Create Entry"));
+      fireEvent.click(screen.getByText("entries.form.createEntry"));
     });
 
     await waitFor(() => {
@@ -229,13 +233,16 @@ describe("EntryEditForm", () => {
     );
 
     await act(async () => {
-      fireEvent.change(screen.getByPlaceholderText("Entry title"), {
-        target: { value: "New Entry" },
-      });
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        {
+          target: { value: "New Entry" },
+        }
+      );
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByText("Create Entry"));
+      fireEvent.click(screen.getByText("entries.form.createEntry"));
     });
 
     await waitFor(() => {
@@ -272,19 +279,22 @@ describe("EntryEditForm", () => {
 
     // Wait for secrets to load
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Entry title")).toHaveValue(
-        "Test Entry"
+      expect(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder")
+      ).toHaveValue("Test Entry");
+    });
+
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        {
+          target: { value: "Updated Title" },
+        }
       );
     });
 
     await act(async () => {
-      fireEvent.change(screen.getByPlaceholderText("Entry title"), {
-        target: { value: "Updated Title" },
-      });
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Save Changes"));
+      fireEvent.click(screen.getByText("entries.form.saveChanges"));
     });
 
     await waitFor(() => {
@@ -317,22 +327,24 @@ describe("EntryEditForm", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("Protected values could not be loaded.")
+        screen.getByText("entries.form.protectedValuesError")
       ).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "entries.form.saveChanges" })
+    ).toBeDisabled();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
     });
 
     await waitFor(() => {
       expect(
-        screen.queryByText("Protected values could not be loaded.")
+        screen.queryByText("entries.form.protectedValuesError")
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Save Changes" })
+        screen.getByRole("button", { name: "entries.form.saveChanges" })
       ).not.toBeDisabled();
     });
   });
@@ -351,7 +363,7 @@ describe("EntryEditForm", () => {
     );
 
     await act(async () => {
-      fireEvent.click(screen.getByText("Cancel"));
+      fireEvent.click(screen.getByText("common.cancel"));
     });
 
     expect(onCancel).toHaveBeenCalledTimes(1);
@@ -375,7 +387,7 @@ describe("EntryEditForm", () => {
     );
 
     await act(async () => {
-      fireEvent.click(screen.getByText("Cancel"));
+      fireEvent.click(screen.getByText("common.cancel"));
     });
 
     expect(onCancel).toHaveBeenCalledTimes(1);
@@ -392,11 +404,15 @@ describe("EntryEditForm", () => {
       { wrapper: createWrapper() }
     );
 
-    const passwordInput = screen.getByPlaceholderText("Enter password...");
+    const passwordInput = screen.getByPlaceholderText(
+      "entries.form.passwordPlaceholder"
+    );
     expect(passwordInput).toHaveAttribute("type", "password");
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "entries.form.showPassword" })
+      );
     });
 
     expect(passwordInput).toHaveAttribute("type", "text");
@@ -415,11 +431,13 @@ describe("EntryEditForm", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByPlaceholderText("Username or email")
+        screen.getByPlaceholderText("entries.form.usernamePlaceholder")
       ).toBeInTheDocument();
     });
 
-    const usernameInput = screen.getByPlaceholderText("Username or email");
+    const usernameInput = screen.getByPlaceholderText(
+      "entries.form.usernamePlaceholder"
+    );
     await act(async () => {
       fireEvent.focus(usernameInput);
       fireEvent.change(usernameInput, { target: { value: "ali" } });
@@ -450,9 +468,9 @@ describe("EntryEditForm", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Entry title")).toHaveValue(
-        "Test Entry"
-      );
+      expect(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder")
+      ).toHaveValue("Test Entry");
     });
 
     rerender(
@@ -466,15 +484,15 @@ describe("EntryEditForm", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Entry title")).toHaveValue(
-        "Second Entry"
-      );
-      expect(screen.getByPlaceholderText("Username or email")).toHaveValue(
-        "second@example.com"
-      );
-      expect(screen.getByPlaceholderText("https://example.com")).toHaveValue(
-        "https://second.example.com"
-      );
+      expect(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder")
+      ).toHaveValue("Second Entry");
+      expect(
+        screen.getByPlaceholderText("entries.form.usernamePlaceholder")
+      ).toHaveValue("second@example.com");
+      expect(
+        screen.getByPlaceholderText("entries.form.urlPlaceholder")
+      ).toHaveValue("https://second.example.com");
     });
   });
 
@@ -490,9 +508,12 @@ describe("EntryEditForm", () => {
     );
 
     await act(async () => {
-      fireEvent.change(screen.getByPlaceholderText("Entry title"), {
-        target: { value: "Draft title" },
-      });
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        {
+          target: { value: "Draft title" },
+        }
+      );
     });
 
     rerender(
@@ -504,9 +525,9 @@ describe("EntryEditForm", () => {
       />
     );
 
-    expect(screen.getByPlaceholderText("Entry title")).toHaveValue(
-      "Draft title"
-    );
+    expect(
+      screen.getByPlaceholderText("entries.form.titlePlaceholder")
+    ).toHaveValue("Draft title");
   });
 
   it("emits dirty state when form changes", async () => {
@@ -523,9 +544,12 @@ describe("EntryEditForm", () => {
     );
 
     await act(async () => {
-      fireEvent.change(screen.getByPlaceholderText("Entry title"), {
-        target: { value: "Dirty title" },
-      });
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        {
+          target: { value: "Dirty title" },
+        }
+      );
     });
 
     await waitFor(() => {

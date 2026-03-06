@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "@tanstack/react-router";
 import {
   Cog,
@@ -21,18 +22,23 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 
-const sections = [
-  { id: "general", title: "General", icon: SlidersHorizontal },
-  { id: "security", title: "Security", icon: Shield },
-  { id: "appearance", title: "Appearance", icon: Palette },
-  { id: "browser", title: "Browser", icon: Globe },
-  { id: "advanced", title: "Advanced", icon: WandSparkles },
-  { id: "database", title: "Database", icon: Database },
+const sectionDefs = [
+  {
+    id: "general",
+    titleKey: "settings.general.title",
+    icon: SlidersHorizontal,
+  },
+  { id: "security", titleKey: "settings.security.title", icon: Shield },
+  { id: "appearance", titleKey: "settings.appearance.title", icon: Palette },
+  { id: "browser", titleKey: "settings.browser.title", icon: Globe },
+  { id: "advanced", titleKey: "settings.advanced.title", icon: WandSparkles },
+  { id: "database", titleKey: "settings.database.title", icon: Database },
 ] as const;
 
 export function AppSettingsSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
+  const { t } = useTranslation();
   const location = useLocation();
 
   return (
@@ -46,9 +52,9 @@ export function AppSettingsSidebar({
                   <Cog className="size-4" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-medium">Settings</span>
+                  <span className="font-medium">{t("settings.title")}</span>
                   <span className="text-xs text-muted-foreground">
-                    Preferences
+                    {t("settings.sidebar.preferences")}
                   </span>
                 </div>
               </Link>
@@ -59,9 +65,11 @@ export function AppSettingsSidebar({
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Sections</SidebarGroupLabel>
+          <SidebarGroupLabel>
+            {t("settings.sidebar.sections")}
+          </SidebarGroupLabel>
           <SidebarMenu>
-            {sections.map((section) => (
+            {sectionDefs.map((section) => (
               <SidebarMenuItem key={section.id}>
                 <SidebarMenuButton asChild>
                   <a
@@ -75,7 +83,7 @@ export function AppSettingsSidebar({
                     }
                   >
                     <section.icon className="size-4" />
-                    <span>{section.title}</span>
+                    <span>{t(section.titleKey)}</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>

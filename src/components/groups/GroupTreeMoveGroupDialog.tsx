@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,7 @@ export function GroupTreeMoveGroupDialog({
   onMove,
   isPending,
 }: GroupTreeMoveGroupDialogProps) {
+  const { t } = useTranslation();
   const [targetParentId, setTargetParentId] = useState("");
   const { data: allGroups } = useGroups(open ? dbId : null);
 
@@ -69,17 +71,17 @@ export function GroupTreeMoveGroupDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Move Group</DialogTitle>
+          <DialogTitle>{t("groups.moveTitle")}</DialogTitle>
           <DialogDescription>
-            Select a new parent group for &ldquo;{group.name}&rdquo;.
+            {t("groups.moveDescription", { groupName: group.name })}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="move-target">Destination</Label>
+            <Label htmlFor="move-target">{t("groups.destination")}</Label>
             <Select value={targetParentId} onValueChange={setTargetParentId}>
               <SelectTrigger className="w-full" id="move-target">
-                <SelectValue placeholder="Select a group" />
+                <SelectValue placeholder={t("groups.selectGroup")} />
               </SelectTrigger>
               <SelectContent>
                 {moveTargets.map((group) => (
@@ -95,13 +97,13 @@ export function GroupTreeMoveGroupDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={!targetParentId || isPending}
           >
-            {isPending ? "Moving..." : "Move"}
+            {isPending ? t("groups.moving") : t("common.move")}
           </Button>
         </DialogFooter>
       </DialogContent>

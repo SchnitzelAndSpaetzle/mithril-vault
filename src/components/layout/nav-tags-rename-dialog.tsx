@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ export function NavTagsRenameDialog({
   onConfirm,
   isPending,
 }: NavTagsRenameDialogProps) {
+  const { t } = useTranslation();
   const [newTagName, setNewTagName] = useState(targetTag);
   const handleConfirm = () => onConfirm(newTagName);
 
@@ -32,9 +34,9 @@ export function NavTagsRenameDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename Tag</DialogTitle>
+          <DialogTitle>{t("tags.renameTitle")}</DialogTitle>
           <DialogDescription>
-            This will rename &quot;{targetTag}&quot; across all entries.
+            {t("tags.renameDescription", { tag: targetTag })}
           </DialogDescription>
         </DialogHeader>
         <Input
@@ -45,12 +47,12 @@ export function NavTagsRenameDialog({
               handleConfirm();
             }
           }}
-          placeholder="New tag name"
+          placeholder={t("tags.newTagPlaceholder")}
           autoFocus
         />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleConfirm}
@@ -58,7 +60,7 @@ export function NavTagsRenameDialog({
               !newTagName.trim() || newTagName.trim() === targetTag || isPending
             }
           >
-            {isPending ? "Renaming..." : "Rename"}
+            {isPending ? t("tags.renaming") : t("common.rename")}
           </Button>
         </DialogFooter>
       </DialogContent>

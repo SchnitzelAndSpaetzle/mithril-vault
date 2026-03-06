@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn, getFilenameFromPath } from "@/lib/utils.ts";
 import {
   Card,
@@ -29,6 +30,7 @@ export function UnlockView({
   rememberKeyfile,
   ...props
 }: UnlockViewProps) {
+  const { t } = useTranslation();
   const filename = getFilenameFromPath(initialPath);
   const directory = getDirectoryFromPath(initialPath);
 
@@ -37,7 +39,9 @@ export function UnlockView({
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-xl">
-            {filename ? `Unlock ${filename}` : "Unlock Database"}
+            {filename
+              ? t("unlock.titleWithName", { filename })
+              : t("unlock.title")}
           </CardTitle>
           {directory && (
             <CardDescription>

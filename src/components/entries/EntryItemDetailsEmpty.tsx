@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   Empty,
   EmptyDescription,
@@ -8,15 +9,17 @@ import {
 import { KeyIcon } from "lucide-react";
 
 export function EntryItemDetailsEmpty() {
+  const { t } = useTranslation();
+
   return (
     <Empty>
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <KeyIcon />
         </EmptyMedia>
-        <EmptyTitle>No Entry Selected</EmptyTitle>
+        <EmptyTitle>{t("entries.noEntrySelected")}</EmptyTitle>
         <EmptyDescription>
-          Select an entry from the list to view its details.
+          {t("entries.noEntrySelectedDescription")}
         </EmptyDescription>
       </EmptyHeader>
     </Empty>

@@ -132,9 +132,7 @@ describe("SearchResultsList", () => {
   it("shows empty state when no results", () => {
     render(<SearchResultsList results={[]} query="test" />);
 
-    expect(
-      screen.getByText("No entries match your search.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("entries.search.noResults")).toBeInTheDocument();
   });
 
   it("renders virtualized items and group path", () => {

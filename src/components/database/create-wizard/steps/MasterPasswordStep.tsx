@@ -1,6 +1,7 @@
 import { Eye, EyeClosed, ShieldAlert } from "lucide-react";
 import { useState } from "react";
-import { Controller, type Control, useWatch } from "react-hook-form";
+import { type Control, Controller, useWatch } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import type { CreateDatabaseFormValues } from "@/lib/formTypes";
 import {
   Field,
@@ -27,6 +28,7 @@ export function MasterPasswordStep({
   control,
   disabled,
 }: MasterPasswordStepProps) {
+  const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -35,10 +37,11 @@ export function MasterPasswordStep({
   return (
     <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="password">Master Password</FieldLabel>
+        <FieldLabel htmlFor="password">
+          {t("createDatabase.password.label")}
+        </FieldLabel>
         <FieldDescription>
-          Choose a strong password that you can remember. This password encrypts
-          your entire database.
+          {t("createDatabase.password.description")}
         </FieldDescription>
 
         <Controller
@@ -52,7 +55,7 @@ export function MasterPasswordStep({
                   id={field.name}
                   aria-invalid={fieldState.invalid}
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter your master password..."
+                  placeholder={t("createDatabase.password.placeholder")}
                   autoComplete="new-password"
                   disabled={disabled}
                 />
@@ -60,7 +63,9 @@ export function MasterPasswordStep({
                   <InputGroupButton
                     variant="ghost"
                     aria-label={
-                      showPassword ? "Hide password" : "Show password"
+                      showPassword
+                        ? t("entries.form.hidePassword")
+                        : t("entries.form.showPassword")
                     }
                     size="icon-xs"
                     type="button"
@@ -83,9 +88,11 @@ export function MasterPasswordStep({
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="confirmPassword">Confirm Password</FieldLabel>
+        <FieldLabel htmlFor="confirmPassword">
+          {t("createDatabase.password.confirmLabel")}
+        </FieldLabel>
         <FieldDescription>
-          Re-enter your password to confirm it.
+          {t("createDatabase.password.confirmDescription")}
         </FieldDescription>
 
         <Controller
@@ -99,7 +106,7 @@ export function MasterPasswordStep({
                   id={field.name}
                   aria-invalid={fieldState.invalid}
                   type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Confirm your master password..."
+                  placeholder={t("createDatabase.password.confirmPlaceholder")}
                   autoComplete="new-password"
                   disabled={disabled}
                 />
@@ -107,7 +114,9 @@ export function MasterPasswordStep({
                   <InputGroupButton
                     variant="ghost"
                     aria-label={
-                      showConfirmPassword ? "Hide password" : "Show password"
+                      showConfirmPassword
+                        ? t("entries.form.hidePassword")
+                        : t("entries.form.showPassword")
                     }
                     size="icon-xs"
                     type="button"
@@ -134,11 +143,10 @@ export function MasterPasswordStep({
         >
           <ShieldAlert className="size-4 text-amber-600" />
           <AlertTitle className="text-amber-800 dark:text-amber-400">
-            Important Security Notice
+            {t("createDatabase.password.securityNoticeTitle")}
           </AlertTitle>
           <AlertDescription className="text-amber-700 dark:text-amber-300">
-            Your master password cannot be recovered if forgotten. Store it
-            safely or use a memorable passphrase.
+            {t("createDatabase.password.securityNoticeDescription")}
           </AlertDescription>
         </Alert>
       )}

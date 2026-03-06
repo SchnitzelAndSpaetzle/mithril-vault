@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ResizableHandle,
@@ -34,6 +35,7 @@ type EditMode = "view" | "edit" | "create";
 const DESKTOP_SEARCH_INPUT_ID = "desktop-global-search-input";
 
 export default function DragRegion() {
+  const { t } = useTranslation();
   const { groupName, entryCount, activeTag } = useEntryListHeader();
   const navigate = useNavigate();
   const { tab, dbId } = useActiveDatabase();
@@ -88,10 +90,10 @@ export default function DragRegion() {
     }
 
     if (isEditing && hasUnsavedChanges) {
-      const confirmed = await ask(
-        "You have unsaved changes. Do you want to discard them and open another entry?",
-        { title: "Unsaved Changes", kind: "warning" }
-      );
+      const confirmed = await ask(t("entries.unsavedChanges.discardAndOpen"), {
+        title: t("entries.unsavedChanges.title"),
+        kind: "warning",
+      });
       if (!confirmed) {
         return;
       }
@@ -108,10 +110,10 @@ export default function DragRegion() {
   const handleDelete = async () => {
     if (!dbId || !selectedEntryId) return;
 
-    const confirmed = await ask(
-      "Are you sure you want to delete this entry? This action cannot be undone.",
-      { title: "Delete Entry", kind: "warning" }
-    );
+    const confirmed = await ask(t("entries.deleteConfirm"), {
+      title: t("entries.deleteTitle"),
+      kind: "warning",
+    });
 
     if (!confirmed) return;
 
@@ -122,10 +124,10 @@ export default function DragRegion() {
           if (tab) {
             updateTabState(tab.id, { selectedEntryId: null });
           }
-          toast.success("Entry deleted.");
+          toast.success(t("entries.deleted"));
         },
         onError: (error) => {
-          toast.error(`Failed to delete entry: ${error.message}`);
+          toast.error(t("entries.deleteFailed", { error: error.message }));
         },
       }
     );
@@ -166,14 +168,17 @@ export default function DragRegion() {
                   <>
                     <p className="text-sm">
                       {activeTag
-                        ? `Search in #${activeTag}`
+                        ? t("entries.search.searchInTag", { tag: activeTag })
                         : groupName !== "All"
-                          ? `Search in ${groupName}`
-                          : "Search Results"}
+                          ? t("entries.search.searchInGroup", {
+                              group: groupName,
+                            })
+                          : t("entries.search.searchResults")}
                     </p>
                     <small className="text-muted-foreground text-xs">
-                      {searchState.results.length}{" "}
-                      {searchState.results.length === 1 ? "match" : "matches"}
+                      {t("entries.search.match", {
+                        count: searchState.results.length,
+                      })}
                     </small>
                   </>
                 ) : (
@@ -211,7 +216,7 @@ export default function DragRegion() {
                       )}
                     </div>
                     <small className="text-muted-foreground text-xs">
-                      {entryCount} {entryCount === 1 ? "Item" : "Items"}
+                      {t("entries.count", { count: entryCount })}
                     </small>
                   </>
                 )}
@@ -269,7 +274,7 @@ export default function DragRegion() {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="share entry"
+                  aria-label={t("entries.shareEntry")}
                   disabled={isEditing}
                 >
                   <Share />
@@ -279,7 +284,7 @@ export default function DragRegion() {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="password generator"
+                  aria-label={t("passwordGenerator.passwordGeneratorButton")}
                   disabled={isEditing}
                 >
                   <Dices />
@@ -287,7 +292,7 @@ export default function DragRegion() {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="more options"
+                  aria-label={t("entries.moreOptions")}
                   disabled={isEditing}
                 >
                   <EllipsisVertical />

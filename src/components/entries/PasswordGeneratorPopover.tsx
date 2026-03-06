@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, Copy, Dices } from "lucide-react";
 import {
   Popover,
@@ -39,6 +40,7 @@ export function PasswordGeneratorPopover({
   onUsePassword,
   children,
 }: PasswordGeneratorPopoverProps) {
+  const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
   const [open, setOpen] = useState(false);
   const [options, setOptions] =
@@ -106,20 +108,22 @@ export function PasswordGeneratorPopover({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-80 space-y-3" align="end">
-        <div className="text-sm font-medium">Password Generator</div>
+        <div className="text-sm font-medium">
+          {t("passwordGenerator.title")}
+        </div>
 
         {/* Generated password display */}
         <div className="flex items-center gap-2 rounded-md border bg-muted/50 p-2">
           <code className="flex-1 truncate text-sm">
             {!generatedPassword && isGenerating
-              ? "Generating..."
+              ? t("passwordGenerator.generating")
               : generatedPassword}
           </code>
           <Button
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label="Regenerate password"
+            aria-label={t("passwordGenerator.regenerate")}
             onClick={() => generate(options)}
             disabled={isGenerating}
           >
@@ -129,7 +133,11 @@ export function PasswordGeneratorPopover({
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label={isCopied ? "Password copied" : "Copy password"}
+            aria-label={
+              isCopied
+                ? t("passwordGenerator.passwordCopied")
+                : t("passwordGenerator.copyPassword")
+            }
             onClick={() => void handleCopy()}
             disabled={isGenerating || !generatedPassword}
           >
@@ -148,7 +156,9 @@ export function PasswordGeneratorPopover({
 
         {/* Length control */}
         <div className="flex items-center gap-3">
-          <Label className="text-xs shrink-0">Length</Label>
+          <Label className="text-xs shrink-0">
+            {t("passwordGenerator.length")}
+          </Label>
           <input
             type="range"
             min={4}
@@ -176,18 +186,23 @@ export function PasswordGeneratorPopover({
         <div className="grid grid-cols-2 gap-2">
           {(
             [
-              ["uppercase", "A-Z"],
-              ["lowercase", "a-z"],
-              ["numbers", "0-9"],
-              ["symbols", "!@#$"],
+              ["uppercase", t("passwordGenerator.uppercase")],
+              ["lowercase", t("passwordGenerator.lowercase")],
+              ["numbers", t("passwordGenerator.numbers")],
+              ["symbols", t("passwordGenerator.symbols")],
             ] as const
           ).map(([key, label]) => (
             <div key={key} className="flex items-center gap-2">
               <Checkbox
                 id={`gen-${key}`}
-                checked={options[key]}
+                checked={
+                  (options[key as keyof typeof options] as boolean) ?? false
+                }
                 onCheckedChange={(checked) =>
-                  updateOption(key, checked === true)
+                  updateOption(
+                    key as keyof PasswordGeneratorOptions,
+                    checked === true
+                  )
                 }
               />
               <Label htmlFor={`gen-${key}`} className="text-xs">
@@ -206,11 +221,11 @@ export function PasswordGeneratorPopover({
             }
           />
           <Label htmlFor="gen-exclude-ambiguous" className="text-xs">
-            Exclude ambiguous (0O, 1lI)
+            {t("passwordGenerator.excludeAmbiguous")}
           </Label>
         </div>
 
-        {/* Use password button */}
+        {/* Use the password button */}
         <Button
           type="button"
           size="sm"
@@ -218,7 +233,7 @@ export function PasswordGeneratorPopover({
           onClick={handleUse}
           disabled={isGenerating || !generatedPassword}
         >
-          Use Password
+          {t("passwordGenerator.usePassword")}
         </Button>
       </PopoverContent>
     </Popover>

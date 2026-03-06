@@ -1,4 +1,5 @@
-import { Controller, type Control } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { type Control, Controller } from "react-hook-form";
 import { TagInput } from "@/components/entries/TagInput";
 import { Field, FieldLabel } from "@/components/ui/field";
 import type { EntryFormValues } from "@/lib/formTypes";
@@ -14,9 +15,11 @@ export function EntryTagsField({
   isPending,
   availableTags,
 }: EntryTagsFieldProps) {
+  const { t } = useTranslation();
+
   return (
     <Field>
-      <FieldLabel>Tags</FieldLabel>
+      <FieldLabel>{t("entries.form.tags")}</FieldLabel>
       <Controller
         name="tags"
         control={control}

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -23,26 +24,27 @@ export function NavTagsDeleteDialog({
   onConfirm,
   isPending,
 }: NavTagsDeleteDialogProps) {
+  const { t } = useTranslation();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete Tag</DialogTitle>
+          <DialogTitle>{t("tags.deleteTitle")}</DialogTitle>
           <DialogDescription>
-            Are you sure you want to remove &quot;{targetTag}&quot; from all
-            entries? This cannot be undone.
+            {t("tags.deleteDescription", { tag: targetTag })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             variant="destructive"
             onClick={onConfirm}
             disabled={isPending}
           >
-            {isPending ? "Deleting..." : "Delete"}
+            {isPending ? t("tags.deleting") : t("common.delete")}
           </Button>
         </DialogFooter>
       </DialogContent>

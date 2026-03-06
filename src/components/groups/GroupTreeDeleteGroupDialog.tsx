@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,7 @@ export function GroupTreeDeleteGroupDialog({
   onDelete,
   isPending,
 }: GroupTreeDeleteGroupDialogProps) {
+  const { t } = useTranslation();
   const { data: entryCounts } = useGroupEntryCounts(open ? dbId : null);
   const totalEntries = entryCounts
     ? sumGroupEntryCounts(group, entryCounts)
@@ -44,32 +46,25 @@ export function GroupTreeDeleteGroupDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete Group</DialogTitle>
+          <DialogTitle>{t("groups.deleteTitle")}</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete &ldquo;{group.name}&rdquo;?
+            {t("groups.deleteDescription", { groupName: group.name })}
             {totalEntries > 0 && (
-              <>
-                {" "}
-                This group contains{" "}
-                <strong>
-                  {totalEntries} {totalEntries === 1 ? "entry" : "entries"}
-                </strong>
-                .
-              </>
+              <> {t("groups.deleteEntryCount", { count: totalEntries })}</>
             )}{" "}
-            This will move the group and all its contents to the Recycle Bin.
+            {t("groups.deleteRecycleBin")}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             variant="destructive"
             onClick={handleConfirm}
             disabled={isPending}
           >
-            {isPending ? "Deleting..." : "Delete"}
+            {isPending ? t("groups.deleting") : t("common.delete")}
           </Button>
         </DialogFooter>
       </DialogContent>

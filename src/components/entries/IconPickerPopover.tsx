@@ -1,4 +1,5 @@
 import { createElement, type ReactNode, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Popover,
   PopoverContent,
@@ -20,13 +21,16 @@ export function IconPickerPopover({
   onSelect,
   children,
 }: IconPickerPopoverProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-80 p-2" align="start">
-        <div className="mb-2 text-sm font-medium">Choose an icon</div>
+        <div className="mb-2 text-sm font-medium">
+          {t("iconPicker.chooseIcon")}
+        </div>
         <div className="grid grid-cols-10 gap-1">
           {ICON_IDS.map((id) => (
             <button

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Database, Loader2, Lock, Settings } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -29,13 +30,14 @@ import {
 /**
  * Extracts the filename from a full file path.
  */
-function getFilename(path?: string): string {
-  if (!path) return "New Database";
+function getFilename(path: string | undefined, fallback: string): string {
+  if (!path) return fallback;
   const parts = path.split(/[/\\]/);
   return parts[parts.length - 1] || path;
 }
 
 export function DatabaseSwitcher() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { tab, dbId } = useActiveDatabase();
   const removeTab = useDatabaseTabs(
@@ -64,7 +66,7 @@ export function DatabaseSwitcher() {
   const handleOpenAnotherDatabase = async () => {
     try {
       const file = await open({
-        title: "Open Database",
+        title: t("databaseSwitcher.openDatabase"),
         filters: [{ name: "KeePass Database", extensions: ["kdbx"] }],
       });
 
@@ -96,7 +98,8 @@ export function DatabaseSwitcher() {
                   <Database className="size-3" />
                 </div>
                 <span className="truncate font-medium">
-                  {tab.info?.name || getFilename(tab.path)}
+                  {tab.info?.name ||
+                    getFilename(tab.path, t("databaseSwitcher.newDatabase"))}
                 </span>
                 <ChevronDown className="opacity-50" />
               </SidebarMenuButton>
@@ -108,7 +111,7 @@ export function DatabaseSwitcher() {
               sideOffset={4}
             >
               <DropdownMenuLabel className="text-muted-foreground text-xs">
-                Recent Databases
+                {t("databaseSwitcher.recentDatabases")}
               </DropdownMenuLabel>
               {isLoadingRecent ? (
                 <div className="flex items-center justify-center p-2">
@@ -116,7 +119,7 @@ export function DatabaseSwitcher() {
                 </div>
               ) : otherDatabases.length === 0 ? (
                 <DropdownMenuItem disabled className="text-muted-foreground">
-                  No other databases
+                  {t("databaseSwitcher.noOtherDatabases")}
                 </DropdownMenuItem>
               ) : (
                 otherDatabases.map((db) => (
@@ -128,7 +131,9 @@ export function DatabaseSwitcher() {
                     <div className="flex size-6 items-center justify-center rounded-xs border">
                       <Database className="size-4 shrink-0" />
                     </div>
-                    <span className="truncate">{getFilename(db.path)}</span>
+                    <span className="truncate">
+                      {getFilename(db.path, t("databaseSwitcher.newDatabase"))}
+                    </span>
                   </DropdownMenuItem>
                 ))
               )}
@@ -141,7 +146,7 @@ export function DatabaseSwitcher() {
                   <Database className="size-4" />
                 </div>
                 <div className="text-muted-foreground font-medium">
-                  Open another database
+                  {t("databaseSwitcher.openAnother")}
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -156,7 +161,7 @@ export function DatabaseSwitcher() {
             onClick={() => void navigate({ to: "/settings" })}
           >
             <Settings />
-            <span className="sr-only">Settings</span>
+            <span className="sr-only">{t("databaseSwitcher.settings")}</span>
           </Button>
           <Button
             size="icon"
@@ -165,7 +170,9 @@ export function DatabaseSwitcher() {
             onClick={() => void handleLock()}
           >
             <Lock />
-            <span className="sr-only">Lock Database</span>
+            <span className="sr-only">
+              {t("databaseSwitcher.lockDatabase")}
+            </span>
           </Button>
         </div>
       </SidebarMenuItem>

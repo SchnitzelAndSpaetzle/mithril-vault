@@ -1,7 +1,9 @@
 import { Search, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Label } from "@/components/ui/label";
 import { SidebarInput } from "@/components/ui/sidebar";
+import React from "react";
 
 interface SearchFormProps extends Omit<
   React.ComponentProps<"form">,
@@ -24,15 +26,16 @@ export function SearchForm({
   autoFocus,
   ...props
 }: SearchFormProps) {
+  const { t } = useTranslation();
   return (
     <form {...props} onSubmit={(e) => e.preventDefault()}>
       <div className="relative">
         <Label htmlFor={inputId} className="sr-only">
-          Search
+          {t("entries.search.label")}
         </Label>
         <SidebarInput
           id={inputId}
-          placeholder="Search entries... (Ctrl+K)"
+          placeholder={t("entries.search.placeholder")}
           autoFocus={autoFocus}
           className="h-8 pl-7 pr-7"
           value={query}
@@ -50,7 +53,7 @@ export function SearchForm({
             type="button"
             className="absolute top-1/2 right-2 -translate-y-1/2 opacity-50 hover:opacity-100"
             onClick={onClear}
-            aria-label="Clear search"
+            aria-label={t("entries.search.clearSearch")}
           >
             <X className="size-4" />
           </button>

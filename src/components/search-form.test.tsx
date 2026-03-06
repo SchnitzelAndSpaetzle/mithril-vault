@@ -8,7 +8,7 @@ describe("SearchForm", () => {
   it("renders with placeholder", () => {
     render(<SearchForm query="" onQueryChange={vi.fn()} onClear={vi.fn()} />);
     expect(
-      screen.getByPlaceholderText("Search entries... (Ctrl+K)")
+      screen.getByPlaceholderText("entries.search.placeholder")
     ).toBeInTheDocument();
   });
 
@@ -18,7 +18,7 @@ describe("SearchForm", () => {
       <SearchForm query="" onQueryChange={onQueryChange} onClear={vi.fn()} />
     );
 
-    const input = screen.getByPlaceholderText("Search entries... (Ctrl+K)");
+    const input = screen.getByPlaceholderText("entries.search.placeholder");
     fireEvent.change(input, { target: { value: "test" } });
     expect(onQueryChange).toHaveBeenCalledWith("test");
   });
@@ -27,12 +27,16 @@ describe("SearchForm", () => {
     render(
       <SearchForm query="something" onQueryChange={vi.fn()} onClear={vi.fn()} />
     );
-    expect(screen.getByLabelText("Clear search")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("entries.search.clearSearch")
+    ).toBeInTheDocument();
   });
 
   it("does not show clear button when query is empty", () => {
     render(<SearchForm query="" onQueryChange={vi.fn()} onClear={vi.fn()} />);
-    expect(screen.queryByLabelText("Clear search")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("entries.search.clearSearch")
+    ).not.toBeInTheDocument();
   });
 
   it("calls onClear when clear button is clicked", () => {
@@ -41,7 +45,7 @@ describe("SearchForm", () => {
       <SearchForm query="test" onQueryChange={vi.fn()} onClear={onClear} />
     );
 
-    fireEvent.click(screen.getByLabelText("Clear search"));
+    fireEvent.click(screen.getByLabelText("entries.search.clearSearch"));
     expect(onClear).toHaveBeenCalledOnce();
   });
 
@@ -56,7 +60,7 @@ describe("SearchForm", () => {
       />
     );
 
-    const input = screen.getByPlaceholderText("Search entries... (Ctrl+K)");
+    const input = screen.getByPlaceholderText("entries.search.placeholder");
     fireEvent.keyDown(input, { key: "Escape" });
     expect(onEscape).toHaveBeenCalledOnce();
   });
@@ -71,7 +75,7 @@ describe("SearchForm", () => {
       />
     );
 
-    const input = screen.getByPlaceholderText("Search entries... (Ctrl+K)");
+    const input = screen.getByPlaceholderText("entries.search.placeholder");
     expect(input).toHaveFocus();
   });
 
@@ -99,7 +103,7 @@ describe("SearchForm", () => {
       />
     );
 
-    expect(screen.getByLabelText("Search")).toHaveAttribute(
+    expect(screen.getByLabelText("entries.search.label")).toHaveAttribute(
       "id",
       "custom-search-input"
     );
