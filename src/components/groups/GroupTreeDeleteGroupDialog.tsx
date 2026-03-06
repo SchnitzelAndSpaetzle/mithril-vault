@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -50,7 +50,14 @@ export function GroupTreeDeleteGroupDialog({
           <DialogDescription>
             {t("groups.deleteDescription", { groupName: group.name })}
             {totalEntries > 0 && (
-              <> {t("groups.deleteEntryCount", { count: totalEntries })}</>
+              <>
+                {" "}
+                <Trans
+                  i18nKey="groups.deleteEntryCount"
+                  count={totalEntries}
+                  components={{ strong: <strong /> }}
+                />
+              </>
             )}{" "}
             {t("groups.deleteRecycleBin")}
           </DialogDescription>
