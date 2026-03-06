@@ -168,7 +168,7 @@ export function useEntryEditForm({
     return () => {
       cancelled = true;
     };
-  }, [entry, entry?.id, dbId, form, secretReloadToken, t]);
+  }, [entry, dbId, form, secretReloadToken, t]);
 
   // Auto-generate password when creating a new entry
   useEffect(() => {

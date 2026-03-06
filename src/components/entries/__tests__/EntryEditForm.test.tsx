@@ -11,6 +11,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { EntryEditForm } from "../EntryEditForm";
 import type { Entry } from "@/lib/types";
+import React from "react";
 
 const {
   mockCreateEntry,
@@ -312,7 +313,7 @@ describe("EntryEditForm", () => {
   });
 
   it("blocks save and supports retry when protected values fail to load", async () => {
-    mockGetPassword.mockRejectedValueOnce(new Error("secret load failed"));
+    mockGetPassword.mockRejectedValue(new Error("secret load failed"));
 
     render(
       <EntryEditForm
@@ -334,6 +335,9 @@ describe("EntryEditForm", () => {
     expect(
       screen.getByRole("button", { name: "entries.form.saveChanges" })
     ).toBeDisabled();
+
+    // Reset to succeed on retry
+    mockGetPassword.mockResolvedValue("existing-password");
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
