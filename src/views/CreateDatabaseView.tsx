@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -13,14 +14,14 @@ export function CreateDatabaseView({
   className,
   ...props
 }: React.ComponentProps<"div">) {
+  const { t } = useTranslation();
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="w-full max-w-lg mx-auto">
         <CardHeader className="text-center">
-          <CardTitle className="text-xl">Create New Database</CardTitle>
-          <CardDescription>
-            Set up a new password database to store your credentials securely.
-          </CardDescription>
+          <CardTitle className="text-xl">{t("createDatabase.title")}</CardTitle>
+          <CardDescription>{t("createDatabase.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[60vh] pr-3">

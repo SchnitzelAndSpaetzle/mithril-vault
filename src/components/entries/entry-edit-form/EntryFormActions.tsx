@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -20,12 +21,16 @@ export function EntryFormActions({
   onRetrySecretLoad,
   onSaveAndNew,
 }: EntryFormActionsProps) {
+  const { t } = useTranslation();
+
   return (
     <>
       <div className="flex items-center gap-2 pt-2">
         <Button type="submit" disabled={isSubmitDisabled}>
           {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-          {isEditMode ? "Save Changes" : "Create Entry"}
+          {isEditMode
+            ? t("entries.form.saveChanges")
+            : t("entries.form.createEntry")}
         </Button>
         {!isEditMode && onSaveAndNew && (
           <Button
@@ -35,7 +40,7 @@ export function EntryFormActions({
             onClick={onSaveAndNew}
           >
             {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Save & New
+            {t("entries.form.saveAndNew")}
           </Button>
         )}
         <Button
@@ -44,12 +49,12 @@ export function EntryFormActions({
           onClick={onCancel}
           disabled={isPending}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
       </div>
       {secretLoadError && (
         <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
-          <span>Protected values could not be loaded.</span>
+          <span>{t("entries.form.protectedValuesError")}</span>
           <Button
             type="button"
             size="sm"
@@ -57,7 +62,7 @@ export function EntryFormActions({
             onClick={onRetrySecretLoad}
             disabled={isPending}
           >
-            Retry
+            {t("common.retry")}
           </Button>
         </div>
       )}

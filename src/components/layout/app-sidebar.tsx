@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlarmClockMinus,
   MessageCircleQuestion,
@@ -25,6 +26,7 @@ import { useActiveDatabase } from "@/hooks/use-active-database";
 import NavTags from "@/components/layout/nav-tags.tsx";
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { dbId } = useActiveDatabase();
 
@@ -34,7 +36,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 
   const navMain = [
     {
-      title: "All Entries",
+      title: t("sidebar.allEntries"),
       icon: Search,
       onSelect: () =>
         void navigate({
@@ -43,13 +45,13 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         }),
     },
     {
-      title: "Expired",
+      title: t("sidebar.expired"),
       icon: AlarmClockMinus,
       disabled: true,
     },
     {
       // TODO: wire security health to backend
-      title: "Security",
+      title: t("sidebar.security"),
       icon: ShieldIcon,
       disabled: true,
     },
@@ -57,7 +59,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 
   const navSecondary = [
     {
-      title: "Settings",
+      title: t("sidebar.settings"),
       icon: Settings2,
       onSelect: () =>
         void navigate({
@@ -65,7 +67,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         }),
     },
     {
-      title: "Help",
+      title: t("sidebar.help"),
       icon: MessageCircleQuestion,
       disabled: true,
     },
@@ -81,7 +83,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         <Separator />
         <NavTags dbId={dbId} />
         <SidebarGroup>
-          <SidebarGroupLabel>Groups</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("sidebar.groups")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <GroupTree dbId={dbId} />
           </SidebarGroupContent>

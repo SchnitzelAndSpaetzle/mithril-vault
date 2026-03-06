@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import EntryList from "@/components/entries/EntryList.tsx";
 import NavEntries from "@/components/entries/nav-entries.tsx";
 import { SearchForm } from "@/components/search-form.tsx";
@@ -16,6 +17,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 const MOBILE_SEARCH_INPUT_ID = "mobile-global-search-input";
 
 export default function MobileContentArea() {
+  const { t } = useTranslation();
   const { groupName, entryCount, activeTag } = useEntryListHeader();
   const navigate = useNavigate();
   const { dbId } = useActiveDatabase();
@@ -52,21 +54,22 @@ export default function MobileContentArea() {
             <>
               <p className="text-sm">
                 {activeTag
-                  ? `Search in #${activeTag}`
+                  ? t("entries.search.searchInTag", { tag: activeTag })
                   : groupName !== "All"
-                    ? `Search in ${groupName}`
-                    : "Search Results"}
+                    ? t("entries.search.searchInGroup", { group: groupName })
+                    : t("entries.search.searchResults")}
               </p>
               <small className="text-muted-foreground text-xs">
-                {searchState.results.length}{" "}
-                {searchState.results.length === 1 ? "match" : "matches"}
+                {t("entries.search.match", {
+                  count: searchState.results.length,
+                })}
               </small>
             </>
           ) : (
             <>
               <p className="text-sm">{groupName}</p>
               <small className="text-muted-foreground text-xs">
-                {entryCount} {entryCount === 1 ? "Item" : "Items"}
+                {t("entries.count", { count: entryCount })}
               </small>
             </>
           )}

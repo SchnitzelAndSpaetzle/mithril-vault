@@ -1,15 +1,14 @@
+import { useTranslation } from "react-i18next";
 import EntryListItem from "@/components/entries/EntryListItem";
 import { ItemSeparator } from "@/components/ui/item";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
 import { useEntries } from "@/hooks/use-entries";
-import { useEntryListKeyboard } from "@/hooks/use-entry-list-keyboard";
+import { useEntryListInteraction } from "@/hooks/use-entry-list-interaction";
 import { useSortedEntries } from "@/hooks/use-sorted-entries";
-import { useDatabaseTabs } from "@/stores/database-tabs";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useSearch } from "@tanstack/react-router";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useCallback, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 import { entryHasTag } from "@/lib/tag-utils";
@@ -22,12 +21,10 @@ interface EntryListProps {
 }
 
 export default function EntryList({ onEntrySelect }: EntryListProps) {
-  const { dbId, tab } = useActiveDatabase();
+  const { t } = useTranslation();
+  const { dbId } = useActiveDatabase();
   const search = useSearch({ strict: false });
   const { data: customIcons } = useCustomIcons(dbId);
-  const isMobile = useIsMobile();
-  const navigate = useNavigate();
-  const updateTabState = useDatabaseTabs((s) => s.updateTabState);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const sortBy: EntrySortField = search.sortBy ?? "title";
@@ -60,62 +57,17 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
     overscan: 10,
   });
 
-  const selectedEntryId = tab?.selectedEntryId ?? null;
-
-  const handleEntryClick = useCallback(
-    async (id: string) => {
-      if (onEntrySelect) {
-        await onEntrySelect(id);
-        return;
-      }
-
-      if (tab) {
-        updateTabState(tab.id, { selectedEntryId: id });
-      }
-    },
-    [onEntrySelect, tab, updateTabState]
-  );
-
-  const handleEntryActivate = useCallback(
-    (id: string) => {
-      if (isMobile) {
-        void navigate({ to: "/dashboard/entry/$id", params: { id } });
-      }
-    },
-    [isMobile, navigate]
-  );
-
-  const handleItemClick = useCallback(
-    (id: string) => {
-      void (async () => {
-        await handleEntryClick(id);
-        handleEntryActivate(id);
-      })();
-    },
-    [handleEntryClick, handleEntryActivate]
-  );
-
-  const scrollToIndex = useCallback(
-    (index: number) => {
-      virtualizer.scrollToIndex(index, { align: "auto" });
-    },
-    [virtualizer]
-  );
-
-  const { onKeyDown } = useEntryListKeyboard({
-    entries: displayEntries,
-    selectedEntryId,
-    onSelect: (id) => {
-      void handleEntryClick(id);
-    },
-    onActivate: handleEntryActivate,
-    scrollToIndex,
-  });
+  const { selectedEntryId, handleItemClick, onKeyDown } =
+    useEntryListInteraction({
+      entries: displayEntries,
+      onEntrySelect,
+      virtualizer,
+    });
 
   if (!dbId) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
-        Open a database to view entries.
+        {t("entries.openDatabase")}
       </div>
     );
   }
@@ -123,7 +75,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   if (isLoading) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
-        Loading entries...
+        {t("entries.loading")}
       </div>
     );
   }
@@ -131,7 +83,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   if (isError) {
     return (
       <div className="px-3 py-2 text-sm text-destructive">
-        Failed to load entries: {error.message}
+        {t("entries.loadError", { error: error.message })}
       </div>
     );
   }
@@ -140,8 +92,8 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
         {tagFilter
-          ? `No entries with tag "${tagFilter}".`
-          : "No entries found."}
+          ? t("entries.noEntriesWithTag", { tag: tagFilter })
+          : t("entries.noEntries")}
       </div>
     );
   }

@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { useForm, type Resolver } from "react-hook-form";
+import { type Resolver, useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, Loader2, ShieldAlert } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
+import type { TFunction } from "i18next";
 
 import {
-  createDatabaseSchema,
   type CreateDatabaseFormValues,
+  createDatabaseSchema,
   type KeyfileMode,
 } from "@/lib/formTypes";
 import { database, keyfile, settings } from "@/lib/tauri";
@@ -25,44 +27,33 @@ import { MasterPasswordStep } from "./steps/MasterPasswordStep";
 import { KeyFileStep } from "./steps/KeyFileStep";
 import { ReviewStep } from "./steps/ReviewStep";
 
-const WIZARD_STEPS = [
-  { id: "location", title: "Location", fields: ["filePath"] as const },
-  { id: "info", title: "Database Info", fields: ["name"] as const },
-  {
-    id: "password",
-    title: "Master Password",
-    fields: ["password", "confirmPassword"] as const,
-  },
-  { id: "keyfile", title: "Key File", fields: [] as const },
-  { id: "review", title: "Review", fields: [] as const },
-];
-
-function mapErrorToMessage(error: unknown): string {
+function mapErrorToMessage(error: unknown, t: TFunction): string {
   const errorStr = String(error);
 
   if (errorStr.includes("already exists") || errorStr.includes("File exists")) {
-    return "A file already exists at this location. Please choose a different path.";
+    return t("createDatabase.errors.fileExists");
   }
   if (
     errorStr.includes("Permission denied") ||
     errorStr.includes("permission denied")
   ) {
-    return "Permission denied. Please check that you have write access to this location.";
+    return t("createDatabase.errors.permissionDenied");
   }
   if (errorStr.includes("No credentials provided")) {
-    return "Please set a master password or select a key file.";
+    return t("createDatabase.errors.noCredentials");
   }
   if (errorStr.includes("Parent directory does not exist")) {
-    return "The selected directory does not exist. Please choose a valid location.";
+    return t("createDatabase.errors.directoryNotFound");
   }
   if (errorStr.includes("IO error") || errorStr.includes("No such file")) {
-    return "Could not write to the specified location. Please check the path and try again.";
+    return t("createDatabase.errors.ioError");
   }
 
-  return "Failed to create database. Please try again.";
+  return t("createDatabase.errors.generic");
 }
 
 export function CreateDatabaseWizard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const addTab = useDatabaseTabs((state: DatabaseTabsState) => state.addTab);
   const updateTabInfo = useDatabaseTabs(
@@ -75,6 +66,34 @@ export function CreateDatabaseWizard() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const WIZARD_STEPS = [
+    {
+      id: "location",
+      titleKey: "createDatabase.steps.location" as const,
+      fields: ["filePath"] as const,
+    },
+    {
+      id: "info",
+      titleKey: "createDatabase.steps.info" as const,
+      fields: ["name"] as const,
+    },
+    {
+      id: "password",
+      titleKey: "createDatabase.steps.password" as const,
+      fields: ["password", "confirmPassword"] as const,
+    },
+    {
+      id: "keyfile",
+      titleKey: "createDatabase.steps.keyfile" as const,
+      fields: [] as const,
+    },
+    {
+      id: "review",
+      titleKey: "createDatabase.steps.review" as const,
+      fields: [] as const,
+    },
+  ];
 
   const form = useForm<CreateDatabaseFormValues>({
     resolver: standardSchemaResolver(
@@ -99,7 +118,6 @@ export function CreateDatabaseWizard() {
   const isLastStep = currentStep === WIZARD_STEPS.length - 1;
 
   async function handleNext() {
-    // Validate current step's fields
     const fieldsToValidate = currentStepConfig.fields;
 
     if (fieldsToValidate.length > 0) {
@@ -109,13 +127,12 @@ export function CreateDatabaseWizard() {
       if (!isValid) return;
     }
 
-    // Special validation for password step - check password match
     if (currentStepConfig.id === "password") {
       const password = form.getValues("password");
       const confirmPassword = form.getValues("confirmPassword");
       if (password && password !== confirmPassword) {
         form.setError("confirmPassword", {
-          message: "Passwords do not match.",
+          message: t("createDatabase.password.mismatch"),
         });
         return;
       }
@@ -135,18 +152,15 @@ export function CreateDatabaseWizard() {
       form.getValues("password");
 
     if (hasData) {
-      const confirmed = await ask(
-        "Are you sure you want to cancel? Any entered information will be lost.",
-        {
-          title: "Cancel Database Creation",
-          kind: "warning",
-        }
-      );
+      const confirmed = await ask(t("createDatabase.cancelConfirm"), {
+        title: t("createDatabase.cancelTitle"),
+        kind: "warning",
+      });
 
       if (!confirmed) return;
     }
 
-    navigate({ to: "/" });
+    await navigate({ to: "/" });
   }
 
   async function onSubmit(data: CreateDatabaseFormValues) {
@@ -154,7 +168,6 @@ export function CreateDatabaseWizard() {
     setCreateError(null);
 
     try {
-      // If generating keyfile, do it first
       if (data.keyfileMode === "generate" && data.keyfilePath) {
         await keyfile.generate(data.keyfilePath);
       }
@@ -172,7 +185,6 @@ export function CreateDatabaseWizard() {
         }
       );
 
-      // Add to recent databases
       try {
         await settings.addRecentDatabase(
           data.filePath,
@@ -182,16 +194,18 @@ export function CreateDatabaseWizard() {
         console.warn("Failed to update recent database list", error);
       }
 
-      // Add tab and navigate
       const tabId = addTab(data.filePath);
       updateTabInfo(tabId, info);
       setActiveTab(tabId);
 
-      toast.success("Database created successfully!");
+      toast.success(t("createDatabase.toast.created"));
 
-      navigate({ to: "/dashboard/index/$dbId", params: { dbId: info.path } });
+      await navigate({
+        to: "/dashboard/index/$dbId",
+        params: { dbId: info.path },
+      });
     } catch (error) {
-      setCreateError(mapErrorToMessage(error));
+      setCreateError(mapErrorToMessage(error, t));
     } finally {
       setIsCreating(false);
     }
@@ -208,8 +222,11 @@ export function CreateDatabaseWizard() {
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
       {/* Progress indicator */}
       <div className="text-center text-sm text-muted-foreground">
-        Step {currentStep + 1} of {WIZARD_STEPS.length} -{" "}
-        {currentStepConfig.title}
+        {t("createDatabase.stepProgress", {
+          current: currentStep + 1,
+          total: WIZARD_STEPS.length,
+          title: t(currentStepConfig.titleKey),
+        })}
       </div>
 
       {/* Step progress bar */}
@@ -225,7 +242,7 @@ export function CreateDatabaseWizard() {
       </div>
 
       {/* Step content */}
-      <div className="min-h-[300px]">
+      <div className="min-h-75">
         {currentStepConfig.id === "location" && (
           <LocationStep control={form.control} disabled={isCreating} />
         )}
@@ -251,7 +268,7 @@ export function CreateDatabaseWizard() {
       {createError && (
         <Alert variant="destructive">
           <ShieldAlert />
-          <AlertTitle>Error creating database</AlertTitle>
+          <AlertTitle>{t("createDatabase.errorTitle")}</AlertTitle>
           <AlertDescription>{createError}</AlertDescription>
         </Alert>
       )}
@@ -264,7 +281,7 @@ export function CreateDatabaseWizard() {
           onClick={handleCancel}
           disabled={isCreating}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
 
         <div className="flex items-center gap-2">
@@ -276,7 +293,7 @@ export function CreateDatabaseWizard() {
               disabled={isCreating}
             >
               <ArrowLeft className="size-4 mr-1" />
-              Back
+              {t("common.back")}
             </Button>
           )}
 
@@ -285,15 +302,15 @@ export function CreateDatabaseWizard() {
               {isCreating ? (
                 <>
                   <Loader2 className="size-4 mr-1 animate-spin" />
-                  Creating...
+                  {t("createDatabase.creating")}
                 </>
               ) : (
-                "Create Database"
+                t("createDatabase.createDatabase")
               )}
             </Button>
           ) : (
             <Button type="button" onClick={handleNext} disabled={isCreating}>
-              Next
+              {t("common.next")}
               <ArrowRight className="size-4 ml-1" />
             </Button>
           )}

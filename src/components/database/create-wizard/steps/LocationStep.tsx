@@ -1,5 +1,6 @@
 import { FolderOpen } from "lucide-react";
 import { type Control, Controller } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { CreateDatabaseFormValues } from "@/lib/formTypes";
 import {
@@ -23,6 +24,8 @@ interface LocationStepProps {
 }
 
 export function LocationStep({ control, disabled }: LocationStepProps) {
+  const { t } = useTranslation();
+
   async function handleSelectLocation(
     onChange: (value: string) => void,
     currentValue: string
@@ -33,13 +36,12 @@ export function LocationStep({ control, disabled }: LocationStepProps) {
         : "NewDatabase.kdbx";
 
       const file = await save({
-        title: "Choose Database Location",
+        title: t("createDatabase.location.dialogTitle"),
         filters: [{ name: "KeePass Database", extensions: ["kdbx"] }],
         defaultPath: suggestedName,
       });
 
       if (file) {
-        // Ensure .kdbx extension
         let path = file as string;
         if (!path.toLowerCase().endsWith(".kdbx")) {
           path = `${path}.kdbx`;
@@ -53,10 +55,11 @@ export function LocationStep({ control, disabled }: LocationStepProps) {
 
   return (
     <Field>
-      <FieldLabel htmlFor="filePath">Database File Location</FieldLabel>
+      <FieldLabel htmlFor="filePath">
+        {t("createDatabase.location.label")}
+      </FieldLabel>
       <FieldDescription>
-        Choose where to save your new password database. The file will be
-        created with a .kdbx extension.
+        {t("createDatabase.location.description")}
       </FieldDescription>
 
       <Controller
@@ -75,7 +78,7 @@ export function LocationStep({ control, disabled }: LocationStepProps) {
                 <InputGroupText className="font-mono font-medium">
                   <FolderOpen className="size-4" />
                   {getFilenameFromPath(field.value) ||
-                    "Click to select location..."}
+                    t("createDatabase.location.clickToSelect")}
                 </InputGroupText>
               </InputGroupAddon>
 
@@ -83,7 +86,7 @@ export function LocationStep({ control, disabled }: LocationStepProps) {
                 {...field}
                 id={field.name}
                 aria-invalid={fieldState.invalid}
-                placeholder="Or type the full path here..."
+                placeholder={t("createDatabase.location.typePath")}
                 disabled={disabled}
                 className="py-3"
               />
@@ -98,7 +101,7 @@ export function LocationStep({ control, disabled }: LocationStepProps) {
                   }
                   disabled={disabled}
                 >
-                  Browse...
+                  {t("createDatabase.location.browse")}
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>

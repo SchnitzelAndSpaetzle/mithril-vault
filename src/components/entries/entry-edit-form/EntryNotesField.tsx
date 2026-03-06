@@ -1,4 +1,5 @@
-import { Controller, type Control } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { type Control, Controller } from "react-hook-form";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, FieldLabel } from "@/components/ui/field";
 import type { EntryFormValues } from "@/lib/formTypes";
@@ -9,9 +10,11 @@ interface EntryNotesFieldProps {
 }
 
 export function EntryNotesField({ control, isPending }: EntryNotesFieldProps) {
+  const { t } = useTranslation();
+
   return (
     <Field>
-      <FieldLabel htmlFor="notes">Notes</FieldLabel>
+      <FieldLabel htmlFor="notes">{t("entries.form.notes")}</FieldLabel>
       <Controller
         name="notes"
         control={control}
@@ -19,7 +22,7 @@ export function EntryNotesField({ control, isPending }: EntryNotesFieldProps) {
           <Textarea
             {...field}
             id="notes"
-            placeholder="Additional notes..."
+            placeholder={t("entries.form.notesPlaceholder")}
             disabled={isPending}
             rows={4}
           />

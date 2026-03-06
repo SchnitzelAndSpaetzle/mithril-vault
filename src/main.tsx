@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient, router } from "./router";
+import "./lib/i18n";
 import "./index.css";
 
 // Register things for type safety

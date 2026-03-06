@@ -107,25 +107,25 @@ describe("SettingsView", () => {
     render(<SettingsView />);
 
     expect(
-      screen.getByRole("heading", { name: "Settings" })
+      screen.getByRole("heading", { name: "settings.title" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "General" })
+      screen.getByRole("heading", { name: "settings.general.title" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Security" })
+      screen.getByRole("heading", { name: "settings.security.title" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Appearance" })
+      screen.getByRole("heading", { name: "settings.appearance.title" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Browser Integration" })
+      screen.getByRole("heading", { name: "settings.browser.title" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Advanced" })
+      screen.getByRole("heading", { name: "settings.advanced.title" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Database Settings" })
+      screen.getByRole("heading", { name: "settings.database.title" })
     ).toBeInTheDocument();
   });
 
@@ -141,7 +141,7 @@ describe("SettingsView", () => {
     });
 
     render(<SettingsView />);
-    expect(screen.getByText("Loading settings...")).toBeInTheDocument();
+    expect(screen.getByText("common.loading")).toBeInTheDocument();
   });
 
   it("renders top-level load error state", () => {
@@ -156,9 +156,7 @@ describe("SettingsView", () => {
     });
 
     render(<SettingsView />);
-    expect(
-      screen.getByText("Failed to load settings: Error: boom")
-    ).toBeInTheDocument();
+    expect(screen.getByText("errors.failedToLoadSettings")).toBeInTheDocument();
   });
 
   it("saves updated browser allowed sites", async () => {
@@ -175,12 +173,14 @@ describe("SettingsView", () => {
 
     render(<SettingsView />);
 
-    const allowedSites = screen.getByLabelText("Allowed sites (one per line)");
+    const allowedSites = screen.getByLabelText("settings.browser.allowedSites");
     fireEvent.change(allowedSites, {
       target: { value: "example.com\nfoo.bar\n  \nsub.domain" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.saveChanges" })
+    );
 
     await waitFor(() => {
       expect(updatePreferences).toHaveBeenCalledTimes(1);
@@ -193,7 +193,7 @@ describe("SettingsView", () => {
         }),
       })
     );
-    expect(toastSuccess).toHaveBeenCalledWith("Settings updated");
+    expect(toastSuccess).toHaveBeenCalledWith("settings.toast.updated");
   });
 
   it("resets preferences to defaults", async () => {
@@ -216,15 +216,19 @@ describe("SettingsView", () => {
 
     render(<SettingsView />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reset preferences" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.resetDefaults" })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.resetPreferences" })
+    );
 
     await waitFor(() => {
       expect(resetPreferences).toHaveBeenCalledTimes(1);
     });
 
     expect(setTheme).toHaveBeenCalledWith("system");
-    expect(toastSuccess).toHaveBeenCalledWith("Preferences reset to defaults");
+    expect(toastSuccess).toHaveBeenCalledWith("settings.toast.reset");
   });
 
   it("shows database config values and KDF details", () => {
@@ -274,7 +278,7 @@ describe("SettingsView", () => {
 
     const { rerender } = render(<SettingsView />);
     expect(
-      screen.getByText("Loading database settings...")
+      screen.getByText("settings.database.loadingSettings")
     ).toBeInTheDocument();
 
     mockUseDatabaseConfig.mockReturnValue({
@@ -283,9 +287,7 @@ describe("SettingsView", () => {
       error: new Error("db failed"),
     });
     rerender(<SettingsView />);
-    expect(
-      screen.getByText("Failed to load database settings: Error: db failed")
-    ).toBeInTheDocument();
+    expect(screen.getByText("settings.database.loadError")).toBeInTheDocument();
   });
 
   it("shows toast error when update fails", async () => {
@@ -304,10 +306,13 @@ describe("SettingsView", () => {
 
     render(<SettingsView />);
 
-    fireEvent.change(screen.getByLabelText("Language"), {
+    // Change language from "en" to "de" via the select dropdown
+    fireEvent.change(screen.getByLabelText("settings.general.language"), {
       target: { value: "de" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.saveChanges" })
+    );
 
     await waitFor(() => {
       expect(updatePreferences).toHaveBeenCalledTimes(1);
@@ -328,8 +333,10 @@ describe("SettingsView", () => {
     });
 
     render(<SettingsView />);
-    fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.resetDefaults" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
 
     await waitFor(() => {
       expect(resetPreferences).not.toHaveBeenCalled();
@@ -357,36 +364,46 @@ describe("SettingsView", () => {
 
     render(<SettingsView />);
 
-    fireEvent.change(screen.getByLabelText("Startup behavior"), {
-      target: { value: "openLastDatabase" },
-    });
-    fireEvent.change(screen.getByLabelText("Auto-lock timeout (seconds)"), {
-      target: { value: "120" },
-    });
     fireEvent.change(
-      screen.getByLabelText("Clipboard clear timeout (seconds)"),
+      screen.getByLabelText("settings.general.startupBehavior"),
+      {
+        target: { value: "openLastDatabase" },
+      }
+    );
+    fireEvent.change(
+      screen.getByLabelText("settings.security.autoLockTimeout"),
+      {
+        target: { value: "120" },
+      }
+    );
+    fireEvent.change(
+      screen.getByLabelText("settings.security.clipboardTimeout"),
       {
         target: { value: "15" },
       }
     );
-    fireEvent.change(screen.getByLabelText("Theme"), {
+    fireEvent.change(screen.getByLabelText("settings.appearance.theme"), {
       target: { value: "dark" },
     });
-    fireEvent.change(screen.getByLabelText("Font size"), {
+    fireEvent.change(screen.getByLabelText("settings.appearance.fontSize"), {
       target: { value: "18" },
     });
 
-    fireEvent.click(screen.getByText("Show passwords by default"));
-    fireEvent.click(screen.getByText("Minimize to tray"));
-    fireEvent.click(screen.getByText("Start minimized"));
-    fireEvent.click(screen.getByText("Enable browser integration"));
-    fireEvent.click(screen.getByText("Enable debug mode"));
-    fireEvent.click(screen.getByText("Username"));
-    fireEvent.click(screen.getByText("URL"));
-    fireEvent.click(screen.getByText("Modified date"));
-    fireEvent.click(screen.getByText("Tags"));
+    fireEvent.click(
+      screen.getByText("settings.security.showPasswordByDefault")
+    );
+    fireEvent.click(screen.getByText("settings.security.minimizeToTray"));
+    fireEvent.click(screen.getByText("settings.security.startMinimized"));
+    fireEvent.click(screen.getByText("settings.browser.enableIntegration"));
+    fireEvent.click(screen.getByText("settings.advanced.enableDebugMode"));
+    fireEvent.click(screen.getByText("settings.appearance.columns.username"));
+    fireEvent.click(screen.getByText("settings.appearance.columns.url"));
+    fireEvent.click(screen.getByText("settings.appearance.columns.modifiedAt"));
+    fireEvent.click(screen.getByText("settings.appearance.columns.tags"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.saveChanges" })
+    );
 
     await waitFor(() => {
       expect(updatePreferences).toHaveBeenCalledTimes(1);

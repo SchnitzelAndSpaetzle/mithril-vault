@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useNavigate } from "@tanstack/react-router";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ItemSeparator } from "@/components/ui/item";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useGroups } from "@/hooks/use-groups";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
-import { useEntryListKeyboard } from "@/hooks/use-entry-list-keyboard";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useDatabaseTabs } from "@/stores/database-tabs";
+import { useEntryListInteraction } from "@/hooks/use-entry-list-interaction";
 import { buildGroupPathMap, type SearchResult } from "@/lib/search-utils";
 import SearchResultItem from "@/components/search/SearchResultItem";
 import { SearchX } from "lucide-react";
@@ -29,12 +27,10 @@ export default function SearchResultsList({
   query,
   onEntrySelect,
 }: SearchResultsListProps) {
-  const { dbId, tab } = useActiveDatabase();
+  const { t } = useTranslation();
+  const { dbId } = useActiveDatabase();
   const { data: groups } = useGroups(dbId);
   const { data: customIcons } = useCustomIcons(dbId);
-  const isMobile = useIsMobile();
-  const navigate = useNavigate();
-  const updateTabState = useDatabaseTabs((s) => s.updateTabState);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const groupPathMap = useMemo(() => buildGroupPathMap(groups ?? []), [groups]);
@@ -50,63 +46,18 @@ export default function SearchResultsList({
     overscan: 10,
   });
 
-  const selectedEntryId = tab?.selectedEntryId ?? null;
-
-  const handleEntryClick = useCallback(
-    async (id: string) => {
-      if (onEntrySelect) {
-        await onEntrySelect(id);
-        return;
-      }
-
-      if (tab) {
-        updateTabState(tab.id, { selectedEntryId: id });
-      }
-    },
-    [onEntrySelect, tab, updateTabState]
-  );
-
-  const handleEntryActivate = useCallback(
-    (id: string) => {
-      if (isMobile) {
-        void navigate({ to: "/dashboard/entry/$id", params: { id } });
-      }
-    },
-    [isMobile, navigate]
-  );
-
-  const handleItemClick = useCallback(
-    (id: string) => {
-      void (async () => {
-        await handleEntryClick(id);
-        handleEntryActivate(id);
-      })();
-    },
-    [handleEntryClick, handleEntryActivate]
-  );
-
-  const scrollToIndex = useCallback(
-    (index: number) => {
-      virtualizer.scrollToIndex(index, { align: "auto" });
-    },
-    [virtualizer]
-  );
-
-  const { onKeyDown } = useEntryListKeyboard({
-    entries,
-    selectedEntryId,
-    onSelect: (id) => {
-      void handleEntryClick(id);
-    },
-    onActivate: handleEntryActivate,
-    scrollToIndex,
-  });
+  const { selectedEntryId, handleItemClick, onKeyDown } =
+    useEntryListInteraction({
+      entries,
+      onEntrySelect,
+      virtualizer,
+    });
 
   if (results.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 px-3 py-8 text-sm text-muted-foreground">
         <SearchX className="size-8 opacity-50" />
-        <p>No entries match your search.</p>
+        <p>{t("entries.search.noResults")}</p>
       </div>
     );
   }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { type Resolver, useForm, useWatch } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
 import { useTags } from "@/hooks/use-tags";
@@ -77,6 +78,7 @@ export function useEntryEditForm({
   onCancel,
   onDirtyChange,
 }: UseEntryEditFormOptions) {
+  const { t } = useTranslation();
   const isEditMode = Boolean(entry);
   const entryId = entry?.id ?? null;
   const entryRef = useRef<Entry | null | undefined>(entry);
@@ -151,8 +153,8 @@ export function useEntryEditForm({
         if (!cancelled) {
           const message =
             error instanceof Error ? error.message : String(error);
-          setSecretLoadError(`Failed to load protected values: ${message}`);
-          toast.error("Failed to load protected values for this entry.");
+          setSecretLoadError(message);
+          toast.error(t("entries.toast.secretLoadFailed"));
         }
       } finally {
         if (!cancelled) {
@@ -166,7 +168,7 @@ export function useEntryEditForm({
     return () => {
       cancelled = true;
     };
-  }, [entry, entry?.id, dbId, form, secretReloadToken]);
+  }, [entry, dbId, form, secretReloadToken, t]);
 
   // Auto-generate password when creating a new entry
   useEffect(() => {
@@ -178,7 +180,7 @@ export function useEntryEditForm({
 
   async function onSubmit(values: EntryFormValues) {
     if (isEditMode && secretLoadError) {
-      toast.error("Retry loading protected values before saving.");
+      toast.error(t("entries.toast.secretRetryRequired"));
       return;
     }
 
@@ -211,7 +213,7 @@ export function useEntryEditForm({
           });
         }
 
-        toast.success("Entry updated");
+        toast.success(t("entries.toast.updated"));
         onSave(result);
         return;
       }
@@ -231,22 +233,24 @@ export function useEntryEditForm({
           protectedCustomFields,
         },
       });
-      toast.success("Entry created");
+      toast.success(t("entries.toast.created"));
       onSave(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(
-        `Failed to ${isEditMode ? "update" : "create"} entry: ${message}`
+        isEditMode
+          ? t("entries.toast.updateFailed", { error: message })
+          : t("entries.toast.createFailed", { error: message })
       );
     }
   }
 
   async function handleCancel() {
     if (form.formState.isDirty) {
-      const confirmed = await ask(
-        "You have unsaved changes. Are you sure you want to discard them?",
-        { title: "Unsaved Changes", kind: "warning" }
-      );
+      const confirmed = await ask(t("entries.unsavedChanges.message"), {
+        title: t("entries.unsavedChanges.title"),
+        kind: "warning",
+      });
       if (!confirmed) {
         return;
       }
@@ -288,12 +292,12 @@ export function useEntryEditForm({
           protectedCustomFields,
         },
       });
-      toast.success("Entry created");
+      toast.success(t("entries.toast.created"));
       form.reset(getEntryFormDefaults(null, values.groupId ?? groupId));
       void generateNewPassword();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      toast.error(`Failed to create entry: ${message}`);
+      toast.error(t("entries.toast.createFailed", { error: message }));
     }
   }
 

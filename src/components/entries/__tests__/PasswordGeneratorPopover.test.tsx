@@ -45,7 +45,9 @@ describe("PasswordGeneratorPopover", () => {
       expect(generator.generate).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy password" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "passwordGenerator.copyPassword" })
+    );
 
     await waitFor(() => {
       expect(clipboard.copyText).toHaveBeenCalledWith("generated-password", 12);
@@ -70,7 +72,7 @@ describe("PasswordGeneratorPopover", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: "Copy password" })
+      screen.getByRole("button", { name: "passwordGenerator.copyPassword" })
     ).toBeDisabled();
     expect(clipboard.copyText).not.toHaveBeenCalled();
   });

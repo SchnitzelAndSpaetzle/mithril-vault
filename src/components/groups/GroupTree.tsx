@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { useTranslation } from "react-i18next";
 import { SidebarMenu } from "@/components/ui/sidebar";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
 import { useGroups } from "@/hooks/use-groups";
@@ -11,6 +12,7 @@ interface GroupTreeProps {
 }
 
 export function GroupTree({ dbId }: GroupTreeProps) {
+  const { t } = useTranslation();
   const { data: groups, isLoading: groupsLoading } = useGroups(dbId);
   const { data: customIcons, isLoading: iconsLoading } = useCustomIcons(dbId);
 
@@ -25,7 +27,7 @@ export function GroupTree({ dbId }: GroupTreeProps) {
   if (!groups || groups.length === 0) {
     return (
       <div className="px-2 py-1 text-sm text-muted-foreground">
-        No groups found
+        {t("groups.noGroups")}
       </div>
     );
   }

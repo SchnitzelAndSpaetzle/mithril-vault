@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   Item,
   ItemActions,
@@ -18,14 +19,15 @@ interface RecentOpenedDatabaseItemsProps {
 export default function RecentOpenedDatabaseItems({
   recentDatabases,
 }: RecentOpenedDatabaseItemsProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   if (recentDatabases.length === 0) {
     return (
       <div className="flex w-full max-w-md flex-col items-center justify-center py-8 text-muted-foreground">
         <FolderOpen className="size-8 mb-2" />
-        <p className="text-sm">No recent databases</p>
-        <p className="text-xs">Open a database to see it here</p>
+        <p className="text-sm">{t("welcome.noRecentDatabases")}</p>
+        <p className="text-xs">{t("welcome.openToSeeHere")}</p>
       </div>
     );
   }

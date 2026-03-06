@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Controller, type Control } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { type Control, Controller } from "react-hook-form";
 import { Dices, Eye, EyeClosed } from "lucide-react";
 import { PasswordStrengthIndicator } from "@/components/database/create-wizard/PasswordStrengthIndicator";
 import { PasswordGeneratorPopover } from "@/components/entries/PasswordGeneratorPopover";
@@ -25,11 +26,12 @@ export function EntryPasswordField({
   watchedPassword,
   onUseGeneratedPassword,
 }: EntryPasswordFieldProps) {
+  const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
 
   return (
     <Field>
-      <FieldLabel htmlFor="password">Password</FieldLabel>
+      <FieldLabel htmlFor="password">{t("entries.form.password")}</FieldLabel>
       <Controller
         name="password"
         control={control}
@@ -41,7 +43,7 @@ export function EntryPasswordField({
                 id="password"
                 aria-invalid={fieldState.invalid}
                 type={showPassword ? "text" : "password"}
-                placeholder="Enter password..."
+                placeholder={t("entries.form.passwordPlaceholder")}
                 autoComplete="new-password"
                 disabled={isPending}
               />
@@ -50,7 +52,11 @@ export function EntryPasswordField({
                   variant="ghost"
                   size="icon-xs"
                   type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={
+                    showPassword
+                      ? t("entries.form.hidePassword")
+                      : t("entries.form.showPassword")
+                  }
                   onClick={() => setShowPassword((prev) => !prev)}
                   disabled={isPending}
                 >
@@ -63,7 +69,7 @@ export function EntryPasswordField({
                     variant="ghost"
                     size="icon-xs"
                     type="button"
-                    aria-label="Generate password"
+                    aria-label={t("entries.form.generatePassword")}
                     disabled={isPending}
                   >
                     <Dices />

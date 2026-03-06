@@ -1,4 +1,5 @@
 import { createElement, useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Separator } from "@/components/ui/separator.tsx";
 import {
   Check,
@@ -35,6 +36,7 @@ export default function EntryItemDetails({
   entryId,
   dbId,
 }: EntryItemDetailsProps) {
+  const { t } = useTranslation();
   const {
     entry,
     isLoading,
@@ -80,7 +82,7 @@ export default function EntryItemDetails({
         {entry.username && (
           <>
             <EntryFieldRow
-              label="User Name"
+              label={t("entries.detail.userName")}
               value={entry.username}
               isDisabled={isTransitioning}
             />
@@ -111,7 +113,9 @@ export default function EntryItemDetails({
           <>
             <Separator />
             <div className="flex justify-between items-center px-4 py-2">
-              <small className="text-sm font-medium">Tags</small>
+              <small className="text-sm font-medium">
+                {t("entries.detail.tags")}
+              </small>
               <div className="flex flex-wrap gap-1">
                 {entry.tags.map((tag) => (
                   <Badge key={tag} variant="outline">
@@ -162,10 +166,13 @@ export default function EntryItemDetails({
 
       {/* Metadata */}
       <div className="border rounded-md">
-        <EntryFieldBasic label="Created" value={formatDate(entry.createdAt)} />
+        <EntryFieldBasic
+          label={t("entries.detail.created")}
+          value={formatDate(entry.createdAt)}
+        />
         <Separator />
         <EntryFieldBasic
-          label="Modified"
+          label={t("entries.detail.modified")}
           value={formatDate(entry.modifiedAt)}
         />
       </div>
@@ -219,6 +226,7 @@ function PasswordRow({
   onReveal: () => void;
   onHide: () => void;
 }) {
+  const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
   const [isCopied, setIsCopied] = useState(false);
 
@@ -239,7 +247,9 @@ function PasswordRow({
 
   return (
     <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
-      <small className="shrink-0 text-sm font-medium">Password</small>
+      <small className="shrink-0 text-sm font-medium">
+        {t("entries.detail.password")}
+      </small>
       <div className="flex w-0 min-w-0 flex-1 items-center justify-end-safe gap-2">
         <button
           onClick={handleCopy}
@@ -247,7 +257,7 @@ function PasswordRow({
           className="group flex min-w-0 max-w-full flex-1 items-center justify-end gap-2 overflow-hidden rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent"
         >
           <span className="min-w-0 truncate text-right transition-all duration-200">
-            {isCopied ? "Copied" : displayValue}
+            {isCopied ? t("common.copied") : displayValue}
           </span>
           {isCopied ? (
             <Check className="h-3 w-3 text-green-500 transition-all duration-200" />
@@ -258,7 +268,11 @@ function PasswordRow({
         <Button
           variant="outline"
           size="icon-xs"
-          aria-label={isVisible ? "hide password" : "reveal password"}
+          aria-label={
+            isVisible
+              ? t("entries.detail.hidePassword")
+              : t("entries.detail.revealPassword")
+          }
           onClick={isVisible ? onHide : onReveal}
           disabled={isLoading || isDisabled}
         >
@@ -271,7 +285,7 @@ function PasswordRow({
         <Button
           variant="outline"
           size="icon-xs"
-          aria-label="auto-type"
+          aria-label={t("entries.detail.autoType")}
           disabled={isDisabled}
         >
           <Keyboard className="h-3 w-3" />
@@ -282,6 +296,7 @@ function PasswordRow({
 }
 
 function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
+  const { t } = useTranslation();
   const { copy, isCopied } = useCopyToClipboard();
 
   const handleCopy = () => {
@@ -296,7 +311,9 @@ function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
 
   return (
     <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
-      <small className="shrink-0 text-sm font-medium">URL</small>
+      <small className="shrink-0 text-sm font-medium">
+        {t("entries.detail.url")}
+      </small>
       <div className="flex w-0 min-w-0 flex-1 items-center justify-end-safe gap-2">
         <button
           onClick={handleCopy}
@@ -304,7 +321,7 @@ function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
           className="group flex min-w-0 max-w-full flex-1 items-center justify-end gap-2 overflow-hidden rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent"
         >
           <span className="min-w-0 truncate text-right transition-all duration-200">
-            {isCopied ? "Copied" : url}
+            {isCopied ? t("common.copied") : url}
           </span>
           {isCopied ? (
             <Check className="h-3 w-3 text-green-500 transition-all duration-200" />
@@ -315,7 +332,7 @@ function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
         <Button
           variant="outline"
           size="icon-xs"
-          aria-label="open url"
+          aria-label={t("entries.detail.openUrl")}
           onClick={handleOpen}
           disabled={isDisabled}
         >
@@ -337,6 +354,7 @@ function ProtectedCustomFieldRow({
   meta: CustomFieldMeta;
   isDisabled: boolean;
 }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const isVisible = value !== null;
@@ -374,7 +392,11 @@ function ProtectedCustomFieldRow({
         <Button
           variant="outline"
           size="icon-xs"
-          aria-label={isVisible ? `hide ${meta.key}` : `reveal ${meta.key}`}
+          aria-label={
+            isVisible
+              ? t("entries.detail.hideField", { field: meta.key })
+              : t("entries.detail.revealField", { field: meta.key })
+          }
           onClick={isVisible ? hide : reveal}
           disabled={isLoading || isDisabled}
         >
@@ -398,6 +420,7 @@ function EntryFieldRow({
   value: string;
   isDisabled: boolean;
 }) {
+  const { t } = useTranslation();
   const { copy, isCopied } = useCopyToClipboard();
 
   const handleCopy = () => {
@@ -415,7 +438,7 @@ function EntryFieldRow({
           className="group flex min-w-0 max-w-full flex-1 items-center justify-end gap-2 overflow-hidden rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent"
         >
           <span className="min-w-0 truncate text-right transition-all duration-200">
-            {isCopied ? "Copied" : value}
+            {isCopied ? t("common.copied") : value}
           </span>
           {isCopied ? (
             <Check className="h-3 w-3 text-green-500 transition-all duration-200" />
@@ -426,7 +449,7 @@ function EntryFieldRow({
         <Button
           variant="outline"
           size="icon-xs"
-          aria-label="auto-type"
+          aria-label={t("entries.detail.autoType")}
           disabled={isDisabled}
         >
           <Keyboard className="h-3 w-3" />

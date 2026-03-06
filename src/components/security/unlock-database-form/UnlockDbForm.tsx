@@ -16,6 +16,7 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.tsx";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,6 +35,7 @@ import {
   useDatabaseTabs,
 } from "@/stores/database-tabs";
 import { getFilenameFromPath } from "@/lib/utils.ts";
+import type { TFunction } from "i18next";
 
 interface UnlockDbFormProps {
   initialPath?: string | undefined;
@@ -41,38 +43,38 @@ interface UnlockDbFormProps {
   rememberKeyfile?: boolean | undefined;
 }
 
-function mapErrorToMessage(error: unknown): string {
+function mapErrorToMessage(error: unknown, t: TFunction): string {
   const errorStr = String(error);
 
   if (errorStr.includes("Invalid password")) {
-    return "The password you entered is incorrect. Please try again.";
+    return t("unlock.errors.invalidPassword");
   }
   if (errorStr.includes("Keyfile not found")) {
-    return "The keyfile could not be found at the specified location.";
+    return t("unlock.errors.keyfileNotFound");
   }
   if (errorStr.includes("Invalid keyfile format")) {
-    return "The selected keyfile has an invalid format.";
+    return t("unlock.errors.invalidKeyfileFormat");
   }
   if (errorStr.includes("No credentials provided")) {
-    return "Please enter a password or select a keyfile.";
+    return t("unlock.errors.noCredentials");
   }
   if (errorStr.includes("Database is locked")) {
-    return "This database is currently open in another application. Close it first or force unlock.";
+    return t("unlock.errors.databaseLocked");
   }
   if (errorStr.includes("Not a valid KDBX file")) {
-    return "The selected file is not a valid KeePass database.";
+    return t("unlock.errors.notValidKdbx");
   }
   if (errorStr.includes("Unsupported KDBX version")) {
-    return "This database uses an unsupported KeePass format version.";
+    return t("unlock.errors.unsupportedVersion");
   }
   if (
     errorStr.includes("IO error") ||
     errorStr.includes("No such file or directory")
   ) {
-    return "The database file could not be found or read.";
+    return t("unlock.errors.ioError");
   }
 
-  return "Failed to unlock database. Please check your credentials and try again.";
+  return t("unlock.errors.generic");
 }
 
 export function UnlockDbForm({
@@ -80,6 +82,7 @@ export function UnlockDbForm({
   initialKeyfile,
   rememberKeyfile: rememberKeyfileDefault,
 }: UnlockDbFormProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const addTab = useDatabaseTabs((state: DatabaseTabsState) => state.addTab);
   const updateTabInfo = useDatabaseTabs(
@@ -130,7 +133,7 @@ export function UnlockDbForm({
   async function handleSelectDatabase() {
     try {
       const file = await open({
-        title: "Open Database",
+        title: t("databaseSwitcher.openDatabase"),
         filters: [{ name: "KeePass Database", extensions: ["kdbx"] }],
       });
       if (file) {
@@ -187,7 +190,7 @@ export function UnlockDbForm({
       } else if (data.password) {
         info = await database.open(data.filePath, data.password);
       } else {
-        setUnlockError("Please enter a password or select a keyfile.");
+        setUnlockError(t("unlock.errors.noCredentials"));
         setIsUnlocking(false);
         return;
       }
@@ -205,7 +208,7 @@ export function UnlockDbForm({
         );
       } catch (error) {
         console.warn("Failed to update recent database list", error);
-        toast.warning("Failed to update recent database list");
+        toast.warning(t("unlock.recentListWarning"));
       }
 
       if (info) {
@@ -217,7 +220,7 @@ export function UnlockDbForm({
         await navigate({ to: "/" });
       }
     } catch (error) {
-      setUnlockError(mapErrorToMessage(error));
+      setUnlockError(mapErrorToMessage(error, t));
     } finally {
       setIsUnlocking(false);
     }
@@ -240,7 +243,7 @@ export function UnlockDbForm({
                   id={field.name}
                   aria-invalid={fieldState.invalid}
                   type={showPassword ? "text" : "password"}
-                  placeholder="enter password here..."
+                  placeholder={t("unlock.passwordPlaceholder")}
                   autoComplete="off"
                   autoFocus
                   className="relative flex"
@@ -253,7 +256,11 @@ export function UnlockDbForm({
               <InputGroupButton
                 className="ml-auto"
                 variant="ghost"
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-label={
+                  showPassword
+                    ? t("unlock.hidePassword")
+                    : t("unlock.showPassword")
+                }
                 size="icon-xs"
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
@@ -272,7 +279,7 @@ export function UnlockDbForm({
               onClick={handleSelectKeyfile}
               disabled={isUnlocking}
             >
-              add key file <KeyRound />
+              {t("unlock.addKeyFile")} <KeyRound />
             </InputGroupButton>
             <InputGroupButton
               type="submit"
@@ -284,11 +291,11 @@ export function UnlockDbForm({
             >
               {isUnlocking ? (
                 <>
-                  Unlocking <Loader2 className="animate-spin" />
+                  {t("unlock.unlocking")} <Loader2 className="animate-spin" />
                 </>
               ) : (
                 <>
-                  Unlock <CornerDownLeft />
+                  {t("unlock.unlock")} <CornerDownLeft />
                 </>
               )}
             </InputGroupButton>
@@ -301,7 +308,7 @@ export function UnlockDbForm({
           >
             <InputGroupText className="font-mono font-medium">
               <FolderOpen />
-              {filename || "Select a database file..."}
+              {filename || t("unlock.selectDatabase")}
             </InputGroupText>
           </InputGroupAddon>
 
@@ -317,7 +324,7 @@ export function UnlockDbForm({
                 type="button"
                 onClick={handleRemoveKeyfile}
                 disabled={isUnlocking}
-                aria-label="Remove keyfile"
+                aria-label={t("unlock.removeKeyfile")}
               >
                 <X className="size-4" />
               </InputGroupButton>
@@ -339,7 +346,7 @@ export function UnlockDbForm({
               htmlFor="remember-keyfile"
               className="text-sm text-muted-foreground"
             >
-              Remember keyfile for this database
+              {t("unlock.rememberKeyfile")}
             </Label>
           </div>
         )}
@@ -347,7 +354,7 @@ export function UnlockDbForm({
         {unlockError && (
           <Alert variant="destructive">
             <ShieldAlert />
-            <AlertTitle>Error unlocking database</AlertTitle>
+            <AlertTitle>{t("unlock.errorTitle")}</AlertTitle>
             <AlertDescription>{unlockError}</AlertDescription>
           </Alert>
         )}

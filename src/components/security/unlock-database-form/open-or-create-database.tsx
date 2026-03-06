@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib";
 import {
   Card,
@@ -31,14 +32,14 @@ export default function OpenOrCreateDatabase({
   recentDatabases,
   ...props
 }: OpenOrCreateDatabaseProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader className="text-center">
-          <CardTitle className="text-xl">Welcome friend</CardTitle>
-          <CardDescription>
-            Create or open a database to continue.
-          </CardDescription>
+          <CardTitle className="text-xl">{t("welcome.title")}</CardTitle>
+          <CardDescription>{t("welcome.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -47,14 +48,14 @@ export default function OpenOrCreateDatabase({
               <Button variant="outline" asChild>
                 <Link to="/new">
                   <Plus />
-                  New
+                  {t("welcome.new")}
                 </Link>
               </Button>
               <DropdownMenuMoreOptions />
             </Field>
 
             <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-              Recent databases
+              {t("welcome.recentDatabases")}
             </FieldSeparator>
             <ScrollArea className="h-44">
               <RecentOpenedDatabaseItems recentDatabases={recentDatabases} />
@@ -63,8 +64,8 @@ export default function OpenOrCreateDatabase({
         </CardContent>
       </Card>
       <FieldDescription className="px-6 text-center">
-        By clicking continue, you agree to our <a href="#">Terms of Service</a>{" "}
-        and <a href="#">Privacy Policy</a>.
+        {t("welcome.termsPrefix")} <a href="#">{t("welcome.termsOfService")}</a>{" "}
+        {t("welcome.and")} <a href="#">{t("welcome.privacyPolicy")}</a>.
       </FieldDescription>
     </div>
   );

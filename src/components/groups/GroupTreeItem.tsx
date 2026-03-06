@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
@@ -68,6 +69,7 @@ export function GroupTreeItem({
   customIcons,
   depth = 0,
 }: GroupTreeItemProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const { createGroup, updateGroup, deleteGroup, moveGroup } =
@@ -119,21 +121,24 @@ export function GroupTreeItem({
               },
               {
                 onSuccess: () => {
-                  toast.success(`Group "${name}" created`);
+                  toast.success(t("groups.toast.created", { name }));
                 },
                 onError: (error) => {
                   toast.error(
-                    `Group "${name}" created, but failed to set icon: ${error.message}`
+                    t("groups.toast.createdIconFailed", {
+                      name,
+                      error: error.message,
+                    })
                   );
                 },
               }
             );
             return;
           }
-          toast.success(`Group "${name}" created`);
+          toast.success(t("groups.toast.created", { name }));
         },
         onError: (error) => {
-          toast.error(`Failed to create group: ${error.message}`);
+          toast.error(t("groups.toast.createFailed", { error: error.message }));
         },
       }
     );
@@ -144,10 +149,10 @@ export function GroupTreeItem({
       { dbId, id: group.id, data },
       {
         onSuccess: () => {
-          toast.success("Group updated");
+          toast.success(t("groups.toast.updated"));
         },
         onError: (error) => {
-          toast.error(`Failed to update group: ${error.message}`);
+          toast.error(t("groups.toast.updateFailed", { error: error.message }));
         },
       }
     );
@@ -158,10 +163,10 @@ export function GroupTreeItem({
       { dbId, id: group.id },
       {
         onSuccess: () => {
-          toast.success(`Group "${group.name}" moved to Recycle Bin`);
+          toast.success(t("groups.toast.deleted", { name: group.name }));
         },
         onError: (error) => {
-          toast.error(`Failed to delete group: ${error.message}`);
+          toast.error(t("groups.toast.deleteFailed", { error: error.message }));
         },
       }
     );
@@ -172,10 +177,10 @@ export function GroupTreeItem({
       { dbId, id: group.id, targetParentId },
       {
         onSuccess: () => {
-          toast.success(`Group "${group.name}" moved`);
+          toast.success(t("groups.toast.moved", { name: group.name }));
         },
         onError: (error) => {
-          toast.error(`Failed to move group: ${error.message}`);
+          toast.error(t("groups.toast.moveFailed", { error: error.message }));
         },
       }
     );
@@ -216,7 +221,9 @@ export function GroupTreeItem({
             <SidebarMenuAction
               className="bg-sidebar-accent text-sidebar-accent-foreground left-2 data-[state=open]:rotate-90"
               showOnHover
-              aria-label={isExpanded ? "Collapse" : "Expand"}
+              aria-label={
+                isExpanded ? t("groups.collapse") : t("groups.expand")
+              }
             >
               <ChevronRight className="h-3 w-3" />
             </SidebarMenuAction>

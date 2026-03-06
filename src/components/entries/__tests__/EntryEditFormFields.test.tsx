@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { useForm, type Control } from "react-hook-form";
+import { type Control, useForm } from "react-hook-form";
 import {
   EntryFormActions,
   EntryNotesField,
@@ -67,9 +67,11 @@ describe("EntryEditForm field components", () => {
       <EntryTitleField control={control} isPending={false} />
     ));
 
-    expect(screen.getByPlaceholderText("Entry title")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Choose icon" })
+      screen.getByPlaceholderText("entries.form.titlePlaceholder")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "entries.form.chooseIcon" })
     ).toBeInTheDocument();
   });
 
@@ -93,7 +95,9 @@ describe("EntryEditForm field components", () => {
       />
     ));
 
-    fireEvent.focus(screen.getByPlaceholderText("Username or email"));
+    fireEvent.focus(
+      screen.getByPlaceholderText("entries.form.usernamePlaceholder")
+    );
     fireEvent.click(screen.getByRole("option", { name: "alice@example.com" }));
 
     expect(onFocus).toHaveBeenCalled();
@@ -115,10 +119,14 @@ describe("EntryEditForm field components", () => {
       />
     ));
 
-    const passwordInput = screen.getByPlaceholderText("Enter password...");
+    const passwordInput = screen.getByPlaceholderText(
+      "entries.form.passwordPlaceholder"
+    );
     expect(passwordInput).toHaveAttribute("type", "password");
 
-    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.form.showPassword" })
+    );
     expect(passwordInput).toHaveAttribute("type", "text");
 
     fireEvent.click(
@@ -136,10 +144,10 @@ describe("EntryEditForm field components", () => {
     ));
 
     expect(
-      screen.getByPlaceholderText("https://example.com")
+      screen.getByPlaceholderText("entries.form.urlPlaceholder")
     ).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText("Additional notes...")
+      screen.getByPlaceholderText("entries.form.notesPlaceholder")
     ).toBeInTheDocument();
   });
 
@@ -170,11 +178,11 @@ describe("EntryEditForm field components", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
 
     expect(
-      screen.getByRole("button", { name: "Save Changes" })
+      screen.getByRole("button", { name: "entries.form.saveChanges" })
     ).toBeInTheDocument();
     expect(onCancel).toHaveBeenCalled();
     expect(onRetrySecretLoad).toHaveBeenCalled();

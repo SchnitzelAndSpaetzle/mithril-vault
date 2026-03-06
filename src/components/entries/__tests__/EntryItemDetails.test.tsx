@@ -124,8 +124,8 @@ describe("EntryItemDetails", () => {
 
   it("renders metadata dates", () => {
     render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
-    expect(screen.getByText("Created")).toBeInTheDocument();
-    expect(screen.getByText("Modified")).toBeInTheDocument();
+    expect(screen.getByText("entries.detail.created")).toBeInTheDocument();
+    expect(screen.getByText("entries.detail.modified")).toBeInTheDocument();
   });
 
   it("shows skeleton when loading", async () => {
@@ -177,17 +177,23 @@ describe("EntryItemDetails", () => {
     const { rerender } = render(
       <EntryItemDetails entryId="entry-1" dbId="db-1" />
     );
-    fireEvent.click(screen.getByRole("button", { name: "reveal password" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.revealPassword" })
+    );
     expect(revealPassword).toHaveBeenCalledTimes(1);
 
     rerender(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
-    fireEvent.click(screen.getByRole("button", { name: "hide password" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.hidePassword" })
+    );
     expect(hidePassword).toHaveBeenCalledTimes(1);
   });
 
   it("opens URL through tauri opener", () => {
     render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
-    fireEvent.click(screen.getByRole("button", { name: "open url" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.openUrl" })
+    );
     expect(openUrl).toHaveBeenCalledWith("https://example.com");
   });
 
@@ -206,7 +212,9 @@ describe("EntryItemDetails", () => {
     });
 
     render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
-    fireEvent.click(screen.getByRole("button", { name: "reveal API Token" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.revealField" })
+    );
 
     await waitFor(() => {
       expect(entriesApi.getProtectedCustomField).toHaveBeenCalledWith(
@@ -226,8 +234,10 @@ describe("EntryItemDetails", () => {
 
     render(<EntryItemDetails entryId="entry-2" dbId="db-1" />);
     expect(
-      screen.getByRole("button", { name: "reveal password" })
+      screen.getByRole("button", { name: "entries.detail.revealPassword" })
     ).toBeDisabled();
-    expect(screen.getByRole("button", { name: "open url" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "entries.detail.openUrl" })
+    ).toBeDisabled();
   });
 });

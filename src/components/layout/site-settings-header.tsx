@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -12,9 +13,9 @@ import {
 } from "@/components/ui/breadcrumb.tsx";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 
-function getDatabaseLabel(path?: string): string {
+function getDatabaseLabel(path: string | undefined, fallback: string): string {
   if (!path) {
-    return "No database";
+    return fallback;
   }
 
   const parts = path.split(/[/\\]/);
@@ -22,6 +23,7 @@ function getDatabaseLabel(path?: string): string {
 }
 
 export function SiteSettingsHeader() {
+  const { t } = useTranslation();
   const { tab, dbId } = useActiveDatabase();
   const router = useRouter();
   const canGoBack = useCanGoBack();
@@ -52,12 +54,13 @@ export function SiteSettingsHeader() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbPage>Settings</BreadcrumbPage>
+              <BreadcrumbPage>{t("settings.title")}</BreadcrumbPage>
             </BreadcrumbItem>
             <BreadcrumbSeparator className="hidden md:block" />
             <BreadcrumbItem className="hidden md:block">
               <BreadcrumbPage>
-                {tab?.info?.name ?? getDatabaseLabel(tab?.path)}
+                {tab?.info?.name ??
+                  getDatabaseLabel(tab?.path, t("common.noDatabase"))}
               </BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
@@ -65,7 +68,7 @@ export function SiteSettingsHeader() {
       </div>
       <Button variant="outline" size="sm" type="button" onClick={handleBack}>
         <ArrowLeft className="size-4" />
-        Back
+        {t("common.back")}
       </Button>
     </header>
   );

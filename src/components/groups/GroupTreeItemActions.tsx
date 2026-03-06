@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   FolderInput,
   FolderPlus,
@@ -49,6 +50,7 @@ export function GroupTreeItemActions({
   isDeletePending,
   isMovePending,
 }: GroupTreeItemActionsProps) {
+  const { t } = useTranslation();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -60,23 +62,23 @@ export function GroupTreeItemActions({
         <DropdownMenuTrigger asChild>
           <SidebarMenuAction showOnHover>
             <MoreHorizontal />
-            <span className="sr-only">Group actions</span>
+            <span className="sr-only">{t("groups.actions")}</span>
           </SidebarMenuAction>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="start">
           <DropdownMenuItem onSelect={() => setCreateDialogOpen(true)}>
             <FolderPlus className="mr-2 h-4 w-4" />
-            New Subgroup
+            {t("groups.newSubgroup")}
           </DropdownMenuItem>
           {!isRoot && (
             <>
               <DropdownMenuItem onSelect={() => setEditDialogOpen(true)}>
                 <Pencil className="mr-2 h-4 w-4" />
-                Edit
+                {t("common.edit")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>
                 <FolderInput className="mr-2 h-4 w-4" />
-                Move to...
+                {t("groups.moveTo")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -84,7 +86,7 @@ export function GroupTreeItemActions({
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete
+                {t("common.delete")}
               </DropdownMenuItem>
             </>
           )}

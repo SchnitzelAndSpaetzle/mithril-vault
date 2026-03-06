@@ -1,4 +1,5 @@
 import { useController } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ export function CustomFieldRow({
   onRemove,
   disabled,
 }: CustomFieldRowProps) {
+  const { t } = useTranslation();
   const { field: keyField } = useController({
     control,
     name: `customFields.${index}.key`,
@@ -20,7 +22,7 @@ export function CustomFieldRow({
     <div className="flex items-start gap-2">
       <Input
         {...keyField}
-        placeholder="Field name"
+        placeholder={t("entries.form.fieldNamePlaceholder")}
         disabled={disabled}
         className="h-9 w-1/3"
       />
@@ -35,7 +37,7 @@ export function CustomFieldRow({
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-label="Remove custom field"
+        aria-label={t("entries.form.removeField")}
         onClick={onRemove}
         disabled={disabled}
       >

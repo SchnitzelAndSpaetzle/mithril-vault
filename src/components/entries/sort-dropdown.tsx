@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,13 +17,13 @@ import { useTransition } from "react";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 
-const SORT_FIELD_LABELS: Record<EntrySortField, string> = {
-  title: "Title",
-  username: "Username",
-  url: "URL",
-  modifiedAt: "Modified",
-  createdAt: "Created",
-};
+const SORT_FIELD_KEYS = {
+  title: "entries.sort.title",
+  username: "entries.sort.username",
+  url: "entries.sort.url",
+  modifiedAt: "entries.sort.modified",
+  createdAt: "entries.sort.created",
+} as const satisfies Record<EntrySortField, string>;
 
 const DATE_FIELDS: EntrySortField[] = ["modifiedAt", "createdAt"];
 
@@ -31,6 +32,7 @@ function isDateField(field: EntrySortField): boolean {
 }
 
 export default function SortDropdown() {
+  const { t } = useTranslation();
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const { dbId } = useActiveDatabase();
@@ -66,33 +68,46 @@ export default function SortDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon-sm" aria-label="Sort entries">
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label={t("entries.sort.sortEntries")}
+        >
           <SortIcon />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("entries.sort.sortBy")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={sortBy}
           onValueChange={handleSortByChange}
         >
-          {Object.entries(SORT_FIELD_LABELS).map(([value, label]) => (
+          {(
+            Object.entries(SORT_FIELD_KEYS) as [
+              EntrySortField,
+              (typeof SORT_FIELD_KEYS)[EntrySortField],
+            ][]
+          ).map(([value, key]) => (
             <DropdownMenuRadioItem key={value} value={value}>
-              {label}
+              {t(key)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Order</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("entries.sort.order")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={sortOrder}
           onValueChange={handleSortOrderChange}
         >
           <DropdownMenuRadioItem value="asc">
-            {isDateField(sortBy) ? "Oldest first" : "A \u2192 Z"}
+            {isDateField(sortBy)
+              ? t("entries.sort.oldestFirst")
+              : t("entries.sort.aToZ")}
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="desc">
-            {isDateField(sortBy) ? "Newest first" : "Z \u2192 A"}
+            {isDateField(sortBy)
+              ? t("entries.sort.newestFirst")
+              : t("entries.sort.zToA")}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>

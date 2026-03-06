@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createElement, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,7 @@ export function GroupTreeEditGroupDialog({
   onUpdateGroup,
   isPending,
 }: GroupTreeEditGroupDialogProps) {
+  const { t } = useTranslation();
   const [editedName, setEditedName] = useState(group.name);
   const [editedIcon, setEditedIcon] = useState(
     parseGroupIconId(group.icon) ?? DEFAULT_FOLDER_ICON
@@ -66,14 +68,14 @@ export function GroupTreeEditGroupDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Group</DialogTitle>
+          <DialogTitle>{t("groups.editTitle")}</DialogTitle>
           <DialogDescription>
-            Change the name or icon for &ldquo;{group.name}&rdquo;.
+            {t("groups.editDescription", { groupName: group.name })}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="edit-group-name">Name</Label>
+            <Label htmlFor="edit-group-name">{t("common.name")}</Label>
             <div className="flex gap-2">
               <IconPickerPopover
                 selectedIconId={editedIcon}
@@ -105,10 +107,10 @@ export function GroupTreeEditGroupDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={saveDisabled}>
-            {isPending ? "Saving..." : "Save"}
+            {isPending ? t("groups.saving") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

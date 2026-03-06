@@ -1,0 +1,436 @@
+{
+  "common": {
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "create": "Erstellen",
+    "retry": "Erneut versuchen",
+    "move": "Verschieben",
+    "rename": "Umbenennen",
+    "loading": "Laden...",
+    "name": "Name",
+    "back": "Zurück",
+    "next": "Weiter",
+    "edit": "Bearbeiten",
+    "copied": "Kopiert",
+    "noDatabase": "Keine Datenbank"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "description": "Anwendungseinstellungen und Datenbankkonfiguration.",
+    "resetDefaults": "Standardwerte wiederherstellen",
+    "saveChanges": "Änderungen speichern",
+    "resetDialog": {
+      "title": "Einstellungen zurücksetzen?",
+      "description": "Alle Anwendungseinstellungen auf Standardwerte zurücksetzen. Zuletzt verwendete Datenbanken bleiben erhalten."
+    },
+    "resetPreferences": "Einstellungen zurücksetzen",
+    "toast": {
+      "updated": "Einstellungen aktualisiert",
+      "reset": "Einstellungen auf Standardwerte zurückgesetzt"
+    },
+    "general": {
+      "title": "Allgemein",
+      "description": "Start- und Spracheinstellungen für die Anwendung.",
+      "language": "Sprache",
+      "startupBehavior": "Startverhalten",
+      "startupOptions": {
+        "showUnlockScreen": "Entsperrbildschirm anzeigen",
+        "openLastDatabase": "Letzte Datenbank öffnen",
+        "openDefaultDatabase": "Standarddatenbank öffnen"
+      },
+      "defaultDatabasePath": "Standard-Datenbankpfad",
+      "defaultDatabasePathPlaceholder": "/pfad/zur/standard.kdbx",
+      "defaultDatabasePathNote": "TODO: Der Startablauf öffnet diese Datei noch nicht automatisch."
+    },
+    "security": {
+      "title": "Sicherheit",
+      "description": "Zwischenablage- und Sperrverhalten.",
+      "autoLockTimeout": "Automatische Sperre (Sekunden)",
+      "autoLockNote": "TODO: Inaktivitäts-/OS-Sperrereignisse sind noch nicht implementiert.",
+      "clipboardTimeout": "Zwischenablage löschen nach (Sekunden)",
+      "showPasswordByDefault": "Passwörter standardmäßig anzeigen",
+      "minimizeToTray": "In Taskleiste minimieren",
+      "startMinimized": "Minimiert starten"
+    },
+    "appearance": {
+      "title": "Erscheinungsbild",
+      "description": "Design und visuelle Einstellungen.",
+      "theme": "Design",
+      "fontSize": "Schriftgröße",
+      "entryListColumns": "Eintragslistenspalten",
+      "columns": {
+        "username": "Benutzername",
+        "url": "URL",
+        "modifiedAt": "Änderungsdatum",
+        "tags": "Tags"
+      },
+      "columnsNote": "TODO: Spaltenumschaltungen werden gespeichert, sind aber noch nicht in der Listendarstellung verdrahtet."
+    },
+    "browser": {
+      "title": "Browser-Integration",
+      "description": "Erweiterungs-Integration und Site-Allowlist-Einstellungen.",
+      "enableIntegration": "Browser-Integration aktivieren",
+      "allowedSites": "Erlaubte Seiten (eine pro Zeile)",
+      "allowedSitesNote": "TODO: Browser/Native-Messaging-Durchsetzung ist noch nicht implementiert."
+    },
+    "advanced": {
+      "title": "Erweitert",
+      "description": "Diagnose und lokale Dateninformationen.",
+      "enableDebugMode": "Debug-Modus aktivieren",
+      "dataLocation": "Datenspeicherort"
+    },
+    "database": {
+      "title": "Datenbankeinstellungen",
+      "description": "Aktuelle kryptographische Datenbankkonfiguration (schreibgeschützt).",
+      "openPrompt": "Öffnen Sie eine Datenbank, um ihre Konfiguration zu überprüfen.",
+      "loadingSettings": "Datenbankeinstellungen werden geladen...",
+      "loadError": "Datenbankeinstellungen konnten nicht geladen werden: {{error}}",
+      "noConfig": "Keine Datenbankkonfiguration verfügbar.",
+      "version": "Version",
+      "outerCipher": "Äußere Verschlüsselung",
+      "innerCipher": "Innere Verschlüsselung",
+      "compression": "Komprimierung",
+      "kdf": "KDF",
+      "pendingTitle": "Ausstehende Implementierung",
+      "pendingItems": {
+        "mutations": "Datenbankebene-Steuerungen sind noch nicht implementiert.",
+        "recycleBin": "Papierkorb/Verlauf/Sicherheitsrichtlinien-Bearbeitung ist noch TODO."
+      }
+    },
+    "sidebar": {
+      "preferences": "Einstellungen",
+      "sections": "Bereiche"
+    }
+  },
+  "sidebar": {
+    "allEntries": "Alle Einträge",
+    "expired": "Abgelaufen",
+    "security": "Sicherheit",
+    "settings": "Einstellungen",
+    "help": "Hilfe",
+    "groups": "Gruppen"
+  },
+  "entries": {
+    "openDatabase": "Öffnen Sie eine Datenbank, um Einträge anzuzeigen.",
+    "loading": "Einträge werden geladen...",
+    "loadError": "Einträge konnten nicht geladen werden: {{error}}",
+    "noEntries": "Keine Einträge gefunden.",
+    "noEntriesWithTag": "Keine Einträge mit Tag \"{{tag}}\".",
+    "newEntry": "Neuer Eintrag",
+    "editEntry": "Eintrag bearbeiten",
+    "deleteEntry": "Eintrag löschen",
+    "noEntrySelected": "Kein Eintrag ausgewählt",
+    "noEntrySelectedDescription": "Wählen Sie einen Eintrag aus der Liste, um seine Details anzuzeigen.",
+    "deleted": "Eintrag gelöscht.",
+    "deleteFailed": "Eintrag konnte nicht gelöscht werden: {{error}}",
+    "deleteConfirm": "Möchten Sie diesen Eintrag wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "deleteTitle": "Eintrag löschen",
+    "shareEntry": "Eintrag teilen",
+    "moreOptions": "Weitere Optionen",
+    "form": {
+      "title": "Titel",
+      "titlePlaceholder": "Eintragstitel",
+      "chooseIcon": "Symbol wählen",
+      "username": "Benutzername",
+      "usernamePlaceholder": "Benutzername oder E-Mail",
+      "password": "Passwort",
+      "passwordPlaceholder": "Passwort eingeben...",
+      "showPassword": "Passwort anzeigen",
+      "hidePassword": "Passwort verbergen",
+      "generatePassword": "Passwort generieren",
+      "url": "URL",
+      "urlPlaceholder": "https://beispiel.de",
+      "notes": "Notizen",
+      "notesPlaceholder": "Zusätzliche Notizen...",
+      "tags": "Tags",
+      "group": "Gruppe",
+      "selectGroup": "Gruppe auswählen",
+      "saveChanges": "Änderungen speichern",
+      "createEntry": "Eintrag erstellen",
+      "saveAndNew": "Speichern & Neu",
+      "protectedValuesError": "Geschützte Werte konnten nicht geladen werden.",
+      "customFields": "Benutzerdefinierte Felder",
+      "addField": "Feld hinzufügen",
+      "noCustomFields": "Keine benutzerdefinierten Felder.",
+      "fieldNamePlaceholder": "Feldname",
+      "removeField": "Benutzerdefiniertes Feld entfernen"
+    },
+    "toast": {
+      "created": "Eintrag erstellt",
+      "updated": "Eintrag aktualisiert",
+      "createFailed": "Eintrag konnte nicht erstellt werden: {{error}}",
+      "updateFailed": "Eintrag konnte nicht aktualisiert werden: {{error}}",
+      "secretLoadFailed": "Geschützte Werte für diesen Eintrag konnten nicht geladen werden.",
+      "secretRetryRequired": "Laden Sie die geschützten Werte erneut, bevor Sie speichern."
+    },
+    "unsavedChanges": {
+      "message": "Sie haben ungespeicherte Änderungen. Möchten Sie diese wirklich verwerfen?",
+      "title": "Ungespeicherte Änderungen",
+      "discardAndOpen": "Sie haben ungespeicherte Änderungen. Möchten Sie diese verwerfen und einen anderen Eintrag öffnen?"
+    },
+    "detail": {
+      "userName": "Benutzername",
+      "password": "Passwort",
+      "url": "URL",
+      "tags": "Tags",
+      "created": "Erstellt",
+      "modified": "Geändert",
+      "revealPassword": "Passwort anzeigen",
+      "hidePassword": "Passwort verbergen",
+      "autoType": "Auto-Type",
+      "openUrl": "URL öffnen",
+      "revealField": "{{field}} anzeigen",
+      "hideField": "{{field}} verbergen"
+    },
+    "sort": {
+      "sortBy": "Sortieren nach",
+      "sortEntries": "Einträge sortieren",
+      "order": "Reihenfolge",
+      "title": "Titel",
+      "username": "Benutzername",
+      "url": "URL",
+      "modified": "Geändert",
+      "created": "Erstellt",
+      "oldestFirst": "Älteste zuerst",
+      "newestFirst": "Neueste zuerst",
+      "aToZ": "A \u2192 Z",
+      "zToA": "Z \u2192 A"
+    },
+    "search": {
+      "searchResults": "Suchergebnisse",
+      "searchInTag": "Suche in #{{tag}}",
+      "searchInGroup": "Suche in {{group}}",
+      "noResults": "Keine Einträge stimmen mit Ihrer Suche überein.",
+      "match_one": "{{count}} Treffer",
+      "match_other": "{{count}} Treffer",
+      "placeholder": "Einträge suchen... (Strg+K)",
+      "label": "Suche",
+      "clearSearch": "Suche löschen"
+    },
+    "count_one": "{{count}} Element",
+    "count_other": "{{count}} Elemente"
+  },
+  "groups": {
+    "createTitle": "Neue Gruppe erstellen",
+    "createDescription": "Neue Untergruppe in \"{{parentName}}\" erstellen.",
+    "creating": "Wird erstellt...",
+    "editTitle": "Gruppe bearbeiten",
+    "editDescription": "Name oder Symbol für \"{{groupName}}\" ändern.",
+    "saving": "Wird gespeichert...",
+    "deleteTitle": "Gruppe löschen",
+    "deleteDescription": "Möchten Sie \"{{groupName}}\" wirklich löschen?",
+    "deleteEntryCount_one": "Diese Gruppe enthält <strong>{{count}} Eintrag</strong>.",
+    "deleteEntryCount_other": "Diese Gruppe enthält <strong>{{count}} Einträge</strong>.",
+    "deleteRecycleBin": "Die Gruppe und ihr gesamter Inhalt werden in den Papierkorb verschoben.",
+    "deleting": "Wird gelöscht...",
+    "moveTitle": "Gruppe verschieben",
+    "moveDescription": "Neue übergeordnete Gruppe für \"{{groupName}}\" auswählen.",
+    "destination": "Ziel",
+    "selectGroup": "Gruppe auswählen",
+    "moving": "Wird verschoben...",
+    "enterGroupName": "Gruppenname eingeben",
+    "noGroups": "Keine Gruppen gefunden",
+    "actions": "Gruppenaktionen",
+    "newSubgroup": "Neue Untergruppe",
+    "moveTo": "Verschieben nach...",
+    "collapse": "Einklappen",
+    "expand": "Ausklappen",
+    "toast": {
+      "created": "Gruppe \"{{name}}\" erstellt",
+      "createdIconFailed": "Gruppe \"{{name}}\" erstellt, Symbol konnte jedoch nicht gesetzt werden: {{error}}",
+      "createFailed": "Gruppe konnte nicht erstellt werden: {{error}}",
+      "updated": "Gruppe aktualisiert",
+      "updateFailed": "Gruppe konnte nicht aktualisiert werden: {{error}}",
+      "deleted": "Gruppe \"{{name}}\" in den Papierkorb verschoben",
+      "deleteFailed": "Gruppe konnte nicht gelöscht werden: {{error}}",
+      "moved": "Gruppe \"{{name}}\" verschoben",
+      "moveFailed": "Gruppe konnte nicht verschoben werden: {{error}}"
+    }
+  },
+  "tags": {
+    "deleteTitle": "Tag löschen",
+    "deleteDescription": "Möchten Sie \"{{tag}}\" wirklich aus allen Einträgen entfernen? Dies kann nicht rückgängig gemacht werden.",
+    "deleting": "Wird gelöscht...",
+    "renameTitle": "Tag umbenennen",
+    "renameDescription": "\"{{tag}}\" wird in allen Einträgen umbenannt.",
+    "newTagPlaceholder": "Neuer Tag-Name",
+    "renaming": "Wird umbenannt..."
+  },
+  "welcome": {
+    "title": "Willkommen, Freund",
+    "description": "Erstellen oder öffnen Sie eine Datenbank, um fortzufahren.",
+    "open": "Öffnen",
+    "new": "Neu",
+    "more": "Mehr",
+    "recentDatabases": "Zuletzt verwendete Datenbanken",
+    "noRecentDatabases": "Keine zuletzt verwendeten Datenbanken",
+    "openToSeeHere": "Öffnen Sie eine Datenbank, um sie hier zu sehen",
+    "termsPrefix": "Durch Klicken auf Weiter stimmen Sie unseren",
+    "termsOfService": "Nutzungsbedingungen",
+    "and": "und",
+    "privacyPolicy": "Datenschutzrichtlinie",
+    "openMenu": {
+      "offline": "Offline",
+      "localFile": "Lokale Datei",
+      "online": "Online"
+    },
+    "moreMenu": {
+      "demo": "Demo",
+      "generatePassword": "Passwort generieren",
+      "settings": "Einstellungen"
+    }
+  },
+  "unlock": {
+    "title": "Datenbank entsperren",
+    "titleWithName": "{{filename}} entsperren",
+    "passwordPlaceholder": "Passwort hier eingeben...",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen",
+    "addKeyFile": "Schlüsseldatei hinzufügen",
+    "unlock": "Entsperren",
+    "unlocking": "Entsperren...",
+    "selectDatabase": "Datenbankdatei auswählen...",
+    "removeKeyfile": "Schlüsseldatei entfernen",
+    "rememberKeyfile": "Schlüsseldatei für diese Datenbank merken",
+    "errorTitle": "Fehler beim Entsperren der Datenbank",
+    "errors": {
+      "invalidPassword": "Das eingegebene Passwort ist falsch. Bitte versuchen Sie es erneut.",
+      "keyfileNotFound": "Die Schlüsseldatei konnte am angegebenen Speicherort nicht gefunden werden.",
+      "invalidKeyfileFormat": "Die ausgewählte Schlüsseldatei hat ein ungültiges Format.",
+      "noCredentials": "Bitte geben Sie ein Passwort ein oder wählen Sie eine Schlüsseldatei.",
+      "databaseLocked": "Diese Datenbank ist derzeit in einer anderen Anwendung geöffnet. Schließen Sie sie zuerst oder erzwingen Sie die Entsperrung.",
+      "notValidKdbx": "Die ausgewählte Datei ist keine gültige KeePass-Datenbank.",
+      "unsupportedVersion": "Diese Datenbank verwendet eine nicht unterstützte KeePass-Formatversion.",
+      "ioError": "Die Datenbankdatei konnte nicht gefunden oder gelesen werden.",
+      "generic": "Datenbank konnte nicht entsperrt werden. Bitte überprüfen Sie Ihre Anmeldedaten und versuchen Sie es erneut."
+    },
+    "recentListWarning": "Liste der zuletzt verwendeten Datenbanken konnte nicht aktualisiert werden",
+    "selectKeyFile": "Schlüsseldatei auswählen"
+  },
+  "databaseSwitcher": {
+    "newDatabase": "Neue Datenbank",
+    "recentDatabases": "Zuletzt verwendete Datenbanken",
+    "noOtherDatabases": "Keine anderen Datenbanken",
+    "openAnother": "Andere Datenbank öffnen",
+    "openDatabase": "Datenbank öffnen",
+    "settings": "Einstellungen",
+    "lockDatabase": "Datenbank sperren"
+  },
+  "createDatabase": {
+    "title": "Neue Datenbank erstellen",
+    "description": "Richten Sie eine neue Passwortdatenbank ein, um Ihre Anmeldedaten sicher zu speichern.",
+    "stepProgress": "Schritt {{current}} von {{total}} - {{title}}",
+    "steps": {
+      "location": "Speicherort",
+      "info": "Datenbankinfo",
+      "password": "Master-Passwort",
+      "keyfile": "Schlüsseldatei",
+      "review": "Überprüfung"
+    },
+    "location": {
+      "label": "Speicherort der Datenbankdatei",
+      "description": "Wählen Sie, wo Ihre neue Passwortdatenbank gespeichert werden soll. Die Datei wird mit der Erweiterung .kdbx erstellt.",
+      "clickToSelect": "Klicken, um Speicherort auszuwählen...",
+      "typePath": "Oder geben Sie den vollständigen Pfad hier ein...",
+      "browse": "Durchsuchen...",
+      "dialogTitle": "Speicherort der Datenbank wählen"
+    },
+    "info": {
+      "nameLabel": "Datenbankname",
+      "nameDescription": "Ein Name zur Identifizierung Ihrer Datenbank. Dieser wird in der App angezeigt.",
+      "namePlaceholder": "z.B. Persönlich, Arbeit, Familie...",
+      "descriptionLabel": "Beschreibung",
+      "descriptionOptional": "(optional)",
+      "descriptionDescription": "Fügen Sie eine Beschreibung hinzu, um sich an den Zweck dieser Datenbank zu erinnern.",
+      "descriptionPlaceholder": "z.B. Enthält alle meine persönlichen Konten..."
+    },
+    "password": {
+      "label": "Master-Passwort",
+      "description": "Wählen Sie ein starkes Passwort, das Sie sich merken können. Dieses Passwort verschlüsselt Ihre gesamte Datenbank.",
+      "placeholder": "Geben Sie Ihr Master-Passwort ein...",
+      "confirmLabel": "Passwort bestätigen",
+      "confirmDescription": "Geben Sie Ihr Passwort erneut ein, um es zu bestätigen.",
+      "confirmPlaceholder": "Master-Passwort bestätigen...",
+      "securityNoticeTitle": "Wichtiger Sicherheitshinweis",
+      "securityNoticeDescription": "Ihr Master-Passwort kann bei Verlust nicht wiederhergestellt werden. Bewahren Sie es sicher auf oder verwenden Sie eine einprägsame Passphrase.",
+      "mismatch": "Passwörter stimmen nicht überein."
+    },
+    "keyfile": {
+      "label": "Schlüsseldatei (Optional)",
+      "description": "Eine Schlüsseldatei bietet zusätzliche Sicherheit. Sie können sie allein oder mit einem Passwort für Zwei-Faktor-Authentifizierung verwenden.",
+      "noKeyFile": "Keine Schlüsseldatei",
+      "noKeyFileDescription": "Nur Passwort zur Authentifizierung verwenden",
+      "selectExisting": "Vorhandene Schlüsseldatei auswählen",
+      "selectExistingDescription": "Eine bereits vorhandene Schlüsseldatei verwenden",
+      "generateNew": "Neue Schlüsseldatei generieren",
+      "generateNewDescription": "Eine neue zufällige Schlüsseldatei erstellen",
+      "willGenerate": "Wird beim Erstellen der Datenbank generiert",
+      "existingKeyFile": "Vorhandene Schlüsseldatei",
+      "removeKeyfile": "Schlüsseldatei entfernen",
+      "securityTitle": "Schlüsseldatei-Sicherheit",
+      "securityDescription": "Bewahren Sie Ihre Schlüsseldatei getrennt von Ihrer Datenbank auf. Wenn Sie die Schlüsseldatei verlieren und Ihr Passwort vergessen, können Sie nicht mehr auf Ihre Daten zugreifen.",
+      "selectDialogTitle": "Schlüsseldatei auswählen",
+      "saveDialogTitle": "Schlüsseldatei speichern als"
+    },
+    "review": {
+      "location": "Speicherort",
+      "databaseName": "Datenbankname",
+      "noName": "Kein Datenbankname angegeben",
+      "description": "Beschreibung",
+      "masterPassword": "Master-Passwort",
+      "passwordSet": "Passwort gesetzt",
+      "noPassword": "Kein Passwort",
+      "keyFile": "Schlüsseldatei",
+      "willGenerate": "Wird generiert: ",
+      "noKeyFile": "Keine Schlüsseldatei",
+      "additionalOptions": "Zusätzliche Optionen",
+      "configureDescription": "Konfigurieren Sie, wie Ihre Datenbank erstellt wird",
+      "createDefaultGroups": "Standardgruppen erstellen (Allgemein, E-Mail, Banking, Soziales, Arbeit)",
+      "securitySummary": "Sicherheitszusammenfassung:",
+      "encryptedWith": "Ihre Datenbank wird verschlüsselt mit",
+      "twoFactor": "Passwort und Schlüsseldatei (Zwei-Faktor)",
+      "passwordOnly": "Ihrem Master-Passwort",
+      "keyFileOnly": "nur Ihrer Schlüsseldatei",
+      "noCredentials": "keinen Anmeldedaten (bitte gehen Sie zurück und setzen Sie ein Passwort oder eine Schlüsseldatei)"
+    },
+    "creating": "Wird erstellt...",
+    "createDatabase": "Datenbank erstellen",
+    "errorTitle": "Fehler beim Erstellen der Datenbank",
+    "cancelConfirm": "Möchten Sie wirklich abbrechen? Alle eingegebenen Informationen gehen verloren.",
+    "cancelTitle": "Datenbankerstellung abbrechen",
+    "toast": {
+      "created": "Datenbank erfolgreich erstellt!"
+    },
+    "errors": {
+      "fileExists": "An diesem Speicherort existiert bereits eine Datei. Bitte wählen Sie einen anderen Pfad.",
+      "permissionDenied": "Zugriff verweigert. Bitte überprüfen Sie, ob Sie Schreibzugriff auf diesen Speicherort haben.",
+      "noCredentials": "Bitte setzen Sie ein Master-Passwort oder wählen Sie eine Schlüsseldatei.",
+      "directoryNotFound": "Das ausgewählte Verzeichnis existiert nicht. Bitte wählen Sie einen gültigen Speicherort.",
+      "ioError": "Es konnte nicht an den angegebenen Speicherort geschrieben werden. Bitte überprüfen Sie den Pfad und versuchen Sie es erneut.",
+      "generic": "Datenbank konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
+    }
+  },
+  "passwordGenerator": {
+    "title": "Passwort-Generator",
+    "generating": "Wird generiert...",
+    "regenerate": "Passwort neu generieren",
+    "copyPassword": "Passwort kopieren",
+    "passwordCopied": "Passwort kopiert",
+    "length": "Länge",
+    "uppercase": "A-Z",
+    "lowercase": "a-z",
+    "numbers": "0-9",
+    "symbols": "!@#$",
+    "excludeAmbiguous": "Mehrdeutige Zeichen ausschließen (0O, 1lI)",
+    "usePassword": "Passwort verwenden",
+    "passwordGeneratorButton": "Passwort-Generator"
+  },
+  "iconPicker": {
+    "chooseIcon": "Symbol auswählen"
+  },
+  "errors": {
+    "failedToLoadSettings": "Einstellungen konnten nicht geladen werden: {{error}}",
+    "settingsUnavailable": "Einstellungen sind nicht verfügbar."
+  }
+}

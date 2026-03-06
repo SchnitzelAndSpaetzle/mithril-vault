@@ -272,6 +272,39 @@ When working with the `keepass` crate for KDBX operations:
 - **Group creation**: Use `Group::new(name)` which auto-generates UUID, then `parent.add_child(group)`
 - **Metadata**: Access via `db.meta.database_name`, `db.meta.database_description`, `db.meta.generator`
 
+## Internationalization (i18n)
+
+The app uses `react-i18next` for runtime language switching. All user-facing strings are extracted into translation
+files.
+
+### Setup
+
+- **Init**: `src/lib/i18n.ts` — imports all locale bundles and initializes i18next
+- **Constants**: `src/lib/i18n-constants.ts` — `SUPPORTED_LOCALES`, `LOCALE_LABELS`, `isSupportedLocale()`
+- **Type safety**: `src/types/i18next.d.ts` — augments i18next with `CustomTypeOptions` for autocomplete
+- **Sync hook**: `src/hooks/use-language-sync.ts` — syncs `AppPreferences.general.language` to i18next
+
+### Translation files
+
+Located in `src/locales/{locale}/common.json`. Currently supported: `en`, `de`, `es`, `fr`, `sr`.
+
+Key structure is dot-nested by section: `settings.general.title`, `entries.form.password`, `common.cancel`, etc.
+
+### How to add a new locale
+
+1. Add the locale code to `SUPPORTED_LOCALES` in `src/lib/i18n-constants.ts`
+2. Add the display name to `LOCALE_LABELS`
+3. Create `src/locales/{code}/common.json` (copy `en/common.json` and translate)
+4. Import the bundle in `src/lib/i18n.ts` and add it to the `resources` object
+
+### Conventions
+
+- Use `const { t } = useTranslation()` in components
+- Never hardcode user-facing strings — always use `t("key")`
+- Interpolation: `t("entries.loadError", { error: message })` for `"Failed: {{error}}"`
+- Plurals: use `_one` / `_other` suffixes (e.g., `deleteEntryCount_one`, `deleteEntryCount_other`)
+- Tests mock `react-i18next` globally in `src/test/setup.ts` — `t()` returns the key string
+
 ## License Compliance
 
 MIT License. Dependencies must have compatible licenses. CI blocks incompatible licenses.

@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { useTranslation } from "react-i18next";
 import { type Control, Controller } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,9 +19,11 @@ export function EntryTitleField({
   isPending,
   autoFocus,
 }: EntryTitleFieldProps) {
+  const { t } = useTranslation();
+
   return (
     <Field>
-      <FieldLabel htmlFor="title">Title</FieldLabel>
+      <FieldLabel htmlFor="title">{t("entries.form.title")}</FieldLabel>
       <div className="flex items-center gap-2">
         <Controller
           name="iconId"
@@ -34,7 +37,7 @@ export function EntryTitleField({
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                aria-label="Choose icon"
+                aria-label={t("entries.form.chooseIcon")}
               >
                 {createElement(getKeepassIcon(field.value), {
                   className: "size-4",
@@ -53,7 +56,7 @@ export function EntryTitleField({
                 id="title"
                 autoFocus={autoFocus}
                 aria-invalid={fieldState.invalid}
-                placeholder="Entry title"
+                placeholder={t("entries.form.titlePlaceholder")}
                 disabled={isPending}
               />
               {fieldState.error && (

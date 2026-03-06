@@ -1,5 +1,6 @@
 import { FolderOpen, KeyRound, Plus, ShieldAlert, X } from "lucide-react";
 import { type Control, Controller, useWatch } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { CreateDatabaseFormValues, KeyfileMode } from "@/lib/formTypes";
 import {
@@ -12,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn, getFilenameFromPath } from "@/lib/utils";
+import React from "react";
 
 interface KeyFileStepProps {
   control: Control<CreateDatabaseFormValues>;
@@ -90,13 +92,14 @@ function KeyfileModeOption({
 }
 
 export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
+  const { t } = useTranslation();
   const keyfileMode = useWatch({ control, name: "keyfileMode" });
   const keyfilePath = useWatch({ control, name: "keyfilePath" });
 
   async function handleSelectExistingKeyfile() {
     try {
       const file = await open({
-        title: "Select Key File",
+        title: t("createDatabase.keyfile.selectDialogTitle"),
         filters: [
           { name: "Key Files", extensions: ["key", "keyx"] },
           { name: "All Files", extensions: ["*"] },
@@ -114,7 +117,7 @@ export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
   async function handleSelectNewKeyfileLocation() {
     try {
       const file = await save({
-        title: "Save Key File As",
+        title: t("createDatabase.keyfile.saveDialogTitle"),
         filters: [{ name: "Key Files", extensions: ["keyx"] }],
         defaultPath: "keyfile.keyx",
       });
@@ -144,19 +147,18 @@ export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
       setValue("keyfileMode", "none");
       setValue("keyfilePath", "");
     } else if (mode === "select") {
-      handleSelectExistingKeyfile();
+      void handleSelectExistingKeyfile();
     } else if (mode === "generate") {
-      handleSelectNewKeyfileLocation();
+      void handleSelectNewKeyfileLocation();
     }
   }
 
   return (
     <FieldGroup>
       <Field>
-        <FieldLabel>Key File (Optional)</FieldLabel>
+        <FieldLabel>{t("createDatabase.keyfile.label")}</FieldLabel>
         <FieldDescription>
-          A key file provides additional security. You can use it alone or with
-          a password for two-factor authentication.
+          {t("createDatabase.keyfile.description")}
         </FieldDescription>
 
         <Controller
@@ -169,8 +171,8 @@ export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
                   mode="none"
                   currentMode={keyfileMode}
                   icon={<X className="size-4" />}
-                  title="No Key File"
-                  description="Use password only for authentication"
+                  title={t("createDatabase.keyfile.noKeyFile")}
+                  description={t("createDatabase.keyfile.noKeyFileDescription")}
                   onClick={() => handleModeChange("none")}
                   disabled={disabled ?? false}
                 />
@@ -179,8 +181,10 @@ export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
                   mode="select"
                   currentMode={keyfileMode}
                   icon={<FolderOpen className="size-4" />}
-                  title="Select Existing Key File"
-                  description="Use a key file you already have"
+                  title={t("createDatabase.keyfile.selectExisting")}
+                  description={t(
+                    "createDatabase.keyfile.selectExistingDescription"
+                  )}
                   onClick={() => handleModeChange("select")}
                   disabled={disabled ?? false}
                 />
@@ -189,8 +193,10 @@ export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
                   mode="generate"
                   currentMode={keyfileMode}
                   icon={<Plus className="size-4" />}
-                  title="Generate New Key File"
-                  description="Create a new random key file"
+                  title={t("createDatabase.keyfile.generateNew")}
+                  description={t(
+                    "createDatabase.keyfile.generateNewDescription"
+                  )}
                   onClick={() => handleModeChange("generate")}
                   disabled={disabled ?? false}
                 />
@@ -216,8 +222,8 @@ export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
               </div>
               <div className="text-xs text-muted-foreground truncate">
                 {keyfileMode === "generate"
-                  ? "Will be generated when creating database"
-                  : "Existing key file"}
+                  ? t("createDatabase.keyfile.willGenerate")
+                  : t("createDatabase.keyfile.existingKeyFile")}
               </div>
             </div>
             <Button
@@ -226,7 +232,7 @@ export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
               size="icon-xs"
               onClick={handleRemoveKeyfile}
               disabled={disabled}
-              aria-label="Remove keyfile"
+              aria-label={t("createDatabase.keyfile.removeKeyfile")}
             >
               <X className="size-4" />
             </Button>
@@ -253,12 +259,10 @@ export function KeyFileStep({ control, setValue, disabled }: KeyFileStepProps) {
         >
           <ShieldAlert className="size-4 text-amber-600" />
           <AlertTitle className="text-amber-800 dark:text-amber-400">
-            Key File Security
+            {t("createDatabase.keyfile.securityTitle")}
           </AlertTitle>
           <AlertDescription className="text-amber-700 dark:text-amber-300">
-            Store your key file separately from your database. If you lose the
-            key file and forget your password, you will not be able to access
-            your data.
+            {t("createDatabase.keyfile.securityDescription")}
           </AlertDescription>
         </Alert>
       )}

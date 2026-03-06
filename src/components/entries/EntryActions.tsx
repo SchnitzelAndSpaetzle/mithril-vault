@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.tsx";
 import { Pencil, Plus, Trash } from "lucide-react";
 
@@ -20,13 +21,15 @@ export function EntryActions({
   disableEdit,
   disableDelete,
 }: EntryActionsProps) {
+  const { t } = useTranslation();
+
   return (
     <>
       {onNew && (
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="new entry"
+          aria-label={t("entries.newEntry")}
           disabled={disableNew}
           onClick={onNew}
         >
@@ -37,7 +40,7 @@ export function EntryActions({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="edit entry"
+          aria-label={t("entries.editEntry")}
           disabled={disableEdit}
           onClick={onEdit}
         >
@@ -48,7 +51,7 @@ export function EntryActions({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="delete entry"
+          aria-label={t("entries.deleteEntry")}
           disabled={disableDelete}
           onClick={onDelete}
         >
