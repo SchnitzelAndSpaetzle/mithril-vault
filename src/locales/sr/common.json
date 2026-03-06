@@ -1,0 +1,436 @@
+{
+  "common": {
+    "cancel": "Otkaži",
+    "save": "Sačuvaj",
+    "delete": "Obriši",
+    "create": "Kreiraj",
+    "retry": "Pokušaj ponovo",
+    "move": "Premesti",
+    "rename": "Preimenuj",
+    "loading": "Učitavanje...",
+    "name": "Ime",
+    "back": "Nazad",
+    "next": "Dalje",
+    "edit": "Uredi",
+    "copied": "Kopirano",
+    "noDatabase": "Nema baze podataka"
+  },
+  "settings": {
+    "title": "Podešavanja",
+    "description": "Podešavanja aplikacije i konfiguracija baze podataka.",
+    "resetDefaults": "Vrati podrazumevane vrednosti",
+    "saveChanges": "Sačuvaj izmene",
+    "resetDialog": {
+      "title": "Vratiti podešavanja?",
+      "description": "Vrati sva podešavanja aplikacije na podrazumevane vrednosti. Nedavne baze podataka će biti sačuvane."
+    },
+    "resetPreferences": "Vrati podešavanja",
+    "toast": {
+      "updated": "Podešavanja ažurirana",
+      "reset": "Podešavanja vraćena na podrazumevane vrednosti"
+    },
+    "general": {
+      "title": "Opšte",
+      "description": "Podešavanja pokretanja i jezika aplikacije.",
+      "language": "Jezik",
+      "startupBehavior": "Ponašanje pri pokretanju",
+      "startupOptions": {
+        "showUnlockScreen": "Prikaži ekran za otključavanje",
+        "openLastDatabase": "Otvori poslednju bazu podataka",
+        "openDefaultDatabase": "Otvori podrazumevanu bazu podataka"
+      },
+      "defaultDatabasePath": "Putanja podrazumevane baze podataka",
+      "defaultDatabasePathPlaceholder": "/putanja/do/podrazumevane.kdbx",
+      "defaultDatabasePathNote": "TODO: tok pokretanja još uvek ne otvara ovu datoteku automatski."
+    },
+    "security": {
+      "title": "Bezbednost",
+      "description": "Podešavanja privremene memorije i zaključavanja.",
+      "autoLockTimeout": "Vreme automatskog zaključavanja (sekunde)",
+      "autoLockNote": "TODO: događaji neaktivnosti/zaključavanja OS-a još nisu implementirani.",
+      "clipboardTimeout": "Vreme brisanja privremene memorije (sekunde)",
+      "showPasswordByDefault": "Podrazumevano prikaži lozinke",
+      "minimizeToTray": "Minimiziraj u sistemsku traku",
+      "startMinimized": "Pokreni minimizovano"
+    },
+    "appearance": {
+      "title": "Izgled",
+      "description": "Podešavanja teme i prikaza.",
+      "theme": "Tema",
+      "fontSize": "Veličina fonta",
+      "entryListColumns": "Kolone liste unosa",
+      "columns": {
+        "username": "Korisničko ime",
+        "url": "URL",
+        "modifiedAt": "Datum izmene",
+        "tags": "Oznake"
+      },
+      "columnsNote": "TODO: prekidači kolona su sačuvani ali još nisu povezani sa prikazom liste."
+    },
+    "browser": {
+      "title": "Integracija pregledača",
+      "description": "Podešavanja integracije ekstenzija i liste dozvoljenih sajtova.",
+      "enableIntegration": "Omogući integraciju pregledača",
+      "allowedSites": "Dozvoljeni sajtovi (jedan po liniji)",
+      "allowedSitesNote": "TODO: primena pregledača/nativnog dopisivanja još nije implementirana."
+    },
+    "advanced": {
+      "title": "Napredno",
+      "description": "Dijagnostika i informacije o lokalnim podacima.",
+      "enableDebugMode": "Omogući režim za otklanjanje grešaka",
+      "dataLocation": "Lokacija podataka"
+    },
+    "database": {
+      "title": "Podešavanja baze podataka",
+      "description": "Trenutna kriptografska konfiguracija baze podataka (samo za čitanje).",
+      "openPrompt": "Otvorite bazu podataka da pregledate njenu konfiguraciju.",
+      "loadingSettings": "Učitavanje podešavanja baze podataka...",
+      "loadError": "Greška pri učitavanju podešavanja baze podataka: {{error}}",
+      "noConfig": "Konfiguracija baze podataka nije dostupna.",
+      "version": "Verzija",
+      "outerCipher": "Spoljašnje šifrovanje",
+      "innerCipher": "Unutrašnje šifrovanje",
+      "compression": "Kompresija",
+      "kdf": "KDF",
+      "pendingTitle": "Implementacija na čekanju",
+      "pendingItems": {
+        "mutations": "Kontrole mutacije na nivou baze podataka još nisu implementirane.",
+        "recycleBin": "Uređivanje korpe za otpatke/istorije/bezbednosnih pravila je na čekanju."
+      }
+    },
+    "sidebar": {
+      "preferences": "Podešavanja",
+      "sections": "Sekcije"
+    }
+  },
+  "sidebar": {
+    "allEntries": "Svi unosi",
+    "expired": "Istekli",
+    "security": "Bezbednost",
+    "settings": "Podešavanja",
+    "help": "Pomoć",
+    "groups": "Grupe"
+  },
+  "entries": {
+    "openDatabase": "Otvorite bazu podataka da vidite unose.",
+    "loading": "Učitavanje unosa...",
+    "loadError": "Greška pri učitavanju unosa: {{error}}",
+    "noEntries": "Nema pronađenih unosa.",
+    "noEntriesWithTag": "Nema unosa sa oznakom \"{{tag}}\".",
+    "newEntry": "novi unos",
+    "editEntry": "uredi unos",
+    "deleteEntry": "obriši unos",
+    "noEntrySelected": "Nijedan unos nije izabran",
+    "noEntrySelectedDescription": "Izaberite unos sa liste da vidite njegove detalje.",
+    "deleted": "Unos obrisan.",
+    "deleteFailed": "Greška pri brisanju unosa: {{error}}",
+    "deleteConfirm": "Da li ste sigurni da želite da obrišete ovaj unos? Ova radnja se ne može poništiti.",
+    "deleteTitle": "Obriši unos",
+    "shareEntry": "podeli unos",
+    "moreOptions": "više opcija",
+    "form": {
+      "title": "Naslov",
+      "titlePlaceholder": "Naslov unosa",
+      "chooseIcon": "Izaberi ikonu",
+      "username": "Korisničko ime",
+      "usernamePlaceholder": "Korisničko ime ili e-pošta",
+      "password": "Lozinka",
+      "passwordPlaceholder": "Unesite lozinku...",
+      "showPassword": "Prikaži lozinku",
+      "hidePassword": "Sakrij lozinku",
+      "generatePassword": "Generiši lozinku",
+      "url": "URL",
+      "urlPlaceholder": "https://primer.rs",
+      "notes": "Beleške",
+      "notesPlaceholder": "Dodatne beleške...",
+      "tags": "Oznake",
+      "group": "Grupa",
+      "selectGroup": "Izaberite grupu",
+      "saveChanges": "Sačuvaj izmene",
+      "createEntry": "Kreiraj unos",
+      "saveAndNew": "Sačuvaj i novi",
+      "protectedValuesError": "Zaštićene vrednosti nisu mogle biti učitane.",
+      "customFields": "Prilagođena polja",
+      "addField": "Dodaj polje",
+      "noCustomFields": "Nema prilagođenih polja.",
+      "fieldNamePlaceholder": "Ime polja",
+      "removeField": "Ukloni prilagođeno polje"
+    },
+    "toast": {
+      "created": "Unos kreiran",
+      "updated": "Unos ažuriran",
+      "createFailed": "Greška pri kreiranju unosa: {{error}}",
+      "updateFailed": "Greška pri ažuriranju unosa: {{error}}",
+      "secretLoadFailed": "Greška pri učitavanju zaštićenih vrednosti za ovaj unos.",
+      "secretRetryRequired": "Pokušajte ponovo da učitate zaštićene vrednosti pre čuvanja."
+    },
+    "unsavedChanges": {
+      "message": "Imate nesačuvane izmene. Da li ste sigurni da želite da ih odbacite?",
+      "title": "Nesačuvane izmene",
+      "discardAndOpen": "Imate nesačuvane izmene. Da li želite da ih odbacite i otvorite drugi unos?"
+    },
+    "detail": {
+      "userName": "Korisničko ime",
+      "password": "Lozinka",
+      "url": "URL",
+      "tags": "Oznake",
+      "created": "Kreirano",
+      "modified": "Izmenjeno",
+      "revealPassword": "prikaži lozinku",
+      "hidePassword": "sakrij lozinku",
+      "autoType": "automatski unos",
+      "openUrl": "otvori URL",
+      "revealField": "prikaži {{field}}",
+      "hideField": "sakrij {{field}}"
+    },
+    "sort": {
+      "sortBy": "Sortiraj po",
+      "sortEntries": "Sortiraj unose",
+      "order": "Redosled",
+      "title": "Naslov",
+      "username": "Korisničko ime",
+      "url": "URL",
+      "modified": "Izmenjeno",
+      "created": "Kreirano",
+      "oldestFirst": "Najstarije prvo",
+      "newestFirst": "Najnovije prvo",
+      "aToZ": "A \u2192 Z",
+      "zToA": "Z \u2192 A"
+    },
+    "search": {
+      "searchResults": "Rezultati pretrage",
+      "searchInTag": "Pretraga u #{{tag}}",
+      "searchInGroup": "Pretraga u {{group}}",
+      "noResults": "Nijedan unos ne odgovara vašoj pretrazi.",
+      "match_one": "{{count}} rezultat",
+      "match_other": "{{count}} rezultata",
+      "placeholder": "Pretraži unose... (Ctrl+K)",
+      "label": "Pretraga",
+      "clearSearch": "Obriši pretragu"
+    },
+    "count_one": "{{count}} Stavka",
+    "count_other": "{{count}} Stavki"
+  },
+  "groups": {
+    "createTitle": "Kreiraj novu grupu",
+    "createDescription": "Kreiraj novu podgrupu unutar \"{{parentName}}\".",
+    "creating": "Kreiranje...",
+    "editTitle": "Uredi grupu",
+    "editDescription": "Promeni ime ili ikonu za \"{{groupName}}\".",
+    "saving": "Čuvanje...",
+    "deleteTitle": "Obriši grupu",
+    "deleteDescription": "Da li ste sigurni da želite da obrišete \"{{groupName}}\"?",
+    "deleteEntryCount_one": "Ova grupa sadrži <strong>{{count}} unos</strong>.",
+    "deleteEntryCount_other": "Ova grupa sadrži <strong>{{count}} unosa</strong>.",
+    "deleteRecycleBin": "Ovo će premestiti grupu i sav njen sadržaj u korpu za otpatke.",
+    "deleting": "Brisanje...",
+    "moveTitle": "Premesti grupu",
+    "moveDescription": "Izaberite novu nadređenu grupu za \"{{groupName}}\".",
+    "destination": "Odredište",
+    "selectGroup": "Izaberite grupu",
+    "moving": "Premeštanje...",
+    "enterGroupName": "Unesite ime grupe",
+    "noGroups": "Nema pronađenih grupa",
+    "actions": "Akcije grupe",
+    "newSubgroup": "Nova podgrupa",
+    "moveTo": "Premesti u...",
+    "collapse": "Skupi",
+    "expand": "Proširi",
+    "toast": {
+      "created": "Grupa \"{{name}}\" kreirana",
+      "createdIconFailed": "Grupa \"{{name}}\" kreirana, ali ikona nije mogla biti postavljena: {{error}}",
+      "createFailed": "Greška pri kreiranju grupe: {{error}}",
+      "updated": "Grupa ažurirana",
+      "updateFailed": "Greška pri ažuriranju grupe: {{error}}",
+      "deleted": "Grupa \"{{name}}\" premeštena u korpu za otpatke",
+      "deleteFailed": "Greška pri brisanju grupe: {{error}}",
+      "moved": "Grupa \"{{name}}\" premeštena",
+      "moveFailed": "Greška pri premeštanju grupe: {{error}}"
+    }
+  },
+  "tags": {
+    "deleteTitle": "Obriši oznaku",
+    "deleteDescription": "Da li ste sigurni da želite da uklonite \"{{tag}}\" iz svih unosa? Ovo se ne može poništiti.",
+    "deleting": "Brisanje...",
+    "renameTitle": "Preimenuj oznaku",
+    "renameDescription": "Ovo će preimenovati \"{{tag}}\" u svim unosima.",
+    "newTagPlaceholder": "Novo ime oznake",
+    "renaming": "Preimenovanje..."
+  },
+  "welcome": {
+    "title": "Dobrodošao, prijatelju",
+    "description": "Kreirajte ili otvorite bazu podataka da nastavite.",
+    "open": "Otvori",
+    "new": "Novo",
+    "more": "Više",
+    "recentDatabases": "Nedavne baze podataka",
+    "noRecentDatabases": "Nema nedavnih baza podataka",
+    "openToSeeHere": "Otvorite bazu podataka da je vidite ovde",
+    "termsPrefix": "Klikom na nastavi, prihvatate naše",
+    "termsOfService": "Uslove korišćenja",
+    "and": "i",
+    "privacyPolicy": "Politiku privatnosti",
+    "openMenu": {
+      "offline": "Van mreže",
+      "localFile": "Lokalna datoteka",
+      "online": "Na mreži"
+    },
+    "moreMenu": {
+      "demo": "Demo",
+      "generatePassword": "Generiši lozinku",
+      "settings": "Podešavanja"
+    }
+  },
+  "unlock": {
+    "title": "Otključaj bazu podataka",
+    "titleWithName": "Otključaj {{filename}}",
+    "passwordPlaceholder": "unesite lozinku ovde...",
+    "showPassword": "Prikaži lozinku",
+    "hidePassword": "Sakrij lozinku",
+    "addKeyFile": "dodaj datoteku ključa",
+    "unlock": "Otključaj",
+    "unlocking": "Otključavanje",
+    "selectDatabase": "Izaberite datoteku baze podataka...",
+    "removeKeyfile": "Ukloni datoteku ključa",
+    "rememberKeyfile": "Zapamti datoteku ključa za ovu bazu podataka",
+    "errorTitle": "Greška pri otključavanju baze podataka",
+    "errors": {
+      "invalidPassword": "Lozinka koju ste uneli je netačna. Pokušajte ponovo.",
+      "keyfileNotFound": "Datoteka ključa nije pronađena na navedenoj lokaciji.",
+      "invalidKeyfileFormat": "Izabrana datoteka ključa ima nevažeći format.",
+      "noCredentials": "Unesite lozinku ili izaberite datoteku ključa.",
+      "databaseLocked": "Ova baza podataka je trenutno otvorena u drugoj aplikaciji. Zatvorite je prvo ili prisilno otključajte.",
+      "notValidKdbx": "Izabrana datoteka nije validna KeePass baza podataka.",
+      "unsupportedVersion": "Ova baza podataka koristi nepodržanu verziju KeePass formata.",
+      "ioError": "Datoteka baze podataka nije mogla biti pronađena ili pročitana.",
+      "generic": "Neuspešno otključavanje baze podataka. Proverite svoje kredencijale i pokušajte ponovo."
+    },
+    "recentListWarning": "Neuspešno ažuriranje liste nedavnih baza podataka",
+    "selectKeyFile": "Izaberite datoteku ključa"
+  },
+  "databaseSwitcher": {
+    "newDatabase": "Nova baza podataka",
+    "recentDatabases": "Nedavne baze podataka",
+    "noOtherDatabases": "Nema drugih baza podataka",
+    "openAnother": "Otvori drugu bazu podataka",
+    "openDatabase": "Otvori bazu podataka",
+    "settings": "Podešavanja",
+    "lockDatabase": "Zaključaj bazu podataka"
+  },
+  "createDatabase": {
+    "title": "Kreiraj novu bazu podataka",
+    "description": "Podesite novu bazu podataka lozinki za sigurno čuvanje vaših kredencijala.",
+    "stepProgress": "Korak {{current}} od {{total}} - {{title}}",
+    "steps": {
+      "location": "Lokacija",
+      "info": "Info o bazi podataka",
+      "password": "Glavna lozinka",
+      "keyfile": "Datoteka ključa",
+      "review": "Pregled"
+    },
+    "location": {
+      "label": "Lokacija datoteke baze podataka",
+      "description": "Izaberite gde ćete sačuvati novu bazu podataka lozinki. Datoteka će biti kreirana sa ekstenzijom .kdbx.",
+      "clickToSelect": "Kliknite da izaberete lokaciju...",
+      "typePath": "Ili unesite punu putanju ovde...",
+      "browse": "Pretraži...",
+      "dialogTitle": "Izaberite lokaciju baze podataka"
+    },
+    "info": {
+      "nameLabel": "Ime baze podataka",
+      "nameDescription": "Ime za identifikaciju vaše baze podataka. Biće prikazano u aplikaciji.",
+      "namePlaceholder": "npr., Lično, Posao, Porodica...",
+      "descriptionLabel": "Opis",
+      "descriptionOptional": "(opciono)",
+      "descriptionDescription": "Dodajte opis da biste zapamtili svrhu ove baze podataka.",
+      "descriptionPlaceholder": "npr., Sadrži sve moje lične naloge..."
+    },
+    "password": {
+      "label": "Glavna lozinka",
+      "description": "Izaberite jaku lozinku koju ćete zapamtiti. Ova lozinka šifruje celu vašu bazu podataka.",
+      "placeholder": "Unesite vašu glavnu lozinku...",
+      "confirmLabel": "Potvrdite lozinku",
+      "confirmDescription": "Ponovo unesite lozinku da je potvrdite.",
+      "confirmPlaceholder": "Potvrdite vašu glavnu lozinku...",
+      "securityNoticeTitle": "Važno bezbednosno obaveštenje",
+      "securityNoticeDescription": "Vaša glavna lozinka ne može biti povraćena ako je zaboravite. Sačuvajte je na sigurnom mestu ili koristite zapamtljivu frazu.",
+      "mismatch": "Lozinke se ne poklapaju."
+    },
+    "keyfile": {
+      "label": "Datoteka ključa (Opciono)",
+      "description": "Datoteka ključa pruža dodatnu bezbednost. Možete je koristiti samu ili sa lozinkom za dvofaktorsku autentifikaciju.",
+      "noKeyFile": "Bez datoteke ključa",
+      "noKeyFileDescription": "Koristite samo lozinku za autentifikaciju",
+      "selectExisting": "Izaberite postojeću datoteku ključa",
+      "selectExistingDescription": "Koristite datoteku ključa koju već imate",
+      "generateNew": "Generiši novu datoteku ključa",
+      "generateNewDescription": "Kreirajte novu nasumičnu datoteku ključa",
+      "willGenerate": "Biće generisana pri kreiranju baze podataka",
+      "existingKeyFile": "Postojeća datoteka ključa",
+      "removeKeyfile": "Ukloni datoteku ključa",
+      "securityTitle": "Bezbednost datoteke ključa",
+      "securityDescription": "Čuvajte datoteku ključa odvojeno od baze podataka. Ako izgubite datoteku ključa i zaboravite lozinku, nećete moći da pristupite svojim podacima.",
+      "selectDialogTitle": "Izaberite datoteku ključa",
+      "saveDialogTitle": "Sačuvaj datoteku ključa kao"
+    },
+    "review": {
+      "location": "Lokacija",
+      "databaseName": "Ime baze podataka",
+      "noName": "Ime baze podataka nije navedeno",
+      "description": "Opis",
+      "masterPassword": "Glavna lozinka",
+      "passwordSet": "Lozinka postavljena",
+      "noPassword": "Bez lozinke",
+      "keyFile": "Datoteka ključa",
+      "willGenerate": "Generisaće: ",
+      "noKeyFile": "Bez datoteke ključa",
+      "additionalOptions": "Dodatne opcije",
+      "configureDescription": "Konfigurišite kako se vaša baza podataka kreira",
+      "createDefaultGroups": "Kreiraj podrazumevane grupe (Opšte, E-pošta, Bankarstvo, Društveno, Posao)",
+      "securitySummary": "Rezime bezbednosti:",
+      "encryptedWith": "Vaša baza podataka će biti šifrovana koristeći",
+      "twoFactor": "lozinku i datoteku ključa (dvofaktorski)",
+      "passwordOnly": "vašu glavnu lozinku",
+      "keyFileOnly": "samo vašu datoteku ključa",
+      "noCredentials": "bez kredencijala (vratite se i postavite lozinku ili datoteku ključa)"
+    },
+    "creating": "Kreiranje...",
+    "createDatabase": "Kreiraj bazu podataka",
+    "errorTitle": "Greška pri kreiranju baze podataka",
+    "cancelConfirm": "Da li ste sigurni da želite da otkažete? Sve unete informacije će biti izgubljene.",
+    "cancelTitle": "Otkaži kreiranje baze podataka",
+    "toast": {
+      "created": "Baza podataka uspešno kreirana!"
+    },
+    "errors": {
+      "fileExists": "Na ovoj lokaciji već postoji datoteka. Izaberite drugu putanju.",
+      "permissionDenied": "Pristup odbijen. Proverite da imate dozvolu za pisanje na ovoj lokaciji.",
+      "noCredentials": "Postavite glavnu lozinku ili izaberite datoteku ključa.",
+      "directoryNotFound": "Izabrani direktorijum ne postoji. Izaberite validnu lokaciju.",
+      "ioError": "Nije moguće pisati na navedenu lokaciju. Proverite putanju i pokušajte ponovo.",
+      "generic": "Greška pri kreiranju baze podataka. Pokušajte ponovo."
+    }
+  },
+  "passwordGenerator": {
+    "title": "Generator lozinki",
+    "generating": "Generisanje...",
+    "regenerate": "Regeneriši lozinku",
+    "copyPassword": "Kopiraj lozinku",
+    "passwordCopied": "Lozinka kopirana",
+    "length": "Dužina",
+    "uppercase": "A-Z",
+    "lowercase": "a-z",
+    "numbers": "0-9",
+    "symbols": "!@#$",
+    "excludeAmbiguous": "Isključi dvosmislene (0O, 1lI)",
+    "usePassword": "Koristi lozinku",
+    "passwordGeneratorButton": "generator lozinki"
+  },
+  "iconPicker": {
+    "chooseIcon": "Izaberite ikonu"
+  },
+  "errors": {
+    "failedToLoadSettings": "Greška pri učitavanju podešavanja: {{error}}",
+    "settingsUnavailable": "Podešavanja nisu dostupna."
+  }
+}

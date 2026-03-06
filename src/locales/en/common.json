@@ -1,0 +1,436 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "create": "Create",
+    "retry": "Retry",
+    "move": "Move",
+    "rename": "Rename",
+    "loading": "Loading...",
+    "name": "Name",
+    "back": "Back",
+    "next": "Next",
+    "edit": "Edit",
+    "copied": "Copied",
+    "noDatabase": "No database"
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Application preferences and database configuration.",
+    "resetDefaults": "Reset defaults",
+    "saveChanges": "Save changes",
+    "resetDialog": {
+      "title": "Reset preferences?",
+      "description": "Reset all application preferences to defaults. Recent databases will be preserved."
+    },
+    "resetPreferences": "Reset preferences",
+    "toast": {
+      "updated": "Settings updated",
+      "reset": "Preferences reset to defaults"
+    },
+    "general": {
+      "title": "General",
+      "description": "Startup and language preferences for the application.",
+      "language": "Language",
+      "startupBehavior": "Startup behavior",
+      "startupOptions": {
+        "showUnlockScreen": "Show unlock screen",
+        "openLastDatabase": "Open last database",
+        "openDefaultDatabase": "Open default database"
+      },
+      "defaultDatabasePath": "Default database path",
+      "defaultDatabasePathPlaceholder": "/path/to/default.kdbx",
+      "defaultDatabasePathNote": "TODO: startup flow does not yet auto-open this file."
+    },
+    "security": {
+      "title": "Security",
+      "description": "Clipboard and lock behavior preferences.",
+      "autoLockTimeout": "Auto-lock timeout (seconds)",
+      "autoLockNote": "TODO: inactivity/OS-lock event wiring is not implemented yet.",
+      "clipboardTimeout": "Clipboard clear timeout (seconds)",
+      "showPasswordByDefault": "Show passwords by default",
+      "minimizeToTray": "Minimize to tray",
+      "startMinimized": "Start minimized"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "description": "Theme and visual preferences.",
+      "theme": "Theme",
+      "fontSize": "Font size",
+      "entryListColumns": "Entry list columns",
+      "columns": {
+        "username": "Username",
+        "url": "URL",
+        "modifiedAt": "Modified date",
+        "tags": "Tags"
+      },
+      "columnsNote": "TODO: entry list column toggles are stored but not yet wired into list rendering."
+    },
+    "browser": {
+      "title": "Browser Integration",
+      "description": "Extension integration and site allow-list settings.",
+      "enableIntegration": "Enable browser integration",
+      "allowedSites": "Allowed sites (one per line)",
+      "allowedSitesNote": "TODO: browser/native-messaging enforcement is not wired yet."
+    },
+    "advanced": {
+      "title": "Advanced",
+      "description": "Diagnostics and local data information.",
+      "enableDebugMode": "Enable debug mode",
+      "dataLocation": "Data location"
+    },
+    "database": {
+      "title": "Database Settings",
+      "description": "Current database cryptographic configuration (read-only).",
+      "openPrompt": "Open a database to inspect its configuration.",
+      "loadingSettings": "Loading database settings...",
+      "loadError": "Failed to load database settings: {{error}}",
+      "noConfig": "No database configuration available.",
+      "version": "Version",
+      "outerCipher": "Outer cipher",
+      "innerCipher": "Inner cipher",
+      "compression": "Compression",
+      "kdf": "KDF",
+      "pendingTitle": "Pending implementation",
+      "pendingItems": {
+        "mutations": "Database-level mutation controls are not implemented yet.",
+        "recycleBin": "Recycle-bin/history/security policy edits are TODO."
+      }
+    },
+    "sidebar": {
+      "preferences": "Preferences",
+      "sections": "Sections"
+    }
+  },
+  "sidebar": {
+    "allEntries": "All Entries",
+    "expired": "Expired",
+    "security": "Security",
+    "settings": "Settings",
+    "help": "Help",
+    "groups": "Groups"
+  },
+  "entries": {
+    "openDatabase": "Open a database to view entries.",
+    "loading": "Loading entries...",
+    "loadError": "Failed to load entries: {{error}}",
+    "noEntries": "No entries found.",
+    "noEntriesWithTag": "No entries with tag \"{{tag}}\".",
+    "newEntry": "new entry",
+    "editEntry": "edit entry",
+    "deleteEntry": "delete entry",
+    "noEntrySelected": "No Entry Selected",
+    "noEntrySelectedDescription": "Select an entry from the list to view its details.",
+    "deleted": "Entry deleted.",
+    "deleteFailed": "Failed to delete entry: {{error}}",
+    "deleteConfirm": "Are you sure you want to delete this entry? This action cannot be undone.",
+    "deleteTitle": "Delete Entry",
+    "shareEntry": "share entry",
+    "moreOptions": "more options",
+    "form": {
+      "title": "Title",
+      "titlePlaceholder": "Entry title",
+      "chooseIcon": "Choose icon",
+      "username": "Username",
+      "usernamePlaceholder": "Username or email",
+      "password": "Password",
+      "passwordPlaceholder": "Enter password...",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "generatePassword": "Generate password",
+      "url": "URL",
+      "urlPlaceholder": "https://example.com",
+      "notes": "Notes",
+      "notesPlaceholder": "Additional notes...",
+      "tags": "Tags",
+      "group": "Group",
+      "selectGroup": "Select a group",
+      "saveChanges": "Save Changes",
+      "createEntry": "Create Entry",
+      "saveAndNew": "Save & New",
+      "protectedValuesError": "Protected values could not be loaded.",
+      "customFields": "Custom Fields",
+      "addField": "Add Field",
+      "noCustomFields": "No custom fields.",
+      "fieldNamePlaceholder": "Field name",
+      "removeField": "Remove custom field"
+    },
+    "toast": {
+      "created": "Entry created",
+      "updated": "Entry updated",
+      "createFailed": "Failed to create entry: {{error}}",
+      "updateFailed": "Failed to update entry: {{error}}",
+      "secretLoadFailed": "Failed to load protected values for this entry.",
+      "secretRetryRequired": "Retry loading protected values before saving."
+    },
+    "unsavedChanges": {
+      "message": "You have unsaved changes. Are you sure you want to discard them?",
+      "title": "Unsaved Changes",
+      "discardAndOpen": "You have unsaved changes. Do you want to discard them and open another entry?"
+    },
+    "detail": {
+      "userName": "User Name",
+      "password": "Password",
+      "url": "URL",
+      "tags": "Tags",
+      "created": "Created",
+      "modified": "Modified",
+      "revealPassword": "reveal password",
+      "hidePassword": "hide password",
+      "autoType": "auto-type",
+      "openUrl": "open url",
+      "revealField": "reveal {{field}}",
+      "hideField": "hide {{field}}"
+    },
+    "sort": {
+      "sortBy": "Sort by",
+      "sortEntries": "Sort entries",
+      "order": "Order",
+      "title": "Title",
+      "username": "Username",
+      "url": "URL",
+      "modified": "Modified",
+      "created": "Created",
+      "oldestFirst": "Oldest first",
+      "newestFirst": "Newest first",
+      "aToZ": "A \u2192 Z",
+      "zToA": "Z \u2192 A"
+    },
+    "search": {
+      "searchResults": "Search Results",
+      "searchInTag": "Search in #{{tag}}",
+      "searchInGroup": "Search in {{group}}",
+      "noResults": "No entries match your search.",
+      "match_one": "{{count}} match",
+      "match_other": "{{count}} matches",
+      "placeholder": "Search entries... (Ctrl+K)",
+      "label": "Search",
+      "clearSearch": "Clear search"
+    },
+    "count_one": "{{count}} Item",
+    "count_other": "{{count}} Items"
+  },
+  "groups": {
+    "createTitle": "Create New Group",
+    "createDescription": "Create a new subgroup inside \"{{parentName}}\".",
+    "creating": "Creating...",
+    "editTitle": "Edit Group",
+    "editDescription": "Change the name or icon for \"{{groupName}}\".",
+    "saving": "Saving...",
+    "deleteTitle": "Delete Group",
+    "deleteDescription": "Are you sure you want to delete \"{{groupName}}\"?",
+    "deleteEntryCount_one": "This group contains <strong>{{count}} entry</strong>.",
+    "deleteEntryCount_other": "This group contains <strong>{{count}} entries</strong>.",
+    "deleteRecycleBin": "This will move the group and all its contents to the Recycle Bin.",
+    "deleting": "Deleting...",
+    "moveTitle": "Move Group",
+    "moveDescription": "Select a new parent group for \"{{groupName}}\".",
+    "destination": "Destination",
+    "selectGroup": "Select a group",
+    "moving": "Moving...",
+    "enterGroupName": "Enter group name",
+    "noGroups": "No groups found",
+    "actions": "Group actions",
+    "newSubgroup": "New Subgroup",
+    "moveTo": "Move to...",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "toast": {
+      "created": "Group \"{{name}}\" created",
+      "createdIconFailed": "Group \"{{name}}\" created, but failed to set icon: {{error}}",
+      "createFailed": "Failed to create group: {{error}}",
+      "updated": "Group updated",
+      "updateFailed": "Failed to update group: {{error}}",
+      "deleted": "Group \"{{name}}\" moved to Recycle Bin",
+      "deleteFailed": "Failed to delete group: {{error}}",
+      "moved": "Group \"{{name}}\" moved",
+      "moveFailed": "Failed to move group: {{error}}"
+    }
+  },
+  "tags": {
+    "deleteTitle": "Delete Tag",
+    "deleteDescription": "Are you sure you want to remove \"{{tag}}\" from all entries? This cannot be undone.",
+    "deleting": "Deleting...",
+    "renameTitle": "Rename Tag",
+    "renameDescription": "This will rename \"{{tag}}\" across all entries.",
+    "newTagPlaceholder": "New tag name",
+    "renaming": "Renaming..."
+  },
+  "welcome": {
+    "title": "Welcome friend",
+    "description": "Create or open a database to continue.",
+    "open": "Open",
+    "new": "New",
+    "more": "More",
+    "recentDatabases": "Recent databases",
+    "noRecentDatabases": "No recent databases",
+    "openToSeeHere": "Open a database to see it here",
+    "termsPrefix": "By clicking continue, you agree to our",
+    "termsOfService": "Terms of Service",
+    "and": "and",
+    "privacyPolicy": "Privacy Policy",
+    "openMenu": {
+      "offline": "Offline",
+      "localFile": "Local file",
+      "online": "Online"
+    },
+    "moreMenu": {
+      "demo": "Demo",
+      "generatePassword": "Generate Password",
+      "settings": "Settings"
+    }
+  },
+  "unlock": {
+    "title": "Unlock Database",
+    "titleWithName": "Unlock {{filename}}",
+    "passwordPlaceholder": "enter password here...",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "addKeyFile": "add key file",
+    "unlock": "Unlock",
+    "unlocking": "Unlocking",
+    "selectDatabase": "Select a database file...",
+    "removeKeyfile": "Remove keyfile",
+    "rememberKeyfile": "Remember keyfile for this database",
+    "errorTitle": "Error unlocking database",
+    "errors": {
+      "invalidPassword": "The password you entered is incorrect. Please try again.",
+      "keyfileNotFound": "The keyfile could not be found at the specified location.",
+      "invalidKeyfileFormat": "The selected keyfile has an invalid format.",
+      "noCredentials": "Please enter a password or select a keyfile.",
+      "databaseLocked": "This database is currently open in another application. Close it first or force unlock.",
+      "notValidKdbx": "The selected file is not a valid KeePass database.",
+      "unsupportedVersion": "This database uses an unsupported KeePass format version.",
+      "ioError": "The database file could not be found or read.",
+      "generic": "Failed to unlock database. Please check your credentials and try again."
+    },
+    "recentListWarning": "Failed to update recent database list",
+    "selectKeyFile": "Select Key File"
+  },
+  "databaseSwitcher": {
+    "newDatabase": "New Database",
+    "recentDatabases": "Recent Databases",
+    "noOtherDatabases": "No other databases",
+    "openAnother": "Open another database",
+    "openDatabase": "Open Database",
+    "settings": "Settings",
+    "lockDatabase": "Lock Database"
+  },
+  "createDatabase": {
+    "title": "Create New Database",
+    "description": "Set up a new password database to store your credentials securely.",
+    "stepProgress": "Step {{current}} of {{total}} - {{title}}",
+    "steps": {
+      "location": "Location",
+      "info": "Database Info",
+      "password": "Master Password",
+      "keyfile": "Key File",
+      "review": "Review"
+    },
+    "location": {
+      "label": "Database File Location",
+      "description": "Choose where to save your new password database. The file will be created with a .kdbx extension.",
+      "clickToSelect": "Click to select location...",
+      "typePath": "Or type the full path here...",
+      "browse": "Browse...",
+      "dialogTitle": "Choose Database Location"
+    },
+    "info": {
+      "nameLabel": "Database Name",
+      "nameDescription": "A name to identify your database. This will be displayed in the app.",
+      "namePlaceholder": "e.g., Personal, Work, Family...",
+      "descriptionLabel": "Description",
+      "descriptionOptional": "(optional)",
+      "descriptionDescription": "Add a description to help you remember the purpose of this database.",
+      "descriptionPlaceholder": "e.g., Contains all my personal accounts..."
+    },
+    "password": {
+      "label": "Master Password",
+      "description": "Choose a strong password that you can remember. This password encrypts your entire database.",
+      "placeholder": "Enter your master password...",
+      "confirmLabel": "Confirm Password",
+      "confirmDescription": "Re-enter your password to confirm it.",
+      "confirmPlaceholder": "Confirm your master password...",
+      "securityNoticeTitle": "Important Security Notice",
+      "securityNoticeDescription": "Your master password cannot be recovered if forgotten. Store it safely or use a memorable passphrase.",
+      "mismatch": "Passwords do not match."
+    },
+    "keyfile": {
+      "label": "Key File (Optional)",
+      "description": "A key file provides additional security. You can use it alone or with a password for two-factor authentication.",
+      "noKeyFile": "No Key File",
+      "noKeyFileDescription": "Use password only for authentication",
+      "selectExisting": "Select Existing Key File",
+      "selectExistingDescription": "Use a key file you already have",
+      "generateNew": "Generate New Key File",
+      "generateNewDescription": "Create a new random key file",
+      "willGenerate": "Will be generated when creating database",
+      "existingKeyFile": "Existing key file",
+      "removeKeyfile": "Remove keyfile",
+      "securityTitle": "Key File Security",
+      "securityDescription": "Store your key file separately from your database. If you lose the key file and forget your password, you will not be able to access your data.",
+      "selectDialogTitle": "Select Key File",
+      "saveDialogTitle": "Save Key File As"
+    },
+    "review": {
+      "location": "Location",
+      "databaseName": "Database Name",
+      "noName": "No database name provided",
+      "description": "Description",
+      "masterPassword": "Master Password",
+      "passwordSet": "Password set",
+      "noPassword": "No password",
+      "keyFile": "Key File",
+      "willGenerate": "Will generate: ",
+      "noKeyFile": "No key file",
+      "additionalOptions": "Additional Options",
+      "configureDescription": "Configure how your database is created",
+      "createDefaultGroups": "Create default groups (General, Email, Banking, Social, Work)",
+      "securitySummary": "Security Summary:",
+      "encryptedWith": "Your database will be encrypted using",
+      "twoFactor": "both a password and key file (two-factor)",
+      "passwordOnly": "your master password",
+      "keyFileOnly": "your key file only",
+      "noCredentials": "no credentials (please go back and set a password or key file)"
+    },
+    "creating": "Creating...",
+    "createDatabase": "Create Database",
+    "errorTitle": "Error creating database",
+    "cancelConfirm": "Are you sure you want to cancel? Any entered information will be lost.",
+    "cancelTitle": "Cancel Database Creation",
+    "toast": {
+      "created": "Database created successfully!"
+    },
+    "errors": {
+      "fileExists": "A file already exists at this location. Please choose a different path.",
+      "permissionDenied": "Permission denied. Please check that you have write access to this location.",
+      "noCredentials": "Please set a master password or select a key file.",
+      "directoryNotFound": "The selected directory does not exist. Please choose a valid location.",
+      "ioError": "Could not write to the specified location. Please check the path and try again.",
+      "generic": "Failed to create database. Please try again."
+    }
+  },
+  "passwordGenerator": {
+    "title": "Password Generator",
+    "generating": "Generating...",
+    "regenerate": "Regenerate password",
+    "copyPassword": "Copy password",
+    "passwordCopied": "Password copied",
+    "length": "Length",
+    "uppercase": "A-Z",
+    "lowercase": "a-z",
+    "numbers": "0-9",
+    "symbols": "!@#$",
+    "excludeAmbiguous": "Exclude ambiguous (0O, 1lI)",
+    "usePassword": "Use Password",
+    "passwordGeneratorButton": "password generator"
+  },
+  "iconPicker": {
+    "chooseIcon": "Choose an icon"
+  },
+  "errors": {
+    "failedToLoadSettings": "Failed to load settings: {{error}}",
+    "settingsUnavailable": "Settings are unavailable."
+  }
+}

@@ -1,0 +1,436 @@
+{
+  "common": {
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "create": "Crear",
+    "retry": "Reintentar",
+    "move": "Mover",
+    "rename": "Renombrar",
+    "loading": "Cargando...",
+    "name": "Nombre",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "edit": "Editar",
+    "copied": "Copiado",
+    "noDatabase": "Sin base de datos"
+  },
+  "settings": {
+    "title": "Configuración",
+    "description": "Preferencias de la aplicación y configuración de la base de datos.",
+    "resetDefaults": "Restablecer valores predeterminados",
+    "saveChanges": "Guardar cambios",
+    "resetDialog": {
+      "title": "¿Restablecer preferencias?",
+      "description": "Restablecer todas las preferencias de la aplicación a los valores predeterminados. Las bases de datos recientes se conservarán."
+    },
+    "resetPreferences": "Restablecer preferencias",
+    "toast": {
+      "updated": "Configuración actualizada",
+      "reset": "Preferencias restablecidas a los valores predeterminados"
+    },
+    "general": {
+      "title": "General",
+      "description": "Preferencias de inicio e idioma de la aplicación.",
+      "language": "Idioma",
+      "startupBehavior": "Comportamiento de inicio",
+      "startupOptions": {
+        "showUnlockScreen": "Mostrar pantalla de desbloqueo",
+        "openLastDatabase": "Abrir última base de datos",
+        "openDefaultDatabase": "Abrir base de datos predeterminada"
+      },
+      "defaultDatabasePath": "Ruta de base de datos predeterminada",
+      "defaultDatabasePathPlaceholder": "/ruta/a/predeterminada.kdbx",
+      "defaultDatabasePathNote": "TODO: el flujo de inicio aún no abre este archivo automáticamente."
+    },
+    "security": {
+      "title": "Seguridad",
+      "description": "Preferencias de portapapeles y comportamiento de bloqueo.",
+      "autoLockTimeout": "Tiempo de bloqueo automático (segundos)",
+      "autoLockNote": "TODO: los eventos de inactividad/bloqueo del SO aún no están implementados.",
+      "clipboardTimeout": "Tiempo de limpieza del portapapeles (segundos)",
+      "showPasswordByDefault": "Mostrar contraseñas por defecto",
+      "minimizeToTray": "Minimizar a la bandeja",
+      "startMinimized": "Iniciar minimizado"
+    },
+    "appearance": {
+      "title": "Apariencia",
+      "description": "Preferencias de tema y visualización.",
+      "theme": "Tema",
+      "fontSize": "Tamaño de fuente",
+      "entryListColumns": "Columnas de la lista de entradas",
+      "columns": {
+        "username": "Nombre de usuario",
+        "url": "URL",
+        "modifiedAt": "Fecha de modificación",
+        "tags": "Etiquetas"
+      },
+      "columnsNote": "TODO: los interruptores de columnas se almacenan pero aún no están conectados a la representación de la lista."
+    },
+    "browser": {
+      "title": "Integración del navegador",
+      "description": "Configuración de integración de extensiones y lista de sitios permitidos.",
+      "enableIntegration": "Habilitar integración del navegador",
+      "allowedSites": "Sitios permitidos (uno por línea)",
+      "allowedSitesNote": "TODO: la aplicación de navegador/mensajería nativa aún no está implementada."
+    },
+    "advanced": {
+      "title": "Avanzado",
+      "description": "Diagnósticos e información de datos locales.",
+      "enableDebugMode": "Habilitar modo de depuración",
+      "dataLocation": "Ubicación de datos"
+    },
+    "database": {
+      "title": "Configuración de la base de datos",
+      "description": "Configuración criptográfica actual de la base de datos (solo lectura).",
+      "openPrompt": "Abra una base de datos para inspeccionar su configuración.",
+      "loadingSettings": "Cargando configuración de la base de datos...",
+      "loadError": "Error al cargar la configuración de la base de datos: {{error}}",
+      "noConfig": "No hay configuración de base de datos disponible.",
+      "version": "Versión",
+      "outerCipher": "Cifrado externo",
+      "innerCipher": "Cifrado interno",
+      "compression": "Compresión",
+      "kdf": "KDF",
+      "pendingTitle": "Implementación pendiente",
+      "pendingItems": {
+        "mutations": "Los controles de mutación a nivel de base de datos aún no están implementados.",
+        "recycleBin": "La edición de papelera de reciclaje/historial/políticas de seguridad está pendiente."
+      }
+    },
+    "sidebar": {
+      "preferences": "Preferencias",
+      "sections": "Secciones"
+    }
+  },
+  "sidebar": {
+    "allEntries": "Todas las entradas",
+    "expired": "Expiradas",
+    "security": "Seguridad",
+    "settings": "Configuración",
+    "help": "Ayuda",
+    "groups": "Grupos"
+  },
+  "entries": {
+    "openDatabase": "Abra una base de datos para ver las entradas.",
+    "loading": "Cargando entradas...",
+    "loadError": "Error al cargar las entradas: {{error}}",
+    "noEntries": "No se encontraron entradas.",
+    "noEntriesWithTag": "No hay entradas con la etiqueta \"{{tag}}\".",
+    "newEntry": "nueva entrada",
+    "editEntry": "editar entrada",
+    "deleteEntry": "eliminar entrada",
+    "noEntrySelected": "Ninguna entrada seleccionada",
+    "noEntrySelectedDescription": "Seleccione una entrada de la lista para ver sus detalles.",
+    "deleted": "Entrada eliminada.",
+    "deleteFailed": "Error al eliminar la entrada: {{error}}",
+    "deleteConfirm": "¿Está seguro de que desea eliminar esta entrada? Esta acción no se puede deshacer.",
+    "deleteTitle": "Eliminar entrada",
+    "shareEntry": "compartir entrada",
+    "moreOptions": "más opciones",
+    "form": {
+      "title": "Título",
+      "titlePlaceholder": "Título de la entrada",
+      "chooseIcon": "Elegir icono",
+      "username": "Nombre de usuario",
+      "usernamePlaceholder": "Nombre de usuario o correo electrónico",
+      "password": "Contraseña",
+      "passwordPlaceholder": "Introducir contraseña...",
+      "showPassword": "Mostrar contraseña",
+      "hidePassword": "Ocultar contraseña",
+      "generatePassword": "Generar contraseña",
+      "url": "URL",
+      "urlPlaceholder": "https://ejemplo.com",
+      "notes": "Notas",
+      "notesPlaceholder": "Notas adicionales...",
+      "tags": "Etiquetas",
+      "group": "Grupo",
+      "selectGroup": "Seleccionar un grupo",
+      "saveChanges": "Guardar cambios",
+      "createEntry": "Crear entrada",
+      "saveAndNew": "Guardar y nuevo",
+      "protectedValuesError": "No se pudieron cargar los valores protegidos.",
+      "customFields": "Campos personalizados",
+      "addField": "Agregar campo",
+      "noCustomFields": "Sin campos personalizados.",
+      "fieldNamePlaceholder": "Nombre del campo",
+      "removeField": "Eliminar campo personalizado"
+    },
+    "toast": {
+      "created": "Entrada creada",
+      "updated": "Entrada actualizada",
+      "createFailed": "Error al crear la entrada: {{error}}",
+      "updateFailed": "Error al actualizar la entrada: {{error}}",
+      "secretLoadFailed": "No se pudieron cargar los valores protegidos de esta entrada.",
+      "secretRetryRequired": "Reintente cargar los valores protegidos antes de guardar."
+    },
+    "unsavedChanges": {
+      "message": "Tiene cambios sin guardar. ¿Está seguro de que desea descartarlos?",
+      "title": "Cambios sin guardar",
+      "discardAndOpen": "Tiene cambios sin guardar. ¿Desea descartarlos y abrir otra entrada?"
+    },
+    "detail": {
+      "userName": "Nombre de usuario",
+      "password": "Contraseña",
+      "url": "URL",
+      "tags": "Etiquetas",
+      "created": "Creado",
+      "modified": "Modificado",
+      "revealPassword": "revelar contraseña",
+      "hidePassword": "ocultar contraseña",
+      "autoType": "auto-escritura",
+      "openUrl": "abrir URL",
+      "revealField": "revelar {{field}}",
+      "hideField": "ocultar {{field}}"
+    },
+    "sort": {
+      "sortBy": "Ordenar por",
+      "sortEntries": "Ordenar entradas",
+      "order": "Orden",
+      "title": "Título",
+      "username": "Nombre de usuario",
+      "url": "URL",
+      "modified": "Modificado",
+      "created": "Creado",
+      "oldestFirst": "Más antiguo primero",
+      "newestFirst": "Más reciente primero",
+      "aToZ": "A \u2192 Z",
+      "zToA": "Z \u2192 A"
+    },
+    "search": {
+      "searchResults": "Resultados de búsqueda",
+      "searchInTag": "Buscar en #{{tag}}",
+      "searchInGroup": "Buscar en {{group}}",
+      "noResults": "Ninguna entrada coincide con su búsqueda.",
+      "match_one": "{{count}} coincidencia",
+      "match_other": "{{count}} coincidencias",
+      "placeholder": "Buscar entradas... (Ctrl+K)",
+      "label": "Buscar",
+      "clearSearch": "Borrar búsqueda"
+    },
+    "count_one": "{{count}} Elemento",
+    "count_other": "{{count}} Elementos"
+  },
+  "groups": {
+    "createTitle": "Crear nuevo grupo",
+    "createDescription": "Crear un nuevo subgrupo dentro de \"{{parentName}}\".",
+    "creating": "Creando...",
+    "editTitle": "Editar grupo",
+    "editDescription": "Cambiar el nombre o icono de \"{{groupName}}\".",
+    "saving": "Guardando...",
+    "deleteTitle": "Eliminar grupo",
+    "deleteDescription": "¿Está seguro de que desea eliminar \"{{groupName}}\"?",
+    "deleteEntryCount_one": "Este grupo contiene <strong>{{count}} entrada</strong>.",
+    "deleteEntryCount_other": "Este grupo contiene <strong>{{count}} entradas</strong>.",
+    "deleteRecycleBin": "Esto moverá el grupo y todo su contenido a la papelera de reciclaje.",
+    "deleting": "Eliminando...",
+    "moveTitle": "Mover grupo",
+    "moveDescription": "Seleccione un nuevo grupo padre para \"{{groupName}}\".",
+    "destination": "Destino",
+    "selectGroup": "Seleccionar un grupo",
+    "moving": "Moviendo...",
+    "enterGroupName": "Introducir nombre del grupo",
+    "noGroups": "No se encontraron grupos",
+    "actions": "Acciones del grupo",
+    "newSubgroup": "Nuevo subgrupo",
+    "moveTo": "Mover a...",
+    "collapse": "Contraer",
+    "expand": "Expandir",
+    "toast": {
+      "created": "Grupo \"{{name}}\" creado",
+      "createdIconFailed": "Grupo \"{{name}}\" creado, pero no se pudo establecer el icono: {{error}}",
+      "createFailed": "Error al crear el grupo: {{error}}",
+      "updated": "Grupo actualizado",
+      "updateFailed": "Error al actualizar el grupo: {{error}}",
+      "deleted": "Grupo \"{{name}}\" movido a la papelera",
+      "deleteFailed": "Error al eliminar el grupo: {{error}}",
+      "moved": "Grupo \"{{name}}\" movido",
+      "moveFailed": "Error al mover el grupo: {{error}}"
+    }
+  },
+  "tags": {
+    "deleteTitle": "Eliminar etiqueta",
+    "deleteDescription": "¿Está seguro de que desea eliminar \"{{tag}}\" de todas las entradas? Esto no se puede deshacer.",
+    "deleting": "Eliminando...",
+    "renameTitle": "Renombrar etiqueta",
+    "renameDescription": "Esto renombrará \"{{tag}}\" en todas las entradas.",
+    "newTagPlaceholder": "Nuevo nombre de etiqueta",
+    "renaming": "Renombrando..."
+  },
+  "welcome": {
+    "title": "Bienvenido, amigo",
+    "description": "Cree o abra una base de datos para continuar.",
+    "open": "Abrir",
+    "new": "Nuevo",
+    "more": "Más",
+    "recentDatabases": "Bases de datos recientes",
+    "noRecentDatabases": "No hay bases de datos recientes",
+    "openToSeeHere": "Abra una base de datos para verla aquí",
+    "termsPrefix": "Al hacer clic en continuar, acepta nuestros",
+    "termsOfService": "Términos de servicio",
+    "and": "y",
+    "privacyPolicy": "Política de privacidad",
+    "openMenu": {
+      "offline": "Sin conexión",
+      "localFile": "Archivo local",
+      "online": "En línea"
+    },
+    "moreMenu": {
+      "demo": "Demo",
+      "generatePassword": "Generar contraseña",
+      "settings": "Configuración"
+    }
+  },
+  "unlock": {
+    "title": "Desbloquear base de datos",
+    "titleWithName": "Desbloquear {{filename}}",
+    "passwordPlaceholder": "introduzca la contraseña aquí...",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
+    "addKeyFile": "añadir archivo de clave",
+    "unlock": "Desbloquear",
+    "unlocking": "Desbloqueando",
+    "selectDatabase": "Seleccionar un archivo de base de datos...",
+    "removeKeyfile": "Eliminar archivo de clave",
+    "rememberKeyfile": "Recordar archivo de clave para esta base de datos",
+    "errorTitle": "Error al desbloquear la base de datos",
+    "errors": {
+      "invalidPassword": "La contraseña introducida es incorrecta. Inténtelo de nuevo.",
+      "keyfileNotFound": "No se pudo encontrar el archivo de clave en la ubicación especificada.",
+      "invalidKeyfileFormat": "El archivo de clave seleccionado tiene un formato no válido.",
+      "noCredentials": "Introduzca una contraseña o seleccione un archivo de clave.",
+      "databaseLocked": "Esta base de datos está abierta en otra aplicación. Ciérrela primero o fuerce el desbloqueo.",
+      "notValidKdbx": "El archivo seleccionado no es una base de datos KeePass válida.",
+      "unsupportedVersion": "Esta base de datos usa una versión de formato KeePass no compatible.",
+      "ioError": "No se pudo encontrar o leer el archivo de base de datos.",
+      "generic": "No se pudo desbloquear la base de datos. Verifique sus credenciales e inténtelo de nuevo."
+    },
+    "recentListWarning": "No se pudo actualizar la lista de bases de datos recientes",
+    "selectKeyFile": "Seleccionar archivo de clave"
+  },
+  "databaseSwitcher": {
+    "newDatabase": "Nueva base de datos",
+    "recentDatabases": "Bases de datos recientes",
+    "noOtherDatabases": "No hay otras bases de datos",
+    "openAnother": "Abrir otra base de datos",
+    "openDatabase": "Abrir base de datos",
+    "settings": "Configuración",
+    "lockDatabase": "Bloquear base de datos"
+  },
+  "createDatabase": {
+    "title": "Crear nueva base de datos",
+    "description": "Configure una nueva base de datos de contraseñas para almacenar sus credenciales de forma segura.",
+    "stepProgress": "Paso {{current}} de {{total}} - {{title}}",
+    "steps": {
+      "location": "Ubicación",
+      "info": "Info de la base de datos",
+      "password": "Contraseña maestra",
+      "keyfile": "Archivo de clave",
+      "review": "Revisión"
+    },
+    "location": {
+      "label": "Ubicación del archivo de base de datos",
+      "description": "Elija dónde guardar su nueva base de datos de contraseñas. El archivo se creará con extensión .kdbx.",
+      "clickToSelect": "Haga clic para seleccionar ubicación...",
+      "typePath": "O escriba la ruta completa aquí...",
+      "browse": "Examinar...",
+      "dialogTitle": "Elegir ubicación de la base de datos"
+    },
+    "info": {
+      "nameLabel": "Nombre de la base de datos",
+      "nameDescription": "Un nombre para identificar su base de datos. Se mostrará en la aplicación.",
+      "namePlaceholder": "ej., Personal, Trabajo, Familia...",
+      "descriptionLabel": "Descripción",
+      "descriptionOptional": "(opcional)",
+      "descriptionDescription": "Agregue una descripción para recordar el propósito de esta base de datos.",
+      "descriptionPlaceholder": "ej., Contiene todas mis cuentas personales..."
+    },
+    "password": {
+      "label": "Contraseña maestra",
+      "description": "Elija una contraseña fuerte que pueda recordar. Esta contraseña cifra toda su base de datos.",
+      "placeholder": "Introduzca su contraseña maestra...",
+      "confirmLabel": "Confirmar contraseña",
+      "confirmDescription": "Vuelva a introducir su contraseña para confirmarla.",
+      "confirmPlaceholder": "Confirme su contraseña maestra...",
+      "securityNoticeTitle": "Aviso de seguridad importante",
+      "securityNoticeDescription": "Su contraseña maestra no se puede recuperar si la olvida. Guárdela de forma segura o use una frase de contraseña memorable.",
+      "mismatch": "Las contraseñas no coinciden."
+    },
+    "keyfile": {
+      "label": "Archivo de clave (Opcional)",
+      "description": "Un archivo de clave proporciona seguridad adicional. Puede usarlo solo o con una contraseña para autenticación de dos factores.",
+      "noKeyFile": "Sin archivo de clave",
+      "noKeyFileDescription": "Usar solo contraseña para autenticación",
+      "selectExisting": "Seleccionar archivo de clave existente",
+      "selectExistingDescription": "Usar un archivo de clave que ya tiene",
+      "generateNew": "Generar nuevo archivo de clave",
+      "generateNewDescription": "Crear un nuevo archivo de clave aleatorio",
+      "willGenerate": "Se generará al crear la base de datos",
+      "existingKeyFile": "Archivo de clave existente",
+      "removeKeyfile": "Eliminar archivo de clave",
+      "securityTitle": "Seguridad del archivo de clave",
+      "securityDescription": "Guarde su archivo de clave separado de su base de datos. Si pierde el archivo de clave y olvida su contraseña, no podrá acceder a sus datos.",
+      "selectDialogTitle": "Seleccionar archivo de clave",
+      "saveDialogTitle": "Guardar archivo de clave como"
+    },
+    "review": {
+      "location": "Ubicación",
+      "databaseName": "Nombre de la base de datos",
+      "noName": "Sin nombre de base de datos",
+      "description": "Descripción",
+      "masterPassword": "Contraseña maestra",
+      "passwordSet": "Contraseña establecida",
+      "noPassword": "Sin contraseña",
+      "keyFile": "Archivo de clave",
+      "willGenerate": "Generará: ",
+      "noKeyFile": "Sin archivo de clave",
+      "additionalOptions": "Opciones adicionales",
+      "configureDescription": "Configure cómo se crea su base de datos",
+      "createDefaultGroups": "Crear grupos predeterminados (General, Email, Banca, Social, Trabajo)",
+      "securitySummary": "Resumen de seguridad:",
+      "encryptedWith": "Su base de datos se cifrará usando",
+      "twoFactor": "contraseña y archivo de clave (dos factores)",
+      "passwordOnly": "su contraseña maestra",
+      "keyFileOnly": "solo su archivo de clave",
+      "noCredentials": "sin credenciales (vuelva atrás y establezca una contraseña o archivo de clave)"
+    },
+    "creating": "Creando...",
+    "createDatabase": "Crear base de datos",
+    "errorTitle": "Error al crear la base de datos",
+    "cancelConfirm": "¿Está seguro de que desea cancelar? Toda la información ingresada se perderá.",
+    "cancelTitle": "Cancelar creación de base de datos",
+    "toast": {
+      "created": "¡Base de datos creada exitosamente!"
+    },
+    "errors": {
+      "fileExists": "Ya existe un archivo en esta ubicación. Elija una ruta diferente.",
+      "permissionDenied": "Permiso denegado. Verifique que tiene acceso de escritura a esta ubicación.",
+      "noCredentials": "Establezca una contraseña maestra o seleccione un archivo de clave.",
+      "directoryNotFound": "El directorio seleccionado no existe. Elija una ubicación válida.",
+      "ioError": "No se pudo escribir en la ubicación especificada. Verifique la ruta e inténtelo de nuevo.",
+      "generic": "Error al crear la base de datos. Inténtelo de nuevo."
+    }
+  },
+  "passwordGenerator": {
+    "title": "Generador de contraseñas",
+    "generating": "Generando...",
+    "regenerate": "Regenerar contraseña",
+    "copyPassword": "Copiar contraseña",
+    "passwordCopied": "Contraseña copiada",
+    "length": "Longitud",
+    "uppercase": "A-Z",
+    "lowercase": "a-z",
+    "numbers": "0-9",
+    "symbols": "!@#$",
+    "excludeAmbiguous": "Excluir ambiguos (0O, 1lI)",
+    "usePassword": "Usar contraseña",
+    "passwordGeneratorButton": "generador de contraseñas"
+  },
+  "iconPicker": {
+    "chooseIcon": "Elegir un icono"
+  },
+  "errors": {
+    "failedToLoadSettings": "Error al cargar la configuración: {{error}}",
+    "settingsUnavailable": "La configuración no está disponible."
+  }
+}

@@ -1,0 +1,436 @@
+{
+  "common": {
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "create": "Créer",
+    "retry": "Réessayer",
+    "move": "Déplacer",
+    "rename": "Renommer",
+    "loading": "Chargement...",
+    "name": "Nom",
+    "back": "Retour",
+    "next": "Suivant",
+    "edit": "Modifier",
+    "copied": "Copié",
+    "noDatabase": "Aucune base de données"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "description": "Préférences de l'application et configuration de la base de données.",
+    "resetDefaults": "Réinitialiser les valeurs par défaut",
+    "saveChanges": "Enregistrer les modifications",
+    "resetDialog": {
+      "title": "Réinitialiser les préférences ?",
+      "description": "Réinitialiser toutes les préférences de l'application aux valeurs par défaut. Les bases de données récentes seront conservées."
+    },
+    "resetPreferences": "Réinitialiser les préférences",
+    "toast": {
+      "updated": "Paramètres mis à jour",
+      "reset": "Préférences réinitialisées aux valeurs par défaut"
+    },
+    "general": {
+      "title": "Général",
+      "description": "Préférences de démarrage et de langue de l'application.",
+      "language": "Langue",
+      "startupBehavior": "Comportement au démarrage",
+      "startupOptions": {
+        "showUnlockScreen": "Afficher l'écran de déverrouillage",
+        "openLastDatabase": "Ouvrir la dernière base de données",
+        "openDefaultDatabase": "Ouvrir la base de données par défaut"
+      },
+      "defaultDatabasePath": "Chemin de la base de données par défaut",
+      "defaultDatabasePathPlaceholder": "/chemin/vers/defaut.kdbx",
+      "defaultDatabasePathNote": "TODO : le flux de démarrage n'ouvre pas encore ce fichier automatiquement."
+    },
+    "security": {
+      "title": "Sécurité",
+      "description": "Préférences du presse-papiers et du verrouillage.",
+      "autoLockTimeout": "Délai de verrouillage automatique (secondes)",
+      "autoLockNote": "TODO : les événements d'inactivité/verrouillage du système ne sont pas encore implémentés.",
+      "clipboardTimeout": "Délai d'effacement du presse-papiers (secondes)",
+      "showPasswordByDefault": "Afficher les mots de passe par défaut",
+      "minimizeToTray": "Réduire dans la barre des tâches",
+      "startMinimized": "Démarrer réduit"
+    },
+    "appearance": {
+      "title": "Apparence",
+      "description": "Préférences de thème et d'affichage.",
+      "theme": "Thème",
+      "fontSize": "Taille de police",
+      "entryListColumns": "Colonnes de la liste d'entrées",
+      "columns": {
+        "username": "Nom d'utilisateur",
+        "url": "URL",
+        "modifiedAt": "Date de modification",
+        "tags": "Étiquettes"
+      },
+      "columnsNote": "TODO : les bascules de colonnes sont stockées mais pas encore connectées au rendu de la liste."
+    },
+    "browser": {
+      "title": "Intégration du navigateur",
+      "description": "Paramètres d'intégration des extensions et liste des sites autorisés.",
+      "enableIntegration": "Activer l'intégration du navigateur",
+      "allowedSites": "Sites autorisés (un par ligne)",
+      "allowedSitesNote": "TODO : l'application navigateur/messagerie native n'est pas encore implémentée."
+    },
+    "advanced": {
+      "title": "Avancé",
+      "description": "Diagnostics et informations sur les données locales.",
+      "enableDebugMode": "Activer le mode débogage",
+      "dataLocation": "Emplacement des données"
+    },
+    "database": {
+      "title": "Paramètres de la base de données",
+      "description": "Configuration cryptographique actuelle de la base de données (lecture seule).",
+      "openPrompt": "Ouvrez une base de données pour inspecter sa configuration.",
+      "loadingSettings": "Chargement des paramètres de la base de données...",
+      "loadError": "Échec du chargement des paramètres de la base de données : {{error}}",
+      "noConfig": "Aucune configuration de base de données disponible.",
+      "version": "Version",
+      "outerCipher": "Chiffrement externe",
+      "innerCipher": "Chiffrement interne",
+      "compression": "Compression",
+      "kdf": "KDF",
+      "pendingTitle": "Implémentation en attente",
+      "pendingItems": {
+        "mutations": "Les contrôles de mutation au niveau de la base de données ne sont pas encore implémentés.",
+        "recycleBin": "L'édition de la corbeille/historique/politique de sécurité est à faire."
+      }
+    },
+    "sidebar": {
+      "preferences": "Préférences",
+      "sections": "Sections"
+    }
+  },
+  "sidebar": {
+    "allEntries": "Toutes les entrées",
+    "expired": "Expirées",
+    "security": "Sécurité",
+    "settings": "Paramètres",
+    "help": "Aide",
+    "groups": "Groupes"
+  },
+  "entries": {
+    "openDatabase": "Ouvrez une base de données pour afficher les entrées.",
+    "loading": "Chargement des entrées...",
+    "loadError": "Échec du chargement des entrées : {{error}}",
+    "noEntries": "Aucune entrée trouvée.",
+    "noEntriesWithTag": "Aucune entrée avec l'étiquette « {{tag}} ».",
+    "newEntry": "nouvelle entrée",
+    "editEntry": "modifier l'entrée",
+    "deleteEntry": "supprimer l'entrée",
+    "noEntrySelected": "Aucune entrée sélectionnée",
+    "noEntrySelectedDescription": "Sélectionnez une entrée dans la liste pour voir ses détails.",
+    "deleted": "Entrée supprimée.",
+    "deleteFailed": "Échec de la suppression de l'entrée : {{error}}",
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer cette entrée ? Cette action est irréversible.",
+    "deleteTitle": "Supprimer l'entrée",
+    "shareEntry": "partager l'entrée",
+    "moreOptions": "plus d'options",
+    "form": {
+      "title": "Titre",
+      "titlePlaceholder": "Titre de l'entrée",
+      "chooseIcon": "Choisir une icône",
+      "username": "Nom d'utilisateur",
+      "usernamePlaceholder": "Nom d'utilisateur ou e-mail",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Saisir le mot de passe...",
+      "showPassword": "Afficher le mot de passe",
+      "hidePassword": "Masquer le mot de passe",
+      "generatePassword": "Générer un mot de passe",
+      "url": "URL",
+      "urlPlaceholder": "https://exemple.com",
+      "notes": "Notes",
+      "notesPlaceholder": "Notes supplémentaires...",
+      "tags": "Étiquettes",
+      "group": "Groupe",
+      "selectGroup": "Sélectionner un groupe",
+      "saveChanges": "Enregistrer les modifications",
+      "createEntry": "Créer une entrée",
+      "saveAndNew": "Enregistrer et nouveau",
+      "protectedValuesError": "Les valeurs protégées n'ont pas pu être chargées.",
+      "customFields": "Champs personnalisés",
+      "addField": "Ajouter un champ",
+      "noCustomFields": "Aucun champ personnalisé.",
+      "fieldNamePlaceholder": "Nom du champ",
+      "removeField": "Supprimer le champ personnalisé"
+    },
+    "toast": {
+      "created": "Entrée créée",
+      "updated": "Entrée mise à jour",
+      "createFailed": "Échec de la création de l'entrée : {{error}}",
+      "updateFailed": "Échec de la mise à jour de l'entrée : {{error}}",
+      "secretLoadFailed": "Échec du chargement des valeurs protégées pour cette entrée.",
+      "secretRetryRequired": "Réessayez de charger les valeurs protégées avant d'enregistrer."
+    },
+    "unsavedChanges": {
+      "message": "Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir les abandonner ?",
+      "title": "Modifications non enregistrées",
+      "discardAndOpen": "Vous avez des modifications non enregistrées. Voulez-vous les abandonner et ouvrir une autre entrée ?"
+    },
+    "detail": {
+      "userName": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "url": "URL",
+      "tags": "Étiquettes",
+      "created": "Créé",
+      "modified": "Modifié",
+      "revealPassword": "révéler le mot de passe",
+      "hidePassword": "masquer le mot de passe",
+      "autoType": "saisie automatique",
+      "openUrl": "ouvrir l'URL",
+      "revealField": "révéler {{field}}",
+      "hideField": "masquer {{field}}"
+    },
+    "sort": {
+      "sortBy": "Trier par",
+      "sortEntries": "Trier les entrées",
+      "order": "Ordre",
+      "title": "Titre",
+      "username": "Nom d'utilisateur",
+      "url": "URL",
+      "modified": "Modifié",
+      "created": "Créé",
+      "oldestFirst": "Plus ancien d'abord",
+      "newestFirst": "Plus récent d'abord",
+      "aToZ": "A \u2192 Z",
+      "zToA": "Z \u2192 A"
+    },
+    "search": {
+      "searchResults": "Résultats de recherche",
+      "searchInTag": "Rechercher dans #{{tag}}",
+      "searchInGroup": "Rechercher dans {{group}}",
+      "noResults": "Aucune entrée ne correspond à votre recherche.",
+      "match_one": "{{count}} correspondance",
+      "match_other": "{{count}} correspondances",
+      "placeholder": "Rechercher des entrées... (Ctrl+K)",
+      "label": "Rechercher",
+      "clearSearch": "Effacer la recherche"
+    },
+    "count_one": "{{count}} Élément",
+    "count_other": "{{count}} Éléments"
+  },
+  "groups": {
+    "createTitle": "Créer un nouveau groupe",
+    "createDescription": "Créer un nouveau sous-groupe dans « {{parentName}} ».",
+    "creating": "Création en cours...",
+    "editTitle": "Modifier le groupe",
+    "editDescription": "Modifier le nom ou l'icône de « {{groupName}} ».",
+    "saving": "Enregistrement...",
+    "deleteTitle": "Supprimer le groupe",
+    "deleteDescription": "Êtes-vous sûr de vouloir supprimer « {{groupName}} » ?",
+    "deleteEntryCount_one": "Ce groupe contient <strong>{{count}} entrée</strong>.",
+    "deleteEntryCount_other": "Ce groupe contient <strong>{{count}} entrées</strong>.",
+    "deleteRecycleBin": "Cela déplacera le groupe et tout son contenu dans la corbeille.",
+    "deleting": "Suppression...",
+    "moveTitle": "Déplacer le groupe",
+    "moveDescription": "Sélectionner un nouveau groupe parent pour « {{groupName}} ».",
+    "destination": "Destination",
+    "selectGroup": "Sélectionner un groupe",
+    "moving": "Déplacement...",
+    "enterGroupName": "Saisir le nom du groupe",
+    "noGroups": "Aucun groupe trouvé",
+    "actions": "Actions du groupe",
+    "newSubgroup": "Nouveau sous-groupe",
+    "moveTo": "Déplacer vers...",
+    "collapse": "Réduire",
+    "expand": "Développer",
+    "toast": {
+      "created": "Groupe « {{name}} » créé",
+      "createdIconFailed": "Groupe « {{name}} » créé, mais l'icône n'a pas pu être définie : {{error}}",
+      "createFailed": "Échec de la création du groupe : {{error}}",
+      "updated": "Groupe mis à jour",
+      "updateFailed": "Échec de la mise à jour du groupe : {{error}}",
+      "deleted": "Groupe « {{name}} » déplacé dans la corbeille",
+      "deleteFailed": "Échec de la suppression du groupe : {{error}}",
+      "moved": "Groupe « {{name}} » déplacé",
+      "moveFailed": "Échec du déplacement du groupe : {{error}}"
+    }
+  },
+  "tags": {
+    "deleteTitle": "Supprimer l'étiquette",
+    "deleteDescription": "Êtes-vous sûr de vouloir supprimer « {{tag}} » de toutes les entrées ? Cette action est irréversible.",
+    "deleting": "Suppression...",
+    "renameTitle": "Renommer l'étiquette",
+    "renameDescription": "Cela renommera « {{tag}} » dans toutes les entrées.",
+    "newTagPlaceholder": "Nouveau nom d'étiquette",
+    "renaming": "Renommage..."
+  },
+  "welcome": {
+    "title": "Bienvenue, ami",
+    "description": "Créez ou ouvrez une base de données pour continuer.",
+    "open": "Ouvrir",
+    "new": "Nouveau",
+    "more": "Plus",
+    "recentDatabases": "Bases de données récentes",
+    "noRecentDatabases": "Aucune base de données récente",
+    "openToSeeHere": "Ouvrez une base de données pour la voir ici",
+    "termsPrefix": "En cliquant sur continuer, vous acceptez nos",
+    "termsOfService": "Conditions d'utilisation",
+    "and": "et",
+    "privacyPolicy": "Politique de confidentialité",
+    "openMenu": {
+      "offline": "Hors ligne",
+      "localFile": "Fichier local",
+      "online": "En ligne"
+    },
+    "moreMenu": {
+      "demo": "Démo",
+      "generatePassword": "Générer un mot de passe",
+      "settings": "Paramètres"
+    }
+  },
+  "unlock": {
+    "title": "Déverrouiller la base de données",
+    "titleWithName": "Déverrouiller {{filename}}",
+    "passwordPlaceholder": "saisir le mot de passe ici...",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
+    "addKeyFile": "ajouter un fichier clé",
+    "unlock": "Déverrouiller",
+    "unlocking": "Déverrouillage",
+    "selectDatabase": "Sélectionner un fichier de base de données...",
+    "removeKeyfile": "Supprimer le fichier clé",
+    "rememberKeyfile": "Mémoriser le fichier clé pour cette base de données",
+    "errorTitle": "Erreur lors du déverrouillage de la base de données",
+    "errors": {
+      "invalidPassword": "Le mot de passe saisi est incorrect. Veuillez réessayer.",
+      "keyfileNotFound": "Le fichier clé n'a pas pu être trouvé à l'emplacement spécifié.",
+      "invalidKeyfileFormat": "Le fichier clé sélectionné a un format invalide.",
+      "noCredentials": "Veuillez saisir un mot de passe ou sélectionner un fichier clé.",
+      "databaseLocked": "Cette base de données est actuellement ouverte dans une autre application. Fermez-la d'abord ou forcez le déverrouillage.",
+      "notValidKdbx": "Le fichier sélectionné n'est pas une base de données KeePass valide.",
+      "unsupportedVersion": "Cette base de données utilise une version de format KeePass non prise en charge.",
+      "ioError": "Le fichier de base de données n'a pas pu être trouvé ou lu.",
+      "generic": "Échec du déverrouillage de la base de données. Veuillez vérifier vos identifiants et réessayer."
+    },
+    "recentListWarning": "Échec de la mise à jour de la liste des bases de données récentes",
+    "selectKeyFile": "Sélectionner le fichier clé"
+  },
+  "databaseSwitcher": {
+    "newDatabase": "Nouvelle base de données",
+    "recentDatabases": "Bases de données récentes",
+    "noOtherDatabases": "Aucune autre base de données",
+    "openAnother": "Ouvrir une autre base de données",
+    "openDatabase": "Ouvrir la base de données",
+    "settings": "Paramètres",
+    "lockDatabase": "Verrouiller la base de données"
+  },
+  "createDatabase": {
+    "title": "Créer une nouvelle base de données",
+    "description": "Configurez une nouvelle base de données de mots de passe pour stocker vos identifiants en toute sécurité.",
+    "stepProgress": "Étape {{current}} sur {{total}} - {{title}}",
+    "steps": {
+      "location": "Emplacement",
+      "info": "Info de la base de données",
+      "password": "Mot de passe maître",
+      "keyfile": "Fichier clé",
+      "review": "Vérification"
+    },
+    "location": {
+      "label": "Emplacement du fichier de base de données",
+      "description": "Choisissez où enregistrer votre nouvelle base de données de mots de passe. Le fichier sera créé avec l'extension .kdbx.",
+      "clickToSelect": "Cliquez pour sélectionner l'emplacement...",
+      "typePath": "Ou saisissez le chemin complet ici...",
+      "browse": "Parcourir...",
+      "dialogTitle": "Choisir l'emplacement de la base de données"
+    },
+    "info": {
+      "nameLabel": "Nom de la base de données",
+      "nameDescription": "Un nom pour identifier votre base de données. Il sera affiché dans l'application.",
+      "namePlaceholder": "ex., Personnel, Travail, Famille...",
+      "descriptionLabel": "Description",
+      "descriptionOptional": "(optionnel)",
+      "descriptionDescription": "Ajoutez une description pour vous rappeler l'objectif de cette base de données.",
+      "descriptionPlaceholder": "ex., Contient tous mes comptes personnels..."
+    },
+    "password": {
+      "label": "Mot de passe maître",
+      "description": "Choisissez un mot de passe fort dont vous vous souviendrez. Ce mot de passe chiffre l'intégralité de votre base de données.",
+      "placeholder": "Saisissez votre mot de passe maître...",
+      "confirmLabel": "Confirmer le mot de passe",
+      "confirmDescription": "Saisissez à nouveau votre mot de passe pour le confirmer.",
+      "confirmPlaceholder": "Confirmez votre mot de passe maître...",
+      "securityNoticeTitle": "Avis de sécurité important",
+      "securityNoticeDescription": "Votre mot de passe maître ne peut pas être récupéré en cas d'oubli. Conservez-le en lieu sûr ou utilisez une phrase de passe mémorable.",
+      "mismatch": "Les mots de passe ne correspondent pas."
+    },
+    "keyfile": {
+      "label": "Fichier clé (Optionnel)",
+      "description": "Un fichier clé offre une sécurité supplémentaire. Vous pouvez l'utiliser seul ou avec un mot de passe pour une authentification à deux facteurs.",
+      "noKeyFile": "Pas de fichier clé",
+      "noKeyFileDescription": "Utiliser uniquement le mot de passe pour l'authentification",
+      "selectExisting": "Sélectionner un fichier clé existant",
+      "selectExistingDescription": "Utiliser un fichier clé que vous possédez déjà",
+      "generateNew": "Générer un nouveau fichier clé",
+      "generateNewDescription": "Créer un nouveau fichier clé aléatoire",
+      "willGenerate": "Sera généré lors de la création de la base de données",
+      "existingKeyFile": "Fichier clé existant",
+      "removeKeyfile": "Supprimer le fichier clé",
+      "securityTitle": "Sécurité du fichier clé",
+      "securityDescription": "Conservez votre fichier clé séparément de votre base de données. Si vous perdez le fichier clé et oubliez votre mot de passe, vous ne pourrez plus accéder à vos données.",
+      "selectDialogTitle": "Sélectionner le fichier clé",
+      "saveDialogTitle": "Enregistrer le fichier clé sous"
+    },
+    "review": {
+      "location": "Emplacement",
+      "databaseName": "Nom de la base de données",
+      "noName": "Aucun nom de base de données fourni",
+      "description": "Description",
+      "masterPassword": "Mot de passe maître",
+      "passwordSet": "Mot de passe défini",
+      "noPassword": "Pas de mot de passe",
+      "keyFile": "Fichier clé",
+      "willGenerate": "Générera : ",
+      "noKeyFile": "Pas de fichier clé",
+      "additionalOptions": "Options supplémentaires",
+      "configureDescription": "Configurez la création de votre base de données",
+      "createDefaultGroups": "Créer les groupes par défaut (Général, E-mail, Banque, Social, Travail)",
+      "securitySummary": "Résumé de sécurité :",
+      "encryptedWith": "Votre base de données sera chiffrée avec",
+      "twoFactor": "un mot de passe et un fichier clé (deux facteurs)",
+      "passwordOnly": "votre mot de passe maître",
+      "keyFileOnly": "votre fichier clé uniquement",
+      "noCredentials": "aucune identification (veuillez revenir en arrière et définir un mot de passe ou un fichier clé)"
+    },
+    "creating": "Création en cours...",
+    "createDatabase": "Créer la base de données",
+    "errorTitle": "Erreur lors de la création de la base de données",
+    "cancelConfirm": "Êtes-vous sûr de vouloir annuler ? Toutes les informations saisies seront perdues.",
+    "cancelTitle": "Annuler la création de la base de données",
+    "toast": {
+      "created": "Base de données créée avec succès !"
+    },
+    "errors": {
+      "fileExists": "Un fichier existe déjà à cet emplacement. Veuillez choisir un chemin différent.",
+      "permissionDenied": "Permission refusée. Vérifiez que vous avez un accès en écriture à cet emplacement.",
+      "noCredentials": "Veuillez définir un mot de passe maître ou sélectionner un fichier clé.",
+      "directoryNotFound": "Le répertoire sélectionné n'existe pas. Veuillez choisir un emplacement valide.",
+      "ioError": "Impossible d'écrire à l'emplacement spécifié. Vérifiez le chemin et réessayez.",
+      "generic": "Échec de la création de la base de données. Veuillez réessayer."
+    }
+  },
+  "passwordGenerator": {
+    "title": "Générateur de mots de passe",
+    "generating": "Génération...",
+    "regenerate": "Régénérer le mot de passe",
+    "copyPassword": "Copier le mot de passe",
+    "passwordCopied": "Mot de passe copié",
+    "length": "Longueur",
+    "uppercase": "A-Z",
+    "lowercase": "a-z",
+    "numbers": "0-9",
+    "symbols": "!@#$",
+    "excludeAmbiguous": "Exclure les caractères ambigus (0O, 1lI)",
+    "usePassword": "Utiliser le mot de passe",
+    "passwordGeneratorButton": "générateur de mots de passe"
+  },
+  "iconPicker": {
+    "chooseIcon": "Choisir une icône"
+  },
+  "errors": {
+    "failedToLoadSettings": "Échec du chargement des paramètres : {{error}}",
+    "settingsUnavailable": "Les paramètres ne sont pas disponibles."
+  }
+}
