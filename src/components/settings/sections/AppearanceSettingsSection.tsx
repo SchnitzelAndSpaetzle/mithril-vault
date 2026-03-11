@@ -11,18 +11,22 @@ import {
   isThemePreference,
   THEME_OPTIONS,
 } from "@/components/settings/settings-utils";
+import { ThemePresetPicker } from "@/components/settings/ThemePresetPicker";
+import { type ColorPresetId, isColorPresetId } from "@/lib/theme-presets";
 import type { AppPreferences } from "@/lib/types";
 
 interface AppearanceSettingsSectionProps {
   draft: AppPreferences;
   updateDraft: (updater: (previous: AppPreferences) => AppPreferences) => void;
   onThemePreview: (theme: AppPreferences["appearance"]["theme"]) => void;
+  onColorPresetPreview: (preset: ColorPresetId) => void;
 }
 
 export function AppearanceSettingsSection({
   draft,
   updateDraft,
   onThemePreview,
+  onColorPresetPreview,
 }: Readonly<AppearanceSettingsSectionProps>) {
   const { t } = useTranslation();
 
@@ -87,6 +91,30 @@ export function AppearanceSettingsSection({
             }
           />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>{t("settings.appearance.colorPreset")}</Label>
+        <p className="text-xs text-muted-foreground">
+          {t("settings.appearance.colorPresetDescription")}
+        </p>
+        <ThemePresetPicker
+          value={
+            isColorPresetId(draft.appearance.colorPreset)
+              ? draft.appearance.colorPreset
+              : "default"
+          }
+          onChange={(preset) => {
+            updateDraft((previous) => ({
+              ...previous,
+              appearance: {
+                ...previous.appearance,
+                colorPreset: preset,
+              },
+            }));
+          }}
+          onPreview={onColorPresetPreview}
+        />
       </div>
 
       <div className="space-y-2">

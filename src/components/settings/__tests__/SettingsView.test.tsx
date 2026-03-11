@@ -51,6 +51,7 @@ function makePreferences(): AppPreferences {
     },
     appearance: {
       theme: "system",
+      colorPreset: "default",
       fontSize: 14,
       entryListColumns: {
         username: true,
@@ -78,6 +79,9 @@ describe("SettingsView", () => {
       theme: "system",
       setTheme: vi.fn(),
       setThemePreview: vi.fn(),
+      colorPreset: "default",
+      setColorPreset: vi.fn(),
+      setColorPresetPreview: vi.fn(),
     });
 
     mockUseActiveDatabase.mockReturnValue({
@@ -203,6 +207,9 @@ describe("SettingsView", () => {
       theme: "dark",
       setTheme,
       setThemePreview: vi.fn(),
+      colorPreset: "default",
+      setColorPreset: vi.fn(),
+      setColorPresetPreview: vi.fn(),
     });
     mockUseAppPreferences.mockReturnValue({
       preferences: makePreferences(),
@@ -351,6 +358,9 @@ describe("SettingsView", () => {
       theme: "system",
       setTheme,
       setThemePreview,
+      colorPreset: "default",
+      setColorPreset: vi.fn(),
+      setColorPresetPreview: vi.fn(),
     });
     mockUseAppPreferences.mockReturnValue({
       preferences: makePreferences(),
