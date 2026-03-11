@@ -1,7 +1,9 @@
 import {
+  useCallback,
   createContext,
   type ReactNode,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -118,24 +120,48 @@ export function ThemeProvider({
     previousVarsRef.current = newVarNames;
   }, [theme, colorPreset]);
 
-  const value: ThemeProviderState = {
-    theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme);
-      setThemeState(theme);
+  const setTheme = useCallback(
+    (nextTheme: Theme) => {
+      localStorage.setItem(storageKey, nextTheme);
+      setThemeState(nextTheme);
     },
-    setThemePreview: (theme: Theme) => {
-      setThemeState(theme);
-    },
-    colorPreset,
-    setColorPreset: (preset: ColorPresetId) => {
+    [storageKey]
+  );
+
+  const setThemePreview = useCallback((nextTheme: Theme) => {
+    setThemeState(nextTheme);
+  }, []);
+
+  const setColorPreset = useCallback(
+    (preset: ColorPresetId) => {
       localStorage.setItem(presetStorageKey, preset);
       setColorPresetState(preset);
     },
-    setColorPresetPreview: (preset: ColorPresetId) => {
-      setColorPresetState(preset);
-    },
-  };
+    [presetStorageKey]
+  );
+
+  const setColorPresetPreview = useCallback((preset: ColorPresetId) => {
+    setColorPresetState(preset);
+  }, []);
+
+  const value = useMemo<ThemeProviderState>(
+    () => ({
+      theme,
+      setTheme,
+      setThemePreview,
+      colorPreset,
+      setColorPreset,
+      setColorPresetPreview,
+    }),
+    [
+      theme,
+      setTheme,
+      setThemePreview,
+      colorPreset,
+      setColorPreset,
+      setColorPresetPreview,
+    ]
+  );
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>
