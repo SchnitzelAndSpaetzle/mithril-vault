@@ -69,12 +69,18 @@
       "colorPresetDescription": "Wählen Sie eine Farbpalette, die zu Ihrem Stil passt.",
       "presets": {
         "default": "Standard",
-        "catppuccin": "Catppuccin",
-        "nord": "Nord",
-        "dracula": "Dracula",
-        "rosePine": "Rose Pine",
-        "solarized": "Solarized",
-        "tokyoNight": "Tokyo Night"
+        "mithril": "Mithril",
+        "shire": "Das Auenland",
+        "mordor": "Mordor",
+        "rivendell": "Bruchtal",
+        "rohan": "Rohan",
+        "lothlorien": "Lothlórien",
+        "gondor": "Gondor",
+        "isengard": "Isengart",
+        "mirkwood": "Düsterwald",
+        "deadMarshes": "Totensümpfe",
+        "erebor": "Erebor",
+        "baradDur": "Barad-dûr"
       },
       "columnsNote": "TODO: Spaltenumschaltungen werden gespeichert, sind aber noch nicht in der Listendarstellung verdrahtet."
     },

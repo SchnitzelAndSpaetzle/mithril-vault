@@ -69,12 +69,18 @@
       "colorPresetDescription": "Izaberite paletu boja koja odgovara vašem stilu.",
       "presets": {
         "default": "Podrazumevano",
-        "catppuccin": "Catppuccin",
-        "nord": "Nord",
-        "dracula": "Dracula",
-        "rosePine": "Rose Pine",
-        "solarized": "Solarized",
-        "tokyoNight": "Tokyo Night"
+        "mithril": "Митрил",
+        "shire": "Шајр",
+        "mordor": "Мордор",
+        "rivendell": "Ривендел",
+        "rohan": "Рохан",
+        "lothlorien": "Лотлоријен",
+        "gondor": "Гондор",
+        "isengard": "Изенгард",
+        "mirkwood": "Мрачна шума",
+        "deadMarshes": "Мртве мочваре",
+        "erebor": "Еребор",
+        "baradDur": "Барад-дур"
       },
       "columnsNote": "TODO: prekidači kolona su sačuvani ali još nisu povezani sa prikazom liste."
     },

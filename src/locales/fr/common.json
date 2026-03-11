@@ -69,12 +69,18 @@
       "colorPresetDescription": "Choisissez une palette de couleurs qui correspond à votre style.",
       "presets": {
         "default": "Par défaut",
-        "catppuccin": "Catppuccin",
-        "nord": "Nord",
-        "dracula": "Dracula",
-        "rosePine": "Rose Pine",
-        "solarized": "Solarized",
-        "tokyoNight": "Tokyo Night"
+        "mithril": "Mithril",
+        "shire": "La Comté",
+        "mordor": "Mordor",
+        "rivendell": "Fondcombe",
+        "rohan": "Rohan",
+        "lothlorien": "Lothlórien",
+        "gondor": "Gondor",
+        "isengard": "Isengard",
+        "mirkwood": "Forêt Noire",
+        "deadMarshes": "Marais des Morts",
+        "erebor": "Erebor",
+        "baradDur": "Barad-dûr"
       },
       "columnsNote": "TODO : les bascules de colonnes sont stockées mais pas encore connectées au rendu de la liste."
     },

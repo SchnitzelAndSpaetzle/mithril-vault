@@ -32,8 +32,8 @@ describe("ThemePresetPicker", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("settings.appearance.presets.catppuccin"));
-    expect(onChange).toHaveBeenCalledWith("catppuccin");
+    fireEvent.click(screen.getByText("settings.appearance.presets.mithril"));
+    expect(onChange).toHaveBeenCalledWith("mithril");
   });
 
   it("calls onPreview on mouse enter", () => {
@@ -46,18 +46,18 @@ describe("ThemePresetPicker", () => {
       />
     );
 
-    const nordButton = screen
-      .getByText("settings.appearance.presets.nord")
+    const shireButton = screen
+      .getByText("settings.appearance.presets.shire")
       .closest("button")!;
-    fireEvent.mouseEnter(nordButton);
-    expect(onPreview).toHaveBeenCalledWith("nord");
+    fireEvent.mouseEnter(shireButton);
+    expect(onPreview).toHaveBeenCalledWith("shire");
   });
 
   it("reverts preview on mouse leave from grid", () => {
     const onPreview = vi.fn();
     render(
       <ThemePresetPicker
-        value="dracula"
+        value="shire"
         onChange={vi.fn()}
         onPreview={onPreview}
       />
@@ -68,6 +68,6 @@ describe("ThemePresetPicker", () => {
       .getByText("settings.appearance.presets.default")
       .closest("div.grid")!;
     fireEvent.mouseLeave(grid);
-    expect(onPreview).toHaveBeenCalledWith("dracula");
+    expect(onPreview).toHaveBeenCalledWith("shire");
   });
 });

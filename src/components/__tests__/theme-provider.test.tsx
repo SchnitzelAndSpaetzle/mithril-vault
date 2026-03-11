@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -26,11 +26,11 @@ describe("ThemeProvider", () => {
 
     act(() => {
       result.current.setThemePreview("dark");
-      result.current.setColorPresetPreview("catppuccin");
+      result.current.setColorPresetPreview("mithril");
     });
 
     expect(result.current.theme).toBe("dark");
-    expect(result.current.colorPreset).toBe("catppuccin");
+    expect(result.current.colorPreset).toBe("mithril");
     expect(result.current.setTheme).toBe(initialSetTheme);
     expect(result.current.setColorPreset).toBe(initialSetColorPreset);
   });
