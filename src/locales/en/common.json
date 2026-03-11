@@ -65,6 +65,17 @@
         "modifiedAt": "Modified date",
         "tags": "Tags"
       },
+      "colorPreset": "Color preset",
+      "colorPresetDescription": "Choose a color palette that suits your style.",
+      "presets": {
+        "default": "Default",
+        "catppuccin": "Catppuccin",
+        "nord": "Nord",
+        "dracula": "Dracula",
+        "rosePine": "Rose Pine",
+        "solarized": "Solarized",
+        "tokyoNight": "Tokyo Night"
+      },
       "columnsNote": "TODO: entry list column toggles are stored but not yet wired into list rendering."
     },
     "browser": {

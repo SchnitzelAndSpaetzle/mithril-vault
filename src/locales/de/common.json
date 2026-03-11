@@ -65,6 +65,17 @@
         "modifiedAt": "Änderungsdatum",
         "tags": "Tags"
       },
+      "colorPreset": "Farbvoreinstellung",
+      "colorPresetDescription": "Wählen Sie eine Farbpalette, die zu Ihrem Stil passt.",
+      "presets": {
+        "default": "Standard",
+        "catppuccin": "Catppuccin",
+        "nord": "Nord",
+        "dracula": "Dracula",
+        "rosePine": "Rose Pine",
+        "solarized": "Solarized",
+        "tokyoNight": "Tokyo Night"
+      },
       "columnsNote": "TODO: Spaltenumschaltungen werden gespeichert, sind aber noch nicht in der Listendarstellung verdrahtet."
     },
     "browser": {

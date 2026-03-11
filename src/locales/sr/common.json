@@ -65,6 +65,17 @@
         "modifiedAt": "Datum izmene",
         "tags": "Oznake"
       },
+      "colorPreset": "Paleta boja",
+      "colorPresetDescription": "Izaberite paletu boja koja odgovara vašem stilu.",
+      "presets": {
+        "default": "Podrazumevano",
+        "catppuccin": "Catppuccin",
+        "nord": "Nord",
+        "dracula": "Dracula",
+        "rosePine": "Rose Pine",
+        "solarized": "Solarized",
+        "tokyoNight": "Tokyo Night"
+      },
       "columnsNote": "TODO: prekidači kolona su sačuvani ali još nisu povezani sa prikazom liste."
     },
     "browser": {
