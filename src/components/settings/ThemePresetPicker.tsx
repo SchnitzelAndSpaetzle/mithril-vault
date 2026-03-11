@@ -42,7 +42,10 @@ export function ThemePresetPicker({
                 ? "border-primary ring-2 ring-primary/20"
                 : "border-border"
             )}
-            onClick={() => onChange(presetId)}
+            onClick={() => {
+              onChange(presetId);
+              onPreview(presetId);
+            }}
             onMouseEnter={() => onPreview(presetId)}
           >
             {isSelected && (

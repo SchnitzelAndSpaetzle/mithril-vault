@@ -24,16 +24,18 @@ describe("ThemePresetPicker", () => {
 
   it("calls onChange when a preset is clicked", () => {
     const onChange = vi.fn();
+    const onPreview = vi.fn();
     render(
       <ThemePresetPicker
         value="default"
         onChange={onChange}
-        onPreview={vi.fn()}
+        onPreview={onPreview}
       />
     );
 
     fireEvent.click(screen.getByText("settings.appearance.presets.mithril"));
     expect(onChange).toHaveBeenCalledWith("mithril");
+    expect(onPreview).toHaveBeenCalledWith("mithril");
   });
 
   it("calls onPreview on mouse enter", () => {
