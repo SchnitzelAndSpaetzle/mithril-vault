@@ -11,6 +11,7 @@ export const COLOR_PRESET_IDS = [
 ] as const;
 
 export type ColorPresetId = (typeof COLOR_PRESET_IDS)[number];
+export type PresetLabelKey = `settings.appearance.presets.${ColorPresetId}`;
 
 export function isColorPresetId(value: string): value is ColorPresetId {
   return COLOR_PRESET_IDS.includes(value as ColorPresetId);
@@ -18,7 +19,7 @@ export function isColorPresetId(value: string): value is ColorPresetId {
 
 export interface ThemePreset {
   id: ColorPresetId;
-  labelKey: string;
+  labelKey: PresetLabelKey;
   light: Record<string, string>;
   dark: Record<string, string>;
 }

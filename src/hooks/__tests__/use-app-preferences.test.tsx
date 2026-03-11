@@ -32,6 +32,7 @@ function makePreferences(): AppPreferences {
     },
     appearance: {
       theme: "system",
+      colorPreset: "default",
       fontSize: 14,
       entryListColumns: {
         username: true,
