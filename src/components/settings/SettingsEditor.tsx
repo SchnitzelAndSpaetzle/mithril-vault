@@ -23,6 +23,7 @@ import {
   formatAllowedSites,
   parseAllowedSites,
 } from "@/components/settings/settings-utils";
+import { isColorPresetId } from "@/lib/theme-presets";
 import { AdvancedSettingsSection } from "@/components/settings/sections/AdvancedSettingsSection";
 import { AppearanceSettingsSection } from "@/components/settings/sections/AppearanceSettingsSection";
 import { BrowserIntegrationSettingsSection } from "@/components/settings/sections/BrowserIntegrationSettingsSection";
@@ -53,7 +54,8 @@ function useSettingsEditorState({
   onResetPreferences,
 }: Readonly<UseSettingsEditorStateArgs>) {
   const { t } = useTranslation();
-  const { setTheme, setThemePreview } = useTheme();
+  const { setTheme, setThemePreview, setColorPreset, setColorPresetPreview } =
+    useTheme();
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [draft, setDraft] = useState<AppPreferences>(initialPreferences);
   const [allowedSitesInput, setAllowedSitesInput] = useState<string>(() =>
@@ -63,6 +65,13 @@ function useSettingsEditorState({
   useEffect(() => {
     setTheme(initialPreferences.appearance.theme);
   }, [initialPreferences.appearance.theme, setTheme]);
+
+  useEffect(() => {
+    const preset = initialPreferences.appearance.colorPreset;
+    if (isColorPresetId(preset)) {
+      setColorPreset(preset);
+    }
+  }, [initialPreferences.appearance.colorPreset, setColorPreset]);
 
   const hasChanges = useMemo(() => {
     const normalizedDraft: AppPreferences = {
@@ -106,6 +115,9 @@ function useSettingsEditorState({
     try {
       await onUpdatePreferences(nextDraft);
       setTheme(nextDraft.appearance.theme);
+      if (isColorPresetId(nextDraft.appearance.colorPreset)) {
+        setColorPreset(nextDraft.appearance.colorPreset);
+      }
       setDraft(nextDraft);
       toast.success(t("settings.toast.updated"));
     } catch (updateError) {
@@ -121,6 +133,9 @@ function useSettingsEditorState({
         formatAllowedSites(reset.browserIntegration.allowedSites)
       );
       setTheme(reset.appearance.theme);
+      if (isColorPresetId(reset.appearance.colorPreset)) {
+        setColorPreset(reset.appearance.colorPreset);
+      }
       setIsResetDialogOpen(false);
       toast.success(t("settings.toast.reset"));
     } catch (resetError) {
@@ -133,6 +148,7 @@ function useSettingsEditorState({
     draft,
     hasChanges,
     isResetDialogOpen,
+    previewColorPreset: setColorPresetPreview,
     previewTheme: setThemePreview,
     resetToDefaults,
     saveChanges,
@@ -159,6 +175,7 @@ export function SettingsEditor({
     draft,
     hasChanges,
     isResetDialogOpen,
+    previewColorPreset,
     previewTheme,
     resetToDefaults,
     saveChanges,
@@ -247,6 +264,7 @@ export function SettingsEditor({
         draft={draft}
         updateDraft={updateDraft}
         onThemePreview={previewTheme}
+        onColorPresetPreview={previewColorPreset}
       />
       <BrowserIntegrationSettingsSection
         draft={draft}

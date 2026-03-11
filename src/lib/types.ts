@@ -224,6 +224,7 @@ export type SecuritySettings = z.infer<typeof SecuritySettingsSchema>;
 
 export const AppearanceSettingsSchema = z.object({
   theme: ThemePreferenceSchema,
+  colorPreset: z.string().default("default"),
   fontSize: z.number().int().min(10).max(24),
   entryListColumns: EntryListColumnsSchema,
 });
@@ -262,6 +263,7 @@ export const AppSettingsSchema = z.object({
   minimizeToTray: z.boolean(),
   startMinimized: z.boolean(),
   theme: ThemePreferenceSchema,
+  colorPreset: z.string().default("default"),
   fontSize: z.number().int().min(10).max(24),
   entryListShowUsername: z.boolean(),
   entryListShowUrl: z.boolean(),

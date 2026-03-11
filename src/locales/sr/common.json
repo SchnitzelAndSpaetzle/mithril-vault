@@ -65,6 +65,23 @@
         "modifiedAt": "Datum izmene",
         "tags": "Oznake"
       },
+      "colorPreset": "Paleta boja",
+      "colorPresetDescription": "Izaberite paletu boja koja odgovara vašem stilu.",
+      "presets": {
+        "default": "Podrazumevano",
+        "mithril": "Митрил",
+        "shire": "Шајр",
+        "mordor": "Мордор",
+        "rivendell": "Ривендел",
+        "rohan": "Рохан",
+        "lothlorien": "Лотлоријен",
+        "gondor": "Гондор",
+        "isengard": "Изенгард",
+        "mirkwood": "Мрачна шума",
+        "deadMarshes": "Мртве мочваре",
+        "erebor": "Еребор",
+        "baradDur": "Барад-дур"
+      },
       "columnsNote": "TODO: prekidači kolona su sačuvani ali još nisu povezani sa prikazom liste."
     },
     "browser": {

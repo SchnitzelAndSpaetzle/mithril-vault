@@ -65,6 +65,23 @@
         "modifiedAt": "Date de modification",
         "tags": "Étiquettes"
       },
+      "colorPreset": "Palette de couleurs",
+      "colorPresetDescription": "Choisissez une palette de couleurs qui correspond à votre style.",
+      "presets": {
+        "default": "Par défaut",
+        "mithril": "Mithril",
+        "shire": "La Comté",
+        "mordor": "Mordor",
+        "rivendell": "Fondcombe",
+        "rohan": "Rohan",
+        "lothlorien": "Lothlórien",
+        "gondor": "Gondor",
+        "isengard": "Isengard",
+        "mirkwood": "Forêt Noire",
+        "deadMarshes": "Marais des Morts",
+        "erebor": "Erebor",
+        "baradDur": "Barad-dûr"
+      },
       "columnsNote": "TODO : les bascules de colonnes sont stockées mais pas encore connectées au rendu de la liste."
     },
     "browser": {

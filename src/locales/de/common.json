@@ -65,6 +65,23 @@
         "modifiedAt": "Änderungsdatum",
         "tags": "Tags"
       },
+      "colorPreset": "Farbvoreinstellung",
+      "colorPresetDescription": "Wählen Sie eine Farbpalette, die zu Ihrem Stil passt.",
+      "presets": {
+        "default": "Standard",
+        "mithril": "Mithril",
+        "shire": "Das Auenland",
+        "mordor": "Mordor",
+        "rivendell": "Bruchtal",
+        "rohan": "Rohan",
+        "lothlorien": "Lothlórien",
+        "gondor": "Gondor",
+        "isengard": "Isengart",
+        "mirkwood": "Düsterwald",
+        "deadMarshes": "Totensümpfe",
+        "erebor": "Erebor",
+        "baradDur": "Barad-dûr"
+      },
       "columnsNote": "TODO: Spaltenumschaltungen werden gespeichert, sind aber noch nicht in der Listendarstellung verdrahtet."
     },
     "browser": {

@@ -66,6 +66,7 @@ pub struct SecuritySettings {
 #[serde(rename_all = "camelCase")]
 pub struct AppearanceSettings {
     pub theme: String,
+    pub color_preset: String,
     pub font_size: u8,
     pub entry_list_columns: EntryListColumns,
 }
@@ -108,6 +109,7 @@ pub struct AppSettings {
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
     pub theme: String,
+    pub color_preset: String,
     pub font_size: u8,
     pub entry_list_show_username: bool,
     pub entry_list_show_url: bool,
@@ -131,6 +133,7 @@ impl Default for AppSettings {
             minimize_to_tray: true,
             start_minimized: false,
             theme: "system".into(),
+            color_preset: "default".into(),
             font_size: 14,
             entry_list_show_username: true,
             entry_list_show_url: true,
@@ -161,6 +164,7 @@ impl AppPreferences {
             },
             appearance: AppearanceSettings {
                 theme: settings.theme.clone(),
+                color_preset: settings.color_preset.clone(),
                 font_size: settings.font_size,
                 entry_list_columns: EntryListColumns {
                     username: settings.entry_list_show_username,
@@ -192,6 +196,9 @@ impl AppPreferences {
         settings.minimize_to_tray = self.security.minimize_to_tray;
         settings.start_minimized = self.security.start_minimized;
         settings.theme.clone_from(&self.appearance.theme);
+        settings
+            .color_preset
+            .clone_from(&self.appearance.color_preset);
         settings.font_size = self.appearance.font_size;
         settings.entry_list_show_username = self.appearance.entry_list_columns.username;
         settings.entry_list_show_url = self.appearance.entry_list_columns.url;

@@ -65,6 +65,23 @@
         "modifiedAt": "Fecha de modificación",
         "tags": "Etiquetas"
       },
+      "colorPreset": "Paleta de colores",
+      "colorPresetDescription": "Elige una paleta de colores que se adapte a tu estilo.",
+      "presets": {
+        "default": "Predeterminado",
+        "mithril": "Mithril",
+        "shire": "La Comarca",
+        "mordor": "Mordor",
+        "rivendell": "Rivendel",
+        "rohan": "Rohan",
+        "lothlorien": "Lothlórien",
+        "gondor": "Gondor",
+        "isengard": "Isengard",
+        "mirkwood": "Bosque Negro",
+        "deadMarshes": "Ciénagas de los Muertos",
+        "erebor": "Erebor",
+        "baradDur": "Barad-dûr"
+      },
       "columnsNote": "TODO: los interruptores de columnas se almacenan pero aún no están conectados a la representación de la lista."
     },
     "browser": {
