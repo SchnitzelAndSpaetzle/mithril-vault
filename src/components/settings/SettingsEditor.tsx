@@ -29,6 +29,7 @@ import { AppearanceSettingsSection } from "@/components/settings/sections/Appear
 import { BrowserIntegrationSettingsSection } from "@/components/settings/sections/BrowserIntegrationSettingsSection";
 import { DatabaseSettingsSection } from "@/components/settings/sections/DatabaseSettingsSection";
 import { GeneralSettingsSection } from "@/components/settings/sections/GeneralSettingsSection";
+import { KeyboardShortcutsSettingsSection } from "@/components/settings/sections/KeyboardShortcutsSettingsSection";
 import { SecuritySettingsSection } from "@/components/settings/sections/SecuritySettingsSection";
 
 interface SettingsEditorProps {
@@ -272,6 +273,7 @@ export function SettingsEditor({
         setAllowedSitesInput={setAllowedSitesInput}
         updateDraft={updateDraft}
       />
+      <KeyboardShortcutsSettingsSection />
       <AdvancedSettingsSection draft={draft} updateDraft={updateDraft} />
       <DatabaseSettingsSection
         dbId={dbId}

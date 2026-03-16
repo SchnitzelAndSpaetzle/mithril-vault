@@ -2,7 +2,13 @@
 
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
 import { Pencil, Plus, Trash } from "lucide-react";
+import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
 
 interface EntryActionsProps {
   onNew?: () => void;
@@ -26,37 +32,58 @@ export function EntryActions({
   return (
     <>
       {onNew && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("entries.newEntry")}
-          disabled={disableNew}
-          onClick={onNew}
-        >
-          <Plus />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("entries.newEntry")}
+              disabled={disableNew}
+              onClick={onNew}
+            >
+              <Plus />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {t("entries.newEntry")} ({formatShortcut(SHORTCUTS.newEntry)})
+          </TooltipContent>
+        </Tooltip>
       )}
       {onEdit && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("entries.editEntry")}
-          disabled={disableEdit}
-          onClick={onEdit}
-        >
-          <Pencil />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("entries.editEntry")}
+              disabled={disableEdit}
+              onClick={onEdit}
+            >
+              <Pencil />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {t("entries.editEntry")} ({formatShortcut(SHORTCUTS.editEntry)})
+          </TooltipContent>
+        </Tooltip>
       )}
       {onDelete && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("entries.deleteEntry")}
-          disabled={disableDelete}
-          onClick={onDelete}
-        >
-          <Trash />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("entries.deleteEntry")}
+              disabled={disableDelete}
+              onClick={onDelete}
+            >
+              <Trash />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {t("entries.deleteEntry")} ({formatShortcut(SHORTCUTS.deleteEntry)})
+          </TooltipContent>
+        </Tooltip>
       )}
     </>
   );

@@ -97,6 +97,10 @@
       "enableDebugMode": "Omogući režim za otklanjanje grešaka",
       "dataLocation": "Lokacija podataka"
     },
+    "shortcuts": {
+      "title": "Prečice na tastaturi",
+      "description": "Pogledajte sve dostupne prečice na tastaturi."
+    },
     "database": {
       "title": "Podešavanja baze podataka",
       "description": "Trenutna kriptografska konfiguracija baze podataka (samo za čitanje).",
@@ -449,5 +453,33 @@
   "errors": {
     "failedToLoadSettings": "Greška pri učitavanju podešavanja: {{error}}",
     "settingsUnavailable": "Podešavanja nisu dostupna."
+  },
+  "shortcuts": {
+    "title": "Пречице на тастатури",
+    "globalGroup": "Глобалне",
+    "entryGroup": "Акције уноса",
+    "listGroup": "Навигација листе",
+    "search": "Претрага",
+    "newEntry": "Нови унос",
+    "save": "Сачувај базу података",
+    "lockDatabase": "Закључај базу података",
+    "settings": "Подешавања",
+    "toggleSidebar": "Прикажи/сакриј бочну траку",
+    "shortcutsHelp": "Пречице на тастатури",
+    "copyUsername": "Копирај корисничко име",
+    "copyPassword": "Копирај лозинку",
+    "openUrl": "Отвори URL",
+    "editEntry": "Уреди унос",
+    "deleteEntry": "Обриши унос",
+    "navigateDown": "Следећи унос",
+    "navigateUp": "Претходни унос",
+    "firstEntry": "Први унос",
+    "lastEntry": "Последњи унос",
+    "activateEntry": "Отвори унос",
+    "toast": {
+      "saved": "База података сачувана",
+      "usernameCopied": "Корисничко име копирано",
+      "passwordCopied": "Лозинка копирана"
+    }
   }
 }

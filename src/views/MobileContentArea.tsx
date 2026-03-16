@@ -10,9 +10,14 @@ import SortDropdown from "@/components/entries/sort-dropdown";
 import { useCreateEntryShortcut } from "@/hooks/use-create-entry-shortcut";
 import { useSearchEntries } from "@/hooks/use-search-entries";
 import { useSearchShortcut } from "@/hooks/use-search-shortcut";
+import { useShortcut } from "@/hooks/use-shortcut";
 import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 import { useActiveDatabase } from "@/hooks/use-active-database";
+import { useDatabaseTabs } from "@/stores/database-tabs";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { SHORTCUTS } from "@/lib/shortcuts";
+import { database } from "@/lib/tauri";
 
 const MOBILE_SEARCH_INPUT_ID = "mobile-global-search-input";
 
@@ -20,7 +25,8 @@ export default function MobileContentArea() {
   const { t } = useTranslation();
   const { groupName, entryCount, activeTag } = useEntryListHeader();
   const navigate = useNavigate();
-  const { dbId } = useActiveDatabase();
+  const { tab, dbId } = useActiveDatabase();
+  const removeTab = useDatabaseTabs((s) => s.removeTab);
 
   const search = useSearch({ strict: false });
   const searchGroupId = (search.groupId as string | undefined) ?? null;
@@ -45,6 +51,42 @@ export default function MobileContentArea() {
   const handleSearchEscape = useCallback(() => {
     searchState.clearSearch();
   }, [searchState]);
+
+  useShortcut(
+    SHORTCUTS.save,
+    useCallback(() => {
+      if (!dbId) return;
+      void database.save(dbId).then(() => {
+        toast.success(t("shortcuts.toast.saved"));
+      });
+    }, [dbId, t]),
+    Boolean(dbId)
+  );
+
+  useShortcut(
+    SHORTCUTS.lockDatabase,
+    useCallback(() => {
+      if (!tab?.id || !dbId) return;
+      void (async () => {
+        try {
+          await database.close(dbId);
+          removeTab(tab.id);
+          void navigate({ to: "/" });
+        } catch {
+          // lock failed silently
+        }
+      })();
+    }, [tab, dbId, removeTab, navigate]),
+    Boolean(dbId)
+  );
+
+  useShortcut(
+    SHORTCUTS.settings,
+    useCallback(() => {
+      void navigate({ to: "/settings" });
+    }, [navigate]),
+    Boolean(dbId)
+  );
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col">

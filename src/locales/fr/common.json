@@ -97,6 +97,10 @@
       "enableDebugMode": "Activer le mode débogage",
       "dataLocation": "Emplacement des données"
     },
+    "shortcuts": {
+      "title": "Raccourcis clavier",
+      "description": "Voir tous les raccourcis clavier disponibles."
+    },
     "database": {
       "title": "Paramètres de la base de données",
       "description": "Configuration cryptographique actuelle de la base de données (lecture seule).",
@@ -449,5 +453,33 @@
   "errors": {
     "failedToLoadSettings": "Échec du chargement des paramètres : {{error}}",
     "settingsUnavailable": "Les paramètres ne sont pas disponibles."
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "globalGroup": "Global",
+    "entryGroup": "Actions d'entrée",
+    "listGroup": "Navigation de liste",
+    "search": "Rechercher",
+    "newEntry": "Nouvelle entrée",
+    "save": "Enregistrer la base de données",
+    "lockDatabase": "Verrouiller la base de données",
+    "settings": "Paramètres",
+    "toggleSidebar": "Basculer la barre latérale",
+    "shortcutsHelp": "Raccourcis clavier",
+    "copyUsername": "Copier le nom d'utilisateur",
+    "copyPassword": "Copier le mot de passe",
+    "openUrl": "Ouvrir l'URL",
+    "editEntry": "Modifier l'entrée",
+    "deleteEntry": "Supprimer l'entrée",
+    "navigateDown": "Entrée suivante",
+    "navigateUp": "Entrée précédente",
+    "firstEntry": "Première entrée",
+    "lastEntry": "Dernière entrée",
+    "activateEntry": "Ouvrir l'entrée",
+    "toast": {
+      "saved": "Base de données enregistrée",
+      "usernameCopied": "Nom d'utilisateur copié",
+      "passwordCopied": "Mot de passe copié"
+    }
   }
 }

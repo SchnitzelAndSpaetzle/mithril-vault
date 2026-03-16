@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -9,6 +10,7 @@ import {
 import { useCreateEntryShortcut } from "@/hooks/use-create-entry-shortcut";
 import { useSearchEntries } from "@/hooks/use-search-entries";
 import { useSearchShortcut } from "@/hooks/use-search-shortcut";
+import { useShortcut } from "@/hooks/use-shortcut";
 import EntryList from "@/components/entries/EntryList.tsx";
 import EntryItemDetails from "@/components/entries/EntryItemDetails.tsx";
 import { EntryItemDetailsEmpty } from "@/components/entries/EntryItemDetailsEmpty.tsx";
@@ -25,10 +27,15 @@ import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 import { useEntryDetail } from "@/hooks/use-entry-detail";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
+import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { SHORTCUTS } from "@/lib/shortcuts";
+import { queryKeys } from "@/lib/query-keys";
+import { clipboard, database } from "@/lib/tauri";
 import type { Entry } from "@/lib/types";
 
 type EditMode = "view" | "edit" | "create";
@@ -107,7 +114,7 @@ export default function DragRegion() {
     updateTabState(tab.id, { selectedEntryId: id });
   };
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!dbId || !selectedEntryId) return;
 
     const confirmed = await ask(t("entries.deleteConfirm"), {
@@ -131,7 +138,7 @@ export default function DragRegion() {
         },
       }
     );
-  };
+  }, [dbId, selectedEntryId, t, deleteEntry, tab, updateTabState]);
 
   const openCreateMode = useCallback(() => setEditMode("create"), []);
   useCreateEntryShortcut(openCreateMode, Boolean(dbId) && !isEditing);
@@ -147,6 +154,113 @@ export default function DragRegion() {
   const handleSearchEscape = useCallback(() => {
     searchState.clearSearch();
   }, [searchState]);
+
+  const queryClient = useQueryClient();
+  const removeTab = useDatabaseTabs((s) => s.removeTab);
+  const clipboardTimeout = useClipboardTimeout();
+
+  const getSelectedEntry = useCallback((): Entry | undefined => {
+    if (!dbId || !selectedEntryId) return undefined;
+    return queryClient.getQueryData<Entry>(
+      queryKeys.entries.detail(dbId, selectedEntryId)
+    );
+  }, [dbId, selectedEntryId, queryClient]);
+
+  // Global: Save database (Ctrl+S)
+  useShortcut(
+    SHORTCUTS.save,
+    useCallback(() => {
+      if (!dbId) return;
+      void database.save(dbId).then(() => {
+        toast.success(t("shortcuts.toast.saved"));
+      });
+    }, [dbId, t]),
+    Boolean(dbId)
+  );
+
+  // Global: Lock database (Ctrl+L)
+  useShortcut(
+    SHORTCUTS.lockDatabase,
+    useCallback(() => {
+      if (!tab?.id || !dbId) return;
+      void (async () => {
+        try {
+          await database.close(dbId);
+          removeTab(tab.id);
+          void navigate({ to: "/" });
+        } catch {
+          // lock failed silently
+        }
+      })();
+    }, [tab, dbId, removeTab, navigate]),
+    Boolean(dbId) && !isEditing
+  );
+
+  // Global: Open settings (Ctrl+,)
+  useShortcut(
+    SHORTCUTS.settings,
+    useCallback(() => {
+      void navigate({ to: "/settings" });
+    }, [navigate]),
+    Boolean(dbId) && !isEditing
+  );
+
+  // Entry: Copy username (Ctrl+Shift+U)
+  useShortcut(
+    SHORTCUTS.copyUsername,
+    useCallback(() => {
+      const entry = getSelectedEntry();
+      if (!entry?.username) return;
+      void navigator.clipboard.writeText(entry.username).then(() => {
+        toast.success(t("shortcuts.toast.usernameCopied"));
+      });
+    }, [getSelectedEntry, t]),
+    Boolean(selectedEntryId) && !isEditing
+  );
+
+  // Entry: Copy password (Ctrl+Shift+C)
+  useShortcut(
+    SHORTCUTS.copyPassword,
+    useCallback(() => {
+      if (!dbId || !selectedEntryId) return;
+      void clipboard
+        .copyPassword(dbId, selectedEntryId, clipboardTimeout)
+        .then(() => {
+          toast.success(t("shortcuts.toast.passwordCopied"));
+        });
+    }, [dbId, selectedEntryId, clipboardTimeout, t]),
+    Boolean(dbId) && Boolean(selectedEntryId) && !isEditing
+  );
+
+  // Entry: Open URL (Ctrl+Shift+O)
+  useShortcut(
+    SHORTCUTS.openUrl,
+    useCallback(() => {
+      const entry = getSelectedEntry();
+      if (!entry?.url) return;
+      void openUrl(entry.url);
+    }, [getSelectedEntry]),
+    Boolean(selectedEntryId) && !isEditing
+  );
+
+  // Entry: Edit entry (Ctrl+E)
+  useShortcut(
+    SHORTCUTS.editEntry,
+    useCallback(() => {
+      if (!selectedEntryId) return;
+      setEditMode("edit");
+    }, [selectedEntryId]),
+    Boolean(selectedEntryId) && !isEditing
+  );
+
+  // Entry: Delete entry (Delete key)
+  useShortcut(
+    SHORTCUTS.deleteEntry,
+    useCallback(() => {
+      void handleDelete();
+    }, [handleDelete]),
+    Boolean(selectedEntryId) && !isEditing
+  );
 
   return (
     <ResizablePanelGroup
