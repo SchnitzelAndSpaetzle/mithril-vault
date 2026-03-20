@@ -49,6 +49,11 @@ describe("matchesShortcut", () => {
     expect(matchesShortcut(e, SHORTCUTS.deleteEntry)).toBe(true);
   });
 
+  it("matches delete-entry alias key on macOS keyboards", () => {
+    const e = new KeyboardEvent("keydown", { key: "Backspace" });
+    expect(matchesShortcut(e, SHORTCUTS.deleteEntry)).toBe(true);
+  });
+
   it("rejects non-modifier shortcut if modifier is pressed", () => {
     const e = new KeyboardEvent("keydown", { key: "Delete", ctrlKey: true });
     expect(matchesShortcut(e, SHORTCUTS.deleteEntry)).toBe(false);

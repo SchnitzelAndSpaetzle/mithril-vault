@@ -14,7 +14,7 @@ export function useSearchShortcut(callback: () => void, enabled: boolean) {
         return;
       }
 
-      if (e.key === "/") {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (isInputTarget(e)) return;
         e.preventDefault();
         callback();

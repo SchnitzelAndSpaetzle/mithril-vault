@@ -28,6 +28,17 @@ describe("useSearchShortcut", () => {
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
+  it("does not trigger on slash when modifier keys are pressed", () => {
+    const callback = vi.fn();
+    renderHook(() => useSearchShortcut(callback, true));
+
+    fireEvent.keyDown(window, { key: "/", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "/", metaKey: true });
+    fireEvent.keyDown(window, { key: "/", altKey: true });
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
   it("does not trigger on slash when input-like targets are focused", () => {
     const callback = vi.fn();
     renderHook(() => useSearchShortcut(callback, true));

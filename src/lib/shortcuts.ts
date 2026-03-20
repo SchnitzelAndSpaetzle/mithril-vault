@@ -10,6 +10,7 @@ export type ShortcutScope = "global" | "entry" | "list";
 export interface ShortcutDef {
   id: string;
   key: string;
+  aliases?: readonly string[];
   ctrlOrMeta: boolean;
   shift?: boolean;
   scope: ShortcutScope;
@@ -100,6 +101,7 @@ export const SHORTCUTS = {
   deleteEntry: {
     id: "deleteEntry",
     key: "Delete",
+    aliases: ["Backspace"],
     ctrlOrMeta: false,
     scope: "entry",
     i18nKey: "shortcuts.deleteEntry",
@@ -113,7 +115,9 @@ export function matchesShortcut(e: KeyboardEvent, def: ShortcutDef): boolean {
   if (!def.ctrlOrMeta && (e.ctrlKey || e.metaKey)) return false;
   if (def.shift && !e.shiftKey) return false;
   if (!def.shift && e.shiftKey) return false;
-  return e.key.toLowerCase() === def.key.toLowerCase();
+  const eventKey = e.key.toLowerCase();
+  if (eventKey === def.key.toLowerCase()) return true;
+  return (def.aliases ?? []).some((alias) => eventKey === alias.toLowerCase());
 }
 
 export function formatShortcut(def: ShortcutDef): string {
