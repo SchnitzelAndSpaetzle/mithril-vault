@@ -63,6 +63,24 @@ describe("matchesShortcut", () => {
     const e = new KeyboardEvent("keydown", { key: "K", ctrlKey: true });
     expect(matchesShortcut(e, SHORTCUTS.search)).toBe(true);
   });
+
+  it("rejects extra shift for shortcuts that do not allow shift", () => {
+    const e = new KeyboardEvent("keydown", {
+      key: "k",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(matchesShortcut(e, SHORTCUTS.search)).toBe(false);
+  });
+
+  it("allows shifted symbol aliases when shortcut opts in", () => {
+    const e = new KeyboardEvent("keydown", {
+      key: "?",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(matchesShortcut(e, SHORTCUTS.shortcutsHelp)).toBe(true);
+  });
 });
 
 describe("formatShortcut", () => {

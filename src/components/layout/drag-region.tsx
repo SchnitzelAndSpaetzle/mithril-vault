@@ -175,7 +175,7 @@ export default function DragRegion() {
         toast.success(t("shortcuts.toast.saved"));
       });
     }, [dbId, t]),
-    Boolean(dbId)
+    Boolean(dbId) && !isEditing
   );
 
   // Global: Lock database (Ctrl+L)

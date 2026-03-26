@@ -13,6 +13,7 @@ export interface ShortcutDef {
   aliases?: readonly string[];
   ctrlOrMeta: boolean;
   shift?: boolean;
+  allowShift?: boolean;
   scope: ShortcutScope;
   i18nKey: string;
 }
@@ -63,7 +64,9 @@ export const SHORTCUTS = {
   shortcutsHelp: {
     id: "shortcutsHelp",
     key: "/",
+    aliases: ["?"],
     ctrlOrMeta: true,
+    allowShift: true,
     scope: "global",
     i18nKey: "shortcuts.shortcutsHelp",
   },
@@ -114,7 +117,7 @@ export function matchesShortcut(e: KeyboardEvent, def: ShortcutDef): boolean {
   if (def.ctrlOrMeta && !(e.ctrlKey || e.metaKey)) return false;
   if (!def.ctrlOrMeta && (e.ctrlKey || e.metaKey)) return false;
   if (def.shift && !e.shiftKey) return false;
-  if (!def.shift && e.shiftKey) return false;
+  if (!def.shift && e.shiftKey && !def.allowShift) return false;
   const eventKey = e.key.toLowerCase();
   if (eventKey === def.key.toLowerCase()) return true;
   return (def.aliases ?? []).some((alias) => eventKey === alias.toLowerCase());
