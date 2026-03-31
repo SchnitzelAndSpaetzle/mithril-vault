@@ -52,6 +52,14 @@ impl KdbxService {
     ) -> Result<(), AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
+        let destination_normalized_path = Self::normalize_path(new_path);
+
+        if destination_normalized_path != normalized_path
+            && databases.contains_key(&destination_normalized_path)
+        {
+            return Err(AppError::DatabaseAlreadyOpen(new_path.to_string()));
+        }
+
         {
             let open_db = databases
                 .get_mut(&normalized_path)
