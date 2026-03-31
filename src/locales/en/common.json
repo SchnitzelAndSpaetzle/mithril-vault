@@ -320,7 +320,6 @@
       "keyfileNotFound": "The keyfile could not be found at the specified location.",
       "invalidKeyfileFormat": "The selected keyfile has an invalid format.",
       "noCredentials": "Please enter a password or select a keyfile.",
-      "databaseLocked": "This database is currently open in another application. Close it first or force unlock.",
       "notValidKdbx": "The selected file is not a valid KeePass database.",
       "unsupportedVersion": "This database uses an unsupported KeePass format version.",
       "ioError": "The database file could not be found or read.",

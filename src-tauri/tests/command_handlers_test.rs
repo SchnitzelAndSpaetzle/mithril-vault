@@ -5,10 +5,9 @@
 
 use mithril_vault_lib::commands::clipboard::{clear_clipboard, copy_password_to_clipboard};
 use mithril_vault_lib::commands::database::{
-    close_database, create_database, force_unlock_database, generate_keyfile, get_custom_icons,
-    get_database_config, get_database_info, get_lock_status, inspect_database, list_open_databases,
-    lock_database, open_database, open_database_with_keyfile, open_database_with_keyfile_only,
-    save_database, unlock_database,
+    close_database, create_database, generate_keyfile, get_custom_icons, get_database_config,
+    get_database_info, inspect_database, list_open_databases, lock_database, open_database,
+    open_database_with_keyfile, open_database_with_keyfile_only, save_database, unlock_database,
 };
 use mithril_vault_lib::commands::entries::{delete_tag, list_entries, rename_tag};
 use mithril_vault_lib::commands::generator::{
@@ -24,7 +23,6 @@ use mithril_vault_lib::commands::secure_storage::{
 };
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::dto::group::UpdateGroupData;
-use mithril_vault_lib::dto::lock::LockStatusDto;
 use mithril_vault_lib::register_services;
 use tauri::test::mock_app;
 use tauri::Manager;
@@ -320,13 +318,6 @@ fn database_commands_cover_success_paths() {
         "Inspect should report KDBX version"
     );
 
-    let lock_status =
-        tauri::async_runtime::block_on(get_lock_status(db_path_str.clone())).expect("lock status");
-    assert!(
-        matches!(lock_status, LockStatusDto::LockedByCurrentProcess),
-        "Open database should be locked by current process"
-    );
-
     let icons = tauri::async_runtime::block_on(get_custom_icons(db_path_str.clone(), app.state()))
         .expect("get custom icons");
     assert!(
@@ -382,9 +373,6 @@ fn database_commands_cover_success_paths() {
 
     tauri::async_runtime::block_on(close_database(key_only_path_str.clone(), app.state()))
         .expect("final close");
-
-    tauri::async_runtime::block_on(force_unlock_database(key_only_path_str))
-        .expect("force unlock should succeed");
 
     cleanup_app_files(&app);
 }

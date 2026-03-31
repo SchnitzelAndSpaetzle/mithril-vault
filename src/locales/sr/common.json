@@ -320,7 +320,6 @@
       "keyfileNotFound": "Datoteka ključa nije pronađena na navedenoj lokaciji.",
       "invalidKeyfileFormat": "Izabrana datoteka ključa ima nevažeći format.",
       "noCredentials": "Unesite lozinku ili izaberite datoteku ključa.",
-      "databaseLocked": "Ova baza podataka je trenutno otvorena u drugoj aplikaciji. Zatvorite je prvo ili prisilno otključajte.",
       "notValidKdbx": "Izabrana datoteka nije validna KeePass baza podataka.",
       "unsupportedVersion": "Ova baza podataka koristi nepodržanu verziju KeePass formata.",
       "ioError": "Datoteka baze podataka nije mogla biti pronađena ili pročitana.",
