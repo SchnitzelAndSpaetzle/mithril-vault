@@ -261,7 +261,9 @@ export function useEntryEditForm({
 
   async function generateNewPassword() {
     try {
-      const password = await generator.generate(PASSWORD_GENERATOR_DEFAULTS);
+      const { password } = await generator.generate(
+        PASSWORD_GENERATOR_DEFAULTS
+      );
       form.setValue("password", password, { shouldDirty: false });
     } catch {
       // User can still type or use the generator popover

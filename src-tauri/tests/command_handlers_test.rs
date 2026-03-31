@@ -11,8 +11,7 @@ use mithril_vault_lib::commands::database::{
 };
 use mithril_vault_lib::commands::entries::{delete_tag, list_entries, rename_tag};
 use mithril_vault_lib::commands::generator::{
-    calculate_password_strength, generate_passphrase, generate_password,
-    PassphraseGeneratorOptions, PasswordGeneratorOptions,
+    generate_passphrase, generate_password, PassphraseGeneratorOptions, PasswordGeneratorOptions,
 };
 use mithril_vault_lib::commands::groups::{
     create_group, delete_group, get_group, get_group_entry_counts, get_recycle_bin_id, list_groups,
@@ -41,21 +40,21 @@ fn cleanup_app_files(app: &tauri::App<tauri::test::MockRuntime>) {
 }
 
 #[test]
-fn generator_commands_match_current_implementation() {
-    let password =
+fn generator_commands_produce_valid_output() {
+    let result =
         tauri::async_runtime::block_on(generate_password(PasswordGeneratorOptions::default()))
             .expect("expected generated password");
-    assert_eq!(password.len(), PasswordGeneratorOptions::default().length);
+    assert_eq!(
+        result.password.len(),
+        PasswordGeneratorOptions::default().length
+    );
+    assert!(result.entropy_bits > 0.0);
 
-    let passphrase_err =
+    let passphrase =
         tauri::async_runtime::block_on(generate_passphrase(PassphraseGeneratorOptions::default()))
-            .expect_err("expected not implemented");
-    assert!(matches!(passphrase_err, AppError::NotImplemented(_)));
-
-    let strength_err =
-        tauri::async_runtime::block_on(calculate_password_strength("test".to_string()))
-            .expect_err("expected not implemented");
-    assert!(matches!(strength_err, AppError::NotImplemented(_)));
+            .expect("expected generated passphrase");
+    assert!(!passphrase.passphrase.is_empty());
+    assert!(passphrase.entropy_bits > 0.0);
 }
 
 #[test]

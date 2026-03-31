@@ -28,7 +28,10 @@ vi.mock("@/lib/tauri", () => ({
 describe("PasswordGeneratorPopover", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(generator.generate).mockResolvedValue("generated-password");
+    vi.mocked(generator.generate).mockResolvedValue({
+      password: "generated-password",
+      entropyBits: 128,
+    });
     vi.mocked(clipboard.copyText).mockResolvedValue(undefined);
   });
 

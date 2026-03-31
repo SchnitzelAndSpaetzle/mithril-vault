@@ -444,7 +444,21 @@
     "symbols": "!@#$",
     "excludeAmbiguous": "Exclure les caractères ambigus (0O, 1lI)",
     "usePassword": "Utiliser le mot de passe",
-    "passwordGeneratorButton": "générateur de mots de passe"
+    "passwordGeneratorButton": "générateur de mots de passe",
+    "passwordTab": "Password",
+    "passphraseTab": "Passphrase",
+    "entropyBits": "{{bits}} bits of entropy",
+    "wordCount": "Word Count",
+    "separator": "Separator",
+    "capitalizeWords": "Capitalize words",
+    "includeNumber": "Include number",
+    "minNumbers": "Min digits",
+    "minSymbols": "Min symbols",
+    "excludeCustom": "Exclude characters",
+    "passphrase": "Passphrase",
+    "copyPassphrase": "Copy passphrase",
+    "regeneratePassphrase": "Regenerate passphrase",
+    "passphraseCopied": "Passphrase copied"
   },
   "iconPicker": {
     "chooseIcon": "Choisir une icône"

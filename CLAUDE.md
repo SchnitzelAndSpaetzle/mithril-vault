@@ -160,6 +160,14 @@ export const entries = {
 };
 ```
 
+### Password Generator Architecture
+
+- **Password/passphrase generation** happens in Rust (`commands/generator.rs`) using `OsRng` for cryptographic security
+- **Strength evaluation** happens in JS via `@zxcvbn-ts` (pattern detection, dictionary attacks) — this is a UI concern, not a backend security gate
+- **Entropy bits** (mathematical: `length × log₂(charset_size)`) are calculated alongside generation in Rust and returned with the password/passphrase
+- **Passphrase wordlist**: EFF large diceware wordlist (7776 words, ~12.9 bits/word) embedded via `include_str!` at `src-tauri/assets/eff-diceware-wordlist.txt`
+- Shared hooks: `usePasswordGenerator` / `usePassphraseGenerator` in `hooks/use-password-generator.ts`
+
 ## Security Requirements (Critical)
 
 - **Never log passwords, keys, or sensitive data**

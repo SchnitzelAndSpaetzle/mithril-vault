@@ -57,7 +57,7 @@ export function PasswordGeneratorPopover({
 
     setIsGenerating(true);
     try {
-      const pw = await generator.generate(opts);
+      const { password: pw } = await generator.generate(opts);
       if (requestId === latestGenerationRequestRef.current) {
         setGeneratedPassword(pw);
         setGenerationError(null);
