@@ -10,14 +10,15 @@ use crate::dto::error::AppError;
 use commands::{
     add_recent_database, calculate_password_strength, clear_clipboard, clear_recent_databases,
     clear_session_key, close_database, copy_password_to_clipboard, copy_text_to_clipboard,
-    create_database, create_entry, create_group, delete_entry, delete_group, delete_tag, generate_keyfile,
-    generate_passphrase, generate_password, get_app_preferences, get_custom_icons, get_database_config,
-    get_database_info, get_entry, get_entry_password, get_entry_protected_custom_field, get_group,
-    get_group_entry_counts, get_keyfile_for_database, get_recycle_bin_id, get_settings, has_session_key,
-    inspect_database, list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
-    open_database, open_database_with_keyfile, open_database_with_keyfile_only, remove_recent_database,
-    rename_group, rename_tag, reset_app_preferences, save_database, store_session_key, unlock_database,
-    update_app_preferences, update_entry, update_group, update_settings,
+    create_database, create_entry, create_group, delete_entry, delete_group, delete_tag,
+    generate_keyfile, generate_passphrase, generate_password, get_app_preferences,
+    get_custom_icons, get_database_config, get_database_info, get_entry, get_entry_password,
+    get_entry_protected_custom_field, get_group, get_group_entry_counts, get_keyfile_for_database,
+    get_recycle_bin_id, get_settings, has_session_key, inspect_database, list_entries, list_groups,
+    list_open_databases, lock_database, move_entry, move_group, open_database,
+    open_database_with_keyfile, open_database_with_keyfile_only, remove_recent_database,
+    rename_group, rename_tag, reset_app_preferences, save_database, store_session_key,
+    unlock_database, update_app_preferences, update_entry, update_group, update_settings,
 };
 use services::clipboard::ClipboardService;
 use services::kdbx::KdbxService;
