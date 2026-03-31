@@ -448,7 +448,7 @@ mod tests {
         let digit_count = generated
             .password
             .chars()
-            .filter(|c| c.is_ascii_digit())
+            .filter(char::is_ascii_digit)
             .count();
         assert!(
             digit_count >= 5,
@@ -586,7 +586,7 @@ mod tests {
         for word in generated.passphrase.split('-') {
             let first = word.chars().next();
             assert!(
-                first.is_some_and(|c| c.is_uppercase()),
+                first.is_some_and(char::is_uppercase),
                 "Expected uppercase first char in word '{word}'"
             );
         }
