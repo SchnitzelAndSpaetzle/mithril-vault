@@ -2,7 +2,6 @@ use crate::domain::kdbx::{format_database_version, OpenDatabase};
 use crate::domain::secure::SecureString;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
-use crate::services::file_lock::FileLockService;
 use keepass::error::{
     BlockStreamError, CompressionConfigError, CryptographyError, DatabaseIntegrityError,
     DatabaseKeyError, DatabaseOpenError, InnerCipherConfigError, KdfConfigError,
@@ -25,9 +24,6 @@ impl KdbxService {
             return Err(AppError::DatabaseAlreadyOpen(path.to_string()));
         }
 
-        // Acquire file lock before opening database
-        let file_lock = FileLockService::try_acquire_lock(path)?;
-
         let mut file = File::open(path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
 
         let key = DatabaseKey::new().with_password(password);
@@ -46,7 +42,6 @@ impl KdbxService {
                 password: Some(SecureString::from(password)),
                 keyfile_path: None,
                 version: version.clone(),
-                file_lock: Some(file_lock),
             },
         );
 
@@ -75,9 +70,6 @@ impl KdbxService {
             return Err(AppError::DatabaseAlreadyOpen(path.to_string()));
         }
 
-        // Acquire file lock before opening database
-        let file_lock = FileLockService::try_acquire_lock(path)?;
-
         let mut file = File::open(path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
         let mut keyfile =
             File::open(keyfile_path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
@@ -102,7 +94,6 @@ impl KdbxService {
                 password: Some(SecureString::from(password)),
                 keyfile_path: Some(keyfile_path.to_string()),
                 version: version.clone(),
-                file_lock: Some(file_lock),
             },
         );
 
@@ -130,9 +121,6 @@ impl KdbxService {
             return Err(AppError::DatabaseAlreadyOpen(path.to_string()));
         }
 
-        // Acquire file lock before opening database
-        let file_lock = FileLockService::try_acquire_lock(path)?;
-
         let mut file = File::open(path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
         let mut keyfile = File::open(keyfile_path).map_err(|_| AppError::KeyfileNotFound)?;
 
@@ -155,7 +143,6 @@ impl KdbxService {
                 password: None,
                 keyfile_path: Some(keyfile_path.to_string()),
                 version: version.clone(),
-                file_lock: Some(file_lock),
             },
         );
 

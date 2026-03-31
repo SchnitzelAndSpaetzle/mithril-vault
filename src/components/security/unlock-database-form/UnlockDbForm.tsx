@@ -58,9 +58,6 @@ function mapErrorToMessage(error: unknown, t: TFunction): string {
   if (errorStr.includes("No credentials provided")) {
     return t("unlock.errors.noCredentials");
   }
-  if (errorStr.includes("Database is locked")) {
-    return t("unlock.errors.databaseLocked");
-  }
   if (errorStr.includes("Not a valid KDBX file")) {
     return t("unlock.errors.notValidKdbx");
   }

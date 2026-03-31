@@ -320,7 +320,6 @@
       "keyfileNotFound": "Die Schlüsseldatei konnte am angegebenen Speicherort nicht gefunden werden.",
       "invalidKeyfileFormat": "Die ausgewählte Schlüsseldatei hat ein ungültiges Format.",
       "noCredentials": "Bitte geben Sie ein Passwort ein oder wählen Sie eine Schlüsseldatei.",
-      "databaseLocked": "Diese Datenbank ist derzeit in einer anderen Anwendung geöffnet. Schließen Sie sie zuerst oder erzwingen Sie die Entsperrung.",
       "notValidKdbx": "Die ausgewählte Datei ist keine gültige KeePass-Datenbank.",
       "unsupportedVersion": "Diese Datenbank verwendet eine nicht unterstützte KeePass-Formatversion.",
       "ioError": "Die Datenbankdatei konnte nicht gefunden oder gelesen werden.",

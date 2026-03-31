@@ -8,7 +8,6 @@
 #![allow(clippy::expect_used)] // expect() is acceptable in tests
 
 use mithril_vault_lib::dto::error::AppError;
-use mithril_vault_lib::services::file_lock::FileLockService;
 use mithril_vault_lib::services::kdbx::KdbxService;
 use tempfile::tempdir;
 
@@ -200,7 +199,7 @@ fn test_save_database_not_open() {
 }
 
 #[test]
-fn test_save_as_moves_lock_file() {
+fn test_save_as_updates_database_identity_and_still_closes() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("original.kdbx");
     let new_path = dir.path().join("moved.kdbx");
@@ -212,29 +211,29 @@ fn test_save_as_moves_lock_file() {
         .create(&db_path_str, "savepass", "Save Test DB")
         .expect("Failed to create database");
 
-    let old_lock_path = FileLockService::lock_file_path(&db_path_str);
-    assert!(old_lock_path.exists(), "Original lock file should exist");
-
     service
         .save_as(&db_path_str, &new_path_str, None)
         .expect("Failed to save database as new path");
 
-    let new_lock_path = FileLockService::lock_file_path(&new_path_str);
+    // After save_as, the database is now at new_path
+    let old_info = service.get_info(&db_path_str);
     assert!(
-        !old_lock_path.exists(),
-        "Old lock file should be removed after save_as"
-    );
-    assert!(
-        new_lock_path.exists(),
-        "New lock file should exist after save_as"
+        matches!(old_info, Err(AppError::DatabaseNotFound(_))),
+        "Old database id should not resolve after save_as"
     );
 
-    // After save_as, the database is now at new_path
+    let new_info = service
+        .get_info(&new_path_str)
+        .expect("New database id should resolve after save_as");
+    assert_eq!(new_info.path, new_path_str);
+
     service
         .close(&new_path_str)
         .expect("Failed to close database");
+
+    let after_close = service.get_info(&new_path_str);
     assert!(
-        !new_lock_path.exists(),
-        "Lock file should be removed after close"
+        matches!(after_close, Err(AppError::DatabaseNotFound(_))),
+        "Database should be closed after close()"
     );
 }

@@ -89,12 +89,6 @@ pub enum AppError {
     #[error("Lock error")]
     Lock,
 
-    #[error("Database is locked: {0}")]
-    DatabaseLocked(String),
-
-    #[error("File lock failed: {0}")]
-    FileLockFailed(String),
-
     #[error("Not implemented: {0}")]
     NotImplemented(String),
 

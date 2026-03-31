@@ -14,7 +14,6 @@ import type {
   DatabaseInfo,
   Entry,
   Group,
-  LockStatus,
   PasswordGeneratorOptions,
   UpdateEntryData,
 } from "./types";
@@ -30,7 +29,6 @@ import {
   DatabaseInfoSchema,
   EntrySchema,
   GroupSchema,
-  LockStatusSchema,
   PasswordGeneratorOptionsSchema,
   UpdateEntryDataSchema,
 } from "./types";
@@ -227,34 +225,6 @@ export const database = {
   async listOpen(): Promise<DatabaseInfo[]> {
     const result = await invoke("list_open_databases");
     return z.array(DatabaseInfoSchema).parse(result);
-  },
-
-  /**
-   * Get the lock status for a database file without opening it.
-   * Can be used to check if a database is locked before attempting to open it.
-   *
-   * @param path - File path to the KDBX database
-   */
-  async getLockStatus(path: string): Promise<LockStatus> {
-    PathOnlySchema.parse({ path });
-    const result = await invoke("get_lock_status", { path });
-    return LockStatusSchema.parse(result);
-  },
-
-  /**
-   * Force remove a lock file for recovery purposes.
-   *
-   * WARNING: Only use this when:
-   * - The lock is known to be stale (process crashed)
-   * - The user has confirmed they want to force unlock
-   *
-   * Using this on an actively locked database may cause data corruption.
-   *
-   * @param path - File path to the KDBX database
-   */
-  async forceUnlock(path: string): Promise<void> {
-    PathOnlySchema.parse({ path });
-    return invoke("force_unlock_database", { path });
   },
 };
 

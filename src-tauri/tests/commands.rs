@@ -20,8 +20,7 @@ fn fixture_exists(filename: &str) -> bool {
 }
 
 /// Creates a temporary copy of a fixture file for isolated testing.
-/// This is necessary because file locking prevents multiple tests from
-/// opening the same database file concurrently.
+/// This prevents tests from interfering with each other when mutating fixture-backed files.
 fn copy_fixture_to_temp(filename: &str) -> Option<(TempDir, PathBuf)> {
     if !fixture_exists(filename) {
         return None;

@@ -88,6 +88,50 @@ fn test_save_as_with_new_password() {
 }
 
 #[test]
+fn test_save_as_fails_when_target_database_is_already_open() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let source_path = dir.path().join("source.kdbx");
+    let target_path = dir.path().join("target.kdbx");
+    let source_path_str = source_path.to_string_lossy().to_string();
+    let target_path_str = target_path.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    service
+        .create(&source_path_str, "sourcepass", "Source")
+        .expect("Failed to create source database");
+    service
+        .create(&target_path_str, "targetpass", "Target")
+        .expect("Failed to create target database");
+
+    let result = service.save_as(&source_path_str, &target_path_str, None);
+    assert!(
+        matches!(result, Err(AppError::DatabaseAlreadyOpen(_))),
+        "save_as should reject destination when target database is already open"
+    );
+
+    let source_info = service
+        .get_info(&source_path_str)
+        .expect("Source database should remain open");
+    assert_eq!(source_info.path, source_path_str);
+
+    let target_info = service
+        .get_info(&target_path_str)
+        .expect("Target database should remain open");
+    assert_eq!(target_info.path, target_path_str);
+
+    service
+        .close(&source_path_str)
+        .expect("Failed to close source database");
+    service
+        .close(&target_path_str)
+        .expect("Failed to close target database");
+
+    service
+        .open(&target_path_str, "targetpass")
+        .expect("Target database should still open with original password");
+}
+
+#[test]
 fn test_save_preserves_keyfile_authentication() {
     let dir = tempdir().expect("Failed to create temp dir");
     let db_path = dir.path().join("keyfile-save-test.kdbx");

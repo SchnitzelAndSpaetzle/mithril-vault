@@ -320,7 +320,6 @@
       "keyfileNotFound": "No se pudo encontrar el archivo de clave en la ubicación especificada.",
       "invalidKeyfileFormat": "El archivo de clave seleccionado tiene un formato no válido.",
       "noCredentials": "Introduzca una contraseña o seleccione un archivo de clave.",
-      "databaseLocked": "Esta base de datos está abierta en otra aplicación. Ciérrela primero o fuerce el desbloqueo.",
       "notValidKdbx": "El archivo seleccionado no es una base de datos KeePass válida.",
       "unsupportedVersion": "Esta base de datos usa una versión de formato KeePass no compatible.",
       "ioError": "No se pudo encontrar o leer el archivo de base de datos.",

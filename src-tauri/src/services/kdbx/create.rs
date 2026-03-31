@@ -2,7 +2,6 @@ use crate::domain::kdbx::OpenDatabase;
 use crate::domain::secure::SecureString;
 use crate::dto::database::{DatabaseCreationOptions, DatabaseInfo};
 use crate::dto::error::AppError;
-use crate::services::file_lock::FileLockService;
 use crate::services::kdbx::key::build_database_key;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::config::{
@@ -95,8 +94,6 @@ impl KdbxService {
             },
         )?;
 
-        // Acquire file lock after database file is created
-        let file_lock = FileLockService::try_acquire_lock(path)?;
         let version = String::from("KDBX 4.0");
 
         let normalized_path = Self::normalize_path(path);
@@ -109,7 +106,6 @@ impl KdbxService {
                 password: password.map(SecureString::from),
                 keyfile_path: keyfile_path.map(String::from),
                 version: version.clone(),
-                file_lock: Some(file_lock),
             },
         );
 
