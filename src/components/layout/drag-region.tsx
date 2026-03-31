@@ -400,6 +400,7 @@ export default function DragRegion() {
                   size="icon-sm"
                   aria-label={t("passwordGenerator.passwordGeneratorButton")}
                   disabled={isEditing}
+                  onClick={() => void navigate({ to: "/password-generator" })}
                 >
                   <Dices />
                 </Button>
