@@ -5,6 +5,7 @@ import {
   Cog,
   Database,
   Globe,
+  Keyboard,
   Palette,
   Shield,
   SlidersHorizontal,
@@ -31,6 +32,7 @@ const sectionDefs = [
   { id: "security", titleKey: "settings.security.title", icon: Shield },
   { id: "appearance", titleKey: "settings.appearance.title", icon: Palette },
   { id: "browser", titleKey: "settings.browser.title", icon: Globe },
+  { id: "shortcuts", titleKey: "settings.shortcuts.title", icon: Keyboard },
   { id: "advanced", titleKey: "settings.advanced.title", icon: WandSparkles },
   { id: "database", titleKey: "settings.database.title", icon: Database },
 ] as const;

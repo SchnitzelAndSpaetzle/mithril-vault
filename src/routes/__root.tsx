@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type CSSProperties, useEffect } from "react";
 import App from "@/App.tsx";
 import { DatabaseTabBar } from "@/components/layout/database-tab-bar";
+import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 
@@ -30,6 +31,7 @@ function RootRouteComponent() {
           <Outlet />
         </div>
       </div>
+      <KeyboardShortcutsDialog />
       {/*<TanStackRouterDevtools />*/}
     </App>
   );

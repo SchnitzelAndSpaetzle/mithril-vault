@@ -97,6 +97,10 @@
       "enableDebugMode": "Enable debug mode",
       "dataLocation": "Data location"
     },
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "description": "View all available keyboard shortcuts."
+    },
     "database": {
       "title": "Database Settings",
       "description": "Current database cryptographic configuration (read-only).",
@@ -449,5 +453,33 @@
   "errors": {
     "failedToLoadSettings": "Failed to load settings: {{error}}",
     "settingsUnavailable": "Settings are unavailable."
+  },
+  "shortcuts": {
+    "title": "Keyboard Shortcuts",
+    "globalGroup": "Global",
+    "entryGroup": "Entry Actions",
+    "listGroup": "List Navigation",
+    "search": "Search",
+    "newEntry": "New Entry",
+    "save": "Save Database",
+    "lockDatabase": "Lock Database",
+    "settings": "Settings",
+    "toggleSidebar": "Toggle Sidebar",
+    "shortcutsHelp": "Keyboard Shortcuts",
+    "copyUsername": "Copy Username",
+    "copyPassword": "Copy Password",
+    "openUrl": "Open URL",
+    "editEntry": "Edit Entry",
+    "deleteEntry": "Delete Entry",
+    "navigateDown": "Next Entry",
+    "navigateUp": "Previous Entry",
+    "firstEntry": "First Entry",
+    "lastEntry": "Last Entry",
+    "activateEntry": "Open Entry",
+    "toast": {
+      "saved": "Database saved",
+      "usernameCopied": "Username copied",
+      "passwordCopied": "Password copied"
+    }
   }
 }

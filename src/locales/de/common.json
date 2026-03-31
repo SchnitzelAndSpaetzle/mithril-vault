@@ -97,6 +97,10 @@
       "enableDebugMode": "Debug-Modus aktivieren",
       "dataLocation": "Datenspeicherort"
     },
+    "shortcuts": {
+      "title": "Tastenkürzel",
+      "description": "Alle verfügbaren Tastenkürzel anzeigen."
+    },
     "database": {
       "title": "Datenbankeinstellungen",
       "description": "Aktuelle kryptographische Datenbankkonfiguration (schreibgeschützt).",
@@ -449,5 +453,33 @@
   "errors": {
     "failedToLoadSettings": "Einstellungen konnten nicht geladen werden: {{error}}",
     "settingsUnavailable": "Einstellungen sind nicht verfügbar."
+  },
+  "shortcuts": {
+    "title": "Tastaturkürzel",
+    "globalGroup": "Global",
+    "entryGroup": "Eintrag-Aktionen",
+    "listGroup": "Listennavigation",
+    "search": "Suchen",
+    "newEntry": "Neuer Eintrag",
+    "save": "Datenbank speichern",
+    "lockDatabase": "Datenbank sperren",
+    "settings": "Einstellungen",
+    "toggleSidebar": "Seitenleiste umschalten",
+    "shortcutsHelp": "Tastaturkürzel",
+    "copyUsername": "Benutzername kopieren",
+    "copyPassword": "Passwort kopieren",
+    "openUrl": "URL öffnen",
+    "editEntry": "Eintrag bearbeiten",
+    "deleteEntry": "Eintrag löschen",
+    "navigateDown": "Nächster Eintrag",
+    "navigateUp": "Vorheriger Eintrag",
+    "firstEntry": "Erster Eintrag",
+    "lastEntry": "Letzter Eintrag",
+    "activateEntry": "Eintrag öffnen",
+    "toast": {
+      "saved": "Datenbank gespeichert",
+      "usernameCopied": "Benutzername kopiert",
+      "passwordCopied": "Passwort kopiert"
+    }
   }
 }

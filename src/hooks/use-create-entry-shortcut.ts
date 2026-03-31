@@ -1,20 +1,8 @@
-import { useEffect } from "react";
+// SPDX-License-Identifier: MIT
 
-/**
- * Registers a Ctrl/Cmd+N keyboard shortcut to trigger entry creation.
- */
+import { SHORTCUTS } from "@/lib/shortcuts";
+import { useShortcut } from "@/hooks/use-shortcut";
+
 export function useCreateEntryShortcut(callback: () => void, enabled: boolean) {
-  useEffect(() => {
-    if (!enabled) return;
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
-        e.preventDefault();
-        callback();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [callback, enabled]);
+  useShortcut(SHORTCUTS.newEntry, callback, enabled);
 }
