@@ -101,6 +101,10 @@
       "title": "Tastenkürzel",
       "description": "Alle verfügbaren Tastenkürzel anzeigen."
     },
+    "generator": {
+      "title": "Passwortgenerator",
+      "description": "Sichere Passwörter und Passphrasen generieren."
+    },
     "database": {
       "title": "Datenbankeinstellungen",
       "description": "Aktuelle kryptographische Datenbankkonfiguration (schreibgeschützt).",
@@ -444,7 +448,22 @@
     "symbols": "!@#$",
     "excludeAmbiguous": "Mehrdeutige Zeichen ausschließen (0O, 1lI)",
     "usePassword": "Passwort verwenden",
-    "passwordGeneratorButton": "Passwort-Generator"
+    "usePassphrase": "Passphrase verwenden",
+    "passwordGeneratorButton": "Passwort-Generator",
+    "passwordTab": "Password",
+    "passphraseTab": "Passphrase",
+    "entropyBits": "{{bits}} bits of entropy",
+    "wordCount": "Word Count",
+    "separator": "Separator",
+    "capitalizeWords": "Capitalize words",
+    "includeNumber": "Include number",
+    "minNumbers": "Min digits",
+    "minSymbols": "Min symbols",
+    "excludeCustom": "Exclude characters",
+    "passphrase": "Passphrase",
+    "copyPassphrase": "Copy passphrase",
+    "regeneratePassphrase": "Regenerate passphrase",
+    "passphraseCopied": "Passphrase copied"
   },
   "iconPicker": {
     "chooseIcon": "Symbol auswählen"

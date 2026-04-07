@@ -101,6 +101,10 @@
       "title": "Atajos de teclado",
       "description": "Ver todos los atajos de teclado disponibles."
     },
+    "generator": {
+      "title": "Generador de contraseñas",
+      "description": "Generar contraseñas y frases de contraseña seguras."
+    },
     "database": {
       "title": "Configuración de la base de datos",
       "description": "Configuración criptográfica actual de la base de datos (solo lectura).",
@@ -444,7 +448,22 @@
     "symbols": "!@#$",
     "excludeAmbiguous": "Excluir ambiguos (0O, 1lI)",
     "usePassword": "Usar contraseña",
-    "passwordGeneratorButton": "generador de contraseñas"
+    "usePassphrase": "Usar frase de contraseña",
+    "passwordGeneratorButton": "generador de contraseñas",
+    "passwordTab": "Password",
+    "passphraseTab": "Passphrase",
+    "entropyBits": "{{bits}} bits of entropy",
+    "wordCount": "Word Count",
+    "separator": "Separator",
+    "capitalizeWords": "Capitalize words",
+    "includeNumber": "Include number",
+    "minNumbers": "Min digits",
+    "minSymbols": "Min symbols",
+    "excludeCustom": "Exclude characters",
+    "passphrase": "Passphrase",
+    "copyPassphrase": "Copy passphrase",
+    "regeneratePassphrase": "Regenerate passphrase",
+    "passphraseCopied": "Passphrase copied"
   },
   "iconPicker": {
     "chooseIcon": "Elegir un icono"

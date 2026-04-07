@@ -67,10 +67,34 @@ export const PasswordGeneratorOptionsSchema = z.object({
   symbols: z.boolean(),
   excludeAmbiguous: z.boolean(),
   excludeChars: z.string().optional(),
+  minNumbers: z.number().int().min(0).optional(),
+  minSymbols: z.number().int().min(0).optional(),
 });
 export type PasswordGeneratorOptions = z.infer<
   typeof PasswordGeneratorOptionsSchema
 >;
+
+export const PassphraseGeneratorOptionsSchema = z.object({
+  wordCount: z.number().int().min(1).max(20),
+  separator: z.string(),
+  capitalize: z.boolean(),
+  includeNumber: z.boolean(),
+});
+export type PassphraseGeneratorOptions = z.infer<
+  typeof PassphraseGeneratorOptionsSchema
+>;
+
+export const GeneratedPasswordSchema = z.object({
+  password: z.string(),
+  entropyBits: z.number(),
+});
+export type GeneratedPassword = z.infer<typeof GeneratedPasswordSchema>;
+
+export const GeneratedPassphraseSchema = z.object({
+  passphrase: z.string(),
+  entropyBits: z.number(),
+});
+export type GeneratedPassphrase = z.infer<typeof GeneratedPassphraseSchema>;
 
 export const CreateEntryDataSchema = z.object({
   title: z.string().min(1),

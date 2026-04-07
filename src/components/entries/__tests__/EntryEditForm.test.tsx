@@ -82,7 +82,9 @@ vi.mock("@/lib/tauri", () => ({
     getProtectedCustomField: mockGetProtectedCustomField,
   },
   generator: {
-    generate: vi.fn(() => Promise.resolve("generated-pw-123")),
+    generate: vi.fn(() =>
+      Promise.resolve({ password: "generated-pw-123", entropyBits: 128 })
+    ),
   },
 }));
 

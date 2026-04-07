@@ -13,7 +13,10 @@ import type {
   DatabaseHeaderInfo,
   DatabaseInfo,
   Entry,
+  GeneratedPassphrase,
+  GeneratedPassword,
   Group,
+  PassphraseGeneratorOptions,
   PasswordGeneratorOptions,
   UpdateEntryData,
 } from "./types";
@@ -28,7 +31,10 @@ import {
   DatabaseHeaderInfoSchema,
   DatabaseInfoSchema,
   EntrySchema,
+  GeneratedPassphraseSchema,
+  GeneratedPasswordSchema,
   GroupSchema,
+  PassphraseGeneratorOptionsSchema,
   PasswordGeneratorOptionsSchema,
   UpdateEntryDataSchema,
 } from "./types";
@@ -422,10 +428,20 @@ export const tags = {
  * Password generation commands backed by the Rust generator.
  */
 export const generator = {
-  async generate(options: PasswordGeneratorOptions): Promise<string> {
+  async generate(
+    options: PasswordGeneratorOptions
+  ): Promise<GeneratedPassword> {
     PasswordGeneratorOptionsSchema.parse(options);
     const result = await invoke("generate_password", { options });
-    return z.string().parse(result);
+    return GeneratedPasswordSchema.parse(result);
+  },
+
+  async generatePassphrase(
+    options: PassphraseGeneratorOptions
+  ): Promise<GeneratedPassphrase> {
+    PassphraseGeneratorOptionsSchema.parse(options);
+    const result = await invoke("generate_passphrase", { options });
+    return GeneratedPassphraseSchema.parse(result);
   },
 };
 
