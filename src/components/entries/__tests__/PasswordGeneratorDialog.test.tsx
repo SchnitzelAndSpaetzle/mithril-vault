@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { PasswordGeneratorPopover } from "@/components/entries/PasswordGeneratorPopover";
+import { PasswordGeneratorDialog } from "@/components/entries/PasswordGeneratorDialog";
 import { clipboard, generator } from "@/lib/tauri";
 
 vi.mock(
@@ -22,61 +22,58 @@ vi.mock("@/lib/tauri", () => ({
   },
   generator: {
     generate: vi.fn(),
+    generatePassphrase: vi.fn(),
   },
 }));
 
-describe("PasswordGeneratorPopover", () => {
+describe("PasswordGeneratorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(generator.generate).mockResolvedValue({
       password: "generated-password",
       entropyBits: 128,
     });
+    vi.mocked(generator.generatePassphrase).mockResolvedValue({
+      passphrase: "correct-horse-battery-staple",
+      entropyBits: 51.7,
+    });
     vi.mocked(clipboard.copyText).mockResolvedValue(undefined);
   });
 
-  it("copies generated password using settings-driven clipboard timeout", async () => {
+  it("opens dialog and shows generator when trigger is clicked", async () => {
     render(
-      <PasswordGeneratorPopover onUsePassword={vi.fn()}>
+      <PasswordGeneratorDialog onUsePassword={vi.fn()}>
         <button type="button">Open</button>
-      </PasswordGeneratorPopover>
+      </PasswordGeneratorDialog>
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     await waitFor(() => {
-      expect(generator.generate).toHaveBeenCalled();
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "passwordGenerator.copyPassword" })
-    );
-
-    await waitFor(() => {
-      expect(clipboard.copyText).toHaveBeenCalledWith("generated-password", 12);
+      expect(
+        screen.getByRole("tab", { name: "passwordGenerator.passwordTab" })
+      ).toBeInTheDocument();
     });
   });
 
-  it("shows generation error and prevents copy when generation fails", async () => {
-    vi.mocked(generator.generate).mockRejectedValueOnce(
-      new Error("gen failed")
-    );
-
+  it("calls onUsePassword and closes dialog when use button is clicked", async () => {
+    const onUsePassword = vi.fn();
     render(
-      <PasswordGeneratorPopover onUsePassword={vi.fn()}>
+      <PasswordGeneratorDialog onUsePassword={onUsePassword}>
         <button type="button">Open</button>
-      </PasswordGeneratorPopover>
+      </PasswordGeneratorDialog>
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     await waitFor(() => {
-      expect(screen.getByText("gen failed")).toBeInTheDocument();
+      expect(screen.getByText("generated-password")).toBeInTheDocument();
     });
 
-    expect(
-      screen.getByRole("button", { name: "passwordGenerator.copyPassword" })
-    ).toBeDisabled();
-    expect(clipboard.copyText).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "passwordGenerator.usePassword" })
+    );
+
+    expect(onUsePassword).toHaveBeenCalledWith("generated-password");
   });
 });

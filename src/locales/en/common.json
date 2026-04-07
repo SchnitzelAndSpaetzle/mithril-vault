@@ -101,6 +101,10 @@
       "title": "Keyboard Shortcuts",
       "description": "View all available keyboard shortcuts."
     },
+    "generator": {
+      "title": "Password Generator",
+      "description": "Generate secure passwords and passphrases."
+    },
     "database": {
       "title": "Database Settings",
       "description": "Current database cryptographic configuration (read-only).",
@@ -444,6 +448,7 @@
     "symbols": "!@#$",
     "excludeAmbiguous": "Exclude ambiguous (0O, 1lI)",
     "usePassword": "Use Password",
+    "usePassphrase": "Use Passphrase",
     "passwordGeneratorButton": "password generator",
     "passwordTab": "Password",
     "passphraseTab": "Passphrase",

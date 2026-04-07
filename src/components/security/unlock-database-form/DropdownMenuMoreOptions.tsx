@@ -25,7 +25,11 @@ export default function DropdownMenuMoreOptions() {
         <DropdownMenuGroup>
           <DropdownMenuItem>{t("welcome.moreMenu.demo")}</DropdownMenuItem>
           <DropdownMenuItem>
-            <Link to="/password-generator" className="flex items-center gap-2">
+            <Link
+              to="/settings"
+              hash="generator"
+              className="flex items-center gap-2"
+            >
               {t("welcome.moreMenu.generatePassword")}
             </Link>
           </DropdownMenuItem>

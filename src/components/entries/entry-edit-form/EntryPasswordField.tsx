@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { type Control, Controller } from "react-hook-form";
 import { Dices, Eye, EyeClosed } from "lucide-react";
 import { PasswordStrengthIndicator } from "@/components/database/create-wizard/PasswordStrengthIndicator";
-import { PasswordGeneratorPopover } from "@/components/entries/PasswordGeneratorPopover";
+import { PasswordGeneratorDialog } from "@/components/entries/PasswordGeneratorDialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import {
   InputGroup,
@@ -62,9 +62,7 @@ export function EntryPasswordField({
                 >
                   {showPassword ? <Eye /> : <EyeClosed />}
                 </InputGroupButton>
-                <PasswordGeneratorPopover
-                  onUsePassword={onUseGeneratedPassword}
-                >
+                <PasswordGeneratorDialog onUsePassword={onUseGeneratedPassword}>
                   <InputGroupButton
                     variant="ghost"
                     size="icon-xs"
@@ -74,7 +72,7 @@ export function EntryPasswordField({
                   >
                     <Dices />
                   </InputGroupButton>
-                </PasswordGeneratorPopover>
+                </PasswordGeneratorDialog>
               </InputGroupAddon>
             </InputGroup>
             <PasswordStrengthIndicator password={watchedPassword} />

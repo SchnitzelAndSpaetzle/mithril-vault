@@ -30,6 +30,7 @@ import { BrowserIntegrationSettingsSection } from "@/components/settings/section
 import { DatabaseSettingsSection } from "@/components/settings/sections/DatabaseSettingsSection";
 import { GeneralSettingsSection } from "@/components/settings/sections/GeneralSettingsSection";
 import { KeyboardShortcutsSettingsSection } from "@/components/settings/sections/KeyboardShortcutsSettingsSection";
+import { PasswordGeneratorSettingsSection } from "@/components/settings/sections/PasswordGeneratorSettingsSection";
 import { SecuritySettingsSection } from "@/components/settings/sections/SecuritySettingsSection";
 
 interface SettingsEditorProps {
@@ -274,6 +275,7 @@ export function SettingsEditor({
         updateDraft={updateDraft}
       />
       <KeyboardShortcutsSettingsSection />
+      <PasswordGeneratorSettingsSection />
       <AdvancedSettingsSection draft={draft} updateDraft={updateDraft} />
       <DatabaseSettingsSection
         dbId={dbId}

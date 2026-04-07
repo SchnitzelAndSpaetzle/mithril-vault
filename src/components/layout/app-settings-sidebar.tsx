@@ -4,6 +4,7 @@ import { Link, useLocation } from "@tanstack/react-router";
 import {
   Cog,
   Database,
+  Dices,
   Globe,
   Keyboard,
   Palette,
@@ -33,6 +34,7 @@ const sectionDefs = [
   { id: "appearance", titleKey: "settings.appearance.title", icon: Palette },
   { id: "browser", titleKey: "settings.browser.title", icon: Globe },
   { id: "shortcuts", titleKey: "settings.shortcuts.title", icon: Keyboard },
+  { id: "generator", titleKey: "settings.generator.title", icon: Dices },
   { id: "advanced", titleKey: "settings.advanced.title", icon: WandSparkles },
   { id: "database", titleKey: "settings.database.title", icon: Database },
 ] as const;

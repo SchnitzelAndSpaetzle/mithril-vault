@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as PasswordGeneratorRouteImport } from './routes/password-generator'
 import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
@@ -23,11 +22,6 @@ import { Route as DashboardEntryNewRouteImport } from './routes/dashboard/entry/
 import { Route as DashboardEntryEditRouteImport } from './routes/dashboard/entry/edit'
 import { Route as DashboardEntryIdRouteImport } from './routes/dashboard/entry/$id'
 
-const PasswordGeneratorRoute = PasswordGeneratorRouteImport.update({
-  id: '/password-generator',
-  path: '/password-generator',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const DashboardRouteRoute = DashboardRouteRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -90,7 +84,6 @@ const DashboardEntryIdRoute = DashboardEntryIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteRouteWithChildren
-  '/password-generator': typeof PasswordGeneratorRoute
   '/import-file': typeof authImportFileRoute
   '/new': typeof authNewRoute
   '/unlock': typeof authUnlockRoute
@@ -103,7 +96,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/index/$dbId': typeof DashboardIndexDbIdRoute
 }
 export interface FileRoutesByTo {
-  '/password-generator': typeof PasswordGeneratorRoute
   '/import-file': typeof authImportFileRoute
   '/new': typeof authNewRoute
   '/unlock': typeof authUnlockRoute
@@ -119,7 +111,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(auth)': typeof authRouteRouteWithChildren
   '/dashboard': typeof DashboardRouteRouteWithChildren
-  '/password-generator': typeof PasswordGeneratorRoute
   '/(auth)/import-file': typeof authImportFileRoute
   '/(auth)/new': typeof authNewRoute
   '/(auth)/unlock': typeof authUnlockRoute
@@ -135,7 +126,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/dashboard'
-    | '/password-generator'
     | '/import-file'
     | '/new'
     | '/unlock'
@@ -148,7 +138,6 @@ export interface FileRouteTypes {
     | '/dashboard/index/$dbId'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/password-generator'
     | '/import-file'
     | '/new'
     | '/unlock'
@@ -163,7 +152,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/(auth)'
     | '/dashboard'
-    | '/password-generator'
     | '/(auth)/import-file'
     | '/(auth)/new'
     | '/(auth)/unlock'
@@ -179,19 +167,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   authRouteRoute: typeof authRouteRouteWithChildren
   DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
-  PasswordGeneratorRoute: typeof PasswordGeneratorRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/password-generator': {
-      id: '/password-generator'
-      path: '/password-generator'
-      fullPath: '/password-generator'
-      preLoaderRoute: typeof PasswordGeneratorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -320,7 +300,6 @@ const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   authRouteRoute: authRouteRouteWithChildren,
   DashboardRouteRoute: DashboardRouteRouteWithChildren,
-  PasswordGeneratorRoute: PasswordGeneratorRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 export const routeTree = rootRouteImport

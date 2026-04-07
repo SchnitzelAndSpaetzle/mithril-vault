@@ -39,7 +39,11 @@ const DEFAULT_PASSPHRASE_OPTIONS: PassphraseGeneratorOptions = {
   includeNumber: true,
 };
 
-export function PasswordGeneratorPage() {
+interface PasswordGeneratorProps {
+  onUsePassword?: (value: string) => void;
+}
+
+export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
   const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
   const [activeTab, setActiveTab] = useState("password");
@@ -71,11 +75,20 @@ export function PasswordGeneratorPage() {
 
   const [isCopied, setIsCopied] = useState(false);
 
+  const currentValue =
+    activeTab === "password" ? passwordGen.password : passphraseGen.passphrase;
+
   async function handleCopy(text: string) {
     if (!text) return;
     await clipboard.copyText(text, clipboardClearTimeout);
     setIsCopied(true);
     window.setTimeout(() => setIsCopied(false), 2000);
+  }
+
+  function handleUse() {
+    if (onUsePassword && currentValue) {
+      onUsePassword(currentValue);
+    }
   }
 
   function updatePasswordOption<K extends keyof PasswordGeneratorOptions>(
@@ -93,11 +106,7 @@ export function PasswordGeneratorPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-lg p-6">
-      <h1 className="mb-6 text-xl font-semibold">
-        {t("passwordGenerator.title")}
-      </h1>
-
+    <div className="w-full max-w-lg space-y-4">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full">
           <TabsTrigger value="password">
@@ -178,7 +187,7 @@ export function PasswordGeneratorPage() {
             ).map(([key, label]) => (
               <div key={key} className="flex items-center gap-2">
                 <Checkbox
-                  id={`page-gen-${key}`}
+                  id={`gen-${key}`}
                   checked={
                     (passwordOptions[
                       key as keyof typeof passwordOptions
@@ -191,7 +200,7 @@ export function PasswordGeneratorPage() {
                     )
                   }
                 />
-                <Label htmlFor={`page-gen-${key}`} className="text-sm">
+                <Label htmlFor={`gen-${key}`} className="text-sm">
                   {label}
                 </Label>
               </div>
@@ -200,13 +209,13 @@ export function PasswordGeneratorPage() {
 
           <div className="flex items-center gap-2">
             <Checkbox
-              id="page-gen-exclude-ambiguous"
+              id="gen-exclude-ambiguous"
               checked={passwordOptions.excludeAmbiguous}
               onCheckedChange={(checked) =>
                 updatePasswordOption("excludeAmbiguous", checked === true)
               }
             />
-            <Label htmlFor="page-gen-exclude-ambiguous" className="text-sm">
+            <Label htmlFor="gen-exclude-ambiguous" className="text-sm">
               {t("passwordGenerator.excludeAmbiguous")}
             </Label>
           </div>
@@ -345,31 +354,48 @@ export function PasswordGeneratorPage() {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Checkbox
-                id="page-gen-capitalize"
+                id="gen-capitalize"
                 checked={passphraseOptions.capitalize}
                 onCheckedChange={(checked) =>
                   updatePassphraseOption("capitalize", checked === true)
                 }
               />
-              <Label htmlFor="page-gen-capitalize" className="text-sm">
+              <Label htmlFor="gen-capitalize" className="text-sm">
                 {t("passwordGenerator.capitalizeWords")}
               </Label>
             </div>
             <div className="flex items-center gap-2">
               <Checkbox
-                id="page-gen-include-number"
+                id="gen-include-number"
                 checked={passphraseOptions.includeNumber}
                 onCheckedChange={(checked) =>
                   updatePassphraseOption("includeNumber", checked === true)
                 }
               />
-              <Label htmlFor="page-gen-include-number" className="text-sm">
+              <Label htmlFor="gen-include-number" className="text-sm">
                 {t("passwordGenerator.includeNumber")}
               </Label>
             </div>
           </div>
         </TabsContent>
       </Tabs>
+
+      {onUsePassword && (
+        <Button
+          type="button"
+          className="w-full"
+          onClick={handleUse}
+          disabled={
+            (activeTab === "password" && passwordGen.isGenerating) ||
+            (activeTab === "passphrase" && passphraseGen.isGenerating) ||
+            !currentValue
+          }
+        >
+          {activeTab === "password"
+            ? t("passwordGenerator.usePassword")
+            : t("passwordGenerator.usePassphrase")}
+        </Button>
+      )}
     </div>
   );
 }

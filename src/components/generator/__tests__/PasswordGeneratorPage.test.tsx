@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { PasswordGeneratorPage } from "@/components/generator/PasswordGeneratorPage";
+import { PasswordGenerator } from "@/components/generator/PasswordGenerator";
 import { clipboard, generator } from "@/lib/tauri";
 
 vi.mock(
@@ -26,7 +26,7 @@ vi.mock("@/lib/tauri", () => ({
   },
 }));
 
-describe("PasswordGeneratorPage", () => {
+describe("PasswordGenerator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(generator.generate).mockResolvedValue({
@@ -41,7 +41,7 @@ describe("PasswordGeneratorPage", () => {
   });
 
   it("renders both tabs", () => {
-    render(<PasswordGeneratorPage />);
+    render(<PasswordGenerator />);
 
     expect(
       screen.getByRole("tab", { name: "passwordGenerator.passwordTab" })
@@ -52,7 +52,7 @@ describe("PasswordGeneratorPage", () => {
   });
 
   it("shows generated password and entropy on password tab", async () => {
-    render(<PasswordGeneratorPage />);
+    render(<PasswordGenerator />);
 
     await waitFor(() => {
       expect(screen.getByText("test-password-123")).toBeInTheDocument();
@@ -64,7 +64,7 @@ describe("PasswordGeneratorPage", () => {
   });
 
   it("renders passphrase tab trigger", () => {
-    render(<PasswordGeneratorPage />);
+    render(<PasswordGenerator />);
 
     const passphraseTab = screen.getByRole("tab", {
       name: "passwordGenerator.passphraseTab",
@@ -74,7 +74,7 @@ describe("PasswordGeneratorPage", () => {
   });
 
   it("copies password when copy button is clicked", async () => {
-    render(<PasswordGeneratorPage />);
+    render(<PasswordGenerator />);
 
     await waitFor(() => {
       expect(screen.getByText("test-password-123")).toBeInTheDocument();
@@ -89,5 +89,40 @@ describe("PasswordGeneratorPage", () => {
     await waitFor(() => {
       expect(clipboard.copyText).toHaveBeenCalledWith("test-password-123", 30);
     });
+  });
+
+  it("does not render use button when onUsePassword is not provided", () => {
+    render(<PasswordGenerator />);
+
+    expect(
+      screen.queryByRole("button", { name: "passwordGenerator.usePassword" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders use button when onUsePassword is provided", async () => {
+    render(<PasswordGenerator onUsePassword={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("test-password-123")).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByRole("button", { name: "passwordGenerator.usePassword" })
+    ).toBeInTheDocument();
+  });
+
+  it("calls onUsePassword with current password when use button is clicked", async () => {
+    const onUsePassword = vi.fn();
+    render(<PasswordGenerator onUsePassword={onUsePassword} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("test-password-123")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "passwordGenerator.usePassword" })
+    );
+
+    expect(onUsePassword).toHaveBeenCalledWith("test-password-123");
   });
 });

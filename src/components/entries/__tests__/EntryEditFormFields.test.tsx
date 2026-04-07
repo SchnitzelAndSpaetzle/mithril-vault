@@ -22,8 +22,8 @@ vi.mock(
   })
 );
 
-vi.mock("@/components/entries/PasswordGeneratorPopover", () => ({
-  PasswordGeneratorPopover: ({
+vi.mock("@/components/entries/PasswordGeneratorDialog", () => ({
+  PasswordGeneratorDialog: ({
     children,
     onUsePassword,
   }: {

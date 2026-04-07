@@ -101,6 +101,10 @@
       "title": "Prečice na tastaturi",
       "description": "Pogledajte sve dostupne prečice na tastaturi."
     },
+    "generator": {
+      "title": "Generator lozinki",
+      "description": "Generišite sigurne lozinke i frazne lozinke."
+    },
     "database": {
       "title": "Podešavanja baze podataka",
       "description": "Trenutna kriptografska konfiguracija baze podataka (samo za čitanje).",
@@ -444,6 +448,7 @@
     "symbols": "!@#$",
     "excludeAmbiguous": "Isključi dvosmislene (0O, 1lI)",
     "usePassword": "Koristi lozinku",
+    "usePassphrase": "Koristi fraznu lozinku",
     "passwordGeneratorButton": "generator lozinki",
     "passwordTab": "Password",
     "passphraseTab": "Passphrase",
