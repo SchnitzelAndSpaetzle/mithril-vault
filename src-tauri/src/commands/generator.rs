@@ -166,6 +166,22 @@ fn generate_password_value(
         ));
     }
 
+    let min_numbers = options.min_numbers.unwrap_or(0);
+    if min_numbers > 0 && number_chars.is_empty() {
+        return Err(AppError::Crypto(
+            "Minimum numbers requested, but no number characters are available after exclusions"
+                .into(),
+        ));
+    }
+
+    let min_symbols = options.min_symbols.unwrap_or(0);
+    if min_symbols > 0 && symbol_chars.is_empty() {
+        return Err(AppError::Crypto(
+            "Minimum symbols requested, but no symbol characters are available after exclusions"
+                .into(),
+        ));
+    }
+
     let charset_size = charset.len();
     let mut rng = OsRng;
     let mut password: Vec<char> = Vec::with_capacity(options.length);
@@ -177,19 +193,14 @@ fn generate_password_value(
         password.push(*ch);
     }
 
-    // Enforce minimum character requirements by replacing random positions
-    enforce_minimum(
+    // Enforce minimum character requirements in one pass so requirements
+    // cannot overwrite each other.
+    enforce_minimums(
         &mut password,
         &number_chars,
-        options.min_numbers,
-        &charset,
-        &mut rng,
-    )?;
-    enforce_minimum(
-        &mut password,
+        min_numbers,
         &symbol_chars,
-        options.min_symbols,
-        &charset,
+        min_symbols,
         &mut rng,
     )?;
 
@@ -205,45 +216,37 @@ fn generate_password_value(
     })
 }
 
-fn enforce_minimum(
+fn enforce_minimums(
     password: &mut [char],
-    required_chars: &[char],
-    min_count: Option<usize>,
-    _full_charset: &[char],
+    number_chars: &[char],
+    min_numbers: usize,
+    symbol_chars: &[char],
+    min_symbols: usize,
     rng: &mut OsRng,
 ) -> Result<(), AppError> {
-    let Some(min) = min_count else {
-        return Ok(());
-    };
-    if min == 0 || required_chars.is_empty() {
+    if min_numbers == 0 && min_symbols == 0 {
         return Ok(());
     }
 
-    let current_count = password
-        .iter()
-        .filter(|ch| required_chars.contains(ch))
-        .count();
+    let mut indices: Vec<usize> = (0..password.len()).collect();
+    indices.shuffle(rng);
 
-    if current_count >= min {
-        return Ok(());
-    }
+    let number_indices = &indices[..min_numbers];
+    let symbol_start = min_numbers;
+    let symbol_end = min_numbers + min_symbols;
+    let symbol_indices = &indices[symbol_start..symbol_end];
 
-    let needed = min - current_count;
-
-    // Find positions that don't already contain a required character
-    let mut replaceable: Vec<usize> = password
-        .iter()
-        .enumerate()
-        .filter(|(_, ch)| !required_chars.contains(ch))
-        .map(|(i, _)| i)
-        .collect();
-
-    replaceable.shuffle(rng);
-
-    for &pos in replaceable.iter().take(needed) {
-        let ch = required_chars
+    for &pos in number_indices {
+        let ch = number_chars
             .choose(rng)
-            .ok_or_else(|| AppError::Crypto("Failed to select replacement character".into()))?;
+            .ok_or_else(|| AppError::Crypto("Failed to select number character".into()))?;
+        password[pos] = *ch;
+    }
+
+    for &pos in symbol_indices {
+        let ch = symbol_chars
+            .choose(rng)
+            .ok_or_else(|| AppError::Crypto("Failed to select symbol character".into()))?;
         password[pos] = *ch;
     }
 
@@ -513,6 +516,69 @@ mod tests {
             length: 15,
             min_numbers: Some(10),
             min_symbols: Some(10),
+            ..Default::default()
+        };
+
+        let result = generate_password_value(&options);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn generates_password_meeting_both_minimums() {
+        let options = PasswordGeneratorOptions {
+            length: 20,
+            min_numbers: Some(6),
+            min_symbols: Some(5),
+            ..Default::default()
+        };
+
+        let result = generate_password_value(&options);
+        assert!(result.is_ok());
+        let generated = result.unwrap_or_else(|_| GeneratedPassword {
+            password: String::new(),
+            entropy_bits: 0.0,
+        });
+
+        let digit_count = generated
+            .password
+            .chars()
+            .filter(char::is_ascii_digit)
+            .count();
+        let symbol_count = generated
+            .password
+            .chars()
+            .filter(|c| SYMBOL_CHARS.contains(*c))
+            .count();
+
+        assert!(
+            digit_count >= 6,
+            "Expected at least 6 digits, got {digit_count} in '{}'",
+            generated.password
+        );
+        assert!(
+            symbol_count >= 5,
+            "Expected at least 5 symbols, got {symbol_count} in '{}'",
+            generated.password
+        );
+    }
+
+    #[test]
+    fn rejects_min_numbers_when_all_numbers_excluded() {
+        let options = PasswordGeneratorOptions {
+            min_numbers: Some(1),
+            exclude_chars: Some(NUMBER_CHARS.into()),
+            ..Default::default()
+        };
+
+        let result = generate_password_value(&options);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_min_symbols_when_all_symbols_excluded() {
+        let options = PasswordGeneratorOptions {
+            min_symbols: Some(1),
+            exclude_chars: Some(SYMBOL_CHARS.into()),
             ..Default::default()
         };
 
