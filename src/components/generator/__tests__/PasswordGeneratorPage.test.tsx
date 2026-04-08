@@ -52,7 +52,7 @@ describe("PasswordGenerator", () => {
     render(<PasswordGenerator />);
 
     await waitFor(() => {
-      expect(screen.getByText("test-password-123")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("test-password-123")).toBeInTheDocument();
     });
 
     expect(
@@ -74,7 +74,7 @@ describe("PasswordGenerator", () => {
     render(<PasswordGenerator />);
 
     await waitFor(() => {
-      expect(screen.getByText("test-password-123")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("test-password-123")).toBeInTheDocument();
     });
 
     fireEvent.click(
@@ -100,7 +100,7 @@ describe("PasswordGenerator", () => {
     render(<PasswordGenerator onUsePassword={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText("test-password-123")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("test-password-123")).toBeInTheDocument();
     });
 
     expect(
@@ -113,7 +113,7 @@ describe("PasswordGenerator", () => {
     render(<PasswordGenerator onUsePassword={onUsePassword} />);
 
     await waitFor(() => {
-      expect(screen.getByText("test-password-123")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("test-password-123")).toBeInTheDocument();
     });
 
     fireEvent.click(

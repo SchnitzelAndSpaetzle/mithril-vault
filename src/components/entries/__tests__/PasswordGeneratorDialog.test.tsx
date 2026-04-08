@@ -64,7 +64,9 @@ describe("PasswordGeneratorDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     await waitFor(() => {
-      expect(screen.getByText("generated-password")).toBeInTheDocument();
+      expect(
+        screen.getByDisplayValue("generated-password")
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(
