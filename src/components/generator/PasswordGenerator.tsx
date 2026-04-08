@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { PasswordStrengthIndicator } from "@/components/database/create-wizard/PasswordStrengthIndicator";
+import { PasswordStrengthIndicator } from "@/components/ui/password-strength-indicator";
 import {
   usePassphraseGenerator,
   usePasswordGenerator,
@@ -131,7 +131,10 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
             generatingLabel={t("passwordGenerator.generating")}
           />
 
-          <PasswordStrengthIndicator password={passwordGen.password} />
+          <PasswordStrengthIndicator
+            password={passwordGen.password}
+            entropyBits={passwordGen.entropyBits}
+          />
 
           {passwordGen.entropyBits > 0 && (
             <p className="text-xs text-muted-foreground">
@@ -292,7 +295,10 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
             generatingLabel={t("passwordGenerator.generating")}
           />
 
-          <PasswordStrengthIndicator password={passphraseGen.passphrase} />
+          <PasswordStrengthIndicator
+            password={passphraseGen.passphrase}
+            entropyBits={passphraseGen.entropyBits}
+          />
 
           {passphraseGen.entropyBits > 0 && (
             <p className="text-xs text-muted-foreground">

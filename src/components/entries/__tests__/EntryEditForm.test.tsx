@@ -97,12 +97,9 @@ vi.mock("sonner", () => ({
 }));
 
 // Mock PasswordStrengthIndicator to avoid zxcvbn setup
-vi.mock(
-  "@/components/database/create-wizard/PasswordStrengthIndicator",
-  () => ({
-    PasswordStrengthIndicator: () => null,
-  })
-);
+vi.mock("@/components/ui/password-strength-indicator", () => ({
+  PasswordStrengthIndicator: () => null,
+}));
 
 const mockEntry: Entry = {
   id: "entry-1",

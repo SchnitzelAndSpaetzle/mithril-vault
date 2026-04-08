@@ -219,8 +219,8 @@
       "created": "Kreirano",
       "oldestFirst": "Najstarije prvo",
       "newestFirst": "Najnovije prvo",
-      "aToZ": "A \u2192 Z",
-      "zToA": "Z \u2192 A"
+      "aToZ": "A → Z",
+      "zToA": "Z → A"
     },
     "search": {
       "searchResults": "Rezultati pretrage",
@@ -464,6 +464,13 @@
     "copyPassphrase": "Copy passphrase",
     "regeneratePassphrase": "Regenerate passphrase",
     "passphraseCopied": "Passphrase copied"
+  },
+  "passwordStrength": {
+    "veryWeak": "Veoma slaba",
+    "weak": "Slaba",
+    "fair": "Srednja",
+    "strong": "Jaka",
+    "excellent": "Odlična"
   },
   "iconPicker": {
     "chooseIcon": "Izaberite ikonu"

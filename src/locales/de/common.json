@@ -219,8 +219,8 @@
       "created": "Erstellt",
       "oldestFirst": "Älteste zuerst",
       "newestFirst": "Neueste zuerst",
-      "aToZ": "A \u2192 Z",
-      "zToA": "Z \u2192 A"
+      "aToZ": "A → Z",
+      "zToA": "Z → A"
     },
     "search": {
       "searchResults": "Suchergebnisse",
@@ -464,6 +464,13 @@
     "copyPassphrase": "Copy passphrase",
     "regeneratePassphrase": "Regenerate passphrase",
     "passphraseCopied": "Passphrase copied"
+  },
+  "passwordStrength": {
+    "veryWeak": "Sehr schwach",
+    "weak": "Schwach",
+    "fair": "Mittel",
+    "strong": "Stark",
+    "excellent": "Ausgezeichnet"
   },
   "iconPicker": {
     "chooseIcon": "Symbol auswählen"

@@ -123,6 +123,18 @@
   }
 }
 
+@keyframes strength-rainbow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -131,5 +143,38 @@
 
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+
+  .strength-bar-rainbow {
+    background: linear-gradient(
+      90deg,
+      oklch(0.7 0.25 0),
+      oklch(0.75 0.2 50),
+      oklch(0.82 0.18 90),
+      oklch(0.72 0.2 150),
+      oklch(0.6 0.2 230),
+      oklch(0.6 0.25 290),
+      oklch(0.7 0.25 360)
+    );
+    background-size: 500% 100%;
+    animation: strength-rainbow 8s ease-in-out infinite;
+  }
+
+  .strength-label-rainbow {
+    background: linear-gradient(
+      90deg,
+      oklch(0.7 0.25 0),
+      oklch(0.75 0.2 50),
+      oklch(0.82 0.18 90),
+      oklch(0.72 0.2 150),
+      oklch(0.6 0.2 230),
+      oklch(0.6 0.25 290),
+      oklch(0.7 0.25 360)
+    );
+    background-size: 500% 100%;
+    animation: strength-rainbow 8s ease-in-out infinite;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }

@@ -5,12 +5,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PasswordGeneratorDialog } from "@/components/entries/PasswordGeneratorDialog";
 import { clipboard, generator } from "@/lib/tauri";
 
-vi.mock(
-  "@/components/database/create-wizard/PasswordStrengthIndicator",
-  () => ({
-    PasswordStrengthIndicator: () => <div>Password strength</div>,
-  })
-);
+vi.mock("@/components/ui/password-strength-indicator", () => ({
+  PasswordStrengthIndicator: () => <div>Password strength</div>,
+}));
 
 vi.mock("@/hooks/use-clipboard-timeout", () => ({
   useClipboardTimeout: () => 12,
