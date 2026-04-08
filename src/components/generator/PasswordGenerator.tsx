@@ -462,6 +462,10 @@ function GeneratedDisplay({
     <div className="flex items-center gap-2 rounded-md border bg-muted/50 p-3">
       <input
         type="text"
+        autoComplete="off"
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
         value={!value && isGenerating ? generatingLabel : value}
         onChange={(e) => onChange(e.target.value)}
         className="flex-1 break-all bg-transparent text-sm font-mono outline-none"
