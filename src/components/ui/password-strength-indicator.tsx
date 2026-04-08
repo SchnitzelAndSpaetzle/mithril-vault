@@ -101,7 +101,7 @@ const RAINBOW_BAR_DELAY_SECONDS = -0.4;
 
 interface PasswordStrengthIndicatorProps {
   password: string;
-  entropyBits?: number;
+  entropyBits?: number | undefined;
   className?: string;
 }
 
