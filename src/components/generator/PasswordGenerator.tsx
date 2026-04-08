@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { PasswordStrengthIndicator } from "@/components/ui/password-strength-indicator";
+import {
+  calculateEntropy,
+  PasswordStrengthIndicator,
+} from "@/components/ui/password-strength-indicator";
 import {
   usePassphraseGenerator,
   usePasswordGenerator,
@@ -146,10 +149,14 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
             }
           />
 
-          {customPassword === null && passwordGen.entropyBits > 0 && (
+          {effectivePassword && (
             <p className="text-xs text-muted-foreground">
               {t("passwordGenerator.entropyBits", {
-                bits: Math.round(passwordGen.entropyBits),
+                bits: Math.round(
+                  customPassword === null
+                    ? passwordGen.entropyBits
+                    : calculateEntropy(effectivePassword)
+                ),
               })}
             </p>
           )}
@@ -316,10 +323,14 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
             }
           />
 
-          {customPassphrase === null && passphraseGen.entropyBits > 0 && (
+          {effectivePassphrase && (
             <p className="text-xs text-muted-foreground">
               {t("passwordGenerator.entropyBits", {
-                bits: Math.round(passphraseGen.entropyBits),
+                bits: Math.round(
+                  customPassphrase === null
+                    ? passphraseGen.entropyBits
+                    : calculateEntropy(effectivePassphrase)
+                ),
               })}
             </p>
           )}

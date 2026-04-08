@@ -48,7 +48,7 @@ const HAS_UPPERCASE = /[A-Z]/;
 const HAS_DIGITS = /[0-9]/;
 const HAS_SYMBOLS = /[^a-zA-Z0-9]/;
 
-function calculateEntropy(password: string): number {
+export function calculateEntropy(password: string): number {
   let charsetSize = 0;
   if (HAS_LOWERCASE.test(password)) charsetSize += 26;
   if (HAS_UPPERCASE.test(password)) charsetSize += 26;
