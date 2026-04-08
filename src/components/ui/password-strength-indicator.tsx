@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { zxcvbnAsync, zxcvbnOptions } from "@zxcvbn-ts/core";
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common";
@@ -47,6 +47,8 @@ const HAS_LOWERCASE = /[a-z]/;
 const HAS_UPPERCASE = /[A-Z]/;
 const HAS_DIGITS = /[0-9]/;
 const HAS_SYMBOLS = /[^a-zA-Z0-9]/;
+const HAS_TRIPLE_REPEAT = /(.)\1{2,}/;
+const IS_SINGLE_CHAR_ONLY = /^(.)\1+$/;
 
 export function calculateEntropy(password: string): number {
   let charsetSize = 0;
@@ -66,26 +68,82 @@ function getStrengthLevel(entropy: number): 0 | 1 | 2 | 3 | 4 {
   return 4;
 }
 
-function usePasswordFeedback(password: string): string[] | null {
+function estimateTypedPasswordStrength(password: string): 0 | 1 | 2 | 3 | 4 {
+  if (!password) {
+    return 0;
+  }
+
+  const length = password.length;
+  const characterClasses =
+    Number(HAS_LOWERCASE.test(password)) +
+    Number(HAS_UPPERCASE.test(password)) +
+    Number(HAS_DIGITS.test(password)) +
+    Number(HAS_SYMBOLS.test(password));
+  const uniqueRatio = new Set(password).size / length;
+
+  let score = 0;
+
+  if (length >= 2) score += 1;
+  if (length >= 7) score += 1;
+  if (length >= 11) score += 1;
+  if (length >= 16) score += 1;
+  if (length >= 21) score += 1;
+
+  if (characterClasses >= 2) score += 1;
+  if (characterClasses >= 3) score += 1;
+  if (characterClasses === 4) score += 1;
+
+  if (HAS_TRIPLE_REPEAT.test(password)) score -= 2;
+  if (IS_SINGLE_CHAR_ONLY.test(password)) score -= 2;
+
+  if (uniqueRatio < 0.35) score -= 3;
+  else if (uniqueRatio < 0.5) score -= 2;
+  else if (uniqueRatio < 0.6) score -= 1;
+
+  if (score <= 1) return 0;
+  if (score <= 2) return 1;
+  if (score <= 4) return 2;
+  if (score <= 6) return 3;
+  return 4;
+}
+
+interface PasswordFeedback {
+  score: 0 | 1 | 2 | 3 | 4 | null;
+  suggestions: string[] | null;
+}
+
+interface ResolvedPasswordFeedback extends PasswordFeedback {
+  password: string;
+}
+
+function normalizeScore(score: number): 0 | 1 | 2 | 3 | 4 {
+  if (score <= 0) return 0;
+  if (score >= 4) return 4;
+  return score as 1 | 2 | 3;
+}
+
+function usePasswordFeedback(password: string): PasswordFeedback {
   const deferredPassword = useDeferredValue(password);
-  const [suggestions, setSuggestions] = useState<string[] | null>(null);
-  const prevPasswordRef = useRef<string>("");
+  const [resolvedFeedback, setResolvedFeedback] =
+    useState<ResolvedPasswordFeedback>({
+      password: "",
+      score: null,
+      suggestions: null,
+    });
 
   useEffect(() => {
-    if (deferredPassword === prevPasswordRef.current) {
-      return;
-    }
-    prevPasswordRef.current = deferredPassword;
-
     if (!deferredPassword) {
-      queueMicrotask(() => setSuggestions(null));
       return;
     }
 
     let cancelled = false;
     zxcvbnAsync(deferredPassword).then((res) => {
       if (!cancelled) {
-        setSuggestions(res.feedback.suggestions);
+        setResolvedFeedback({
+          password: deferredPassword,
+          score: normalizeScore(res.score),
+          suggestions: res.feedback.suggestions,
+        });
       }
     });
 
@@ -94,7 +152,17 @@ function usePasswordFeedback(password: string): string[] | null {
     };
   }, [deferredPassword]);
 
-  return suggestions;
+  if (!deferredPassword || resolvedFeedback.password !== deferredPassword) {
+    return {
+      score: null,
+      suggestions: null,
+    };
+  }
+
+  return {
+    score: resolvedFeedback.score,
+    suggestions: resolvedFeedback.suggestions,
+  };
 }
 
 const RAINBOW_BAR_DELAY_SECONDS = -0.4;
@@ -111,14 +179,16 @@ export function PasswordStrengthIndicator({
   className,
 }: PasswordStrengthIndicatorProps) {
   const { t } = useTranslation();
-  const suggestions = usePasswordFeedback(password);
+  const { score, suggestions } = usePasswordFeedback(password);
 
   if (!password) {
     return null;
   }
 
-  const entropy = entropyBits ?? calculateEntropy(password);
-  const level = getStrengthLevel(entropy);
+  const level =
+    entropyBits === undefined
+      ? (score ?? estimateTypedPasswordStrength(password))
+      : getStrengthLevel(entropyBits);
   const barColor = STRENGTH_BAR_COLORS[level];
   const labelColorClass = STRENGTH_LABEL_COLORS[level];
   const labelKey = STRENGTH_LABEL_KEYS[level];

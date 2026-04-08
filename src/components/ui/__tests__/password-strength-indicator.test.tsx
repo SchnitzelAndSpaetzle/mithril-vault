@@ -21,21 +21,26 @@ vi.mock("@zxcvbn-ts/language-en", () => ({
   translations: {},
 }));
 
-function makeFeedback(suggestions: string[] = []) {
-  return { score: 0 as const, feedback: { suggestions, warning: "" } };
+function makeFeedbackWithScore(
+  score: 0 | 1 | 2 | 3 | 4,
+  suggestions: string[] = []
+) {
+  return { score, feedback: { suggestions, warning: "" } };
 }
-
-// Pre-computed test passwords with known entropy values:
-// "ab"           → lowercase(26), len=2  → 2×log2(26)  ≈ 9.4   → Very Weak (<28)
-// "abcdefg"      → lowercase(26), len=7  → 7×log2(26)  ≈ 32.9  → Weak (28-35)
-// "abcdefghijk"  → lowercase(26), len=11 → 11×log2(26) ≈ 51.7  → Fair (36-59)
-// "Password1!"   → all 4 types(95), len=10 → 10×log2(95) ≈ 65.7 → Strong (60-127)
-// "Correct-Horse-Batt1!" → all 4(95), len=21 → 21×log2(95) ≈ 138 → Excellent (128+)
 
 describe("PasswordStrengthIndicator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockZxcvbnAsync.mockResolvedValue(makeFeedback());
+    mockZxcvbnAsync.mockImplementation(async (password: string) => {
+      const defaultScores: Record<string, 0 | 1 | 2 | 3 | 4> = {
+        ab: 0,
+        abcdefg: 1,
+        abcdefghijk: 2,
+        "Password1!": 3,
+        "Correct-Horse-Batt1!": 4,
+      };
+      return makeFeedbackWithScore(defaultScores[password] ?? 0);
+    });
   });
 
   it("renders nothing when password is empty", () => {
@@ -60,7 +65,9 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Very Weak: shows zxcvbn feedback when available", async () => {
-    mockZxcvbnAsync.mockResolvedValue(makeFeedback(["Use a longer password"]));
+    mockZxcvbnAsync.mockResolvedValue(
+      makeFeedbackWithScore(0, ["Use a longer password"])
+    );
     render(<PasswordStrengthIndicator password="ab" />);
 
     await waitFor(() => {
@@ -84,7 +91,9 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Weak: shows zxcvbn feedback when available", async () => {
-    mockZxcvbnAsync.mockResolvedValue(makeFeedback(["Avoid common words"]));
+    mockZxcvbnAsync.mockResolvedValue(
+      makeFeedbackWithScore(1, ["Avoid common words"])
+    );
     render(<PasswordStrengthIndicator password="abcdefg" />);
 
     await waitFor(() => {
@@ -100,7 +109,9 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Fair: shows feedback (boundary: level <= 2)", async () => {
-    mockZxcvbnAsync.mockResolvedValue(makeFeedback(["Add more symbols"]));
+    mockZxcvbnAsync.mockResolvedValue(
+      makeFeedbackWithScore(2, ["Add more symbols"])
+    );
     render(<PasswordStrengthIndicator password="abcdefghijk" />);
 
     await waitFor(() => {
@@ -124,7 +135,7 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Strong: does NOT show feedback", async () => {
-    mockZxcvbnAsync.mockResolvedValue(makeFeedback(["Some tip"]));
+    mockZxcvbnAsync.mockResolvedValue(makeFeedbackWithScore(3, ["Some tip"]));
     render(<PasswordStrengthIndicator password="Password1!" />);
 
     await waitFor(() => {
@@ -167,7 +178,9 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Excellent: does NOT show feedback", async () => {
-    mockZxcvbnAsync.mockResolvedValue(makeFeedback(["This should not show"]));
+    mockZxcvbnAsync.mockResolvedValue(
+      makeFeedbackWithScore(4, ["This should not show"])
+    );
     render(<PasswordStrengthIndicator password="Correct-Horse-Batt1!" />);
 
     await waitFor(() => {
@@ -204,16 +217,32 @@ describe("PasswordStrengthIndicator", () => {
     expect(bars[2]).toHaveClass("bg-muted");
   });
 
-  it("falls back to character-level entropy when entropyBits is not provided", () => {
-    // "Correct-Horse-Batt1!" = ~138 bits from characters → Excellent
+  it("uses typed-password scoring when entropyBits is not provided", () => {
+    // Typed passwords use zxcvbn score (with conservative fallback while pending).
     render(<PasswordStrengthIndicator password="Correct-Horse-Batt1!" />);
     expect(screen.getByText("passwordStrength.excellent")).toBeInTheDocument();
+  });
+
+  it("pending typed-password fallback does not overrate repetitive patterns", () => {
+    mockZxcvbnAsync.mockReturnValue(
+      new Promise<ReturnType<typeof makeFeedbackWithScore>>(() => {
+        // Keep pending so the synchronous fallback is asserted.
+      })
+    );
+
+    render(<PasswordStrengthIndicator password="Aa1!Aa1!Aa1!Aa1!" />);
+    expect(
+      screen.queryByText("passwordStrength.strong")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("passwordStrength.excellent")
+    ).not.toBeInTheDocument();
   });
 
   // --- General behavior ---
 
   it("does not render feedback when suggestions are empty", async () => {
-    mockZxcvbnAsync.mockResolvedValue(makeFeedback([]));
+    mockZxcvbnAsync.mockResolvedValue(makeFeedbackWithScore(0, []));
     render(<PasswordStrengthIndicator password="ab" />);
 
     await waitFor(() => {
@@ -252,20 +281,22 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("ignores stale zxcvbn feedback when password changes rapidly", async () => {
-    let resolveFirst!: (v: ReturnType<typeof makeFeedback>) => void;
-    const firstPromise = new Promise<ReturnType<typeof makeFeedback>>((res) => {
-      resolveFirst = res;
-    });
+    let resolveFirst!: (v: ReturnType<typeof makeFeedbackWithScore>) => void;
+    const firstPromise = new Promise<ReturnType<typeof makeFeedbackWithScore>>(
+      (res) => {
+        resolveFirst = res;
+      }
+    );
 
     mockZxcvbnAsync
       .mockReturnValueOnce(firstPromise)
-      .mockResolvedValue(makeFeedback([]));
+      .mockResolvedValue(makeFeedbackWithScore(1, []));
 
     const { rerender } = render(<PasswordStrengthIndicator password="ab" />);
     rerender(<PasswordStrengthIndicator password="abcdefg" />);
 
     await act(async () => {
-      resolveFirst(makeFeedback(["Stale suggestion"]));
+      resolveFirst(makeFeedbackWithScore(0, ["Stale suggestion"]));
     });
 
     expect(screen.getByText("passwordStrength.weak")).toBeInTheDocument();
