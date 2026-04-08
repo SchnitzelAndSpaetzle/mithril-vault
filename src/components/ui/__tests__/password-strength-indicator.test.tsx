@@ -2,7 +2,10 @@
 
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PasswordStrengthIndicator } from "@/components/ui/password-strength-indicator";
+import {
+  calculateEntropy,
+  PasswordStrengthIndicator,
+} from "@/components/ui/password-strength-indicator";
 
 const mockZxcvbnAsync = vi.fn();
 
@@ -46,6 +49,15 @@ describe("PasswordStrengthIndicator", () => {
   it("renders nothing when password is empty", () => {
     const { container } = render(<PasswordStrengthIndicator password="" />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it("calculateEntropy returns 0 for empty input", () => {
+    expect(calculateEntropy("")).toBe(0);
+  });
+
+  it("calculateEntropy includes all detected character classes", () => {
+    // 4 chars, charset: lowercase + uppercase + digits + symbols = 95
+    expect(calculateEntropy("aA1!")).toBeCloseTo(4 * Math.log2(95), 6);
   });
 
   // --- Very Weak (<28 bits): "ab" = 9.4 bits ---
@@ -217,6 +229,16 @@ describe("PasswordStrengthIndicator", () => {
     expect(bars[2]).toHaveClass("bg-muted");
   });
 
+  it("entropyBits override: maps 60 bits to Strong", () => {
+    render(<PasswordStrengthIndicator password="any" entropyBits={60} />);
+    expect(screen.getByText("passwordStrength.strong")).toBeInTheDocument();
+  });
+
+  it("entropyBits override: maps 128 bits to Excellent", () => {
+    render(<PasswordStrengthIndicator password="any" entropyBits={128} />);
+    expect(screen.getByText("passwordStrength.excellent")).toBeInTheDocument();
+  });
+
   it("uses typed-password scoring when entropyBits is not provided", () => {
     // Typed passwords use zxcvbn score (with conservative fallback while pending).
     render(<PasswordStrengthIndicator password="Correct-Horse-Batt1!" />);
@@ -237,6 +259,17 @@ describe("PasswordStrengthIndicator", () => {
     expect(
       screen.queryByText("passwordStrength.excellent")
     ).not.toBeInTheDocument();
+  });
+
+  it("pending typed-password fallback penalizes medium uniqueness repetition", () => {
+    mockZxcvbnAsync.mockReturnValue(
+      new Promise<ReturnType<typeof makeFeedbackWithScore>>(() => {
+        // Keep pending so the synchronous fallback is asserted.
+      })
+    );
+
+    render(<PasswordStrengthIndicator password="abcdeabcde" />);
+    expect(screen.getByText("passwordStrength.veryWeak")).toBeInTheDocument();
   });
 
   // --- General behavior ---
