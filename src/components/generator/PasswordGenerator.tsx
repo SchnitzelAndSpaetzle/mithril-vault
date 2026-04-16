@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { PasswordStrengthIndicator } from "@/components/database/create-wizard/PasswordStrengthIndicator";
+import {
+  calculateEntropy,
+  PasswordStrengthIndicator,
+} from "@/components/ui/password-strength-indicator";
 import {
   usePassphraseGenerator,
   usePasswordGenerator,
@@ -74,9 +77,13 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
   );
 
   const [isCopied, setIsCopied] = useState(false);
+  const [customPassword, setCustomPassword] = useState<string | null>(null);
+  const [customPassphrase, setCustomPassphrase] = useState<string | null>(null);
 
+  const effectivePassword = customPassword ?? passwordGen.password;
+  const effectivePassphrase = customPassphrase ?? passphraseGen.passphrase;
   const currentValue =
-    activeTab === "password" ? passwordGen.password : passphraseGen.passphrase;
+    activeTab === "password" ? effectivePassword : effectivePassphrase;
 
   async function handleCopy(text: string) {
     if (!text) return;
@@ -120,23 +127,36 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
         {/* Password Tab */}
         <TabsContent value="password" className="space-y-4">
           <GeneratedDisplay
-            value={passwordGen.password}
+            value={effectivePassword}
             isGenerating={passwordGen.isGenerating}
             isCopied={isCopied}
-            onRegenerate={passwordGen.regenerate}
-            onCopy={() => void handleCopy(passwordGen.password)}
+            onRegenerate={() => {
+              setCustomPassword(null);
+              passwordGen.regenerate();
+            }}
+            onChange={setCustomPassword}
+            onCopy={() => void handleCopy(effectivePassword)}
             regenerateLabel={t("passwordGenerator.regenerate")}
             copyLabel={t("passwordGenerator.copyPassword")}
             copiedLabel={t("passwordGenerator.passwordCopied")}
             generatingLabel={t("passwordGenerator.generating")}
           />
 
-          <PasswordStrengthIndicator password={passwordGen.password} />
+          <PasswordStrengthIndicator
+            password={effectivePassword}
+            entropyBits={
+              customPassword === null ? passwordGen.entropyBits : undefined
+            }
+          />
 
-          {passwordGen.entropyBits > 0 && (
+          {effectivePassword && (
             <p className="text-xs text-muted-foreground">
               {t("passwordGenerator.entropyBits", {
-                bits: Math.round(passwordGen.entropyBits),
+                bits: Math.round(
+                  customPassword === null
+                    ? passwordGen.entropyBits
+                    : calculateEntropy(effectivePassword)
+                ),
               })}
             </p>
           )}
@@ -281,23 +301,36 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
         {/* Passphrase Tab */}
         <TabsContent value="passphrase" className="space-y-4">
           <GeneratedDisplay
-            value={passphraseGen.passphrase}
+            value={effectivePassphrase}
             isGenerating={passphraseGen.isGenerating}
             isCopied={isCopied}
-            onRegenerate={passphraseGen.regenerate}
-            onCopy={() => void handleCopy(passphraseGen.passphrase)}
+            onRegenerate={() => {
+              setCustomPassphrase(null);
+              passphraseGen.regenerate();
+            }}
+            onChange={setCustomPassphrase}
+            onCopy={() => void handleCopy(effectivePassphrase)}
             regenerateLabel={t("passwordGenerator.regeneratePassphrase")}
             copyLabel={t("passwordGenerator.copyPassphrase")}
             copiedLabel={t("passwordGenerator.passphraseCopied")}
             generatingLabel={t("passwordGenerator.generating")}
           />
 
-          <PasswordStrengthIndicator password={passphraseGen.passphrase} />
+          <PasswordStrengthIndicator
+            password={effectivePassphrase}
+            entropyBits={
+              customPassphrase === null ? passphraseGen.entropyBits : undefined
+            }
+          />
 
-          {passphraseGen.entropyBits > 0 && (
+          {effectivePassphrase && (
             <p className="text-xs text-muted-foreground">
               {t("passwordGenerator.entropyBits", {
-                bits: Math.round(passphraseGen.entropyBits),
+                bits: Math.round(
+                  customPassphrase === null
+                    ? passphraseGen.entropyBits
+                    : calculateEntropy(effectivePassphrase)
+                ),
               })}
             </p>
           )}
@@ -405,6 +438,7 @@ interface GeneratedDisplayProps {
   isGenerating: boolean;
   isCopied: boolean;
   onRegenerate: () => void;
+  onChange: (value: string) => void;
   onCopy: () => void;
   regenerateLabel: string;
   copyLabel: string;
@@ -417,6 +451,7 @@ function GeneratedDisplay({
   isGenerating,
   isCopied,
   onRegenerate,
+  onChange,
   onCopy,
   regenerateLabel,
   copyLabel,
@@ -425,9 +460,16 @@ function GeneratedDisplay({
 }: GeneratedDisplayProps) {
   return (
     <div className="flex items-center gap-2 rounded-md border bg-muted/50 p-3">
-      <code className="flex-1 break-all text-sm font-mono">
-        {!value && isGenerating ? generatingLabel : value}
-      </code>
+      <input
+        type="text"
+        autoComplete="off"
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
+        value={!value && isGenerating ? generatingLabel : value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 break-all bg-transparent text-sm font-mono outline-none"
+      />
       <Button
         type="button"
         variant="ghost"

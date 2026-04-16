@@ -17,7 +17,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { PasswordStrengthIndicator } from "../PasswordStrengthIndicator";
+import { PasswordStrengthIndicator } from "@/components/ui/password-strength-indicator";
 
 interface MasterPasswordStepProps {
   control: Control<CreateDatabaseFormValues>;

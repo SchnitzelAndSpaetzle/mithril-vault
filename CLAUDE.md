@@ -163,8 +163,11 @@ export const entries = {
 ### Password Generator Architecture
 
 - **Password/passphrase generation** happens in Rust (`commands/generator.rs`) using `OsRng` for cryptographic security
-- **Strength evaluation** happens in JS via `@zxcvbn-ts` (pattern detection, dictionary attacks) — this is a UI concern, not a backend security gate
-- **Entropy bits** (mathematical: `length × log₂(charset_size)`) are calculated alongside generation in Rust and returned with the password/passphrase
+- **Strength indicator** (`src/components/ui/password-strength-indicator.tsx`) uses a two-layer approach:
+  - **Strength level** is determined by mathematical entropy (`length × log₂(charset_size)`) calculated in JS from character diversity — thresholds: Very Weak (<28 bits), Weak (28-35), Fair (36-59), Strong (60-127), Excellent (128+)
+  - **Feedback suggestions** come from `@zxcvbn-ts` async analysis (pattern detection, dictionary attacks) — shown for levels ≤ Fair
+  - The `calculateEntropy()` and `getStrengthLevel()` functions are exported for testing
+- **Entropy bits** (mathematical) are also calculated alongside generation in Rust and returned with the password/passphrase
 - **Passphrase wordlist**: EFF large diceware wordlist (7776 words, ~12.9 bits/word) embedded via `include_str!` at `src-tauri/assets/eff-diceware-wordlist.txt`
 - Shared hooks: `usePasswordGenerator` / `usePassphraseGenerator` in `hooks/use-password-generator.ts`
 

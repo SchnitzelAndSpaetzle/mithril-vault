@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type Control, Controller } from "react-hook-form";
 import { Dices, Eye, EyeClosed } from "lucide-react";
-import { PasswordStrengthIndicator } from "@/components/database/create-wizard/PasswordStrengthIndicator";
+import { PasswordStrengthIndicator } from "@/components/ui/password-strength-indicator";
 import { PasswordGeneratorDialog } from "@/components/entries/PasswordGeneratorDialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import {

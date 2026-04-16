@@ -15,12 +15,9 @@ import {
 } from "@/components/entries/entry-edit-form";
 import type { EntryFormValues } from "@/lib/formTypes";
 
-vi.mock(
-  "@/components/database/create-wizard/PasswordStrengthIndicator",
-  () => ({
-    PasswordStrengthIndicator: () => null,
-  })
-);
+vi.mock("@/components/ui/password-strength-indicator", () => ({
+  PasswordStrengthIndicator: () => null,
+}));
 
 vi.mock("@/components/entries/PasswordGeneratorDialog", () => ({
   PasswordGeneratorDialog: ({
