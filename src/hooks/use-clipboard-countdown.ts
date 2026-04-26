@@ -21,7 +21,7 @@ export function useClipboardCountdown() {
       clearInterval(activeInterval);
       activeInterval = null;
     }
-    toast.dismiss(TOAST_ID);
+    toast.dismiss?.(TOAST_ID);
   }, [preferences?.security.showClipboardCountdown]);
 
   const startCountdown = useCallback(

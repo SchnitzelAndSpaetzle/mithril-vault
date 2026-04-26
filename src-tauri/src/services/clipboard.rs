@@ -41,8 +41,7 @@ impl ClipboardService {
                     if let Ok(mut cb) = arboard::Clipboard::new() {
                         let should_clear = cb
                             .get_text()
-                            .map(|current| current == copied_text)
-                            .unwrap_or(false);
+                            .is_ok_and(|current| current == copied_text);
                         if should_clear {
                             let _ = cb.set_text("");
                         }
