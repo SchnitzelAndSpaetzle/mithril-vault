@@ -82,6 +82,36 @@ export function SecuritySettingsSection({
       <div className="grid gap-4 md:grid-cols-3">
         <label className="flex items-center gap-2 text-sm">
           <Checkbox
+            checked={draft.security.clearClipboardOnLock}
+            onCheckedChange={(checked) =>
+              updateDraft((previous) => ({
+                ...previous,
+                security: {
+                  ...previous.security,
+                  clearClipboardOnLock: checked === true,
+                },
+              }))
+            }
+          />
+          {t("settings.security.clearClipboardOnLock")}
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={draft.security.showClipboardCountdown}
+            onCheckedChange={(checked) =>
+              updateDraft((previous) => ({
+                ...previous,
+                security: {
+                  ...previous.security,
+                  showClipboardCountdown: checked === true,
+                },
+              }))
+            }
+          />
+          {t("settings.security.showClipboardCountdown")}
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
             checked={draft.security.showPasswordByDefault}
             onCheckedChange={(checked) =>
               updateDraft((previous) => ({

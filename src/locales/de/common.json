@@ -15,6 +15,9 @@
     "copied": "Kopiert",
     "noDatabase": "Keine Datenbank"
   },
+  "clipboard": {
+    "countdown": "Zwischenablage wird in {{seconds}}s gelöscht"
+  },
   "settings": {
     "title": "Einstellungen",
     "description": "Anwendungseinstellungen und Datenbankkonfiguration.",
@@ -49,6 +52,8 @@
       "autoLockTimeout": "Automatische Sperre (Sekunden)",
       "autoLockNote": "TODO: Inaktivitäts-/OS-Sperrereignisse sind noch nicht implementiert.",
       "clipboardTimeout": "Zwischenablage löschen nach (Sekunden)",
+      "clearClipboardOnLock": "Zwischenablage beim Sperren leeren",
+      "showClipboardCountdown": "Countdown der Zwischenablage anzeigen",
       "showPasswordByDefault": "Passwörter standardmäßig anzeigen",
       "minimizeToTray": "In Taskleiste minimieren",
       "startMinimized": "Minimiert starten"

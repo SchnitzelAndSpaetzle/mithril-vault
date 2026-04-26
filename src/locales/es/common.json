@@ -15,6 +15,9 @@
     "copied": "Copiado",
     "noDatabase": "Sin base de datos"
   },
+  "clipboard": {
+    "countdown": "El portapapeles se limpia en {{seconds}}s"
+  },
   "settings": {
     "title": "Configuración",
     "description": "Preferencias de la aplicación y configuración de la base de datos.",
@@ -49,6 +52,8 @@
       "autoLockTimeout": "Tiempo de bloqueo automático (segundos)",
       "autoLockNote": "TODO: los eventos de inactividad/bloqueo del SO aún no están implementados.",
       "clipboardTimeout": "Tiempo de limpieza del portapapeles (segundos)",
+      "clearClipboardOnLock": "Limpiar portapapeles al bloquear",
+      "showClipboardCountdown": "Mostrar cuenta regresiva del portapapeles",
       "showPasswordByDefault": "Mostrar contraseñas por defecto",
       "minimizeToTray": "Minimizar a la bandeja",
       "startMinimized": "Iniciar minimizado"

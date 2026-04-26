@@ -17,6 +17,7 @@ import {
   usePasswordGenerator,
 } from "@/hooks/use-password-generator";
 import { clipboard } from "@/lib/tauri";
+import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import type {
   PassphraseGeneratorOptions,
@@ -49,6 +50,7 @@ interface PasswordGeneratorProps {
 export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
   const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
+  const startCountdown = useClipboardCountdown();
   const [activeTab, setActiveTab] = useState("password");
 
   const [passwordOptions, setPasswordOptions] =
@@ -89,6 +91,7 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
     if (!text) return;
     await clipboard.copyText(text, clipboardClearTimeout);
     setIsCopied(true);
+    startCountdown(clipboardClearTimeout);
     window.setTimeout(() => setIsCopied(false), 2000);
   }
 

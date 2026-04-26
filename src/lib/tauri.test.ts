@@ -74,6 +74,8 @@ describe("tauri wrappers validation", () => {
       security: {
         autoLockTimeout: 300,
         clipboardClearTimeout: 30,
+        clearClipboardOnLock: true,
+        showClipboardCountdown: false,
         showPasswordByDefault: false,
         minimizeToTray: true,
         startMinimized: false,
@@ -129,6 +131,8 @@ describe("tauri wrappers validation", () => {
         security: {
           autoLockTimeout: 300,
           clipboardClearTimeout: 30,
+          clearClipboardOnLock: true,
+          showClipboardCountdown: false,
           showPasswordByDefault: false,
           minimizeToTray: true,
           startMinimized: false,

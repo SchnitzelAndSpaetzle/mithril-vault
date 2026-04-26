@@ -20,6 +20,7 @@ impl ClipboardService {
     /// Copies text to the clipboard. If `clear_after_secs` is `Some`, spawns
     /// an async task that clears the clipboard after the specified duration.
     /// A subsequent copy cancels any pending clear.
+    /// The scheduled clear only runs if clipboard content still matches what we copied.
     pub fn copy(&self, text: &str, clear_after_secs: Option<u32>) -> Result<(), AppError> {
         let mut cb = arboard::Clipboard::new()
             .map_err(|e| AppError::Io(format!("Failed to access clipboard: {e}")))?;
@@ -31,12 +32,18 @@ impl ClipboardService {
 
         if let Some(secs) = clear_after_secs {
             let generation = Arc::clone(&self.copy_generation);
+            let copied_text = text.to_owned();
             tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(u64::from(secs))).await;
-                // Only clear if no newer copy happened.
+                // Only clear if no newer copy happened and clipboard still contains
+                // the value we originally copied.
                 if generation.load(Ordering::SeqCst) == gen {
                     if let Ok(mut cb) = arboard::Clipboard::new() {
-                        let _ = cb.set_text("");
+                        let should_clear =
+                            cb.get_text().is_ok_and(|current| current == copied_text);
+                        if should_clear {
+                            let _ = cb.set_text("");
+                        }
                     }
                 }
             });

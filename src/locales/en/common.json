@@ -15,6 +15,9 @@
     "copied": "Copied",
     "noDatabase": "No database"
   },
+  "clipboard": {
+    "countdown": "Clipboard clears in {{seconds}}s"
+  },
   "settings": {
     "title": "Settings",
     "description": "Application preferences and database configuration.",
@@ -49,6 +52,8 @@
       "autoLockTimeout": "Auto-lock timeout (seconds)",
       "autoLockNote": "TODO: inactivity/OS-lock event wiring is not implemented yet.",
       "clipboardTimeout": "Clipboard clear timeout (seconds)",
+      "clearClipboardOnLock": "Clear clipboard on database lock",
+      "showClipboardCountdown": "Show clipboard countdown",
       "showPasswordByDefault": "Show passwords by default",
       "minimizeToTray": "Minimize to tray",
       "startMinimized": "Start minimized"

@@ -220,6 +220,8 @@ export type GeneralSettings = z.infer<typeof GeneralSettingsSchema>;
 export const SecuritySettingsSchema = z.object({
   autoLockTimeout: z.number().int().positive(),
   clipboardClearTimeout: z.number().int().positive(),
+  clearClipboardOnLock: z.boolean(),
+  showClipboardCountdown: z.boolean(),
   showPasswordByDefault: z.boolean(),
   minimizeToTray: z.boolean(),
   startMinimized: z.boolean(),
@@ -263,6 +265,8 @@ export const AppSettingsSchema = z.object({
   defaultDatabasePath: z.string().nullable(),
   autoLockTimeout: z.number().int(),
   clipboardClearTimeout: z.number().int(),
+  clearClipboardOnLock: z.boolean(),
+  showClipboardCountdown: z.boolean(),
   showPasswordByDefault: z.boolean(),
   minimizeToTray: z.boolean(),
   startMinimized: z.boolean(),

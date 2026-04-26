@@ -26,7 +26,9 @@ import SortDropdown from "@/components/entries/sort-dropdown";
 import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 import { useEntryDetail } from "@/hooks/use-entry-detail";
 import { useActiveDatabase } from "@/hooks/use-active-database";
+import { useAppPreferences } from "@/hooks/use-app-preferences";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
+import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -158,6 +160,11 @@ export default function DragRegion() {
   const queryClient = useQueryClient();
   const removeTab = useDatabaseTabs((s) => s.removeTab);
   const clipboardTimeout = useClipboardTimeout();
+  const startCountdown = useClipboardCountdown();
+  const { preferences } = useAppPreferences();
+  const clearClipboardOnLock = Boolean(
+    preferences?.security.clearClipboardOnLock
+  );
 
   const getSelectedEntry = useCallback((): Entry | undefined => {
     if (!dbId || !selectedEntryId) return undefined;
@@ -185,6 +192,13 @@ export default function DragRegion() {
       if (!tab?.id || !dbId) return;
       void (async () => {
         try {
+          if (clearClipboardOnLock) {
+            try {
+              await clipboard.clear();
+            } catch (error) {
+              console.error("Failed to clear clipboard before lock:", error);
+            }
+          }
           await database.close(dbId);
           removeTab(tab.id);
           void navigate({ to: "/" });
@@ -192,7 +206,7 @@ export default function DragRegion() {
           // lock failed silently
         }
       })();
-    }, [tab, dbId, removeTab, navigate]),
+    }, [tab, dbId, removeTab, navigate, clearClipboardOnLock]),
     Boolean(dbId) && !isEditing
   );
 
@@ -227,8 +241,9 @@ export default function DragRegion() {
         .copyPassword(dbId, selectedEntryId, clipboardTimeout)
         .then(() => {
           toast.success(t("shortcuts.toast.passwordCopied"));
+          startCountdown(clipboardTimeout);
         });
-    }, [dbId, selectedEntryId, clipboardTimeout, t]),
+    }, [dbId, selectedEntryId, clipboardTimeout, startCountdown, t]),
     Boolean(dbId) && Boolean(selectedEntryId) && !isEditing
   );
 

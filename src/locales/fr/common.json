@@ -15,6 +15,9 @@
     "copied": "Copié",
     "noDatabase": "Aucune base de données"
   },
+  "clipboard": {
+    "countdown": "Le presse-papiers s'efface dans {{seconds}}s"
+  },
   "settings": {
     "title": "Paramètres",
     "description": "Préférences de l'application et configuration de la base de données.",
@@ -49,6 +52,8 @@
       "autoLockTimeout": "Délai de verrouillage automatique (secondes)",
       "autoLockNote": "TODO : les événements d'inactivité/verrouillage du système ne sont pas encore implémentés.",
       "clipboardTimeout": "Délai d'effacement du presse-papiers (secondes)",
+      "clearClipboardOnLock": "Effacer le presse-papiers au verrouillage",
+      "showClipboardCountdown": "Afficher le compte à rebours du presse-papiers",
       "showPasswordByDefault": "Afficher les mots de passe par défaut",
       "minimizeToTray": "Réduire dans la barre des tâches",
       "startMinimized": "Démarrer réduit"

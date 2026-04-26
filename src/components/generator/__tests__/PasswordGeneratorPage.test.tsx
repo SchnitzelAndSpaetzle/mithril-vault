@@ -25,6 +25,10 @@ vi.mock("@/hooks/use-clipboard-timeout", () => ({
   useClipboardTimeout: () => 30,
 }));
 
+vi.mock("@/hooks/use-clipboard-countdown", () => ({
+  useClipboardCountdown: () => vi.fn(),
+}));
+
 vi.mock("@/lib/tauri", () => ({
   clipboard: {
     copyText: vi.fn(),

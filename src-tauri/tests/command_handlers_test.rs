@@ -3,7 +3,9 @@
 
 #![allow(clippy::expect_used)]
 
-use mithril_vault_lib::commands::clipboard::{clear_clipboard, copy_password_to_clipboard};
+use mithril_vault_lib::commands::clipboard::{
+    clear_clipboard, copy_password_to_clipboard, copy_protected_field_to_clipboard,
+};
 use mithril_vault_lib::commands::database::{
     close_database, create_database, generate_keyfile, get_custom_icons, get_database_config,
     get_database_info, inspect_database, list_open_databases, lock_database, open_database,
@@ -107,6 +109,24 @@ fn clear_clipboard_command_returns_expected_result_shape() {
         result.is_ok() || matches!(result, Err(AppError::Io(_))),
         "clear_clipboard should either succeed or return IO error"
     );
+
+    cleanup_app_files(&app);
+}
+
+#[test]
+fn copy_protected_field_command_fails_when_database_is_not_open() {
+    let app = setup_app();
+
+    let err = tauri::async_runtime::block_on(copy_protected_field_to_clipboard(
+        "nonexistent.kdbx".to_string(),
+        "entry-id".to_string(),
+        "secret-field".to_string(),
+        Some(30),
+        app.state(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(err, AppError::DatabaseNotFound(_)));
 
     cleanup_app_files(&app);
 }
