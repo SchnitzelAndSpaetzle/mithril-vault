@@ -39,9 +39,8 @@ impl ClipboardService {
                 // the value we originally copied.
                 if generation.load(Ordering::SeqCst) == gen {
                     if let Ok(mut cb) = arboard::Clipboard::new() {
-                        let should_clear = cb
-                            .get_text()
-                            .is_ok_and(|current| current == copied_text);
+                        let should_clear =
+                            cb.get_text().is_ok_and(|current| current == copied_text);
                         if should_clear {
                             let _ = cb.set_text("");
                         }
