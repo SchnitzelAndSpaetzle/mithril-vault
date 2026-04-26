@@ -99,6 +99,13 @@ const CopyTextSchema = z.object({
   timeoutSecs: z.number().int().positive().optional(),
 });
 
+const CopyProtectedFieldSchema = z.object({
+  dbId: z.string().min(1),
+  entryId: KeepassIdSchema,
+  fieldKey: z.string().min(1),
+  timeoutSecs: z.number().int().positive().optional(),
+});
+
 const CreateDatabaseSchema = z.object({
   path: z.string().min(1),
   name: z.string().min(1),
@@ -461,6 +468,21 @@ export const clipboard = {
   ): Promise<void> {
     CopyPasswordSchema.parse({ dbId, entryId, timeoutSecs });
     return invoke("copy_password_to_clipboard", { dbId, entryId, timeoutSecs });
+  },
+
+  async copyProtectedField(
+    dbId: string,
+    entryId: string,
+    fieldKey: string,
+    timeoutSecs?: number
+  ): Promise<void> {
+    CopyProtectedFieldSchema.parse({ dbId, entryId, fieldKey, timeoutSecs });
+    return invoke("copy_protected_field_to_clipboard", {
+      dbId,
+      entryId,
+      fieldKey,
+      timeoutSecs,
+    });
   },
 
   async clear(): Promise<void> {

@@ -12,6 +12,7 @@ import EntryItemDetails from "../EntryItemDetails";
 import { useEntryDetail } from "@/hooks/use-entry-detail";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { toast } from "sonner";
 import type { Entry } from "@/lib/types";
 
 const mockEntry: Entry = {
@@ -53,14 +54,28 @@ vi.mock("@/hooks/use-clipboard-timeout", () => ({
   useClipboardTimeout: vi.fn(() => 45),
 }));
 
+vi.mock("@/hooks/use-clipboard-countdown", () => ({
+  useClipboardCountdown: () => vi.fn(),
+}));
+
 vi.mock("@/lib/tauri", () => ({
-  clipboard: { copyPassword: vi.fn() },
+  clipboard: { copyPassword: vi.fn(), copyProtectedField: vi.fn() },
   entries: { getProtectedCustomField: vi.fn() },
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
 }));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+const writeText = vi.fn().mockResolvedValue(undefined);
+Object.defineProperty(navigator, "clipboard", {
+  configurable: true,
+  value: { writeText },
+});
 
 function makeHookResult(
   overrides: Partial<ReturnType<typeof useEntryDetail>> = {}
@@ -239,5 +254,128 @@ describe("EntryItemDetails", () => {
     expect(
       screen.getByRole("button", { name: "entries.detail.openUrl" })
     ).toBeDisabled();
+  });
+
+  it("shows toast on password copy", async () => {
+    vi.mocked(clipboard.copyPassword).mockResolvedValueOnce(undefined);
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const passwordText = screen.getByText("••••••••");
+    await act(async () => {
+      fireEvent.click(passwordText.closest("button") as HTMLButtonElement);
+    });
+    expect(toast.success).toHaveBeenCalledWith(
+      "shortcuts.toast.passwordCopied"
+    );
+  });
+
+  it("shows toast on username copy", async () => {
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const usernameText = screen.getByText("user@example.com");
+    await act(async () => {
+      fireEvent.click(usernameText.closest("button") as HTMLButtonElement);
+    });
+    expect(toast.success).toHaveBeenCalledWith("common.copied");
+  });
+
+  it("shows toast on URL copy", async () => {
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const urlText = screen.getByText("https://example.com");
+    await act(async () => {
+      fireEvent.click(urlText.closest("button") as HTMLButtonElement);
+    });
+    expect(toast.success).toHaveBeenCalledWith("common.copied");
+  });
+
+  it("copies protected custom field via backend clipboard command", async () => {
+    const protectedEntry: Entry = {
+      ...mockEntry,
+      customFields: {},
+      customFieldMeta: [{ key: "API Token", isProtected: true }],
+    };
+    vi.mocked(useEntryDetail).mockReturnValueOnce(
+      makeHookResult({ entry: protectedEntry })
+    );
+    vi.mocked(clipboard.copyProtectedField).mockResolvedValueOnce(undefined);
+
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const maskedTexts = screen.getAllByText("••••••••");
+    // First is password row, second is protected field row
+    const protectedFieldButton = maskedTexts[1]!.closest(
+      "button"
+    ) as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(protectedFieldButton);
+    });
+    expect(clipboard.copyProtectedField).toHaveBeenCalledWith(
+      "db-1",
+      "entry-1",
+      "API Token",
+      45
+    );
+  });
+
+  it("shows toast on protected custom field copy", async () => {
+    const protectedEntry: Entry = {
+      ...mockEntry,
+      customFields: {},
+      customFieldMeta: [{ key: "API Token", isProtected: true }],
+    };
+    vi.mocked(useEntryDetail).mockReturnValueOnce(
+      makeHookResult({ entry: protectedEntry })
+    );
+    vi.mocked(clipboard.copyProtectedField).mockResolvedValueOnce(undefined);
+
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const maskedTexts = screen.getAllByText("••••••••");
+    // First is password row, second is protected field row
+    const protectedFieldButton = maskedTexts[1]!.closest(
+      "button"
+    ) as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(protectedFieldButton);
+    });
+    expect(toast.success).toHaveBeenCalledWith("common.copied");
+  });
+
+  it("shows copied feedback for protected custom field", async () => {
+    const protectedEntry: Entry = {
+      ...mockEntry,
+      customFields: {},
+      customFieldMeta: [{ key: "API Token", isProtected: true }],
+    };
+    vi.mocked(useEntryDetail).mockReturnValueOnce(
+      makeHookResult({ entry: protectedEntry })
+    );
+    vi.mocked(clipboard.copyProtectedField).mockResolvedValueOnce(undefined);
+
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const maskedTexts = screen.getAllByText("••••••••");
+    // First is password row, second is protected field row
+    const protectedFieldButton = maskedTexts[1]!.closest(
+      "button"
+    ) as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(protectedFieldButton);
+    });
+    expect(screen.getByText("common.copied")).toBeInTheDocument();
+  });
+
+  it("disables protected custom field copy while transitioning", () => {
+    const protectedEntry: Entry = {
+      ...mockEntry,
+      customFields: {},
+      customFieldMeta: [{ key: "API Token", isProtected: true }],
+    };
+    vi.mocked(useEntryDetail).mockReturnValueOnce(
+      makeHookResult({ entry: protectedEntry, isTransitioning: true })
+    );
+
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const maskedTexts = screen.getAllByText("••••••••");
+    // First is password row, second is protected field row
+    const protectedFieldButton = maskedTexts[1]!.closest(
+      "button"
+    ) as HTMLButtonElement;
+    expect(protectedFieldButton).toBeDisabled();
   });
 });

@@ -21,10 +21,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useEntryDetail } from "@/hooks/use-entry-detail";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
+import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
 import { getKeepassIcon } from "@/lib/keepass-icons";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { toast } from "sonner";
 import type { CustomFieldMeta } from "@/lib/types";
 
 interface EntryItemDetailsProps {
@@ -228,12 +230,15 @@ function PasswordRow({
 }) {
   const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
+  const startCountdown = useClipboardCountdown();
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = async () => {
     if (isDisabled) return;
     await clipboard.copyPassword(dbId, entryId, clipboardClearTimeout);
     setIsCopied(true);
+    toast.success(t("shortcuts.toast.passwordCopied"));
+    startCountdown(clipboardClearTimeout);
     setTimeout(() => setIsCopied(false), 2000);
   };
 
@@ -302,6 +307,7 @@ function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
   const handleCopy = () => {
     if (isDisabled) return;
     void copy(url);
+    toast.success(t("common.copied"));
   };
 
   const handleOpen = async () => {
@@ -355,8 +361,11 @@ function ProtectedCustomFieldRow({
   isDisabled: boolean;
 }) {
   const { t } = useTranslation();
+  const clipboardClearTimeout = useClipboardTimeout();
+  const startCountdown = useClipboardCountdown();
   const [value, setValue] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
   const isVisible = value !== null;
 
   const reveal = useCallback(async () => {
@@ -376,19 +385,46 @@ function ProtectedCustomFieldRow({
 
   const hide = useCallback(() => setValue(null), []);
 
+  const handleCopy = async () => {
+    if (isDisabled) return;
+    await clipboard.copyProtectedField(
+      dbId,
+      entryId,
+      meta.key,
+      clipboardClearTimeout
+    );
+    setIsCopied(true);
+    toast.success(t("common.copied"));
+    startCountdown(clipboardClearTimeout);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const displayValue = isLoading ? (
+    <Loader2 className="inline h-3 w-3 animate-spin" />
+  ) : isVisible ? (
+    value
+  ) : (
+    "••••••••"
+  );
+
   return (
     <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
       <small className="shrink-0 text-sm font-medium">{meta.key}</small>
       <div className="flex w-0 min-w-0 flex-1 items-center justify-end-safe gap-2">
-        <span className="min-w-0 truncate text-right text-sm font-medium text-muted-foreground">
-          {isLoading ? (
-            <Loader2 className="inline h-3 w-3 animate-spin" />
-          ) : isVisible ? (
-            value
+        <button
+          onClick={handleCopy}
+          disabled={isDisabled}
+          className="group flex min-w-0 max-w-full flex-1 items-center justify-end gap-2 overflow-hidden rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent"
+        >
+          <span className="min-w-0 truncate text-right transition-all duration-200">
+            {isCopied ? t("common.copied") : displayValue}
+          </span>
+          {isCopied ? (
+            <Check className="h-3 w-3 text-green-500 transition-all duration-200" />
           ) : (
-            "••••••••"
+            <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-all duration-200" />
           )}
-        </span>
+        </button>
         <Button
           variant="outline"
           size="icon-xs"
@@ -426,6 +462,7 @@ function EntryFieldRow({
   const handleCopy = () => {
     if (isDisabled) return;
     void copy(value);
+    toast.success(t("common.copied"));
   };
 
   return (

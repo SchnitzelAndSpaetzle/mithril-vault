@@ -27,6 +27,7 @@ import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 import { useEntryDetail } from "@/hooks/use-entry-detail";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
+import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -158,6 +159,7 @@ export default function DragRegion() {
   const queryClient = useQueryClient();
   const removeTab = useDatabaseTabs((s) => s.removeTab);
   const clipboardTimeout = useClipboardTimeout();
+  const startCountdown = useClipboardCountdown();
 
   const getSelectedEntry = useCallback((): Entry | undefined => {
     if (!dbId || !selectedEntryId) return undefined;
@@ -227,8 +229,9 @@ export default function DragRegion() {
         .copyPassword(dbId, selectedEntryId, clipboardTimeout)
         .then(() => {
           toast.success(t("shortcuts.toast.passwordCopied"));
+          startCountdown(clipboardTimeout);
         });
-    }, [dbId, selectedEntryId, clipboardTimeout, t]),
+    }, [dbId, selectedEntryId, clipboardTimeout, startCountdown, t]),
     Boolean(dbId) && Boolean(selectedEntryId) && !isEditing
   );
 

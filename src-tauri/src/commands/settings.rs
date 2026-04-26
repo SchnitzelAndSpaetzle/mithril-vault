@@ -54,9 +54,12 @@ pub struct GeneralSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SecuritySettings {
     pub auto_lock_timeout: u32,
     pub clipboard_clear_timeout: u32,
+    pub clear_clipboard_on_lock: bool,
+    pub show_clipboard_countdown: bool,
     pub show_password_by_default: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
@@ -105,6 +108,8 @@ pub struct AppSettings {
     pub default_database_path: Option<String>,
     pub auto_lock_timeout: u32,
     pub clipboard_clear_timeout: u32,
+    pub clear_clipboard_on_lock: bool,
+    pub show_clipboard_countdown: bool,
     pub show_password_by_default: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
@@ -129,6 +134,8 @@ impl Default for AppSettings {
             default_database_path: None,
             auto_lock_timeout: 300,
             clipboard_clear_timeout: 30,
+            clear_clipboard_on_lock: true,
+            show_clipboard_countdown: false,
             show_password_by_default: false,
             minimize_to_tray: true,
             start_minimized: false,
@@ -158,6 +165,8 @@ impl AppPreferences {
             security: SecuritySettings {
                 auto_lock_timeout: settings.auto_lock_timeout,
                 clipboard_clear_timeout: settings.clipboard_clear_timeout,
+                clear_clipboard_on_lock: settings.clear_clipboard_on_lock,
+                show_clipboard_countdown: settings.show_clipboard_countdown,
                 show_password_by_default: settings.show_password_by_default,
                 minimize_to_tray: settings.minimize_to_tray,
                 start_minimized: settings.start_minimized,
@@ -192,6 +201,8 @@ impl AppPreferences {
             .clone_from(&self.general.default_database_path);
         settings.auto_lock_timeout = self.security.auto_lock_timeout;
         settings.clipboard_clear_timeout = self.security.clipboard_clear_timeout;
+        settings.clear_clipboard_on_lock = self.security.clear_clipboard_on_lock;
+        settings.show_clipboard_countdown = self.security.show_clipboard_countdown;
         settings.show_password_by_default = self.security.show_password_by_default;
         settings.minimize_to_tray = self.security.minimize_to_tray;
         settings.start_minimized = self.security.start_minimized;

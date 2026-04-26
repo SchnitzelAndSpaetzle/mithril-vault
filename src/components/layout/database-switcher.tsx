@@ -20,8 +20,9 @@ import {
 } from "@/components/ui/sidebar.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { useActiveDatabase } from "@/hooks/use-active-database";
+import { useAppPreferences } from "@/hooks/use-app-preferences";
 import { useRecentDatabases } from "@/hooks/use-recent-databases.ts";
-import { database } from "@/lib/tauri.ts";
+import { clipboard, database } from "@/lib/tauri.ts";
 import {
   type DatabaseTabsState,
   useDatabaseTabs,
@@ -44,6 +45,7 @@ export function DatabaseSwitcher() {
     (state: DatabaseTabsState) => state.removeTab
   );
   const { recentDatabases, isLoading: isLoadingRecent } = useRecentDatabases();
+  const { preferences } = useAppPreferences();
 
   const handleLock = async () => {
     if (!tab?.id || !dbId) {
@@ -51,6 +53,9 @@ export function DatabaseSwitcher() {
     }
 
     try {
+      if (preferences?.security.clearClipboardOnLock) {
+        await clipboard.clear();
+      }
       await database.close(dbId);
       removeTab(tab.id);
       void navigate({ to: "/" });

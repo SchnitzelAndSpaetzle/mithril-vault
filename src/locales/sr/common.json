@@ -15,6 +15,9 @@
     "copied": "Kopirano",
     "noDatabase": "Nema baze podataka"
   },
+  "clipboard": {
+    "countdown": "Privremena memorija se briše za {{seconds}}s"
+  },
   "settings": {
     "title": "Podešavanja",
     "description": "Podešavanja aplikacije i konfiguracija baze podataka.",
@@ -49,6 +52,8 @@
       "autoLockTimeout": "Vreme automatskog zaključavanja (sekunde)",
       "autoLockNote": "TODO: događaji neaktivnosti/zaključavanja OS-a još nisu implementirani.",
       "clipboardTimeout": "Vreme brisanja privremene memorije (sekunde)",
+      "clearClipboardOnLock": "Obriši privremenu memoriju pri zaključavanju",
+      "showClipboardCountdown": "Prikaži odbrojavanje privremene memorije",
       "showPasswordByDefault": "Podrazumevano prikaži lozinke",
       "minimizeToTray": "Minimiziraj u sistemsku traku",
       "startMinimized": "Pokreni minimizovano"
