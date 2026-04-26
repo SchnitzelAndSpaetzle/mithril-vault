@@ -170,7 +170,7 @@ mod tests {
 
         // Store a session key
         service
-            .store_session_key(test_key, Duration::from_secs(3600))
+            .store_session_key(test_key, Duration::from_hours(1))
             .expect("store");
 
         // Verify it's present and can be loaded
@@ -186,7 +186,7 @@ mod tests {
 
         // Store and then clear (use long TTL to avoid timing issues in CI)
         service
-            .store_session_key(test_key, Duration::from_secs(3600))
+            .store_session_key(test_key, Duration::from_hours(1))
             .expect("store");
         assert!(service.session_key_present().expect("presence check"));
 
@@ -204,10 +204,10 @@ mod tests {
         let key2 = b"second_key";
 
         service
-            .store_session_key(key1, Duration::from_secs(3600))
+            .store_session_key(key1, Duration::from_hours(1))
             .expect("store first");
         service
-            .store_session_key(key2, Duration::from_secs(3600))
+            .store_session_key(key2, Duration::from_hours(1))
             .expect("store second");
 
         let loaded = service.load_session_key().expect("load");
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn test_default_session_ttl() {
         let ttl = SecureStorageService::default_session_ttl();
-        assert_eq!(ttl, Duration::from_secs(300));
+        assert_eq!(ttl, Duration::from_mins(5));
     }
 
     // Note: TTL expiration testing is omitted because Stronghold's TTL handling
