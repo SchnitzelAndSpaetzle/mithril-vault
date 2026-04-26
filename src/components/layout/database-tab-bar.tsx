@@ -5,7 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { database } from "@/lib/tauri";
+import { useAppPreferences } from "@/hooks/use-app-preferences";
+import { clipboard, database } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
   type DatabaseTab,
@@ -21,6 +22,7 @@ function getFilename(path?: string): string {
 
 export function DatabaseTabBar() {
   const navigate = useNavigate();
+  const { preferences } = useAppPreferences();
   const tabs = useDatabaseTabs(
     (state: DatabaseTabsState) => state.tabs
   ) as DatabaseTab[];
@@ -73,6 +75,13 @@ export function DatabaseTabBar() {
 
     if (tab?.state === "open" && tab.path) {
       try {
+        if (preferences?.security.clearClipboardOnLock) {
+          try {
+            await clipboard.clear();
+          } catch (error) {
+            console.error("Failed to clear clipboard before lock:", error);
+          }
+        }
         await database.close(tab.path);
       } catch (error) {
         console.error("Failed to close database:", error);

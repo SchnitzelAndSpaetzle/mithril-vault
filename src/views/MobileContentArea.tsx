@@ -13,11 +13,12 @@ import { useSearchShortcut } from "@/hooks/use-search-shortcut";
 import { useShortcut } from "@/hooks/use-shortcut";
 import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 import { useActiveDatabase } from "@/hooks/use-active-database";
+import { useAppPreferences } from "@/hooks/use-app-preferences";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { SHORTCUTS } from "@/lib/shortcuts";
-import { database } from "@/lib/tauri";
+import { clipboard, database } from "@/lib/tauri";
 
 const MOBILE_SEARCH_INPUT_ID = "mobile-global-search-input";
 
@@ -27,6 +28,10 @@ export default function MobileContentArea() {
   const navigate = useNavigate();
   const { tab, dbId } = useActiveDatabase();
   const removeTab = useDatabaseTabs((s) => s.removeTab);
+  const { preferences } = useAppPreferences();
+  const clearClipboardOnLock = Boolean(
+    preferences?.security.clearClipboardOnLock
+  );
 
   const search = useSearch({ strict: false });
   const searchGroupId = (search.groupId as string | undefined) ?? null;
@@ -69,6 +74,13 @@ export default function MobileContentArea() {
       if (!tab?.id || !dbId) return;
       void (async () => {
         try {
+          if (clearClipboardOnLock) {
+            try {
+              await clipboard.clear();
+            } catch (error) {
+              console.error("Failed to clear clipboard before lock:", error);
+            }
+          }
           await database.close(dbId);
           removeTab(tab.id);
           void navigate({ to: "/" });
@@ -76,7 +88,7 @@ export default function MobileContentArea() {
           // lock failed silently
         }
       })();
-    }, [tab, dbId, removeTab, navigate]),
+    }, [tab, dbId, removeTab, navigate, clearClipboardOnLock]),
     Boolean(dbId)
   );
 

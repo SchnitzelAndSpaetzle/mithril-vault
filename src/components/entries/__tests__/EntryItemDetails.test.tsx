@@ -268,6 +268,20 @@ describe("EntryItemDetails", () => {
     );
   });
 
+  it("does not show password success toast when password copy fails", async () => {
+    vi.mocked(clipboard.copyPassword).mockRejectedValueOnce(
+      new Error("copy failed")
+    );
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const passwordText = screen.getByText("••••••••");
+    await act(async () => {
+      fireEvent.click(passwordText.closest("button") as HTMLButtonElement);
+    });
+    expect(toast.success).not.toHaveBeenCalledWith(
+      "shortcuts.toast.passwordCopied"
+    );
+  });
+
   it("shows toast on username copy", async () => {
     render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
     const usernameText = screen.getByText("user@example.com");
@@ -335,6 +349,31 @@ describe("EntryItemDetails", () => {
       fireEvent.click(protectedFieldButton);
     });
     expect(toast.success).toHaveBeenCalledWith("common.copied");
+  });
+
+  it("does not show protected field success toast when copy fails", async () => {
+    const protectedEntry: Entry = {
+      ...mockEntry,
+      customFields: {},
+      customFieldMeta: [{ key: "API Token", isProtected: true }],
+    };
+    vi.mocked(useEntryDetail).mockReturnValueOnce(
+      makeHookResult({ entry: protectedEntry })
+    );
+    vi.mocked(clipboard.copyProtectedField).mockRejectedValueOnce(
+      new Error("copy failed")
+    );
+
+    render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+    const maskedTexts = screen.getAllByText("••••••••");
+    const protectedFieldButton = maskedTexts[1]!.closest(
+      "button"
+    ) as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(protectedFieldButton);
+    });
+
+    expect(toast.success).not.toHaveBeenCalledWith("common.copied");
   });
 
   it("shows copied feedback for protected custom field", async () => {

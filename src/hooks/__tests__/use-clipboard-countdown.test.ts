@@ -126,4 +126,33 @@ describe("useClipboardCountdown", () => {
     });
     expect(toast.success).not.toHaveBeenCalled();
   });
+
+  it("stops active countdown when preference is disabled", async () => {
+    const { useAppPreferences } = await import("@/hooks/use-app-preferences");
+    vi.mocked(useAppPreferences).mockReturnValue({
+      preferences: {
+        security: { showClipboardCountdown: true },
+      },
+    } as ReturnType<typeof useAppPreferences>);
+
+    const { result, rerender } = renderHook(() => useClipboardCountdown());
+    act(() => {
+      result.current(3);
+    });
+
+    vi.mocked(useAppPreferences).mockReturnValue({
+      preferences: {
+        security: { showClipboardCountdown: false },
+      },
+    } as ReturnType<typeof useAppPreferences>);
+    rerender();
+
+    expect(toast.dismiss).toHaveBeenCalledWith("clipboard-countdown");
+    const callsBefore = vi.mocked(toast.success).mock.calls.length;
+
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(vi.mocked(toast.success).mock.calls.length).toBe(callsBefore);
+  });
 });

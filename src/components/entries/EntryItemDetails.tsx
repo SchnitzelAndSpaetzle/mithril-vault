@@ -235,11 +235,15 @@ function PasswordRow({
 
   const handleCopy = async () => {
     if (isDisabled) return;
-    await clipboard.copyPassword(dbId, entryId, clipboardClearTimeout);
-    setIsCopied(true);
-    toast.success(t("shortcuts.toast.passwordCopied"));
-    startCountdown(clipboardClearTimeout);
-    setTimeout(() => setIsCopied(false), 2000);
+    try {
+      await clipboard.copyPassword(dbId, entryId, clipboardClearTimeout);
+      setIsCopied(true);
+      toast.success(t("shortcuts.toast.passwordCopied"));
+      startCountdown(clipboardClearTimeout);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy password:", error);
+    }
   };
 
   const displayValue = isLoading ? (
@@ -391,16 +395,20 @@ function ProtectedCustomFieldRow({
 
   const handleCopy = async () => {
     if (isDisabled) return;
-    await clipboard.copyProtectedField(
-      dbId,
-      entryId,
-      meta.key,
-      clipboardClearTimeout
-    );
-    setIsCopied(true);
-    toast.success(t("common.copied"));
-    startCountdown(clipboardClearTimeout);
-    setTimeout(() => setIsCopied(false), 2000);
+    try {
+      await clipboard.copyProtectedField(
+        dbId,
+        entryId,
+        meta.key,
+        clipboardClearTimeout
+      );
+      setIsCopied(true);
+      toast.success(t("common.copied"));
+      startCountdown(clipboardClearTimeout);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy protected field:", error);
+    }
   };
 
   const displayValue = isLoading ? (
