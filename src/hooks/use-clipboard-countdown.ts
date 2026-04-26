@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useAppPreferences } from "@/hooks/use-app-preferences";
 
 const TOAST_ID = "clipboard-countdown";
+let activeInterval: ReturnType<typeof setInterval> | null = null;
 
 export function useClipboardCountdown() {
   const { t } = useTranslation();
   const { preferences } = useAppPreferences();
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startCountdown = useCallback(
     (seconds: number) => {
       if (!preferences?.security.showClipboardCountdown) return;
 
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      if (activeInterval) {
+        clearInterval(activeInterval);
       }
 
       let remaining = seconds;
@@ -26,12 +26,12 @@ export function useClipboardCountdown() {
         duration: Infinity,
       });
 
-      intervalRef.current = setInterval(() => {
+      activeInterval = setInterval(() => {
         remaining -= 1;
         if (remaining <= 0) {
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
+          if (activeInterval) {
+            clearInterval(activeInterval);
+            activeInterval = null;
           }
           toast.dismiss(TOAST_ID);
         } else {

@@ -304,10 +304,14 @@ function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
   const { t } = useTranslation();
   const { copy, isCopied } = useCopyToClipboard();
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (isDisabled) return;
-    void copy(url);
-    toast.success(t("common.copied"));
+    try {
+      await copy(url);
+      toast.success(t("common.copied"));
+    } catch (error) {
+      console.error("Failed to copy URL:", error);
+    }
   };
 
   const handleOpen = async () => {
@@ -459,10 +463,14 @@ function EntryFieldRow({
   const { t } = useTranslation();
   const { copy, isCopied } = useCopyToClipboard();
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (isDisabled) return;
-    void copy(value);
-    toast.success(t("common.copied"));
+    try {
+      await copy(value);
+      toast.success(t("common.copied"));
+    } catch (error) {
+      console.error("Failed to copy field value:", error);
+    }
   };
 
   return (

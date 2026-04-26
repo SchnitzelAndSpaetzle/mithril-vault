@@ -87,6 +87,31 @@ describe("useClipboardCountdown", () => {
     expect(toast.success).toHaveBeenCalledTimes(1);
   });
 
+  it("uses a single active countdown across multiple hook instances", () => {
+    const { result: first } = renderHook(() => useClipboardCountdown());
+    const { result: second } = renderHook(() => useClipboardCountdown());
+
+    act(() => {
+      first.current(5);
+    });
+    expect(toast.success).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(toast.success).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      second.current(3);
+    });
+    expect(toast.success).toHaveBeenCalledTimes(3);
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(toast.success).toHaveBeenCalledTimes(4);
+  });
+
   it("does nothing when showClipboardCountdown is disabled", async () => {
     const { useAppPreferences } = await import("@/hooks/use-app-preferences");
     vi.mocked(useAppPreferences).mockReturnValue({

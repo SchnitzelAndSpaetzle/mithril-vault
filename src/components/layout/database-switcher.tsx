@@ -54,7 +54,11 @@ export function DatabaseSwitcher() {
 
     try {
       if (preferences?.security.clearClipboardOnLock) {
-        await clipboard.clear();
+        try {
+          await clipboard.clear();
+        } catch (error) {
+          console.error("Failed to clear clipboard before lock:", error);
+        }
       }
       await database.close(dbId);
       removeTab(tab.id);
