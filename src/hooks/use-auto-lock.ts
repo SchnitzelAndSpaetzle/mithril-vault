@@ -50,18 +50,25 @@ export function useAutoLock() {
       const activeTabId = getActiveTabId();
 
       let activeTabLocked = false;
+      let activeLockedPath: string | undefined;
 
       for (const tab of tabs) {
-        if (tab.dbId && lockedPaths.includes(tab.dbId)) {
+        const tabDbPath = tab.dbId ?? tab.info?.path ?? tab.path;
+        if (tabDbPath && lockedPaths.includes(tabDbPath)) {
           lockTab(tab.id);
           if (tab.id === activeTabId) {
             activeTabLocked = true;
+            activeLockedPath = tabDbPath;
           }
         }
       }
 
       if (activeTabLocked) {
-        void navigate({ to: "/unlock" });
+        if (activeLockedPath) {
+          void navigate({ to: "/unlock", search: { path: activeLockedPath } });
+        } else {
+          void navigate({ to: "/unlock" });
+        }
       }
     });
 

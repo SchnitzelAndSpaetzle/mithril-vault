@@ -176,12 +176,7 @@ export function UnlockDbForm({
 
       if (isLocked) {
         // Re-unlock a locked database (backend has keyfile path)
-        if (!data.password) {
-          setUnlockError(t("unlock.errors.noCredentials"));
-          setIsUnlocking(false);
-          return;
-        }
-        info = await database.unlock(data.filePath, data.password);
+        info = await database.unlock(data.filePath, data.password || undefined);
       } else if (data.keyfilePath && data.password) {
         info = await database.openWithKeyfile(
           data.filePath,

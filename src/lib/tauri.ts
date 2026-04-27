@@ -238,7 +238,7 @@ export const database = {
     return DatabaseInfoSchema.parse(result);
   },
 
-  async unlock(dbId: string, password: string): Promise<DatabaseInfo> {
+  async unlock(dbId: string, password?: string): Promise<DatabaseInfo> {
     DbIdSchema.parse({ dbId });
     const result = await invoke("unlock_database", { dbId, password });
     return DatabaseInfoSchema.parse(result);

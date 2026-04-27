@@ -155,7 +155,7 @@ fn database_commands_handle_missing_database() {
 
     let err = tauri::async_runtime::block_on(unlock_database(
         "missing.kdbx".to_string(),
-        "password".into(),
+        Some("password".into()),
         app.state(),
     ))
     .expect_err("expected database not found");

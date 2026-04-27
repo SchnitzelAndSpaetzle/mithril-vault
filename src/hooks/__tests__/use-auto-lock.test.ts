@@ -7,6 +7,9 @@ import { useAutoLock } from "../use-auto-lock";
 const mockReportActivity = vi.fn().mockResolvedValue(undefined);
 const mockListen = vi.fn();
 const mockNavigate = vi.fn();
+const mockLockTab = vi.fn();
+let mockTabs: unknown[] = [];
+let mockActiveTabId: string | null = null;
 
 vi.mock("@/lib/tauri", () => ({
   database: {
@@ -23,12 +26,15 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("@/stores/database-tabs", () => {
-  const lockTab = vi.fn();
   const store = Object.assign(
     (selector: (state: unknown) => unknown) =>
-      selector({ lockTab, tabs: [], activeTabId: null }),
+      selector({
+        lockTab: mockLockTab,
+        tabs: mockTabs,
+        activeTabId: mockActiveTabId,
+      }),
     {
-      getState: () => ({ tabs: [], activeTabId: null }),
+      getState: () => ({ tabs: mockTabs, activeTabId: mockActiveTabId }),
     }
   );
   return { useDatabaseTabs: store };
@@ -39,7 +45,10 @@ describe("useAutoLock", () => {
     vi.useFakeTimers();
     mockReportActivity.mockClear();
     mockNavigate.mockClear();
+    mockLockTab.mockClear();
     mockListen.mockReturnValue(Promise.resolve(vi.fn()));
+    mockTabs = [];
+    mockActiveTabId = null;
   });
 
   afterEach(() => {
@@ -113,5 +122,34 @@ describe("useAutoLock", () => {
     expect(removedEvents).toContain("touchstart");
 
     removeSpy.mockRestore();
+  });
+
+  it("redirects to unlock with active database path when active tab is locked", () => {
+    let onDatabaseLocked: ((event: { payload: string[] }) => void) | undefined;
+    mockListen.mockImplementation((_event, callback) => {
+      onDatabaseLocked = callback as (event: { payload: string[] }) => void;
+      return Promise.resolve(vi.fn());
+    });
+
+    mockTabs = [
+      {
+        id: "tab-1",
+        dbId: "/tmp/test.kdbx",
+        path: "/tmp/test.kdbx",
+      },
+    ];
+    mockActiveTabId = "tab-1";
+
+    renderHook(() => useAutoLock());
+
+    act(() => {
+      onDatabaseLocked?.({ payload: ["/tmp/test.kdbx"] });
+    });
+
+    expect(mockLockTab).toHaveBeenCalledWith("tab-1");
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/unlock",
+      search: { path: "/tmp/test.kdbx" },
+    });
   });
 });

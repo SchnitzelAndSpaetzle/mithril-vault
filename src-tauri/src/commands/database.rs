@@ -95,14 +95,14 @@ pub async fn lock_database(
     state.lock(&db_id)
 }
 
-/// Unlocks the database session by re-opening from disk with the provided password.
+/// Unlocks the database session by re-opening from disk with optional password.
 #[tauri::command]
 pub async fn unlock_database(
     db_id: String,
-    password: String,
+    password: Option<String>,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    state.unlock(&db_id, &password)
+    state.unlock(&db_id, password.as_deref())
 }
 
 /// Inspects a KDBX file without requiring credentials.

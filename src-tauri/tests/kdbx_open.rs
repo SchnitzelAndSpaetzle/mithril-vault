@@ -1,6 +1,8 @@
 #![allow(clippy::expect_used)]
 
 use mithril_vault_lib::dto::error::AppError;
+use mithril_vault_lib::dto::entry::CreateEntryData;
+use mithril_vault_lib::domain::secure::SecureString;
 use mithril_vault_lib::services::kdbx::KdbxService;
 use std::path::PathBuf;
 use tempfile::{tempdir, TempDir};
@@ -374,7 +376,7 @@ fn test_lock_and_unlock() {
     );
 
     // Unlock with wrong password should fail
-    let unlock_err = service.unlock(&db_path, "wrong_password");
+    let unlock_err = service.unlock(&db_path, Some("wrong_password"));
     assert!(
         matches!(unlock_err, Err(AppError::InvalidPassword)),
         "Should reject wrong password on unlock: got {unlock_err:?}"
@@ -382,7 +384,7 @@ fn test_lock_and_unlock() {
 
     // Unlock with correct password
     let unlock_info = service
-        .unlock(&db_path, "test123")
+        .unlock(&db_path, Some("test123"))
         .expect("Failed to unlock");
     assert!(!unlock_info.is_locked);
     assert_eq!(unlock_info.name, open_info.name);
@@ -427,6 +429,56 @@ fn test_lock_all() {
 }
 
 #[test]
+fn test_lock_all_skips_modified_databases() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path1 = dir.path().join("dirty.kdbx");
+    let db_path2 = dir.path().join("clean.kdbx");
+    let db_path1_str = db_path1.to_string_lossy().to_string();
+    let db_path2_str = db_path2.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    let info1 = service
+        .create(&db_path1_str, "pass1", "Dirty DB")
+        .expect("Failed to create dirty db");
+    service
+        .create(&db_path2_str, "pass2", "Clean DB")
+        .expect("Failed to create clean db");
+
+    service
+        .create_entry(
+            &db_path1_str,
+            &info1.root_group_id,
+            CreateEntryData {
+                title: "Unsaved entry".to_string(),
+                username: "user".to_string(),
+                password: SecureString::from("secret"),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields: None,
+            },
+        )
+        .expect("Failed to create entry");
+
+    let locked = service.lock_all().expect("Failed to lock all");
+    assert_eq!(locked, vec![db_path2_str.clone()]);
+
+    let dirty_info = service
+        .get_info(&db_path1_str)
+        .expect("Failed to get dirty db info");
+    assert!(!dirty_info.is_locked);
+    assert!(dirty_info.is_modified);
+
+    let clean_info = service
+        .get_info(&db_path2_str)
+        .expect("Failed to get clean db info");
+    assert!(clean_info.is_locked);
+    assert!(!clean_info.is_modified);
+}
+
+#[test]
 fn test_lock_database_not_found() {
     let service = KdbxService::new();
     let result = service.lock("/nonexistent/db.kdbx");
@@ -436,6 +488,36 @@ fn test_lock_database_not_found() {
 #[test]
 fn test_unlock_database_not_found() {
     let service = KdbxService::new();
-    let result = service.unlock("/nonexistent/db.kdbx", "password");
+    let result = service.unlock("/nonexistent/db.kdbx", Some("password"));
     assert!(matches!(result, Err(AppError::DatabaseNotFound(_))));
+}
+
+#[test]
+fn test_unlock_keyfile_only_database_without_password() {
+    let Some((_temp_dir, db_path, key_path)) =
+        copy_keyfile_fixtures_to_temp("test-keyfile-only-kdbx4-low-KDF.kdbx", "test-keyfile.keyx")
+    else {
+        eprintln!("Skipping test: keyfile-only fixtures not found");
+        return;
+    };
+
+    let db_path = db_path.to_string_lossy().to_string();
+    let key_path = key_path.to_string_lossy().to_string();
+    let service = KdbxService::new();
+
+    service
+        .open_with_keyfile_only(&db_path, &key_path)
+        .expect("Failed to open with keyfile only");
+
+    let lock_info = service.lock(&db_path).expect("Failed to lock");
+    assert!(lock_info.is_locked);
+
+    let unlock_info = service
+        .unlock(&db_path, None)
+        .expect("Failed to unlock keyfile-only database");
+    assert!(!unlock_info.is_locked);
+
+    let _ = service
+        .list_entries(&db_path, None)
+        .expect("Failed to list entries after unlock");
 }

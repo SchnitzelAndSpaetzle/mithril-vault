@@ -216,13 +216,15 @@ impl KdbxService {
         })
     }
 
-    /// Locks all currently unlocked databases. Returns the list of locked database paths.
+    /// Locks all currently unlocked clean databases.
+    /// Databases with unsaved changes remain unlocked to avoid silent data loss.
+    /// Returns the list of locked database paths.
     pub fn lock_all(&self) -> Result<Vec<String>, AppError> {
         let mut databases = self.lock_databases()?;
         let mut locked_paths = Vec::new();
 
         for open_db in databases.values_mut() {
-            if !open_db.is_locked() {
+            if !open_db.is_locked() && !open_db.is_modified {
                 open_db.db = None;
                 open_db.password = None;
                 locked_paths.push(open_db.path.clone());
@@ -232,8 +234,8 @@ impl KdbxService {
         Ok(locked_paths)
     }
 
-    /// Unlocks a locked database by re-opening it from disk with the provided password.
-    pub fn unlock(&self, db_id: &str, password: &str) -> Result<DatabaseInfo, AppError> {
+    /// Unlocks a locked database by re-opening it from disk with optional password.
+    pub fn unlock(&self, db_id: &str, password: Option<&str>) -> Result<DatabaseInfo, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
@@ -255,14 +257,14 @@ impl KdbxService {
         let keyfile_path = open_db.keyfile_path.clone();
 
         let mut file = File::open(path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
-        let key = build_database_key(Some(password), keyfile_path.as_deref())?;
+        let key = build_database_key(password, keyfile_path.as_deref())?;
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
         open_db.name.clone_from(&db.root.name);
         open_db.root_group_id = db.root.uuid.to_string();
         open_db.version = format_database_version(&db.config.version);
         open_db.db = Some(db);
-        open_db.password = Some(SecureString::from(password));
+        open_db.password = password.map(SecureString::from);
         open_db.is_modified = false;
 
         Ok(DatabaseInfo {
