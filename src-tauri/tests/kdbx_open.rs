@@ -1,8 +1,8 @@
 #![allow(clippy::expect_used)]
 
-use mithril_vault_lib::dto::error::AppError;
-use mithril_vault_lib::dto::entry::CreateEntryData;
 use mithril_vault_lib::domain::secure::SecureString;
+use mithril_vault_lib::dto::entry::CreateEntryData;
+use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::kdbx::KdbxService;
 use std::path::PathBuf;
 use tempfile::{tempdir, TempDir};
