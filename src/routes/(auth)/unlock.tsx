@@ -34,7 +34,6 @@ export const Route = createFileRoute("/(auth)/unlock")({
       if (existing?.state === "locked") {
         isLocked = true;
         state.setActiveTab(existing.id);
-        state.updateTabState(existing.id, { state: "unlocking" });
       } else {
         const tabId = existing?.id ?? state.addTab(path);
         state.setActiveTab(tabId);
