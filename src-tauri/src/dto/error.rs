@@ -14,6 +14,9 @@ pub enum AppError {
     #[error("Database not found: {0}")]
     DatabaseNotFound(String),
 
+    #[error("Database is locked: {0}")]
+    DatabaseLocked(String),
+
     #[error("Invalid password")]
     InvalidPassword,
 

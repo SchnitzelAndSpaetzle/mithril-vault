@@ -58,11 +58,11 @@ impl KdbxService {
 
         for open_db in databases.values() {
             infos.push(DatabaseInfo {
-                name: open_db.db.root.name.clone(),
+                name: open_db.name.clone(),
                 path: open_db.path.clone(),
                 is_modified: open_db.is_modified,
-                is_locked: false,
-                root_group_id: open_db.db.root.uuid.to_string(),
+                is_locked: open_db.is_locked(),
+                root_group_id: open_db.root_group_id.clone(),
                 version: open_db.version.clone(),
             });
         }

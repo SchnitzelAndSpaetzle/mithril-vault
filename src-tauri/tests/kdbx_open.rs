@@ -347,3 +347,93 @@ fn test_keyfile_not_found_for_password_plus_keyfile() {
         "Should fail when keyfile path doesn't exist: got {result:?}"
     );
 }
+
+#[test]
+fn test_lock_and_unlock() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
+        eprintln!("Skipping test: fixture not found");
+        return;
+    };
+
+    let db_path = path.to_string_lossy().to_string();
+    let service = KdbxService::new();
+    let open_info = service.open(&db_path, "test123").expect("Failed to open");
+    assert!(!open_info.is_locked);
+
+    // Lock the database
+    let lock_info = service.lock(&db_path).expect("Failed to lock");
+    assert!(lock_info.is_locked);
+    assert_eq!(lock_info.name, open_info.name);
+    assert_eq!(lock_info.root_group_id, open_info.root_group_id);
+
+    // Operations should fail while locked
+    let list_result = service.list_entries(&db_path, None);
+    assert!(
+        matches!(list_result, Err(AppError::DatabaseLocked(_))),
+        "Should not allow listing entries when locked: got {list_result:?}"
+    );
+
+    // Unlock with wrong password should fail
+    let unlock_err = service.unlock(&db_path, "wrong_password");
+    assert!(
+        matches!(unlock_err, Err(AppError::InvalidPassword)),
+        "Should reject wrong password on unlock: got {unlock_err:?}"
+    );
+
+    // Unlock with correct password
+    let unlock_info = service.unlock(&db_path, "test123").expect("Failed to unlock");
+    assert!(!unlock_info.is_locked);
+    assert_eq!(unlock_info.name, open_info.name);
+
+    // Operations should work again
+    let entries = service
+        .list_entries(&db_path, None)
+        .expect("Failed to list entries after unlock");
+    assert!(entries.len() >= 0); // Just verify it doesn't error
+}
+
+#[test]
+fn test_lock_all() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path1 = dir.path().join("db1.kdbx");
+    let db_path2 = dir.path().join("db2.kdbx");
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path1.to_string_lossy(), "pass1", "DB1")
+        .expect("Failed to create db1");
+    service
+        .create(&db_path2.to_string_lossy(), "pass2", "DB2")
+        .expect("Failed to create db2");
+
+    let locked = service.lock_all().expect("Failed to lock all");
+    assert_eq!(locked.len(), 2);
+
+    // Both should be locked
+    let info1 = service
+        .get_info(&db_path1.to_string_lossy())
+        .expect("Failed to get info");
+    let info2 = service
+        .get_info(&db_path2.to_string_lossy())
+        .expect("Failed to get info");
+    assert!(info1.is_locked);
+    assert!(info2.is_locked);
+
+    // lock_all on already locked databases returns empty list
+    let locked_again = service.lock_all().expect("Failed to lock all again");
+    assert!(locked_again.is_empty());
+}
+
+#[test]
+fn test_lock_database_not_found() {
+    let service = KdbxService::new();
+    let result = service.lock("/nonexistent/db.kdbx");
+    assert!(matches!(result, Err(AppError::DatabaseNotFound(_))));
+}
+
+#[test]
+fn test_unlock_database_not_found() {
+    let service = KdbxService::new();
+    let result = service.unlock("/nonexistent/db.kdbx", "password");
+    assert!(matches!(result, Err(AppError::DatabaseNotFound(_))));
+}

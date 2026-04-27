@@ -14,6 +14,10 @@ impl KdbxService {
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
+        if open_db.is_locked() {
+            return Err(AppError::DatabaseLocked(open_db.path.clone()));
+        }
+
         if open_db.password.is_none() && open_db.keyfile_path.is_none() {
             return Err(AppError::NoCredentials);
         }
@@ -21,6 +25,7 @@ impl KdbxService {
         let path = open_db.path.clone();
         let password = open_db.password.clone();
         let keyfile_path = open_db.keyfile_path.clone();
+        let db = open_db.db.as_ref().ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
 
         atomic_write(
             &path,
@@ -32,9 +37,7 @@ impl KdbxService {
                     password.as_ref().map(SecureString::as_str),
                     keyfile_path.as_deref(),
                 )?;
-                open_db
-                    .db
-                    .save(file, key)
+                db.save(file, key)
                     .map_err(|e| AppError::Kdbx(e.to_string()))
             },
         )?;
@@ -65,6 +68,10 @@ impl KdbxService {
                 .get_mut(&normalized_path)
                 .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
+            if open_db.is_locked() {
+                return Err(AppError::DatabaseLocked(open_db.path.clone()));
+            }
+
             let effective_password: Option<SecureString> = new_password
                 .map(SecureString::from)
                 .or_else(|| open_db.password.clone());
@@ -74,6 +81,7 @@ impl KdbxService {
             }
 
             let keyfile_path = open_db.keyfile_path.clone();
+            let db = open_db.db.as_ref().ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
 
             atomic_write(
                 new_path,
@@ -85,9 +93,7 @@ impl KdbxService {
                         effective_password.as_ref().map(SecureString::as_str),
                         keyfile_path.as_deref(),
                     )?;
-                    open_db
-                        .db
-                        .save(file, key)
+                    db.save(file, key)
                         .map_err(|e| AppError::Kdbx(e.to_string()))
                 },
             )?;

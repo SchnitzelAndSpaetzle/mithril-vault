@@ -41,8 +41,8 @@ export function DatabaseSwitcher() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { tab, dbId } = useActiveDatabase();
-  const removeTab = useDatabaseTabs(
-    (state: DatabaseTabsState) => state.removeTab
+  const updateTabInfo = useDatabaseTabs(
+    (state: DatabaseTabsState) => state.updateTabInfo
   );
   const { recentDatabases, isLoading: isLoadingRecent } = useRecentDatabases();
   const { preferences } = useAppPreferences();
@@ -60,11 +60,11 @@ export function DatabaseSwitcher() {
           console.error("Failed to clear clipboard before lock:", error);
         }
       }
-      await database.close(dbId);
-      removeTab(tab.id);
-      void navigate({ to: "/" });
+      const info = await database.lock(dbId);
+      updateTabInfo(tab.id, info);
+      void navigate({ to: "/unlock", search: { path: dbId } });
     } catch (error) {
-      console.error("Failed to close database:", error);
+      console.error("Failed to lock database:", error);
     }
   };
 

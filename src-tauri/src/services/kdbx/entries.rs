@@ -21,15 +21,16 @@ impl KdbxService {
         let open_db = databases
             .get(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        let db = open_db.db_or_locked()?;
 
         let mut entries = Vec::new();
 
         if let Some(gid) = group_id {
-            let group = find_group_by_id(&open_db.db.root, gid)
+            let group = find_group_by_id(&db.root, gid)
                 .ok_or_else(|| AppError::GroupNotFound(gid.to_string()))?;
             collect_entries_from_group(group, &mut entries);
         } else {
-            collect_all_entries(&open_db.db.root, &mut entries);
+            collect_all_entries(&db.root, &mut entries);
         }
 
         Ok(entries)
@@ -42,8 +43,9 @@ impl KdbxService {
         let open_db = databases
             .get(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        let db = open_db.db_or_locked()?;
 
-        find_entry_by_id(&open_db.db.root, id)
+        find_entry_by_id(&db.root, id)
             .ok_or_else(|| AppError::EntryNotFound(id.to_string()))
     }
 
@@ -54,8 +56,9 @@ impl KdbxService {
         let open_db = databases
             .get(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        let db = open_db.db_or_locked()?;
 
-        match find_entry_password(&open_db.db.root, id) {
+        match find_entry_password(&db.root, id) {
             PasswordSearchResult::Found(password) => Ok(password),
             PasswordSearchResult::NotFound => Err(AppError::EntryNotFound(id.to_string())),
         }
@@ -73,8 +76,9 @@ impl KdbxService {
         let open_db = databases
             .get(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        let db = open_db.db_or_locked()?;
 
-        let entry = find_entry_by_id_ref(&open_db.db.root, entry_id)
+        let entry = find_entry_by_id_ref(&db.root, entry_id)
             .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
 
         if is_standard_entry_field(key) {
@@ -107,8 +111,9 @@ impl KdbxService {
         let open_db = databases
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        let db = open_db.db_mut_or_locked()?;
 
-        let group = find_group_by_id_mut(&mut open_db.db.root, group_id)
+        let group = find_group_by_id_mut(&mut db.root, group_id)
             .ok_or_else(|| AppError::GroupNotFound(group_id.to_string()))?;
 
         let mut entry = KeepassEntry::new();
@@ -165,7 +170,8 @@ impl KdbxService {
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
-        let (entry, group_id) = find_entry_by_id_mut(&mut open_db.db.root, id)
+        let db = open_db.db_mut_or_locked()?;
+        let (entry, group_id) = find_entry_by_id_mut(&mut db.root, id)
             .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
 
         if let Some(title) = data.title {
@@ -209,9 +215,10 @@ impl KdbxService {
         }
 
         entry.times.set_last_modification(Times::now());
+        let result = convert_entry(entry, &group_id);
         open_db.is_modified = true;
 
-        Ok(convert_entry(entry, &group_id))
+        Ok(result)
     }
 
     /// Deletes an entry by moving it to recycle bin.
@@ -222,13 +229,14 @@ impl KdbxService {
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
-        let mut entry = {
-            let root = &mut open_db.db.root;
-            remove_entry_by_id(root, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
-        };
+        let db = open_db.db_mut_or_locked()?;
 
-        let recycle_bin_id = ensure_recycle_bin(&mut open_db.db);
-        let recycle_bin = find_group_by_id_mut(&mut open_db.db.root, &recycle_bin_id)
+        let mut entry =
+            remove_entry_by_id(&mut db.root, id)
+                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+
+        let recycle_bin_id = ensure_recycle_bin(db);
+        let recycle_bin = find_group_by_id_mut(&mut db.root, &recycle_bin_id)
             .ok_or_else(|| AppError::GroupNotFound(recycle_bin_id.clone()))?;
 
         let now = Times::now();
@@ -253,7 +261,8 @@ impl KdbxService {
             return Ok(0);
         }
 
-        let count = modify_tags_in_group(&mut open_db.db.root, &|entry| {
+        let db = open_db.db_mut_or_locked()?;
+        let count = modify_tags_in_group(&mut db.root, &|entry| {
             rename_tag_in_entry(entry, old_name, new_name)
         });
 
@@ -273,7 +282,8 @@ impl KdbxService {
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
-        let count = modify_tags_in_group(&mut open_db.db.root, &|entry| {
+        let db = open_db.db_mut_or_locked()?;
+        let count = modify_tags_in_group(&mut db.root, &|entry| {
             delete_tag_in_entry(entry, tag_name)
         });
 
@@ -297,12 +307,13 @@ impl KdbxService {
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
-        let mut entry = {
-            let root = &mut open_db.db.root;
-            remove_entry_by_id(root, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?
-        };
+        let db = open_db.db_mut_or_locked()?;
 
-        let target_group = find_group_by_id_mut(&mut open_db.db.root, target_group_id)
+        let mut entry =
+            remove_entry_by_id(&mut db.root, id)
+                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+
+        let target_group = find_group_by_id_mut(&mut db.root, target_group_id)
             .ok_or_else(|| AppError::GroupNotFound(target_group_id.to_string()))?;
 
         let now = Times::now();

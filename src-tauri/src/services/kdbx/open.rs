@@ -2,6 +2,7 @@ use crate::domain::kdbx::{format_database_version, OpenDatabase};
 use crate::domain::secure::SecureString;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
+use crate::services::kdbx::key::build_database_key;
 use keepass::error::{
     BlockStreamError, CompressionConfigError, CryptographyError, DatabaseIntegrityError,
     DatabaseKeyError, DatabaseOpenError, InnerCipherConfigError, KdfConfigError,
@@ -36,12 +37,14 @@ impl KdbxService {
         databases.insert(
             normalized_path,
             OpenDatabase {
-                db,
+                db: Some(db),
                 path: path.to_string(),
                 is_modified: false,
                 password: Some(SecureString::from(password)),
                 keyfile_path: None,
                 version: version.clone(),
+                name: name.clone(),
+                root_group_id: root_group_id.clone(),
             },
         );
 
@@ -88,12 +91,14 @@ impl KdbxService {
         databases.insert(
             normalized_path,
             OpenDatabase {
-                db,
+                db: Some(db),
                 path: path.to_string(),
                 is_modified: false,
                 password: Some(SecureString::from(password)),
                 keyfile_path: Some(keyfile_path.to_string()),
                 version: version.clone(),
+                name: name.clone(),
+                root_group_id: root_group_id.clone(),
             },
         );
 
@@ -137,12 +142,14 @@ impl KdbxService {
         databases.insert(
             normalized_path,
             OpenDatabase {
-                db,
+                db: Some(db),
                 path: path.to_string(),
                 is_modified: false,
                 password: None,
                 keyfile_path: Some(keyfile_path.to_string()),
                 version: version.clone(),
+                name: name.clone(),
+                root_group_id: root_group_id.clone(),
             },
         );
 
@@ -177,11 +184,93 @@ impl KdbxService {
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         Ok(DatabaseInfo {
-            name: open_db.db.root.name.clone(),
+            name: open_db.name.clone(),
             path: open_db.path.clone(),
             is_modified: open_db.is_modified,
+            is_locked: open_db.is_locked(),
+            root_group_id: open_db.root_group_id.clone(),
+            version: open_db.version.clone(),
+        })
+    }
+
+    /// Locks a specific database by dropping the decrypted data and password.
+    pub fn lock(&self, db_id: &str) -> Result<DatabaseInfo, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+
+        // Drop the decrypted database (frees all entry/group data from memory)
+        open_db.db = None;
+        // Zeroize and drop the password (SecureString implements ZeroizeOnDrop)
+        open_db.password = None;
+
+        Ok(DatabaseInfo {
+            name: open_db.name.clone(),
+            path: open_db.path.clone(),
+            is_modified: open_db.is_modified,
+            is_locked: true,
+            root_group_id: open_db.root_group_id.clone(),
+            version: open_db.version.clone(),
+        })
+    }
+
+    /// Locks all currently unlocked databases. Returns the list of locked database paths.
+    pub fn lock_all(&self) -> Result<Vec<String>, AppError> {
+        let mut databases = self.lock_databases()?;
+        let mut locked_paths = Vec::new();
+
+        for open_db in databases.values_mut() {
+            if !open_db.is_locked() {
+                open_db.db = None;
+                open_db.password = None;
+                locked_paths.push(open_db.path.clone());
+            }
+        }
+
+        Ok(locked_paths)
+    }
+
+    /// Unlocks a locked database by re-opening it from disk with the provided password.
+    pub fn unlock(&self, db_id: &str, password: &str) -> Result<DatabaseInfo, AppError> {
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+
+        if !open_db.is_locked() {
+            return Ok(DatabaseInfo {
+                name: open_db.name.clone(),
+                path: open_db.path.clone(),
+                is_modified: open_db.is_modified,
+                is_locked: false,
+                root_group_id: open_db.root_group_id.clone(),
+                version: open_db.version.clone(),
+            });
+        }
+
+        let path = &open_db.path;
+        let keyfile_path = open_db.keyfile_path.clone();
+
+        let mut file = File::open(path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
+        let key = build_database_key(Some(password), keyfile_path.as_deref())?;
+        let db = Database::open(&mut file, key).map_err(map_open_error)?;
+
+        open_db.name.clone_from(&db.root.name);
+        open_db.root_group_id = db.root.uuid.to_string();
+        open_db.version = format_database_version(&db.config.version);
+        open_db.db = Some(db);
+        open_db.password = Some(SecureString::from(password));
+        open_db.is_modified = false;
+
+        Ok(DatabaseInfo {
+            name: open_db.name.clone(),
+            path: open_db.path.clone(),
+            is_modified: false,
             is_locked: false,
-            root_group_id: open_db.db.root.uuid.to_string(),
+            root_group_id: open_db.root_group_id.clone(),
             version: open_db.version.clone(),
         })
     }

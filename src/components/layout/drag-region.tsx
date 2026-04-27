@@ -158,7 +158,7 @@ export default function DragRegion() {
   }, [searchState]);
 
   const queryClient = useQueryClient();
-  const removeTab = useDatabaseTabs((s) => s.removeTab);
+  const updateTabInfo = useDatabaseTabs((s) => s.updateTabInfo);
   const clipboardTimeout = useClipboardTimeout();
   const startCountdown = useClipboardCountdown();
   const { preferences } = useAppPreferences();
@@ -199,14 +199,14 @@ export default function DragRegion() {
               console.error("Failed to clear clipboard before lock:", error);
             }
           }
-          await database.close(dbId);
-          removeTab(tab.id);
-          void navigate({ to: "/" });
+          const info = await database.lock(dbId);
+          updateTabInfo(tab.id, info);
+          void navigate({ to: "/unlock", search: { path: dbId } });
         } catch {
           // lock failed silently
         }
       })();
-    }, [tab, dbId, removeTab, navigate, clearClipboardOnLock]),
+    }, [tab, dbId, updateTabInfo, navigate, clearClipboardOnLock]),
     Boolean(dbId) && !isEditing
   );
 

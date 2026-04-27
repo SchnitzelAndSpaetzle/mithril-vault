@@ -38,5 +38,6 @@ export function useActiveDatabase() {
     tab,
     dbId: routeDbId ?? tab?.path ?? null,
     isUnlocking: tab?.state === "unlocking",
+    isLocked: tab?.state === "locked",
   };
 }
