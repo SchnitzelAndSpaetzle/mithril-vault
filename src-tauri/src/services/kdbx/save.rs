@@ -25,7 +25,10 @@ impl KdbxService {
         let path = open_db.path.clone();
         let password = open_db.password.clone();
         let keyfile_path = open_db.keyfile_path.clone();
-        let db = open_db.db.as_ref().ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
+        let db = open_db
+            .db
+            .as_ref()
+            .ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
 
         atomic_write(
             &path,
@@ -81,7 +84,10 @@ impl KdbxService {
             }
 
             let keyfile_path = open_db.keyfile_path.clone();
-            let db = open_db.db.as_ref().ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
+            let db = open_db
+                .db
+                .as_ref()
+                .ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
 
             atomic_write(
                 new_path,

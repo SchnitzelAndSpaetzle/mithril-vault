@@ -45,8 +45,7 @@ impl KdbxService {
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
         let db = open_db.db_or_locked()?;
 
-        find_entry_by_id(&db.root, id)
-            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))
+        find_entry_by_id(&db.root, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))
     }
 
     /// Fetches an entry password.
@@ -231,9 +230,8 @@ impl KdbxService {
 
         let db = open_db.db_mut_or_locked()?;
 
-        let mut entry =
-            remove_entry_by_id(&mut db.root, id)
-                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+        let mut entry = remove_entry_by_id(&mut db.root, id)
+            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
 
         let recycle_bin_id = ensure_recycle_bin(db);
         let recycle_bin = find_group_by_id_mut(&mut db.root, &recycle_bin_id)
@@ -283,9 +281,8 @@ impl KdbxService {
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let db = open_db.db_mut_or_locked()?;
-        let count = modify_tags_in_group(&mut db.root, &|entry| {
-            delete_tag_in_entry(entry, tag_name)
-        });
+        let count =
+            modify_tags_in_group(&mut db.root, &|entry| delete_tag_in_entry(entry, tag_name));
 
         if count > 0 {
             open_db.is_modified = true;
@@ -309,9 +306,8 @@ impl KdbxService {
 
         let db = open_db.db_mut_or_locked()?;
 
-        let mut entry =
-            remove_entry_by_id(&mut db.root, id)
-                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+        let mut entry = remove_entry_by_id(&mut db.root, id)
+            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
 
         let target_group = find_group_by_id_mut(&mut db.root, target_group_id)
             .ok_or_else(|| AppError::GroupNotFound(target_group_id.to_string()))?;
