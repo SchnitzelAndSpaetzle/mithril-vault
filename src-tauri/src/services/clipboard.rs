@@ -33,7 +33,7 @@ impl ClipboardService {
         if let Some(secs) = clear_after_secs {
             let generation = Arc::clone(&self.copy_generation);
             let copied_text = text.to_owned();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(u64::from(secs))).await;
                 // Only clear if no newer copy happened and clipboard still contains
                 // the value we originally copied.

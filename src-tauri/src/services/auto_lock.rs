@@ -45,7 +45,7 @@ fn current_epoch_secs() -> u64 {
 pub fn start_auto_lock_task<R: Runtime>(app_handle: &tauri::AppHandle<R>) {
     let handle = app_handle.clone();
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(CHECK_INTERVAL_SECS)).await;
 
