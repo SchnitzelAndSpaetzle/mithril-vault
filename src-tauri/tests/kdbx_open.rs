@@ -381,7 +381,9 @@ fn test_lock_and_unlock() {
     );
 
     // Unlock with correct password
-    let unlock_info = service.unlock(&db_path, "test123").expect("Failed to unlock");
+    let unlock_info = service
+        .unlock(&db_path, "test123")
+        .expect("Failed to unlock");
     assert!(!unlock_info.is_locked);
     assert_eq!(unlock_info.name, open_info.name);
 
@@ -389,7 +391,7 @@ fn test_lock_and_unlock() {
     let entries = service
         .list_entries(&db_path, None)
         .expect("Failed to list entries after unlock");
-    assert!(entries.len() >= 0); // Just verify it doesn't error
+    let _ = entries; // Just verify it doesn't error
 }
 
 #[test]
