@@ -79,6 +79,7 @@ describe("tauri wrappers validation", () => {
         showPasswordByDefault: false,
         minimizeToTray: true,
         startMinimized: false,
+        preventScreenCapture: true,
       },
       appearance: {
         theme: "system",
@@ -136,6 +137,7 @@ describe("tauri wrappers validation", () => {
           showPasswordByDefault: false,
           minimizeToTray: true,
           startMinimized: false,
+          preventScreenCapture: true,
         },
         appearance: {
           theme: "system",

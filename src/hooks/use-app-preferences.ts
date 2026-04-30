@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
-import { settings } from "@/lib/tauri";
+import { settings, windowProtection } from "@/lib/tauri";
 import type { AppPreferences } from "@/lib/types";
 
 export function useAppPreferences() {
@@ -15,8 +15,17 @@ export function useAppPreferences() {
   });
 
   const updateMutation = useMutation<void, Error, AppPreferences>({
-    mutationFn: (nextPreferences) =>
-      settings.updatePreferences(nextPreferences),
+    mutationFn: async (nextPreferences) => {
+      const previous = queryClient.getQueryData<AppPreferences>(
+        queryKeys.settings.preferences()
+      );
+      await settings.updatePreferences(nextPreferences);
+      const previousValue = previous?.security.preventScreenCapture;
+      const nextValue = nextPreferences.security.preventScreenCapture;
+      if (previousValue !== nextValue) {
+        await windowProtection.setProtected(nextValue);
+      }
+    },
     onSuccess: (_data, nextPreferences) => {
       queryClient.setQueryData(
         queryKeys.settings.preferences(),
@@ -29,7 +38,18 @@ export function useAppPreferences() {
   });
 
   const resetMutation = useMutation<AppPreferences, Error, void>({
-    mutationFn: () => settings.resetPreferences(),
+    mutationFn: async () => {
+      const previous = queryClient.getQueryData<AppPreferences>(
+        queryKeys.settings.preferences()
+      );
+      const nextPreferences = await settings.resetPreferences();
+      const previousValue = previous?.security.preventScreenCapture;
+      const nextValue = nextPreferences.security.preventScreenCapture;
+      if (previousValue !== nextValue) {
+        await windowProtection.setProtected(nextValue);
+      }
+      return nextPreferences;
+    },
     onSuccess: (nextPreferences) => {
       queryClient.setQueryData(
         queryKeys.settings.preferences(),

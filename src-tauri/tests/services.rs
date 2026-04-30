@@ -22,3 +22,6 @@ mod settings_service_test;
 
 #[path = "services/settings_service_unitlike_test.rs"]
 mod settings_service_unitlike_test;
+
+#[path = "services/window_protection_test.rs"]
+mod window_protection_test;

@@ -56,7 +56,10 @@
       "showClipboardCountdown": "Show clipboard countdown",
       "showPasswordByDefault": "Show passwords by default",
       "minimizeToTray": "Minimize to tray",
-      "startMinimized": "Start minimized"
+      "startMinimized": "Start minimized",
+      "preventScreenCapture": "Prevent screen capture",
+      "preventScreenCaptureNote": "Hides the window from screenshots and screen recordings on macOS and Windows 10 build 2004+. Older Windows builds block screenshots only. Linux is not supported.",
+      "preventScreenCaptureUnsupported": "(not supported on this platform)"
     },
     "appearance": {
       "title": "Appearance",
@@ -510,6 +513,12 @@
       "saved": "Database saved",
       "usernameCopied": "Username copied",
       "passwordCopied": "Password copied"
+    }
+  },
+  "secureMode": {
+    "indicator": {
+      "activeTooltip": "Screen capture prevention is active",
+      "notSupportedTooltip": "Screen capture prevention is enabled but not supported on this platform"
     }
   }
 }

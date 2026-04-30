@@ -97,6 +97,9 @@ pub enum AppError {
 
     #[error("Failed to sync file to disk: {0}")]
     SyncFailed(String),
+
+    #[error("Window protection error: {0}")]
+    WindowProtection(String),
 }
 
 impl Serialize for AppError {

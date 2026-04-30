@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { useWindowProtection } from "@/hooks/use-window-protection";
 import type { AppPreferences } from "@/lib/types";
 
 interface SecuritySettingsSectionProps {
@@ -18,6 +19,7 @@ export function SecuritySettingsSection({
   updateDraft,
 }: Readonly<SecuritySettingsSectionProps>) {
   const { t } = useTranslation();
+  const { isSupported: preventScreenCaptureSupported } = useWindowProtection();
 
   return (
     <SettingsSection
@@ -155,6 +157,36 @@ export function SecuritySettingsSection({
           />
           {t("settings.security.startMinimized")}
         </label>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-1">
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={draft.security.preventScreenCapture}
+            onCheckedChange={(checked) =>
+              updateDraft((previous) => ({
+                ...previous,
+                security: {
+                  ...previous.security,
+                  preventScreenCapture: checked === true,
+                },
+              }))
+            }
+          />
+          <span>
+            {t("settings.security.preventScreenCapture")}
+            {!preventScreenCaptureSupported && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                {t("settings.security.preventScreenCaptureUnsupported")}
+              </span>
+            )}
+          </span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          {t("settings.security.preventScreenCaptureNote")}
+        </p>
       </div>
     </SettingsSection>
   );

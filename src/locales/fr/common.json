@@ -56,7 +56,10 @@
       "showClipboardCountdown": "Afficher le compte à rebours du presse-papiers",
       "showPasswordByDefault": "Afficher les mots de passe par défaut",
       "minimizeToTray": "Réduire dans la barre des tâches",
-      "startMinimized": "Démarrer réduit"
+      "startMinimized": "Démarrer réduit",
+      "preventScreenCapture": "Empêcher la capture d'écran",
+      "preventScreenCaptureNote": "Masque la fenêtre des captures et enregistrements d'écran sur macOS et Windows 10 build 2004 ou ultérieur. Les versions plus anciennes de Windows ne bloquent que les captures. Linux n'est pas pris en charge.",
+      "preventScreenCaptureUnsupported": "(non pris en charge sur cette plateforme)"
     },
     "appearance": {
       "title": "Apparence",
@@ -510,6 +513,12 @@
       "saved": "Base de données enregistrée",
       "usernameCopied": "Nom d'utilisateur copié",
       "passwordCopied": "Mot de passe copié"
+    }
+  },
+  "secureMode": {
+    "indicator": {
+      "activeTooltip": "La prévention des captures d'écran est active",
+      "notSupportedTooltip": "La prévention des captures d'écran est activée mais n'est pas prise en charge sur cette plateforme"
     }
   }
 }

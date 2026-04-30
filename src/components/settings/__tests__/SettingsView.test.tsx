@@ -28,6 +28,10 @@ vi.mock("@/hooks/use-database-config", () => ({
   useDatabaseConfig: () => mockUseDatabaseConfig(),
 }));
 
+vi.mock("@/hooks/use-window-protection", () => ({
+  useWindowProtection: () => ({ enabled: true, isSupported: true }),
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     success: (message: string) => toastSuccess(message),
@@ -50,6 +54,7 @@ function makePreferences(): AppPreferences {
       showPasswordByDefault: false,
       minimizeToTray: true,
       startMinimized: false,
+      preventScreenCapture: true,
     },
     appearance: {
       theme: "system",
@@ -327,6 +332,35 @@ describe("SettingsView", () => {
       expect(updatePreferences).toHaveBeenCalledTimes(1);
     });
     expect(toastError).toHaveBeenCalledWith("Error: update failed");
+  });
+
+  it("toggles preventScreenCapture and includes it in update", async () => {
+    const updatePreferences = vi.fn().mockResolvedValue(undefined);
+    mockUseAppPreferences.mockReturnValue({
+      preferences: makePreferences(),
+      isLoading: false,
+      error: null,
+      updatePreferences,
+      isUpdating: false,
+      resetPreferences: vi.fn().mockResolvedValue(makePreferences()),
+      isResetting: false,
+    });
+
+    render(<SettingsView />);
+
+    fireEvent.click(screen.getByText("settings.security.preventScreenCapture"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.saveChanges" })
+    );
+
+    await waitFor(() => {
+      expect(updatePreferences).toHaveBeenCalledTimes(1);
+    });
+    expect(updatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        security: expect.objectContaining({ preventScreenCapture: false }),
+      })
+    );
   });
 
   it("does not reset when reset dialog is cancelled", async () => {

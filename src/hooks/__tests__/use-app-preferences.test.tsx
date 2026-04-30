@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { useAppPreferences } from "@/hooks/use-app-preferences";
-import { settings } from "@/lib/tauri";
+import { settings, windowProtection } from "@/lib/tauri";
 import type { AppPreferences } from "@/lib/types";
 
 vi.mock("@/lib/tauri", () => ({
@@ -13,6 +13,10 @@ vi.mock("@/lib/tauri", () => ({
     getPreferences: vi.fn(),
     updatePreferences: vi.fn(),
     resetPreferences: vi.fn(),
+  },
+  windowProtection: {
+    setProtected: vi.fn(),
+    isSupported: vi.fn(),
   },
 }));
 
@@ -31,6 +35,7 @@ function makePreferences(): AppPreferences {
       showPasswordByDefault: false,
       minimizeToTray: true,
       startMinimized: false,
+      preventScreenCapture: true,
     },
     appearance: {
       theme: "system",
@@ -106,6 +111,30 @@ describe("useAppPreferences", () => {
     await result.current.updatePreferences(preferences);
 
     expect(settings.updatePreferences).toHaveBeenCalledWith(preferences);
+    expect(windowProtection.setProtected).not.toHaveBeenCalled();
+  });
+
+  it("invokes window protection when preventScreenCapture changes", async () => {
+    const preferences = makePreferences();
+    vi.mocked(settings.getPreferences).mockResolvedValue(preferences);
+    vi.mocked(settings.updatePreferences).mockResolvedValue(undefined);
+    vi.mocked(windowProtection.setProtected).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useAppPreferences(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.preferences).not.toBeNull();
+    });
+
+    const next: AppPreferences = {
+      ...preferences,
+      security: { ...preferences.security, preventScreenCapture: false },
+    };
+    await result.current.updatePreferences(next);
+
+    expect(windowProtection.setProtected).toHaveBeenCalledWith(false);
   });
 
   it("resets preferences", async () => {
