@@ -1,5 +1,6 @@
 pub mod create;
 pub mod entries;
+pub mod favicons;
 pub mod groups;
 pub mod header;
 pub mod key;
@@ -14,18 +15,24 @@ use crate::dto::error::AppError;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 pub struct KdbxService {
     /// Map of normalized database paths to open databases.
     /// The key is the canonical/normalized path to ensure consistent lookups.
     databases: Mutex<HashMap<String, OpenDatabase>>,
+    /// Domain-level cooldown map for failed favicon fetches.
+    favicon_failed_domains: Mutex<HashMap<String, Instant>>,
 }
 
 impl KdbxService {
+    pub const FAVICON_FAILURE_COOLDOWN: Duration = Duration::from_secs(15 * 60);
+
     /// Creates a new KDBX service.
     pub fn new() -> Self {
         Self {
             databases: Mutex::new(HashMap::new()),
+            favicon_failed_domains: Mutex::new(HashMap::new()),
         }
     }
 
@@ -42,6 +49,39 @@ impl KdbxService {
         &self,
     ) -> Result<MutexGuard<'_, HashMap<String, OpenDatabase>>, AppError> {
         self.databases.lock().map_err(|_| AppError::Lock)
+    }
+
+    pub(crate) fn is_favicon_domain_on_cooldown(&self, domain: &str) -> Result<bool, AppError> {
+        let mut failures = self
+            .favicon_failed_domains
+            .lock()
+            .map_err(|_| AppError::Lock)?;
+        let Some(last_failed_at) = failures.get(domain) else {
+            return Ok(false);
+        };
+        if last_failed_at.elapsed() >= Self::FAVICON_FAILURE_COOLDOWN {
+            failures.remove(domain);
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
+    pub(crate) fn mark_favicon_domain_failed(&self, domain: &str) -> Result<(), AppError> {
+        let mut failures = self
+            .favicon_failed_domains
+            .lock()
+            .map_err(|_| AppError::Lock)?;
+        failures.insert(domain.to_string(), Instant::now());
+        Ok(())
+    }
+
+    pub(crate) fn clear_favicon_domain_failure(&self, domain: &str) -> Result<(), AppError> {
+        let mut failures = self
+            .favicon_failed_domains
+            .lock()
+            .map_err(|_| AppError::Lock)?;
+        failures.remove(domain);
+        Ok(())
     }
 
     /// Checks if a database at the given path is already open.

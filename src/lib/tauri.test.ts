@@ -80,6 +80,8 @@ describe("tauri wrappers validation", () => {
         minimizeToTray: true,
         startMinimized: false,
         preventScreenCapture: true,
+        autoDownloadFavicons: false,
+        allowThirdPartyFaviconFallbacks: false,
       },
       appearance: {
         theme: "system",
@@ -138,6 +140,8 @@ describe("tauri wrappers validation", () => {
           minimizeToTray: true,
           startMinimized: false,
           preventScreenCapture: true,
+          autoDownloadFavicons: false,
+          allowThirdPartyFaviconFallbacks: false,
         },
         appearance: {
           theme: "system",

@@ -157,6 +157,36 @@ export function SecuritySettingsSection({
           />
           {t("settings.security.startMinimized")}
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={draft.security.autoDownloadFavicons}
+            onCheckedChange={(checked) =>
+              updateDraft((previous) => ({
+                ...previous,
+                security: {
+                  ...previous.security,
+                  autoDownloadFavicons: checked === true,
+                },
+              }))
+            }
+          />
+          {t("settings.security.autoDownloadFavicons")}
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={draft.security.allowThirdPartyFaviconFallbacks}
+            onCheckedChange={(checked) =>
+              updateDraft((previous) => ({
+                ...previous,
+                security: {
+                  ...previous.security,
+                  allowThirdPartyFaviconFallbacks: checked === true,
+                },
+              }))
+            }
+          />
+          {t("settings.security.allowThirdPartyFaviconFallbacks")}
+        </label>
       </div>
 
       <Separator />

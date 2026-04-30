@@ -55,6 +55,8 @@ function makePreferences(): AppPreferences {
       minimizeToTray: true,
       startMinimized: false,
       preventScreenCapture: true,
+      autoDownloadFavicons: false,
+      allowThirdPartyFaviconFallbacks: false,
     },
     appearance: {
       theme: "system",

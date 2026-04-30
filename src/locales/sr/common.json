@@ -57,6 +57,8 @@
       "showPasswordByDefault": "Podrazumevano prikaži lozinke",
       "minimizeToTray": "Minimiziraj u sistemsku traku",
       "startMinimized": "Pokreni minimizovano",
+      "autoDownloadFavicons": "Automatski preuzmi favikone sa URL-ova unosa",
+      "allowThirdPartyFaviconFallbacks": "Dozvoli usluge treće strane za rezervne favikone",
       "preventScreenCapture": "Spreči snimak ekrana",
       "preventScreenCaptureNote": "Sakriva prozor sa snimaka i video snimaka ekrana na macOS-u i Windows 10 build 2004+. Starije verzije Windows-a blokiraju samo slike ekrana. Linux nije podržan.",
       "preventScreenCaptureUnsupported": "(nije podržano na ovoj platformi)"
@@ -187,7 +189,10 @@
       "addField": "Dodaj polje",
       "noCustomFields": "Nema prilagođenih polja.",
       "fieldNamePlaceholder": "Ime polja",
-      "removeField": "Ukloni prilagođeno polje"
+      "removeField": "Ukloni prilagođeno polje",
+      "fetchFavicon": "Preuzmi favikonu sa URL-a",
+      "refreshFavicon": "Osveži favikonu sa URL-a",
+      "clearCustomIcon": "Ukloni prilagođenu ikonu"
     },
     "toast": {
       "created": "Unos kreiran",
@@ -195,7 +200,12 @@
       "createFailed": "Greška pri kreiranju unosa: {{error}}",
       "updateFailed": "Greška pri ažuriranju unosa: {{error}}",
       "secretLoadFailed": "Greška pri učitavanju zaštićenih vrednosti za ovaj unos.",
-      "secretRetryRequired": "Pokušajte ponovo da učitate zaštićene vrednosti pre čuvanja."
+      "secretRetryRequired": "Pokušajte ponovo da učitate zaštićene vrednosti pre čuvanja.",
+      "faviconUpdated": "Favikona je ažurirana",
+      "faviconNotFound": "Favikona za ovaj URL nije pronađena.",
+      "faviconUpdateFailed": "Neuspešno ažuriranje favikone: {{error}}",
+      "customIconCleared": "Prilagođena ikona je uklonjena",
+      "customIconClearFailed": "Neuspešno uklanjanje prilagođene ikone: {{error}}"
     },
     "unsavedChanges": {
       "message": "Imate nesačuvane izmene. Da li ste sigurni da želite da ih odbacite?",

@@ -41,6 +41,8 @@ fn load_or_default_returns_default_when_missing() {
     assert_eq!(settings.auto_lock_timeout, 300);
     assert_eq!(settings.clipboard_clear_timeout, 30);
     assert_eq!(settings.theme, "system");
+    assert!(!settings.auto_download_favicons);
+    assert!(!settings.allow_third_party_favicon_fallbacks);
     assert!(settings.recent_databases.is_empty());
 
     cleanup_settings_file(&app);
@@ -57,6 +59,8 @@ fn save_and_load_roundtrip() {
         auto_lock_timeout: 120,
         clipboard_clear_timeout: 15,
         show_password_by_default: true,
+        auto_download_favicons: true,
+        allow_third_party_favicon_fallbacks: true,
         minimize_to_tray: false,
         start_minimized: true,
         theme: "dark".into(),
@@ -70,6 +74,8 @@ fn save_and_load_roundtrip() {
     assert_eq!(loaded.auto_lock_timeout, 120);
     assert_eq!(loaded.clipboard_clear_timeout, 15);
     assert!(loaded.show_password_by_default);
+    assert!(loaded.auto_download_favicons);
+    assert!(loaded.allow_third_party_favicon_fallbacks);
     assert!(!loaded.minimize_to_tray);
     assert!(loaded.start_minimized);
     assert_eq!(loaded.theme, "dark");

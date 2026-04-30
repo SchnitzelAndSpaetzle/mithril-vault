@@ -1,6 +1,7 @@
 use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::dto::error::AppError;
 use crate::services::kdbx::KdbxService;
+use crate::services::settings::SettingsService;
 use std::sync::Arc;
 use tauri::State;
 
@@ -117,4 +118,34 @@ pub async fn move_entry(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<Entry, AppError> {
     state.move_entry(&db_id, &id, &target_group_id)
+}
+
+/// Fetches and stores a favicon for an entry URL as a database custom icon.
+#[tauri::command]
+pub async fn fetch_entry_favicon(
+    db_id: String,
+    id: String,
+    force: Option<bool>,
+    kdbx_state: State<'_, Arc<KdbxService>>,
+    settings_state: State<'_, Arc<SettingsService>>,
+) -> Result<bool, AppError> {
+    let settings = settings_state.get_settings()?;
+    kdbx_state
+        .fetch_entry_favicon(
+            &db_id,
+            &id,
+            settings.allow_third_party_favicon_fallbacks,
+            force.unwrap_or(false),
+        )
+        .await
+}
+
+/// Removes a custom icon assignment from an entry.
+#[tauri::command]
+pub async fn clear_entry_custom_icon(
+    db_id: String,
+    id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<bool, AppError> {
+    state.clear_entry_custom_icon(&db_id, &id)
 }

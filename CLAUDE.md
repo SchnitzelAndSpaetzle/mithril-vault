@@ -131,6 +131,16 @@ The application uses a responsive layout system that adapts between desktop and 
 - `reset_app_preferences` resets preferences only and preserves `recent_databases`
 - Clipboard timeout in UI should come from preferences (`useClipboardTimeout`), not hardcoded values
 - Theme is managed through `ThemeProvider` + persisted preference sync from settings view
+- Favicon/privacy settings are part of `AppPreferences.security`:
+  - `autoDownloadFavicons` (default `false`)
+  - `allowThirdPartyFaviconFallbacks` (default `false`)
+
+#### Favicon + Custom Icon Conventions
+
+- Canonical favicon/custom icon storage is KDBX metadata (`db.meta.custom_icons`), linked by entry `custom_icon_uuid`.
+- Do not add network fetches inside entry create/update commands; use follow-up async commands (`fetch_entry_favicon`) so CRUD latency remains predictable.
+- Keep favicon transport HTTPS-only and treat third-party fallback sources as explicit opt-in.
+- Icon payloads over IPC are MIME-aware (`{ mimeType, data }`), and frontend renderers must use `data:${mimeType};base64,${data}` instead of hardcoding PNG.
 
 ### Backend (src-tauri/src/)
 

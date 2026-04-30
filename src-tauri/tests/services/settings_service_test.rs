@@ -72,6 +72,8 @@ fn default_settings_when_missing() {
     assert_eq!(settings.auto_lock_timeout, 300);
     assert_eq!(settings.clipboard_clear_timeout, 30);
     assert_eq!(settings.theme, "system");
+    assert!(!settings.auto_download_favicons);
+    assert!(!settings.allow_third_party_favicon_fallbacks);
     assert!(settings.prevent_screen_capture);
     assert!(settings.recent_databases.is_empty());
 
@@ -103,6 +105,8 @@ fn prevent_screen_capture_persists_across_reload() {
     let service = new_service(&app);
     let updated = AppSettings {
         prevent_screen_capture: false,
+        auto_download_favicons: true,
+        allow_third_party_favicon_fallbacks: true,
         ..AppSettings::default()
     };
     service.update_settings(updated).expect("update settings");
@@ -110,6 +114,8 @@ fn prevent_screen_capture_persists_across_reload() {
     let reloaded = new_service(&app);
     let settings = reloaded.get_settings().expect("get settings");
     assert!(!settings.prevent_screen_capture);
+    assert!(settings.auto_download_favicons);
+    assert!(settings.allow_third_party_favicon_fallbacks);
 
     cleanup_settings_file(&app);
 }

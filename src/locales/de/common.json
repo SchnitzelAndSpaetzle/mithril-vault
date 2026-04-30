@@ -57,6 +57,8 @@
       "showPasswordByDefault": "Passwörter standardmäßig anzeigen",
       "minimizeToTray": "In Taskleiste minimieren",
       "startMinimized": "Minimiert starten",
+      "autoDownloadFavicons": "Favicons aus Eintrags-URLs automatisch herunterladen",
+      "allowThirdPartyFaviconFallbacks": "Favicon-Fallback-Dienste von Drittanbietern erlauben",
       "preventScreenCapture": "Bildschirmaufnahme verhindern",
       "preventScreenCaptureNote": "Blendet das Fenster auf macOS und Windows 10 Build 2004+ aus Screenshots und Bildschirmaufnahmen aus. Ältere Windows-Versionen blockieren nur Screenshots. Linux wird nicht unterstützt.",
       "preventScreenCaptureUnsupported": "(auf dieser Plattform nicht unterstützt)"
@@ -187,7 +189,10 @@
       "addField": "Feld hinzufügen",
       "noCustomFields": "Keine benutzerdefinierten Felder.",
       "fieldNamePlaceholder": "Feldname",
-      "removeField": "Benutzerdefiniertes Feld entfernen"
+      "removeField": "Benutzerdefiniertes Feld entfernen",
+      "fetchFavicon": "Favicon von URL abrufen",
+      "refreshFavicon": "Favicon von URL aktualisieren",
+      "clearCustomIcon": "Benutzerdefiniertes Symbol entfernen"
     },
     "toast": {
       "created": "Eintrag erstellt",
@@ -195,7 +200,12 @@
       "createFailed": "Eintrag konnte nicht erstellt werden: {{error}}",
       "updateFailed": "Eintrag konnte nicht aktualisiert werden: {{error}}",
       "secretLoadFailed": "Geschützte Werte für diesen Eintrag konnten nicht geladen werden.",
-      "secretRetryRequired": "Laden Sie die geschützten Werte erneut, bevor Sie speichern."
+      "secretRetryRequired": "Laden Sie die geschützten Werte erneut, bevor Sie speichern.",
+      "faviconUpdated": "Favicon aktualisiert",
+      "faviconNotFound": "Für diese URL konnte kein Favicon abgerufen werden.",
+      "faviconUpdateFailed": "Favicon konnte nicht aktualisiert werden: {{error}}",
+      "customIconCleared": "Benutzerdefiniertes Symbol entfernt",
+      "customIconClearFailed": "Benutzerdefiniertes Symbol konnte nicht entfernt werden: {{error}}"
     },
     "unsavedChanges": {
       "message": "Sie haben ungespeicherte Änderungen. Möchten Sie diese wirklich verwerfen?",

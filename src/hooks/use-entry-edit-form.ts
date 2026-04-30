@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
+import { useQueryClient } from "@tanstack/react-query";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { type Resolver, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useAppPreferences } from "@/hooks/use-app-preferences";
 import { useEntryMutations } from "@/hooks/use-entry-mutations";
 import { useTags } from "@/hooks/use-tags";
 import { PASSWORD_GENERATOR_DEFAULTS } from "@/lib/constants";
 import { entryFormSchema, type EntryFormValues } from "@/lib/formTypes";
-import { entries as entriesApi, generator } from "@/lib/tauri";
+import { queryKeys } from "@/lib/query-keys";
+import { database, entries as entriesApi, generator } from "@/lib/tauri";
 import type { Entry } from "@/lib/types";
 
 interface UseEntryEditFormOptions {
@@ -79,6 +82,7 @@ export function useEntryEditForm({
   onDirtyChange,
 }: UseEntryEditFormOptions) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const isEditMode = Boolean(entry);
   const entryId = entry?.id ?? null;
   const entryRef = useRef<Entry | null | undefined>(entry);
@@ -86,9 +90,12 @@ export function useEntryEditForm({
   const [isLoadingSecrets, setIsLoadingSecrets] = useState(isEditMode);
   const [secretLoadError, setSecretLoadError] = useState<string | null>(null);
   const [secretReloadToken, setSecretReloadToken] = useState(0);
+  const [isFetchingFavicon, setIsFetchingFavicon] = useState(false);
+  const [isClearingCustomIcon, setIsClearingCustomIcon] = useState(false);
 
   const { createEntry, updateEntry, moveEntry } = useEntryMutations(dbId);
   const { data: availableTags } = useTags(dbId);
+  const { preferences } = useAppPreferences();
 
   const form = useForm<EntryFormValues>({
     resolver: standardSchemaResolver(
@@ -215,6 +222,7 @@ export function useEntryEditForm({
 
         toast.success(t("entries.toast.updated"));
         onSave(result);
+        void maybeAutoFetchFavicon(result.id, values.url);
         return;
       }
 
@@ -235,6 +243,7 @@ export function useEntryEditForm({
       });
       toast.success(t("entries.toast.created"));
       onSave(result);
+      void maybeAutoFetchFavicon(result.id, values.url);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(
@@ -313,6 +322,77 @@ export function useEntryEditForm({
     form.setValue("password", password, { shouldDirty: true });
   }
 
+  async function fetchFaviconFromUrl() {
+    if (!entryId) return;
+    setIsFetchingFavicon(true);
+    try {
+      const changed = await entriesApi.fetchFavicon(dbId, entryId, true);
+      if (changed) {
+        await database.save(dbId);
+        toast.success(t("entries.toast.faviconUpdated"));
+        await refreshFaviconQueries(entryId);
+      } else {
+        toast.error(t("entries.toast.faviconNotFound"));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(t("entries.toast.faviconUpdateFailed", { error: message }));
+    } finally {
+      setIsFetchingFavicon(false);
+    }
+  }
+
+  async function clearCustomIcon() {
+    if (!entryId) return;
+    setIsClearingCustomIcon(true);
+    try {
+      const changed = await entriesApi.clearCustomIcon(dbId, entryId);
+      if (changed) {
+        await database.save(dbId);
+        toast.success(t("entries.toast.customIconCleared"));
+        await refreshFaviconQueries(entryId);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(t("entries.toast.customIconClearFailed", { error: message }));
+    } finally {
+      setIsClearingCustomIcon(false);
+    }
+  }
+
+  async function maybeAutoFetchFavicon(
+    targetEntryId: string,
+    urlValue: string
+  ) {
+    if (!preferences?.security.autoDownloadFavicons) return;
+    if (!urlValue.trim()) return;
+    try {
+      const changed = await entriesApi.fetchFavicon(dbId, targetEntryId, false);
+      if (changed) {
+        await database.save(dbId);
+        await refreshFaviconQueries(targetEntryId);
+      }
+    } catch {
+      // Keep save flow non-blocking for favicon fetch failures.
+    }
+  }
+
+  async function refreshFaviconQueries(targetEntryId: string) {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.database.customIcons(dbId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.entries.detail(dbId, targetEntryId),
+      }),
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === queryKeys.entries.all[0] &&
+          query.queryKey[1] === dbId,
+      }),
+    ]);
+  }
+
   const isPending =
     createEntry.isPending || updateEntry.isPending || moveEntry.isPending;
   const isSubmitDisabled =
@@ -321,6 +401,7 @@ export function useEntryEditForm({
     useWatch({ control: form.control, name: "password" }) ?? "";
   const watchedUsername =
     useWatch({ control: form.control, name: "username" }) ?? "";
+  const watchedUrl = useWatch({ control: form.control, name: "url" }) ?? "";
 
   return {
     form,
@@ -333,10 +414,17 @@ export function useEntryEditForm({
     availableTags,
     watchedPassword,
     watchedUsername,
+    watchedUrl,
     onSubmit,
     handleCancel,
     saveAndCreateAnother,
     retrySecretLoad,
     setGeneratedPassword,
+    isFetchingFavicon,
+    isClearingCustomIcon,
+    hasCustomIcon: Boolean(entry?.customIconUuid),
+    canFetchFavicon: Boolean(entryId && watchedUrl.trim()),
+    fetchFaviconFromUrl,
+    clearCustomIcon,
   };
 }

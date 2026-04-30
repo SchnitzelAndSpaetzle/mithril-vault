@@ -52,6 +52,12 @@ export function EntryEditForm({
     saveAndCreateAnother,
     retrySecretLoad,
     setGeneratedPassword,
+    isFetchingFavicon,
+    isClearingCustomIcon,
+    hasCustomIcon,
+    canFetchFavicon,
+    fetchFaviconFromUrl,
+    clearCustomIcon,
   } = useEntryEditForm({
     entry,
     dbId,
@@ -94,6 +100,13 @@ export function EntryEditForm({
           control={form.control}
           isPending={isPending}
           autoFocus={!isEditMode}
+          isEditMode={isEditMode}
+          hasCustomIcon={hasCustomIcon}
+          canFetchFavicon={canFetchFavicon}
+          isFetchingFavicon={isFetchingFavicon}
+          isClearingCustomIcon={isClearingCustomIcon}
+          onFetchFavicon={fetchFaviconFromUrl}
+          onClearCustomIcon={clearCustomIcon}
         />
         <EntryUsernameField
           control={form.control}

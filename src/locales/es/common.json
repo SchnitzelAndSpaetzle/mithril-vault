@@ -57,6 +57,8 @@
       "showPasswordByDefault": "Mostrar contraseñas por defecto",
       "minimizeToTray": "Minimizar a la bandeja",
       "startMinimized": "Iniciar minimizado",
+      "autoDownloadFavicons": "Descargar favicons automáticamente desde las URL de las entradas",
+      "allowThirdPartyFaviconFallbacks": "Permitir servicios de respaldo de favicon de terceros",
       "preventScreenCapture": "Impedir capturas de pantalla",
       "preventScreenCaptureNote": "Oculta la ventana en capturas y grabaciones de pantalla en macOS y en Windows 10 build 2004 o posterior. Las versiones anteriores de Windows solo bloquean capturas. Linux no es compatible.",
       "preventScreenCaptureUnsupported": "(no compatible con esta plataforma)"
@@ -187,7 +189,10 @@
       "addField": "Agregar campo",
       "noCustomFields": "Sin campos personalizados.",
       "fieldNamePlaceholder": "Nombre del campo",
-      "removeField": "Eliminar campo personalizado"
+      "removeField": "Eliminar campo personalizado",
+      "fetchFavicon": "Obtener favicon desde la URL",
+      "refreshFavicon": "Actualizar favicon desde la URL",
+      "clearCustomIcon": "Quitar icono personalizado"
     },
     "toast": {
       "created": "Entrada creada",
@@ -195,7 +200,12 @@
       "createFailed": "Error al crear la entrada: {{error}}",
       "updateFailed": "Error al actualizar la entrada: {{error}}",
       "secretLoadFailed": "No se pudieron cargar los valores protegidos de esta entrada.",
-      "secretRetryRequired": "Reintente cargar los valores protegidos antes de guardar."
+      "secretRetryRequired": "Reintente cargar los valores protegidos antes de guardar.",
+      "faviconUpdated": "Favicon actualizado",
+      "faviconNotFound": "No se pudo obtener un favicon para esta URL.",
+      "faviconUpdateFailed": "No se pudo actualizar el favicon: {{error}}",
+      "customIconCleared": "Icono personalizado eliminado",
+      "customIconClearFailed": "No se pudo eliminar el icono personalizado: {{error}}"
     },
     "unsavedChanges": {
       "message": "Tiene cambios sin guardar. ¿Está seguro de que desea descartarlos?",

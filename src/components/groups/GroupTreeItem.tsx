@@ -40,7 +40,7 @@ function GroupIcon({
   if (customIcon) {
     return (
       <img
-        src={`data:image/png;base64,${customIcon}`}
+        src={`data:${customIcon.mimeType};base64,${customIcon.data}`}
         alt=""
         aria-hidden="true"
         className="h-4 w-4"

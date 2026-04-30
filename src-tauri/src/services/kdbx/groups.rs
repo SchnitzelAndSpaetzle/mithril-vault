@@ -1,3 +1,4 @@
+use crate::dto::database::CustomIconData;
 use crate::dto::error::AppError;
 use crate::dto::group::{Group, UpdateGroupData};
 use base64::engine::general_purpose::STANDARD;
@@ -5,6 +6,7 @@ use base64::Engine;
 use keepass::db::{Group as KeepassGroup, Node, Times};
 use std::collections::HashMap;
 
+use super::favicons::detect_icon_mime;
 use super::mapping::{
     convert_group, ensure_recycle_bin, find_group_by_id, find_group_by_id_mut,
     find_parent_group_id, group_has_children, is_ancestor_of, remove_group_by_id,
@@ -220,7 +222,10 @@ impl KdbxService {
     }
 
     /// Returns custom icons for the database, keyed by UUID.
-    pub fn get_custom_icons(&self, db_id: &str) -> Result<HashMap<String, String>, AppError> {
+    pub fn get_custom_icons(
+        &self,
+        db_id: &str,
+    ) -> Result<HashMap<String, CustomIconData>, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let databases = self.lock_databases()?;
         let open_db = databases
@@ -229,7 +234,13 @@ impl KdbxService {
 
         let mut icons = HashMap::new();
         for icon in &open_db.db.meta.custom_icons.icons {
-            icons.insert(icon.uuid.to_string(), STANDARD.encode(&icon.data));
+            icons.insert(
+                icon.uuid.to_string(),
+                CustomIconData {
+                    mime_type: detect_icon_mime(&icon.data),
+                    data: STANDARD.encode(&icon.data),
+                },
+            );
         }
 
         Ok(icons)

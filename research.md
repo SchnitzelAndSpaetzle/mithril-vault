@@ -1,188 +1,293 @@
-# MithrilVault — Codebase Research Notes (Issue #42)
+# MithrilVault Research Report — Issue #71 (Entry Favicon Download + Custom Icon Integration)
 
-This document captures what I learned about the MithrilVault codebase while implementing issue #42 ("Implement secure window mode (prevent screenshots)"). It is not a tutorial; it is a reference for whoever picks up this code next.
+## Scope
+This report documents the codebase analysis and implementation work for issue #71, with emphasis on:
+- Favicon download architecture
+- KDBX custom icon persistence strategy
+- IPC contract changes
+- Frontend integration patterns
+- Settings/privacy controls
+- Test and validation outcomes
 
----
-
-## 1. What the project is
-
-MithrilVault is a KeePass-compatible (KDBX4 / KDBX3) cross-platform password manager built on **Tauri v2 + React 18 + TypeScript + Rust**. It targets Linux/Windows/macOS desktop today, with mobile planned. The KDBX work is done by the `keepass` crate; everything else (UI, settings, clipboard, secure storage, KDF) is in-house.
-
-The repo layout splits cleanly:
-- `src/` — React frontend (TanStack Router file-based, Zustand, React Query, Tailwind v4, shadcn/ui)
-- `src-tauri/` — Rust backend (commands, services, DTOs, domain helpers)
-- `src/locales/{en,de,es,fr,sr}/` — i18n bundles
-- `extension/` — browser extension (not touched in this task)
-- `docs/` — reference docs
-
-Two top-level docs steer agents: `CLAUDE.md` (concise) and `AGENTS.md` (verbose, exhaustive). They overlap; AGENTS.md is the reference, CLAUDE.md is the cheat sheet.
+It replaces the previous issue-specific research notes.
 
 ---
 
-## 2. Data-flow contract
+## 1. Code Areas Studied In Depth
 
-The project's hard rule: **all sensitive data lives and is decrypted in Rust**. The frontend is a thin UI; it asks for data through typed Tauri commands and renders what comes back. There are no passwords in `localStorage`, no decryption in JS, no `as any`. Schemas at the IPC boundary are double-validated:
-- Rust uses `serde` with `#[serde(rename_all = "camelCase")]` on every DTO.
-- TypeScript wraps every `invoke` call with a Zod schema that re-parses the result.
+### Backend (Rust)
+- `src-tauri/src/services/kdbx/*`
+  - Existing entry/group/database operations
+  - Custom icon extraction path (`get_custom_icons`)
+  - Open database in-memory state and mutation patterns
+- `src-tauri/src/commands/entries.rs`
+  - Existing command style and error propagation
+- `src-tauri/src/commands/settings.rs`
+  - `AppSettings` (flat persisted model) and `AppPreferences` (nested UI model)
+  - `from_settings` / `apply_to_settings` conversion boundaries
+- `src-tauri/src/lib.rs`
+  - Command registration and service management
 
-This means adding any new command requires updating *both* the Rust struct and the matching Zod schema in `src/lib/types.ts`. The pattern is consistent enough that copying an existing namespace (e.g. `clipboard` in `src/lib/tauri.ts`) is the right move.
-
-### Settings architecture (the key pattern for #42)
-
-Settings are backend-owned and persisted to `$APP_LOCAL_DATA_DIR/settings.json` by `SettingsService`. The data model uses two shapes:
-
-- **`AppSettings`** — flat, all fields at the top level. This is what hits the disk.
-- **`AppPreferences`** — nested by section (`general`, `security`, `appearance`, `browserIntegration`, `advanced`). This is what the UI works with.
-
-`AppPreferences::from_settings(settings, data_location)` and `AppPreferences::apply_to_settings(&self, settings)` shuttle data between the two shapes (`src-tauri/src/commands/settings.rs:157-224`). When you add a new field you must touch *four* spots: `SecuritySettings` (or whichever nested section), `AppSettings`, `from_settings`, and `apply_to_settings`. The default lives in `impl Default for AppSettings`.
-
-There are three commands the frontend uses:
-- `get_app_preferences` → returns nested `AppPreferences`
-- `update_app_preferences(newPreferences)` → writes through and persists
-- `reset_app_preferences()` → returns defaults, **but preserves `recent_databases`**
-
-The flat `get_settings`/`update_settings` exist mainly for tests and lower-level use.
-
-`#[serde(default)]` on `AppSettings` means a `settings.json` missing fields is filled in with defaults at load time — which is how new fields stay backwards-compatible. We rely on this for `prevent_screen_capture`: an existing user's settings file lacks the field, so they get the default `true`.
-
-### Frontend hook
-
-`src/hooks/use-app-preferences.ts` wraps the three commands in React Query. Stale time is 30s. The mutation uses `queryClient.setQueryData` then `invalidateQueries` to keep the cache hot. **Diff-and-side-effect logic** for things like applying window protection on toggle goes inside the mutation's `mutationFn`, comparing `queryClient.getQueryData(...)` (the previous value) against the new payload — this is how I wired the `windowProtection.setProtected` call without polluting the section component.
-
----
-
-## 3. The Rust side, briefly
-
-### Folder roles
-
-```
-src-tauri/src/
-├── commands/      # Tauri command handlers — thin, delegate to services
-├── services/      # Business logic (kdbx, clipboard, settings, secure_storage, …)
-├── dto/           # IPC data structures (Entry, Group, AppError, …)
-├── domain/        # Internal state + secure types (SecureString, SecureBytes)
-├── utils/         # Crosscutting helpers
-├── lib.rs         # `build_app`, `register_services`, `run`
-└── main.rs        # Entry point
-```
-
-Lints in `Cargo.toml` enforce zero `unwrap`/`expect`/`panic` in production code (warn-level, but CI treats them as errors). Tests bypass with `#![allow(clippy::expect_used)]` because they're allowed to be loud.
-
-Errors are a single `AppError` enum in `dto/error.rs` using `thiserror`. Adding a new variant is straightforward; serialization to the frontend uses a custom `impl Serialize` that emits the `Display` form.
-
-### Service registration
-
-Services that hold state (e.g. `KdbxService`, `ClipboardService`, `SettingsService`, `SecureStorageService`) are wrapped in `Arc` and registered in `register_services` in `lib.rs`, then injected into commands via `State<'_, Arc<T>>`.
-
-Stateless helpers (like `WindowProtectionService` I added for #42) don't need this — they can live as a struct namespace with associated functions. Don't add them to `register_services` if there's nothing to manage.
+### Frontend (TypeScript/React)
+- `src/lib/types.ts`
+  - Zod IPC schemas and response parsing
+- `src/lib/tauri.ts`
+  - Command wrappers and typed invoke patterns
+- Entry/edit/render flow:
+  - `src/hooks/use-entry-edit-form.ts`
+  - `src/components/entries/EntryEditForm.tsx`
+  - `src/components/entries/entry-edit-form/EntryTitleField.tsx`
+  - Icon consumers (`EntryListItem`, `EntryItemDetails`, `SearchResultItem`, `GroupTreeItem`)
+- Settings UI:
+  - `src/components/settings/sections/SecuritySettingsSection.tsx`
+  - `src/hooks/use-app-preferences.ts`
 
 ### Tests
-
-- Rust integration tests live in `src-tauri/tests/`. Files are split by topic and pulled into top-level `tests/services.rs` / `tests/commands.rs` via `#[path = ...]` re-exports.
-- `tauri::test::mock_app()` creates a test runtime. **Crucially, it does not create real OS windows** — `set_content_protected` and similar window APIs return early on the mock runtime. We test the wiring (handle plumbing, error mapping), not the OS behavior.
-- Settings tests share a `SETTINGS_TEST_LOCK` (defined in `tests/services.rs`) because they all touch the same `$APP_LOCAL_DATA_DIR/settings.json` — without the lock, parallel tests collide.
-- Dependency on a real clipboard (and therefore CI-flakiness) is avoided in `services/clipboard.rs::tests` by exercising only the generation counter.
+- Rust command and service tests under `src-tauri/tests/`
+- Frontend component/hook tests under `src/components/**/__tests__` and `src/hooks/**/__tests__`
 
 ---
 
-## 4. The frontend, briefly
+## 2. Existing Architecture Before #71
 
-### Stack notes
+### What was already implemented
+- Entry/group/search/list rendering already supported KDBX custom icons through `customIconUuid`.
+- Standard KeePass icon selection (`iconId`) already existed in entry edit flows.
+- Custom icon payload over IPC was PNG-assumed (`base64` string only), not MIME-aware.
+- No favicon fetch/download pipeline existed.
+- No favicon-related privacy settings existed.
 
-- **TanStack Router** with file-based routes in `src/routes/`. The root is `__root.tsx`, which already imports `getCurrentWindow` from `@tauri-apps/api/window` for `setTitle`. That's the natural mounting point for any global window-level effect.
-- **Zustand** for ephemeral UI state — currently only `useDatabaseTabs` (one store, multi-tab DB selection state).
-- **React Query** for everything that crosses the IPC boundary.
-- **Tailwind v4** with `@tailwindcss/vite`, custom variants, and theme via `@theme inline`. Custom utilities live in `src/index.css`.
-- **shadcn/ui** components (`src/components/ui/*`). Tooltips use Radix; the Tooltip wrapper auto-supplies its own `TooltipProvider`, so just rendering `<Tooltip><TooltipTrigger>...</TooltipTrigger><TooltipContent>...</TooltipContent></Tooltip>` works in any subtree without provider plumbing.
-- **Forms** use react-hook-form + Zod via `standardSchemaResolver`; `Controller` is the default field wrapper. (Not used in #42, but documented in `src/components/entries/entry-edit-form/`.)
-
-### Tauri wrapper
-
-`src/lib/tauri.ts` exposes thin namespaces (`database`, `entries`, `groups`, `clipboard`, `settings`, `keyfile`, `secureStorage`, …). I added `windowProtection` next to them. Each namespace is a plain object with async methods that call `invoke()` and validate the result with Zod. Inputs that need shape-checking get their own `*Schema.parse(...)` call before invocation.
-
-### i18n
-
-`react-i18next` with five locales (`en`, `de`, `es`, `fr`, `sr`). All user-facing strings come from `src/locales/{locale}/common.json`, accessed via `useTranslation()` and `t("dot.path.key")`. The keys must exist in **every** locale file or i18next renders the key string. The Cyrillic/Latin mix in `sr/common.json` is pre-existing and tracks the original file's conventions; do not "fix" it without coordinating with the project owner.
-
-### Test setup
-
-- Vitest + React Testing Library + jsdom.
-- `src/test/setup.ts` globally mocks `react-i18next` so `t(key)` returns the key string. This is what makes assertions like `screen.getByText("settings.security.preventScreenCapture")` work.
-- For components that use mutations / queries, wrap with a fresh `QueryClient` per test (see `src/hooks/__tests__/use-app-preferences.test.tsx` for the canonical wrapper pattern).
-- For Tauri commands, mock `@/lib/tauri` and replace the namespace methods with `vi.fn()`.
-- A known wart: react-hook-form's `Controller` does not detect `fireEvent.change` as dirty in jsdom. Test dirty-state logic in a real browser, not via Vitest.
+### Important baseline design constraints
+- Backend owns persistence and sensitive operations.
+- Frontend consumes typed IPC only.
+- Database write consistency relies on existing save commands; entry mutations and metadata changes follow existing modified-state patterns.
 
 ---
 
-## 5. Key research finding for #42 — Tauri's built-in API
+## 3. Design Tree and Resolved Decisions
 
-The original issue lists three platform-specific tasks (NSWindowSharingNone, SetWindowDisplayAffinity, Linux best-effort). I almost reached for `objc2`/`windows-rs`. **Tauri v2 already wraps these.**
+### A. Where to store downloaded icons?
+- Options considered:
+  1. External filesystem icon cache
+  2. KDBX-native custom icon metadata (`db.meta.custom_icons`)
+- Decision: **KDBX-native custom icons**.
+- Why:
+  - Keeps icon portability with database files.
+  - Integrates directly with existing `customIconUuid` rendering.
+  - Avoids sync/migration complexity of external cache stores.
 
-- JS: `getCurrentWindow().setContentProtected(true)` from `@tauri-apps/api/window`
-- Rust: `window.set_content_protected(true)` on `Window` / `WebviewWindow`
-- macOS → `NSWindow.sharingType = NSWindowSharingNone`
-- Windows → `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` on Win10 build 2004+, falls back to `WDA_MONITOR` (screenshots only, no recording protection) on older builds — this fallback is handled by Tauri, not us
-- Linux → no-op (no compositor-level API exists)
+### B. How to trigger favicon fetching?
+- Options considered:
+  1. Inline network call during create/update entry
+  2. Separate async follow-up call
+- Decision: **separate async command** (`fetch_entry_favicon`), called after save in UI flows.
+- Why:
+  - Entry save latency remains fast/predictable.
+  - Network failures do not block CRUD success.
 
-The JS-side path requires the capability `core:window:allow-set-content-protected` in `src-tauri/capabilities/default.json`. The Rust-side path does not. I added the capability anyway to keep the option open for frontend code.
+### C. Automatic vs. manual fetching?
+- Decision: **both**.
+  - Auto fetch: gated by setting `autoDownloadFavicons` (default OFF).
+  - Manual fetch/refresh and clear controls in entry edit.
 
-This finding is the load-bearing decision for the whole feature: it kept the dependency footprint at zero, eliminated the unsafe FFI risk, and meant the implementation collapsed into a single API call wrapped by a tiny service.
+### D. Privacy defaults and third-party fallbacks?
+- Decision:
+  - `autoDownloadFavicons = false` (default)
+  - `allowThirdPartyFaviconFallbacks = false` (default)
+- Why:
+  - Prevents implicit external requests by default.
+  - Keeps explicit user consent for third-party icon services.
+
+### E. Transport and source order?
+- Decision:
+  - HTTPS-only fetch URLs.
+  - Candidate order:
+    1. `https://<host>/favicon.ico`
+    2. Root-host `https://<root>/favicon.ico` fallback
+    3. Third-party sources only if opt-in enabled
+
+### F. Icon dedup and lifecycle?
+- Decision:
+  - Deduplicate by content hash (SHA-256) and reuse existing icon UUID.
+  - No orphan icon GC in v1.
+
+### G. IPC icon payload shape?
+- Decision: move from PNG-assumed base64 string to MIME-aware object:
+  - `{ mimeType: string, data: string }`
+- Why:
+  - Rendering is format-agnostic (PNG/JPEG/ICO/SVG/etc).
+  - Supports fallback-to-original bytes when normalization is not possible.
 
 ---
 
-## 6. Implementation summary (for #42)
+## 4. Backend Implementation Details
 
-What I actually shipped:
+### 4.1 New favicon service module
+- Added `src-tauri/src/services/kdbx/favicons.rs`.
+- New `KdbxService` methods:
+  - `fetch_entry_favicon(db_id, entry_id, allow_third_party_fallbacks, force) -> Result<bool, AppError>`
+  - `clear_entry_custom_icon(db_id, entry_id) -> Result<bool, AppError>`
 
-### Rust
-- New variant `AppError::WindowProtection(String)` in `dto/error.rs`.
-- New stateless service `services/window_protection.rs` exposing `apply_to_all(handle, enabled)` and `is_supported() -> bool` (`cfg!`).
-- New thin commands in `commands/window.rs`: `set_window_content_protected(enabled, app)` and `get_window_content_protection_supported() -> bool`.
-- Added `prevent_screen_capture: bool` (default `true`) to both `SecuritySettings` and `AppSettings`, including the bidirectional conversion.
-- `lib.rs` `setup()` now calls `apply_initial_window_protection(handle)` after `register_services`. It reads the persisted value, falls back to `true` on any error, and **never fails the app launch**.
-- Capability JSON gains `core:window:allow-set-content-protected`.
+### 4.2 Candidate generation and host strategy
+- URL host extraction from entry URL.
+- Candidate order built as:
+  - exact host favicon
+  - root-host favicon fallback
+  - opt-in third-party sources (`google s2`, `icon.horse`)
+- HTTPS-only for all generated source URLs.
+
+### 4.3 Retry throttle and failure cooldown
+- Added in-memory per-session cooldown map in `KdbxService`:
+  - `favicon_failed_domains: Mutex<HashMap<String, Instant>>`
+  - 15-minute cooldown (`FAVICON_FAILURE_COOLDOWN`)
+- Behavior:
+  - Failed domains are skipped during cooldown.
+  - Cooldown clears on successful fetch for the attempted domain.
+
+### 4.4 Download and normalization behavior
+- HTTP client configured with connect/overall timeouts and limited redirects.
+- Response guarded by:
+  - status check
+  - content-type check (image-like)
+  - max byte size guard
+  - lightweight signature checks (image/SVG)
+- Normalization path:
+  - If decodable image: resize/normalize to PNG 64x64.
+  - If not decodable: store original bytes and detected/inferred MIME.
+
+### 4.5 Persistence and dedup
+- Icon bytes hashed (SHA-256).
+- Existing `meta.custom_icons.icons` searched by hash.
+- If hash matches existing icon, reuse UUID.
+- If no match, insert new custom icon and assign new UUID.
+- Entry links icon through `entry.custom_icon_uuid`.
+
+### 4.6 New commands
+- `src-tauri/src/commands/entries.rs`:
+  - `fetch_entry_favicon`
+  - `clear_entry_custom_icon`
+- `src-tauri/src/lib.rs` command registration updated accordingly.
+
+### 4.7 Settings model extension
+- Added to Rust settings structs and conversions:
+  - `auto_download_favicons`
+  - `allow_third_party_favicon_fallbacks`
+- Defaults set to `false` in `AppSettings::default()`.
+
+---
+
+## 5. IPC and Frontend Contract Changes
+
+### 5.1 MIME-aware icon schema
+- Rust `get_custom_icons` now returns map values with both MIME and data.
+- TS schema updated:
+  - `CustomIconDataSchema { mimeType, data }`
+  - `CustomIconMapSchema` now record of `CustomIconData`.
+
+### 5.2 Tauri wrapper updates
+- Added wrapper methods:
+  - `entries.fetchFavicon(dbId, id, force?)`
+  - `entries.clearCustomIcon(dbId, id)`
+
+### 5.3 Rendering path updates
+- Consumers now build src as:
+  - `data:${mimeType};base64,${data}`
+- Existing fallback behavior preserved:
+  - if custom icon missing/unusable, `iconId`-based icon remains.
+
+---
+
+## 6. Frontend Behavior and UX Integration
+
+### 6.1 Entry save follow-up fetch (non-blocking)
+- `use-entry-edit-form` now performs favicon fetch after successful create/update only when:
+  - `preferences.security.autoDownloadFavicons === true`
+  - URL is non-empty
+- Save operation remains independent from favicon fetch result.
+
+### 6.2 Manual entry-edit controls
+- Added in title/icon section:
+  - `Fetch from URL` / `Refresh favicon`
+  - `Clear custom icon`
+- Buttons are state-aware:
+  - fetch requires edit mode + URL + not pending
+  - clear requires existing custom icon
+
+### 6.3 Persistence after icon mutation
+- After successful manual/auto icon mutation path, UI calls `database.save(dbId)`.
+- Related queries invalidated (`customIcons`, entry detail/list) to refresh rendering.
+
+### 6.4 Settings UI additions
+- Security settings now include toggles for:
+  - auto favicon download
+  - third-party fallback allowance
+- i18n keys added across all supported locales.
+
+---
+
+## 7. Validation and Test Outcomes
+
+### Type checking
+- `bun run typecheck` passed after frontend updates.
+
+### Frontend tests (targeted)
+- Entry edit form tests expanded for:
+  - manual fetch action wiring
+  - manual clear action wiring
+  - auto-fetch-on-save behavior when enabled
+- Settings and tauri/preferences fixtures updated for new security fields.
+- Icon rendering related component tests passed.
+
+### Rust tests (targeted)
+- New favicon unit tests added for deterministic behavior:
+  - candidate ordering
+  - opt-in fallback sources presence
+  - fetch no-op for missing/invalid URL
+  - icon dedup by content hash
+  - clear custom icon detach behavior
+- Settings command/service tests extended to verify new fields defaults and round-trip.
+- Entry command regression test suite passed.
+
+---
+
+## 8. Risks and Known Limitations
+
+1. Root-host fallback is currently heuristic (`last two labels`) and not full public-suffix aware registrable-domain resolution.
+2. No orphan custom icon garbage collection in v1 (intentional scope limit).
+3. Network fetch success path in tests is intentionally not live-network tested; unit tests cover deterministic internal logic and mutation behavior.
+4. Cooldown cache is process-memory only (resets between app restarts by design).
+
+---
+
+## 9. Stable Implementation Conventions Learned
+
+1. For new icon-like binary payloads over IPC, use MIME-aware shape, not format-assumed strings.
+2. Keep entry/group CRUD latency isolated from network-bound enrichment; use follow-up async commands.
+3. Privacy-sensitive network features should default OFF and be explicitly user-controlled.
+4. KDBX custom icons are the preferred canonical store for entry icon assets tied to database portability.
+5. When adding settings fields, always update all four Rust conversion points (`SecuritySettings`/`AppSettings` + `from_settings` + `apply_to_settings`) and mirror in TS Zod schemas and test fixtures.
+
+---
+
+## 10. Files Most Relevant for Future Favicon/Icon Work
+
+### Backend
+- `src-tauri/src/services/kdbx/favicons.rs`
+- `src-tauri/src/services/kdbx/groups.rs`
+- `src-tauri/src/services/kdbx/mod.rs`
+- `src-tauri/src/commands/entries.rs`
+- `src-tauri/src/commands/settings.rs`
 
 ### Frontend
-- Zod schemas in `lib/types.ts` updated for the new field.
-- New `windowProtection` namespace in `lib/tauri.ts`.
-- `useAppPreferences` mutation now diffs the previous cached value of `preventScreenCapture` against the next payload and calls `windowProtection.setProtected(next)` only on change. Same diff-and-apply runs on `resetPreferences`.
-- New `useWindowProtection()` hook returning `{ enabled, isSupported }`. `enabled` reads from preferences, `isSupported` is a React Query call to the backend with `staleTime: Infinity` (the value cannot change at runtime).
-- New `<SecureModeIndicator />` component renders a small fixed-position shield icon in the bottom-right when protection is enabled. Tooltip text differs by `isSupported` (Linux gets a "not supported on this platform" message).
-- Mounted in `__root.tsx` so it persists across all routes.
-- New checkbox + helper note added to `SecuritySettingsSection` with platform-aware "(not supported on this platform)" suffix.
-- All three test fixtures that build a `SecuritySettings` object updated.
-
-### i18n
-- Added `settings.security.preventScreenCapture`, `preventScreenCaptureNote`, `preventScreenCaptureUnsupported` to all five locales with proper translations.
-- Added new top-level `secureMode.indicator.activeTooltip` and `secureMode.indicator.notSupportedTooltip` keys.
+- `src/lib/types.ts`
+- `src/lib/tauri.ts`
+- `src/hooks/use-entry-edit-form.ts`
+- `src/components/entries/entry-edit-form/EntryTitleField.tsx`
+- `src/components/settings/sections/SecuritySettingsSection.tsx`
 
 ### Tests
-- Rust: new `tests/services/window_protection_test.rs`, new `tests/commands/window_test.rs`, plus three new tests in `settings_service_test.rs` (default true, missing-field defaults true, persists across reload). Also extended an existing test in `commands/settings_test.rs` to round-trip the new field. **All 275 Rust tests pass.**
-- Frontend: new `hooks/__tests__/use-window-protection.test.tsx`, new `components/layout/__tests__/secure-mode-indicator.test.tsx`, extended `use-app-preferences.test.tsx` to assert the diff-and-apply path, extended `SettingsView.test.tsx` to assert the new checkbox toggles correctly. **All 288 frontend tests pass.**
-
-### Coverage realism
-The OS code paths themselves cannot be tested — `mock_app()` does not create real platform windows. Our coverage applies to the Rust glue (handle plumbing, error mapping, `is_supported` reporting, settings round-trip) and the frontend glue (diff-and-apply logic, indicator render conditions, hook shape). Manual macOS verification (Cmd+Shift+4 capture → black region) is documented in the plan.
-
----
-
-## 7. Things to be careful about (footguns I noticed)
-
-1. **The `sr` locale mixes Cyrillic and Latin scripts** within the same file. The `settings.security.*` block is Latin; the `keyboardShortcuts.toast.*` block is Cyrillic. I followed the per-section convention; do not "normalize" without discussing with the project owner first.
-2. **`SecuritySettingsSection.tsx` calls `useWindowProtection()`**, which calls `useAppPreferences()`. Tests for `SettingsView` must mock `@/hooks/use-window-protection` directly (the alternative — letting the React Query call resolve — adds flakiness with no benefit).
-3. **`fireEvent.click(screen.getByText("settings.security.minimizeToTray"))`** is the common pattern for clicking shadcn checkboxes in tests. The label wraps the Checkbox primitive, so clicking the label flips the underlying input. This is how we toggle `preventScreenCapture` in the new test.
-4. **`AppSettings` has `#[serde(default)]`** at the struct level. New `bool` fields silently default to `false` if you forget to set the default in `impl Default`. For security-relevant fields like `prevent_screen_capture`, always pair the new field with the explicit default in `impl Default for AppSettings` — `serde`'s "use Rust default" path here would silently flip the policy from "secure by default" to "insecure by default."
-5. **`reset_app_preferences` clobbers** every preference back to `AppSettings::default()` while preserving `recent_databases`. New defaults flow naturally — but if you ever want a field to *not* be reset, you must explicitly preserve it the way `recent_databases` is preserved.
-6. **The eslint config has 8 pre-existing warnings** about `react-refresh/only-export-components` in shadcn-derived files. These are not ours to fix in this branch; running `bun run check` passes despite them.
-7. **`apply_initial_window_protection` deliberately does not error.** If `SettingsService` isn't registered yet, or fails to read the file, or the platform call fails, we log to `stderr` and continue. A password manager that refuses to launch when its on-by-default protection setting can't be applied is worse than one that launches with the protection failing silently — but make sure the indicator UI is visible in either case so the user can spot it.
-8. **The visual indicator is `position: fixed`**. If a future modal uses a higher `z-index` than the indicator's `z-50`, it could occlude it. If that becomes a problem, raise the indicator into a portal anchored to the document root, or move it into the title-bar chrome.
-
----
-
-## 8. Pointers for the next agent
-
-- Need to add a new boolean preference? `prevent_screen_capture` is the cleanest reference. Trace it through these files in order: `commands/settings.rs` (struct + default + conversions), `tests/.../settings_*` (round-trip), `lib/types.ts` (Zod), three test fixture files (`tauri.test.ts`, `use-app-preferences.test.tsx`, `SettingsView.test.tsx`), `SecuritySettingsSection.tsx` (UI), all five locale JSON files (i18n).
-- Need to add a Tauri command that touches a window? `commands/window.rs` is the model. Stay in `commands/`, never call `set_content_protected` directly from a non-window command — use `WindowProtectionService::apply_to_all` so the user's preference is honored.
-- Need to react to a settings change with a side effect? Diff inside `useAppPreferences`'s `mutationFn`, not at the section component level. Read `queryClient.getQueryData(...)` *before* `setQueryData` overwrites it.
-- Need to add a new Tauri service? Match `services/clipboard.rs` for stateful + `services/window_protection.rs` for stateless; stateful ones go in `register_services` in `lib.rs`, stateless ones do not.
-
----
+- `src-tauri/src/services/kdbx/favicons.rs` (unit tests)
+- `src-tauri/tests/commands/settings_test.rs`
+- `src-tauri/tests/services/settings_service_test.rs`
+- `src-tauri/tests/services/settings_service_unitlike_test.rs`
+- `src/components/entries/__tests__/EntryEditForm.test.tsx`

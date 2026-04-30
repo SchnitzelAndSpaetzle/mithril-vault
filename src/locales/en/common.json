@@ -57,6 +57,8 @@
       "showPasswordByDefault": "Show passwords by default",
       "minimizeToTray": "Minimize to tray",
       "startMinimized": "Start minimized",
+      "autoDownloadFavicons": "Auto-download favicons from entry URLs",
+      "allowThirdPartyFaviconFallbacks": "Allow third-party favicon fallback services",
       "preventScreenCapture": "Prevent screen capture",
       "preventScreenCaptureNote": "Hides the window from screenshots and screen recordings on macOS and Windows 10 build 2004+. Older Windows builds block screenshots only. Linux is not supported.",
       "preventScreenCaptureUnsupported": "(not supported on this platform)"
@@ -187,7 +189,10 @@
       "addField": "Add Field",
       "noCustomFields": "No custom fields.",
       "fieldNamePlaceholder": "Field name",
-      "removeField": "Remove custom field"
+      "removeField": "Remove custom field",
+      "fetchFavicon": "Fetch favicon from URL",
+      "refreshFavicon": "Refresh favicon from URL",
+      "clearCustomIcon": "Clear custom icon"
     },
     "toast": {
       "created": "Entry created",
@@ -195,7 +200,12 @@
       "createFailed": "Failed to create entry: {{error}}",
       "updateFailed": "Failed to update entry: {{error}}",
       "secretLoadFailed": "Failed to load protected values for this entry.",
-      "secretRetryRequired": "Retry loading protected values before saving."
+      "secretRetryRequired": "Retry loading protected values before saving.",
+      "faviconUpdated": "Favicon updated",
+      "faviconNotFound": "No favicon could be fetched for this URL.",
+      "faviconUpdateFailed": "Failed to update favicon: {{error}}",
+      "customIconCleared": "Custom icon cleared",
+      "customIconClearFailed": "Failed to clear custom icon: {{error}}"
     },
     "unsavedChanges": {
       "message": "You have unsaved changes. Are you sure you want to discard them?",
