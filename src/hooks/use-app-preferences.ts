@@ -5,6 +5,22 @@ import { queryKeys } from "@/lib/query-keys";
 import { settings, windowProtection } from "@/lib/tauri";
 import type { AppPreferences } from "@/lib/types";
 
+async function applyWindowProtectionIfChanged(
+  previousValue: boolean | undefined,
+  nextValue: boolean
+): Promise<void> {
+  if (previousValue === nextValue) {
+    return;
+  }
+
+  try {
+    await windowProtection.setProtected(nextValue);
+  } catch (error) {
+    // Persisted settings are the source of truth; keep this best-effort.
+    console.warn("Failed to apply window content protection:", error);
+  }
+}
+
 export function useAppPreferences() {
   const queryClient = useQueryClient();
 
@@ -22,9 +38,7 @@ export function useAppPreferences() {
       await settings.updatePreferences(nextPreferences);
       const previousValue = previous?.security.preventScreenCapture;
       const nextValue = nextPreferences.security.preventScreenCapture;
-      if (previousValue !== nextValue) {
-        await windowProtection.setProtected(nextValue);
-      }
+      await applyWindowProtectionIfChanged(previousValue, nextValue);
     },
     onSuccess: (_data, nextPreferences) => {
       queryClient.setQueryData(
@@ -45,9 +59,7 @@ export function useAppPreferences() {
       const nextPreferences = await settings.resetPreferences();
       const previousValue = previous?.security.preventScreenCapture;
       const nextValue = nextPreferences.security.preventScreenCapture;
-      if (previousValue !== nextValue) {
-        await windowProtection.setProtected(nextValue);
-      }
+      await applyWindowProtectionIfChanged(previousValue, nextValue);
       return nextPreferences;
     },
     onSuccess: (nextPreferences) => {
