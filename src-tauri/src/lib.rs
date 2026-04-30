@@ -102,8 +102,7 @@ fn apply_initial_window_protection<R: Runtime>(app: &AppHandle<R>) {
     let enabled = match app.try_state::<Arc<SettingsService>>() {
         Some(service) => service
             .get_settings()
-            .map(|s| s.prevent_screen_capture)
-            .unwrap_or(true),
+            .map_or(true, |s| s.prevent_screen_capture),
         None => true,
     };
     if let Err(err) = WindowProtectionService::apply_to_all(app, enabled) {
