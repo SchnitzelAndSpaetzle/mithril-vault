@@ -35,10 +35,12 @@ fn get_and_update_settings_commands() {
 
     let settings = tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
     assert_eq!(settings.auto_lock_timeout, 300);
+    assert!(settings.prevent_screen_capture);
 
     let mut updated = settings.clone();
     updated.auto_lock_timeout = 90;
     updated.theme = "light".into();
+    updated.prevent_screen_capture = false;
 
     tauri::async_runtime::block_on(update_settings(updated, app.state())).expect("update settings");
 
@@ -46,6 +48,7 @@ fn get_and_update_settings_commands() {
         tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
     assert_eq!(refreshed.auto_lock_timeout, 90);
     assert_eq!(refreshed.theme, "light");
+    assert!(!refreshed.prevent_screen_capture);
 
     cleanup_settings_file(&app);
 }

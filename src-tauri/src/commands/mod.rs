@@ -7,6 +7,7 @@ pub mod generator;
 pub mod groups;
 pub mod secure_storage;
 pub mod settings;
+pub mod window;
 
 pub use clipboard::*;
 pub use database::{
@@ -19,3 +20,4 @@ pub use generator::*;
 pub use groups::*;
 pub use secure_storage::*;
 pub use settings::*;
+pub use window::*;

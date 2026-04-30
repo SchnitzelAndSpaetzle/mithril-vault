@@ -14,10 +14,11 @@ use commands::{
     delete_group, delete_tag, generate_keyfile, generate_passphrase, generate_password,
     get_app_preferences, get_custom_icons, get_database_config, get_database_info, get_entry,
     get_entry_password, get_entry_protected_custom_field, get_group, get_group_entry_counts,
-    get_keyfile_for_database, get_recycle_bin_id, get_settings, has_session_key, inspect_database,
-    list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
-    open_database, open_database_with_keyfile, open_database_with_keyfile_only,
-    remove_recent_database, rename_group, rename_tag, reset_app_preferences, save_database,
+    get_keyfile_for_database, get_recycle_bin_id, get_settings,
+    get_window_content_protection_supported, has_session_key, inspect_database, list_entries,
+    list_groups, list_open_databases, lock_database, move_entry, move_group, open_database,
+    open_database_with_keyfile, open_database_with_keyfile_only, remove_recent_database,
+    rename_group, rename_tag, reset_app_preferences, save_database, set_window_content_protected,
     store_session_key, unlock_database, update_app_preferences, update_entry, update_group,
     update_settings,
 };
@@ -25,15 +26,21 @@ use services::clipboard::ClipboardService;
 use services::kdbx::KdbxService;
 use services::secure_storage::SecureStorageService;
 use services::settings::SettingsService;
+use services::window_protection::WindowProtectionService;
 use std::sync::Arc;
-use tauri::{Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 #[doc(hidden)]
 pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| register_services(app.handle()).map_err(Into::into))
+        .setup(|app| {
+            let handle = app.handle();
+            register_services(handle)?;
+            apply_initial_window_protection(handle);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             open_database,
             open_database_with_keyfile,
@@ -86,7 +93,21 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             copy_protected_field_to_clipboard,
             copy_text_to_clipboard,
             clear_clipboard,
+            set_window_content_protected,
+            get_window_content_protection_supported,
         ])
+}
+
+fn apply_initial_window_protection<R: Runtime>(app: &AppHandle<R>) {
+    let enabled = match app.try_state::<Arc<SettingsService>>() {
+        Some(service) => service
+            .get_settings()
+            .map_or(true, |s| s.prevent_screen_capture),
+        None => true,
+    };
+    if let Err(err) = WindowProtectionService::apply_to_all(app, enabled) {
+        eprintln!("warning: failed to apply initial window protection: {err}");
+    }
 }
 
 #[doc(hidden)]

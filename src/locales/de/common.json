@@ -56,7 +56,10 @@
       "showClipboardCountdown": "Countdown der Zwischenablage anzeigen",
       "showPasswordByDefault": "Passwörter standardmäßig anzeigen",
       "minimizeToTray": "In Taskleiste minimieren",
-      "startMinimized": "Minimiert starten"
+      "startMinimized": "Minimiert starten",
+      "preventScreenCapture": "Bildschirmaufnahme verhindern",
+      "preventScreenCaptureNote": "Blendet das Fenster auf macOS und Windows 10 Build 2004+ aus Screenshots und Bildschirmaufnahmen aus. Ältere Windows-Versionen blockieren nur Screenshots. Linux wird nicht unterstützt.",
+      "preventScreenCaptureUnsupported": "(auf dieser Plattform nicht unterstützt)"
     },
     "appearance": {
       "title": "Erscheinungsbild",
@@ -510,6 +513,12 @@
       "saved": "Datenbank gespeichert",
       "usernameCopied": "Benutzername kopiert",
       "passwordCopied": "Passwort kopiert"
+    }
+  },
+  "secureMode": {
+    "indicator": {
+      "activeTooltip": "Bildschirmaufnahmeschutz ist aktiv",
+      "notSupportedTooltip": "Bildschirmaufnahmeschutz ist aktiviert, wird auf dieser Plattform aber nicht unterstützt"
     }
   }
 }

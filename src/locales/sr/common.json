@@ -56,7 +56,10 @@
       "showClipboardCountdown": "Prikaži odbrojavanje privremene memorije",
       "showPasswordByDefault": "Podrazumevano prikaži lozinke",
       "minimizeToTray": "Minimiziraj u sistemsku traku",
-      "startMinimized": "Pokreni minimizovano"
+      "startMinimized": "Pokreni minimizovano",
+      "preventScreenCapture": "Spreči snimak ekrana",
+      "preventScreenCaptureNote": "Sakriva prozor sa snimaka i video snimaka ekrana na macOS-u i Windows 10 build 2004+. Starije verzije Windows-a blokiraju samo slike ekrana. Linux nije podržan.",
+      "preventScreenCaptureUnsupported": "(nije podržano na ovoj platformi)"
     },
     "appearance": {
       "title": "Izgled",
@@ -510,6 +513,12 @@
       "saved": "База података сачувана",
       "usernameCopied": "Корисничко име копирано",
       "passwordCopied": "Лозинка копирана"
+    }
+  },
+  "secureMode": {
+    "indicator": {
+      "activeTooltip": "Zaštita od snimanja ekrana je aktivna",
+      "notSupportedTooltip": "Zaštita od snimanja ekrana je uključena, ali nije podržana na ovoj platformi"
     }
   }
 }

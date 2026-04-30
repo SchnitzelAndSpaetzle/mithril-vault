@@ -72,7 +72,44 @@ fn default_settings_when_missing() {
     assert_eq!(settings.auto_lock_timeout, 300);
     assert_eq!(settings.clipboard_clear_timeout, 30);
     assert_eq!(settings.theme, "system");
+    assert!(settings.prevent_screen_capture);
     assert!(settings.recent_databases.is_empty());
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn missing_prevent_screen_capture_field_defaults_to_true() {
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let path = settings_file_path(&app);
+    std::fs::write(&path, "{}").expect("write empty settings");
+
+    let service = new_service(&app);
+    let settings = service.get_settings().expect("get settings");
+    assert!(settings.prevent_screen_capture);
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn prevent_screen_capture_persists_across_reload() {
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let service = new_service(&app);
+    let updated = AppSettings {
+        prevent_screen_capture: false,
+        ..AppSettings::default()
+    };
+    service.update_settings(updated).expect("update settings");
+
+    let reloaded = new_service(&app);
+    let settings = reloaded.get_settings().expect("get settings");
+    assert!(!settings.prevent_screen_capture);
 
     cleanup_settings_file(&app);
 }

@@ -63,6 +63,7 @@ pub struct SecuritySettings {
     pub show_password_by_default: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
+    pub prevent_screen_capture: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +114,7 @@ pub struct AppSettings {
     pub show_password_by_default: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
+    pub prevent_screen_capture: bool,
     pub theme: String,
     pub color_preset: String,
     pub font_size: u8,
@@ -139,6 +141,7 @@ impl Default for AppSettings {
             show_password_by_default: false,
             minimize_to_tray: true,
             start_minimized: false,
+            prevent_screen_capture: true,
             theme: "system".into(),
             color_preset: "default".into(),
             font_size: 14,
@@ -170,6 +173,7 @@ impl AppPreferences {
                 show_password_by_default: settings.show_password_by_default,
                 minimize_to_tray: settings.minimize_to_tray,
                 start_minimized: settings.start_minimized,
+                prevent_screen_capture: settings.prevent_screen_capture,
             },
             appearance: AppearanceSettings {
                 theme: settings.theme.clone(),
@@ -206,6 +210,7 @@ impl AppPreferences {
         settings.show_password_by_default = self.security.show_password_by_default;
         settings.minimize_to_tray = self.security.minimize_to_tray;
         settings.start_minimized = self.security.start_minimized;
+        settings.prevent_screen_capture = self.security.prevent_screen_capture;
         settings.theme.clone_from(&self.appearance.theme);
         settings
             .color_preset

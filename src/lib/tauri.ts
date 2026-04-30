@@ -561,3 +561,14 @@ export const settings = {
     return invoke("clear_recent_databases");
   },
 };
+
+export const windowProtection = {
+  async setProtected(enabled: boolean): Promise<void> {
+    return invoke("set_window_content_protected", { enabled });
+  },
+
+  async isSupported(): Promise<boolean> {
+    const result = await invoke("get_window_content_protection_supported");
+    return z.boolean().parse(result);
+  },
+};

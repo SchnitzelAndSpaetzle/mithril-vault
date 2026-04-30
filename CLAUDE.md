@@ -178,6 +178,7 @@ export const entries = {
 - **Use `zeroize` crate** for sensitive data in Rust
 - **Clipboard auto-clears** after timeout (default 30 seconds)
 - **Return minimal data** in list views (no password fields in `EntryListItem`)
+- **Window screen-capture protection** is enabled by default. The setting `security.preventScreenCapture` is applied via `WindowProtectionService::apply_to_all` (Rust) on app startup and re-applied through `set_window_content_protected` whenever the user toggles it. macOS uses `NSWindowSharingNone`, Windows uses `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, Linux is a no-op (Tauri provides this wrapper natively, no extra crates required). The `<SecureModeIndicator />` component (mounted in `__root.tsx`) shows a shield icon while protection is active, with a Linux-aware tooltip when the platform is unsupported.
 
 ### Secure Memory Types
 
