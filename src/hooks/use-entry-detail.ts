@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import { entries } from "@/lib/tauri";
@@ -8,6 +8,15 @@ import { entries } from "@/lib/tauri";
 export function useEntryDetail(entryId: string | null, dbId: string | null) {
   const [password, setPassword] = useState<string | null>(null);
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
+
+  // Clear password when entry changes (security requirement).
+  // Done during render via the "store previous prop in state" pattern so we
+  // don't trigger an extra render via useEffect.
+  const [prevEntryId, setPrevEntryId] = useState(entryId);
+  if (prevEntryId !== entryId) {
+    setPrevEntryId(entryId);
+    setPassword(null);
+  }
 
   const {
     data: entry,
@@ -25,11 +34,6 @@ export function useEntryDetail(entryId: string | null, dbId: string | null) {
   const isTransitioning = Boolean(
     entryId && entry && (isPlaceholderData || entry.id !== entryId)
   );
-
-  // Clear password when entry changes (security requirement)
-  useEffect(() => {
-    setPassword(null);
-  }, [entryId]);
 
   const revealPassword = useCallback(async () => {
     if (!dbId || !entryId) return;
