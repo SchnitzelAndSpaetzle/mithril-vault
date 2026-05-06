@@ -55,3 +55,6 @@ mod groups_test;
 
 #[path = "commands/settings_test.rs"]
 mod settings_test;
+
+#[path = "commands/window_test.rs"]
+mod window_test;

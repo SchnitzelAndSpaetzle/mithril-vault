@@ -225,6 +225,7 @@ export const SecuritySettingsSchema = z.object({
   showPasswordByDefault: z.boolean(),
   minimizeToTray: z.boolean(),
   startMinimized: z.boolean(),
+  preventScreenCapture: z.boolean(),
 });
 export type SecuritySettings = z.infer<typeof SecuritySettingsSchema>;
 
@@ -270,6 +271,7 @@ export const AppSettingsSchema = z.object({
   showPasswordByDefault: z.boolean(),
   minimizeToTray: z.boolean(),
   startMinimized: z.boolean(),
+  preventScreenCapture: z.boolean(),
   theme: ThemePreferenceSchema,
   colorPreset: z.string().default("default"),
   fontSize: z.number().int().min(10).max(24),

@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type CSSProperties, useEffect } from "react";
 import App from "@/App.tsx";
 import { DatabaseTabBar } from "@/components/layout/database-tab-bar";
+import { SecureModeIndicator } from "@/components/layout/secure-mode-indicator";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useAutoLock } from "@/hooks/use-auto-lock";
@@ -34,6 +35,7 @@ function RootRouteComponent() {
         </div>
       </div>
       <KeyboardShortcutsDialog />
+      <SecureModeIndicator />
       {/*<TanStackRouterDevtools />*/}
     </App>
   );

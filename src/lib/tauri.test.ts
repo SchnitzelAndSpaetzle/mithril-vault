@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { groups, settings, tags } from "./tauri";
+import { groups, settings, tags, windowProtection } from "./tauri";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -79,6 +79,7 @@ describe("tauri wrappers validation", () => {
         showPasswordByDefault: false,
         minimizeToTray: true,
         startMinimized: false,
+        preventScreenCapture: true,
       },
       appearance: {
         theme: "system",
@@ -136,6 +137,7 @@ describe("tauri wrappers validation", () => {
           showPasswordByDefault: false,
           minimizeToTray: true,
           startMinimized: false,
+          preventScreenCapture: true,
         },
         appearance: {
           theme: "system",
@@ -160,5 +162,33 @@ describe("tauri wrappers validation", () => {
     ).rejects.toThrow();
 
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("sets window protection through invoke", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await windowProtection.setProtected(true);
+
+    expect(invoke).toHaveBeenCalledWith("set_window_content_protected", {
+      enabled: true,
+    });
+  });
+
+  it("parses window protection support response as boolean", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(true);
+
+    await expect(windowProtection.isSupported()).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith(
+      "get_window_content_protection_supported"
+    );
+  });
+
+  it("rejects invalid window protection support payloads", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce("yes");
+
+    await expect(windowProtection.isSupported()).rejects.toThrow();
+    expect(invoke).toHaveBeenCalledWith(
+      "get_window_content_protection_supported"
+    );
   });
 });

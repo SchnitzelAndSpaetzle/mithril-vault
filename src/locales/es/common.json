@@ -56,7 +56,10 @@
       "showClipboardCountdown": "Mostrar cuenta regresiva del portapapeles",
       "showPasswordByDefault": "Mostrar contraseñas por defecto",
       "minimizeToTray": "Minimizar a la bandeja",
-      "startMinimized": "Iniciar minimizado"
+      "startMinimized": "Iniciar minimizado",
+      "preventScreenCapture": "Impedir capturas de pantalla",
+      "preventScreenCaptureNote": "Oculta la ventana en capturas y grabaciones de pantalla en macOS y en Windows 10 build 2004 o posterior. Las versiones anteriores de Windows solo bloquean capturas. Linux no es compatible.",
+      "preventScreenCaptureUnsupported": "(no compatible con esta plataforma)"
     },
     "appearance": {
       "title": "Apariencia",
@@ -510,6 +513,12 @@
       "saved": "Base de datos guardada",
       "usernameCopied": "Nombre de usuario copiado",
       "passwordCopied": "Contraseña copiada"
+    }
+  },
+  "secureMode": {
+    "indicator": {
+      "activeTooltip": "La protección contra capturas de pantalla está activa",
+      "notSupportedTooltip": "La protección contra capturas está activada pero no es compatible con esta plataforma"
     }
   }
 }

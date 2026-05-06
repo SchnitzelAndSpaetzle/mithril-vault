@@ -366,6 +366,13 @@ struct EntryListItem {
 - Use environment variables for development secrets
 - Never commit `.env` files
 
+### 9. Window Screen-Capture Protection
+
+- The default-on setting `security.preventScreenCapture` makes the window invisible in screenshots / screen recordings on macOS (`NSWindowSharingNone`) and Windows (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`). Linux is a no-op.
+- The setting is applied in two places: `apply_initial_window_protection` (called from Tauri `setup()`, runs before any UI paints) and the `set_window_content_protected` Tauri command (invoked by `useAppPreferences` when the user toggles the value).
+- When adding new windows, always go through `WindowProtectionService::apply_to_all` rather than calling `window.set_content_protected(...)` directly so the user's preference is honored. The helper iterates `app.webview_windows()`, so any new window registered before initial setup is covered automatically.
+- The `prevent_screen_capture` field is a clean end-to-end reference for adding a new boolean preference: it touches the Rust `AppSettings`/`SecuritySettings` structs (with `from_settings`/`apply_to_settings` conversions), the `AppSettingsSchema`/`SecuritySettingsSchema` Zod schemas, the `SecuritySettingsSection` UI, the `useAppPreferences` diff-and-apply hook, and the `secureMode` i18n keys in all five locales.
+
 ---
 
 ## Rust Backend Conventions
