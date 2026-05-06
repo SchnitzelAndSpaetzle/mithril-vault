@@ -21,7 +21,7 @@ export default {
     'scope-enum': [
       1,
       'always',
-      ['core', 'ui', 'cli', 'extension', 'sync', 'deps'],
+      ['core', 'ui', 'cli', 'extension', 'sync', 'deps', 'deps-dev'],
     ],
     'subject-case': [0],
     'body-max-line-length': [1, 'always', 100],

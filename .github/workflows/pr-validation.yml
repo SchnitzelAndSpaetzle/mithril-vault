@@ -33,6 +33,7 @@ jobs:
             extension
             sync
             deps
+            deps-dev
           requireScope: false
           subjectPattern: ^[a-z].+$
           subjectPatternError: |
