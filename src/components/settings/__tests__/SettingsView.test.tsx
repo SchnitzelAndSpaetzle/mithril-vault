@@ -386,6 +386,47 @@ describe("SettingsView", () => {
     });
   });
 
+  it.each([0, 5, 30, 120])(
+    "saves auto-lock timeout value %i",
+    async (autoLockTimeout) => {
+      const updatePreferences = vi.fn().mockResolvedValue(undefined);
+      mockUseAppPreferences.mockReturnValue({
+        preferences: makePreferences(),
+        isLoading: false,
+        error: null,
+        updatePreferences,
+        isUpdating: false,
+        resetPreferences: vi.fn().mockResolvedValue(makePreferences()),
+        isResetting: false,
+      });
+
+      render(<SettingsView />);
+
+      fireEvent.change(
+        screen.getByLabelText("settings.security.autoLockTimeout"),
+        {
+          target: { value: String(autoLockTimeout) },
+        }
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "settings.saveChanges" })
+      );
+
+      await waitFor(() => {
+        expect(updatePreferences).toHaveBeenCalledTimes(1);
+      });
+
+      expect(updatePreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            autoLockTimeout,
+          }),
+        })
+      );
+    }
+  );
+
   it("updates core preference toggles and numeric fields", async () => {
     const updatePreferences = vi.fn().mockResolvedValue(undefined);
     const setTheme = vi.fn();

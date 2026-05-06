@@ -50,7 +50,7 @@
       "title": "Security",
       "description": "Clipboard and lock behavior preferences.",
       "autoLockTimeout": "Auto-lock timeout (seconds)",
-      "autoLockNote": "TODO: inactivity/OS-lock event wiring is not implemented yet.",
+      "autoLockNote": "Database will lock after this period of inactivity. Set to 0 to disable.",
       "clipboardTimeout": "Clipboard clear timeout (seconds)",
       "clearClipboardOnLock": "Clear clipboard on database lock",
       "showClipboardCountdown": "Show clipboard countdown",
@@ -317,6 +317,8 @@
   "unlock": {
     "title": "Unlock Database",
     "titleWithName": "Unlock {{filename}}",
+    "lockedTitle": "{{filename}} is locked",
+    "lockedDescription": "Enter your password to unlock the database.",
     "passwordPlaceholder": "enter password here...",
     "showPassword": "Show password",
     "hidePassword": "Hide password",

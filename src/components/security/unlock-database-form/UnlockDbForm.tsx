@@ -41,6 +41,7 @@ interface UnlockDbFormProps {
   initialPath?: string | undefined;
   initialKeyfile?: string | undefined;
   rememberKeyfile?: boolean | undefined;
+  isLocked?: boolean | undefined;
 }
 
 function mapErrorToMessage(error: unknown, t: TFunction): string {
@@ -78,6 +79,7 @@ export function UnlockDbForm({
   initialPath,
   initialKeyfile,
   rememberKeyfile: rememberKeyfileDefault,
+  isLocked,
 }: UnlockDbFormProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -172,8 +174,10 @@ export function UnlockDbForm({
 
       let info: Awaited<ReturnType<typeof database.open>> | null = null;
 
-      // Determine which unlock method to use
-      if (data.keyfilePath && data.password) {
+      if (isLocked) {
+        // Re-unlock a locked database (backend has keyfile path)
+        info = await database.unlock(data.filePath, data.password || undefined);
+      } else if (data.keyfilePath && data.password) {
         info = await database.openWithKeyfile(
           data.filePath,
           data.password,
@@ -197,15 +201,17 @@ export function UnlockDbForm({
         setActiveTab(tabId);
       }
 
-      // Save to recent databases (with keyfile if "remember" is checked)
-      try {
-        await settings.addRecentDatabase(
-          data.filePath,
-          rememberKeyfile ? data.keyfilePath : undefined
-        );
-      } catch (error) {
-        console.warn("Failed to update recent database list", error);
-        toast.warning(t("unlock.recentListWarning"));
+      // Save to recent databases (skip for locked databases - already in list)
+      if (!isLocked) {
+        try {
+          await settings.addRecentDatabase(
+            data.filePath,
+            rememberKeyfile ? data.keyfilePath : undefined
+          );
+        } catch (error) {
+          console.warn("Failed to update recent database list", error);
+          toast.warning(t("unlock.recentListWarning"));
+        }
       }
 
       if (info) {
@@ -269,15 +275,17 @@ export function UnlockDbForm({
           </div>
 
           <InputGroupAddon align="block-end" className="border-t">
-            <InputGroupButton
-              size="sm"
-              variant="ghost"
-              type="button"
-              onClick={handleSelectKeyfile}
-              disabled={isUnlocking}
-            >
-              {t("unlock.addKeyFile")} <KeyRound />
-            </InputGroupButton>
+            {!isLocked && (
+              <InputGroupButton
+                size="sm"
+                variant="ghost"
+                type="button"
+                onClick={handleSelectKeyfile}
+                disabled={isUnlocking}
+              >
+                {t("unlock.addKeyFile")} <KeyRound />
+              </InputGroupButton>
+            )}
             <InputGroupButton
               type="submit"
               form="open-db-form"
@@ -298,18 +306,20 @@ export function UnlockDbForm({
             </InputGroupButton>
           </InputGroupAddon>
 
-          <InputGroupAddon
-            align="block-start"
-            className="border-b cursor-pointer hover:bg-muted/50 transition-colors"
-            onClick={handleSelectDatabase}
-          >
-            <InputGroupText className="font-mono font-medium">
-              <FolderOpen />
-              {filename || t("unlock.selectDatabase")}
-            </InputGroupText>
-          </InputGroupAddon>
+          {!isLocked && (
+            <InputGroupAddon
+              align="block-start"
+              className="border-b cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={handleSelectDatabase}
+            >
+              <InputGroupText className="font-mono font-medium">
+                <FolderOpen />
+                {filename || t("unlock.selectDatabase")}
+              </InputGroupText>
+            </InputGroupAddon>
+          )}
 
-          {keyfilePath && (
+          {!isLocked && keyfilePath && (
             <InputGroupAddon align="block-start" className="border-b">
               <InputGroupText className="font-mono font-medium flex-1">
                 <KeyRound />
@@ -329,7 +339,7 @@ export function UnlockDbForm({
           )}
         </InputGroup>
 
-        {keyfilePath && (
+        {!isLocked && keyfilePath && (
           <div className="flex items-center space-x-2">
             <Checkbox
               id="remember-keyfile"

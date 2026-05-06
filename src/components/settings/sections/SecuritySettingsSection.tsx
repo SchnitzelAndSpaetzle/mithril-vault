@@ -35,20 +35,17 @@ export function SecuritySettingsSection({
           <Input
             id="auto-lock-timeout"
             type="number"
-            min={30}
+            min={0}
             value={draft.security.autoLockTimeout}
-            onChange={(event) =>
+            onChange={(event) => {
               updateDraft((previous) => ({
                 ...previous,
                 security: {
                   ...previous.security,
-                  autoLockTimeout: Math.max(
-                    30,
-                    Number(event.target.value) || 30
-                  ),
+                  autoLockTimeout: Math.max(0, Number(event.target.value) || 0),
                 },
-              }))
-            }
+              }));
+            }}
           />
           <p className="text-xs text-muted-foreground">
             {t("settings.security.autoLockNote")}

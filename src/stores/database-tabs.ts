@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import type { DatabaseInfo } from "@/lib/types";
 
-export type DatabaseTabState = "unlocking" | "open";
+export type DatabaseTabState = "unlocking" | "open" | "locked";
 
 export interface DatabaseTab {
   id: string;
@@ -24,6 +24,7 @@ export interface DatabaseTabsState {
   setActiveTab: (id: string) => void;
   updateTabInfo: (id: string, info: DatabaseInfo) => void;
   updateTabState: (id: string, updates: Partial<DatabaseTab>) => void;
+  lockTab: (id: string) => void;
 }
 
 function createTabId(): string {
@@ -107,7 +108,7 @@ export const useDatabaseTabs = create<DatabaseTabsState>(
                 info,
                 path: info.path,
                 dbId: info.path,
-                state: "open",
+                state: info.isLocked ? "locked" : "open",
               }
             : tab
         ),
@@ -119,6 +120,19 @@ export const useDatabaseTabs = create<DatabaseTabsState>(
             ? {
                 ...tab,
                 ...updates,
+              }
+            : tab
+        ),
+      })),
+    lockTab: (id: string) =>
+      set((state: DatabaseTabsState) => ({
+        tabs: state.tabs.map((tab) =>
+          tab.id === id
+            ? {
+                ...tab,
+                state: "locked" as const,
+                selectedEntryId: null,
+                selectedGroupId: null,
               }
             : tab
         ),

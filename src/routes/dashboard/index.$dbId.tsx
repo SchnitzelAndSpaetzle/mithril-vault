@@ -25,7 +25,7 @@ export const Route = createFileRoute("/dashboard/index/$dbId")({
       throw redirect({ to: "/" });
     }
 
-    if (tab.state === "unlocking") {
+    if (tab.state === "unlocking" || tab.state === "locked") {
       throw redirect({
         to: "/unlock",
         search: tab.path ? { path: tab.path } : {},
