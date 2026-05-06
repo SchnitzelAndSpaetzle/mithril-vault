@@ -120,14 +120,23 @@ export function UnlockDbForm({
     }
   }, [initialPath, openDbForm]);
 
+  // Sync the rememberKeyfile checkbox to the prop during render so we don't
+  // trigger an extra render via useEffect setState.
+  const [prevRememberKeyfileDefault, setPrevRememberKeyfileDefault] = useState(
+    rememberKeyfileDefault
+  );
+  if (prevRememberKeyfileDefault !== rememberKeyfileDefault) {
+    setPrevRememberKeyfileDefault(rememberKeyfileDefault);
+    if (rememberKeyfileDefault !== undefined) {
+      setRememberKeyfile(Boolean(rememberKeyfileDefault));
+    }
+  }
+
   useEffect(() => {
     if (initialKeyfile !== undefined) {
       openDbForm.setValue("keyfilePath", initialKeyfile ?? "");
     }
-    if (rememberKeyfileDefault !== undefined) {
-      setRememberKeyfile(Boolean(rememberKeyfileDefault));
-    }
-  }, [initialKeyfile, rememberKeyfileDefault, openDbForm]);
+  }, [initialKeyfile, openDbForm]);
 
   async function handleSelectDatabase() {
     try {
