@@ -38,12 +38,11 @@ export function SecuritySettingsSection({
             min={0}
             value={draft.security.autoLockTimeout}
             onChange={(event) => {
-              const value = Number(event.target.value);
               updateDraft((previous) => ({
                 ...previous,
                 security: {
                   ...previous.security,
-                  autoLockTimeout: value === 0 ? 0 : Math.max(30, value || 30),
+                  autoLockTimeout: Math.max(0, Number(event.target.value) || 0),
                 },
               }));
             }}
