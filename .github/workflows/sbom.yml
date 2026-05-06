@@ -24,7 +24,7 @@ jobs:
       artifact-name: ${{ steps.metadata.outputs.artifact-name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set metadata
         id: metadata
