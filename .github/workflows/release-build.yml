@@ -200,7 +200,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attest SBOM
-        uses: actions/attest-sbom@v2
+        uses: actions/attest-sbom@v4
         with:
           subject-path: artifacts/*
           sbom-path: sbom/mithril-vault-sbom.json
