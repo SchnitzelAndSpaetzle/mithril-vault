@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Dices } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -58,23 +58,12 @@ export function PasswordGenerator({ onUsePassword }: PasswordGeneratorProps) {
   const [passphraseOptions, setPassphraseOptions] =
     useState<PassphraseGeneratorOptions>(DEFAULT_PASSPHRASE_OPTIONS);
 
-  const stablePasswordOptions = useMemo(
-    () => passwordOptions,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(passwordOptions)]
-  );
-  const stablePassphraseOptions = useMemo(
-    () => passphraseOptions,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(passphraseOptions)]
-  );
-
   const passwordGen = usePasswordGenerator(
-    stablePasswordOptions,
+    passwordOptions,
     activeTab === "password"
   );
   const passphraseGen = usePassphraseGenerator(
-    stablePassphraseOptions,
+    passphraseOptions,
     activeTab === "passphrase"
   );
 
