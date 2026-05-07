@@ -42,6 +42,9 @@ export function usePasswordGenerator(
 
   useEffect(() => {
     if (enabled) {
+      // regenerate awaits a Rust IPC call before any setState fires, so this
+      // is external-system sync, not synchronous setState in the effect body.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void regenerate(options);
     }
   }, [enabled, regenerate, options]);
@@ -90,6 +93,8 @@ export function usePassphraseGenerator(
 
   useEffect(() => {
     if (enabled) {
+      // See usePasswordGenerator above for why this is suppressed.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void regenerate(options);
     }
   }, [enabled, regenerate, options]);
