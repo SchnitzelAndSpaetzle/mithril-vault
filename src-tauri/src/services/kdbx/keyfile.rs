@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 use crate::dto::error::AppError;
-use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::rand_core::TryRng;
+use rand::rngs::SysRng;
 use std::fmt::Write as FmtWrite;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -60,7 +60,9 @@ pub fn generate_keyfile(output_path: &str) -> Result<(), AppError> {
 
     // Generate 32 random bytes (256 bits)
     let mut key_bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut key_bytes);
+    SysRng
+        .try_fill_bytes(&mut key_bytes)
+        .map_err(|err| AppError::Crypto(err.to_string()))?;
 
     // Format as hex with spaces (8 chars per group, 4 groups per line)
     let hex_formatted = format_hex_key(&key_bytes);
