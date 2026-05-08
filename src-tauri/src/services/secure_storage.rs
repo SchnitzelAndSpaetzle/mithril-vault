@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 use crate::dto::error::AppError;
-use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::rand_core::TryRng;
+use rand::rngs::SysRng;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -43,7 +43,9 @@ impl SecureStorageService {
         // Use Zeroizing<Vec<u8>> to ensure our copy of the key is cleared from memory.
         // Stronghold takes ownership of a clone; our Zeroizing wrapper ensures our copy is zeroized.
         let mut key = Zeroizing::new(vec![0u8; 32]);
-        OsRng.fill_bytes(&mut key);
+        SysRng
+            .try_fill_bytes(&mut key)
+            .map_err(|err| AppError::SecureStorage(err.to_string()))?;
 
         let stronghold = Stronghold::new(snapshot_path.clone(), (*key).clone())
             .map_err(|err| AppError::SecureStorage(err.to_string()))?;
