@@ -100,12 +100,14 @@ impl KdbxService {
         databases.insert(
             normalized_path,
             OpenDatabase {
-                db,
+                db: Some(db),
                 path: path.to_string(),
                 is_modified: false,
                 password: password.map(SecureString::from),
                 keyfile_path: keyfile_path.map(String::from),
                 version: version.clone(),
+                name: name.to_string(),
+                root_group_id: root_group_id.clone(),
             },
         );
 

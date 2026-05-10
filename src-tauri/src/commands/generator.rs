@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 use crate::dto::error::AppError;
-use rand::rngs::OsRng;
-use rand::seq::SliceRandom;
-use rand::Rng;
+use rand::rngs::ThreadRng;
+use rand::seq::{IndexedRandom, SliceRandom};
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
@@ -183,7 +183,7 @@ fn generate_password_value(
     }
 
     let charset_size = charset.len();
-    let mut rng = OsRng;
+    let mut rng = rand::rng();
     let mut password: Vec<char> = Vec::with_capacity(options.length);
 
     for _ in 0..options.length {
@@ -222,7 +222,7 @@ fn enforce_minimums(
     min_numbers: usize,
     symbol_chars: &[char],
     min_symbols: usize,
-    rng: &mut OsRng,
+    rng: &mut ThreadRng,
 ) -> Result<(), AppError> {
     if min_numbers == 0 && min_symbols == 0 {
         return Ok(());
@@ -302,7 +302,7 @@ fn generate_passphrase_value(
         ));
     }
 
-    let mut rng = OsRng;
+    let mut rng = rand::rng();
     let mut words: Vec<String> = Vec::with_capacity(options.word_count);
 
     for _ in 0..options.word_count {
@@ -325,8 +325,8 @@ fn generate_passphrase_value(
 
     // Append a random digit to a random word
     if options.include_number {
-        let idx = rng.gen_range(0..words.len());
-        let digit = rng.gen_range(0..10);
+        let idx = rng.random_range(0..words.len());
+        let digit = rng.random_range(0..10);
         words[idx].push_str(&digit.to_string());
     }
 

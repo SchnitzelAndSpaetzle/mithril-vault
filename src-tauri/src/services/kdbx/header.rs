@@ -45,7 +45,8 @@ impl KdbxService {
             .get(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
-        let config = &open_db.db.config;
+        let db = open_db.db_or_locked()?;
+        let config = &db.config;
 
         Ok(DatabaseConfigDto {
             version: open_db.version.clone(),

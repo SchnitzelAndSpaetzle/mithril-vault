@@ -148,16 +148,18 @@ fn database_commands_handle_missing_database() {
             .expect("get database info");
     assert!(info.is_none());
 
-    let err = tauri::async_runtime::block_on(lock_database("missing.kdbx".to_string()))
-        .expect_err("expected not implemented");
-    assert!(matches!(err, AppError::NotImplemented(_)));
+    let err =
+        tauri::async_runtime::block_on(lock_database("missing.kdbx".to_string(), app.state()))
+            .expect_err("expected database not found");
+    assert!(matches!(err, AppError::DatabaseNotFound(_)));
 
     let err = tauri::async_runtime::block_on(unlock_database(
         "missing.kdbx".to_string(),
-        "password".into(),
+        Some("password".into()),
+        app.state(),
     ))
-    .expect_err("expected not implemented");
-    assert!(matches!(err, AppError::NotImplemented(_)));
+    .expect_err("expected database not found");
+    assert!(matches!(err, AppError::DatabaseNotFound(_)));
 
     cleanup_app_files(&app);
 }

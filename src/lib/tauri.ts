@@ -236,6 +236,22 @@ export const database = {
     return CustomIconMapSchema.parse(result);
   },
 
+  async lock(dbId: string): Promise<DatabaseInfo> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("lock_database", { dbId });
+    return DatabaseInfoSchema.parse(result);
+  },
+
+  async unlock(dbId: string, password?: string): Promise<DatabaseInfo> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("unlock_database", { dbId, password });
+    return DatabaseInfoSchema.parse(result);
+  },
+
+  async reportActivity(): Promise<void> {
+    return invoke("report_activity");
+  },
+
   /**
    * List all currently open databases.
    */

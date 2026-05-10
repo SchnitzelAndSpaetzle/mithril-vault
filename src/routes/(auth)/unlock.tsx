@@ -15,6 +15,7 @@ export const Route = createFileRoute("/(auth)/unlock")({
     const path = deps.path;
     let initialKeyfile = "";
     let rememberKeyfile = false;
+    let isLocked = false;
 
     if (path) {
       const state = useDatabaseTabs.getState();
@@ -30,9 +31,14 @@ export const Route = createFileRoute("/(auth)/unlock")({
         });
       }
 
-      const tabId = existing?.id ?? state.addTab(path);
-      state.setActiveTab(tabId);
-      state.updateTabState(tabId, { path, state: "unlocking" });
+      if (existing?.state === "locked") {
+        isLocked = true;
+        state.setActiveTab(existing.id);
+      } else {
+        const tabId = existing?.id ?? state.addTab(path);
+        state.setActiveTab(tabId);
+        state.updateTabState(tabId, { path, state: "unlocking" });
+      }
 
       try {
         const savedKeyfile = await settings.getKeyfileForDatabase(path);
@@ -49,19 +55,21 @@ export const Route = createFileRoute("/(auth)/unlock")({
       initialPath: path,
       initialKeyfile,
       rememberKeyfile,
+      isLocked,
     };
   },
   component: RouteComponent,
 });
 
 function RouteComponent() {
-  const { initialPath, initialKeyfile, rememberKeyfile } =
+  const { initialPath, initialKeyfile, rememberKeyfile, isLocked } =
     Route.useLoaderData();
   return (
     <UnlockView
       initialPath={initialPath}
       initialKeyfile={initialKeyfile}
       rememberKeyfile={rememberKeyfile}
+      isLocked={isLocked}
     />
   );
 }

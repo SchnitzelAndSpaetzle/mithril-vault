@@ -4,6 +4,7 @@ use crate::dto::database::{
     CustomIconData, DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
 };
 use crate::dto::error::AppError;
+use crate::services::auto_lock::AutoLockService;
 use crate::services::kdbx::KdbxService;
 use std::sync::Arc;
 use tauri::State;
@@ -85,28 +86,23 @@ pub async fn open_database_with_keyfile_only(
     state.open_with_keyfile_only(&path, &keyfile_path)
 }
 
-/// Locks the database session.
-///
-/// Note: This is for session locking (UI lock), not storage-level locking.
+/// Locks the database session by dropping decrypted data from memory.
 #[tauri::command]
-pub async fn lock_database(db_id: String) -> Result<(), AppError> {
-    let _ = db_id;
-    // TODO: Implement session locking (clear decrypted data in-memory)
-    Err(AppError::NotImplemented(
-        "lock_database (session lock)".into(),
-    ))
+pub async fn lock_database(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<DatabaseInfo, AppError> {
+    state.lock(&db_id)
 }
 
-/// Unlocks the database session with a password.
-///
-/// Note: This is for session unlocking (UI unlock), not storage-level unlocking.
+/// Unlocks the database session by re-opening from disk with optional password.
 #[tauri::command]
-pub async fn unlock_database(db_id: String, password: String) -> Result<(), AppError> {
-    let _ = (db_id, password);
-    // TODO: Implement session unlocking (re-decrypt with password)
-    Err(AppError::NotImplemented(
-        "unlock_database (session unlock)".into(),
-    ))
+pub async fn unlock_database(
+    db_id: String,
+    password: Option<String>,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<DatabaseInfo, AppError> {
+    state.unlock(&db_id, password.as_deref())
 }
 
 /// Inspects a KDBX file without requiring credentials.
@@ -171,4 +167,11 @@ pub async fn list_open_databases(
 #[tauri::command]
 pub async fn generate_keyfile(output_path: String) -> Result<(), AppError> {
     crate::services::kdbx::keyfile::generate_keyfile(&output_path)
+}
+
+/// Reports user activity to reset the auto-lock timeout.
+#[tauri::command]
+pub async fn report_activity(state: State<'_, Arc<AutoLockService>>) -> Result<(), AppError> {
+    state.report_activity();
+    Ok(())
 }

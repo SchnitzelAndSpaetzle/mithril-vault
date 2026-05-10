@@ -112,11 +112,20 @@ export function useEntryEditForm({
     groupIdRef.current = groupId;
   }, [groupId]);
 
+  // Reset state when the active entry changes. React-internal state (error,
+  // loading flag) is reset during render via the "store previous prop in
+  // state" pattern; the RHF form.reset stays in an effect since it's an
+  // external system update.
+  const [prevFormKey, setPrevFormKey] = useState({ dbId, entryId });
+  if (prevFormKey.dbId !== dbId || prevFormKey.entryId !== entryId) {
+    setPrevFormKey({ dbId, entryId });
+    setSecretLoadError(null);
+    setIsLoadingSecrets(Boolean(entryId));
+  }
+
   useEffect(() => {
     const currentEntry = entryRef.current ?? null;
     form.reset(getEntryFormDefaults(currentEntry, groupIdRef.current));
-    setSecretLoadError(null);
-    setIsLoadingSecrets(Boolean(entryId));
   }, [dbId, entryId, form]);
 
   useEffect(() => {

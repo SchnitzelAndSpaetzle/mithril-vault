@@ -30,7 +30,8 @@ impl KdbxService {
             let open_db = databases
                 .get(&normalized_path)
                 .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-            let entry = find_entry_by_id_ref(&open_db.db.root, entry_id)
+            let db = open_db.db_or_locked()?;
+            let entry = find_entry_by_id_ref(&db.root, entry_id)
                 .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
             (
                 entry.get_url().map(str::to_string),
@@ -102,7 +103,8 @@ impl KdbxService {
         let open_db = databases
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        let Some((entry, _group_id)) = find_entry_by_id_mut(&mut open_db.db.root, entry_id) else {
+        let db = open_db.db_mut_or_locked()?;
+        let Some((entry, _group_id)) = find_entry_by_id_mut(&mut db.root, entry_id) else {
             return Err(AppError::EntryNotFound(entry_id.to_string()));
         };
 
@@ -130,17 +132,20 @@ impl KdbxService {
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
-        let Some((entry, _group_id)) = find_entry_by_id_mut(&mut open_db.db.root, entry_id) else {
-            return Err(AppError::EntryNotFound(entry_id.to_string()));
+        let db = open_db.db_mut_or_locked()?;
+
+        let already_has = {
+            let entry_ref = find_entry_by_id_ref(&db.root, entry_id)
+                .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+            entry_ref.custom_icon_uuid.is_some()
         };
 
-        if !force && entry.custom_icon_uuid.is_some() {
+        if !force && already_has {
             return Ok(false);
         }
 
         let target_hash = hash_bytes(icon_bytes);
-        let existing_uuid = open_db
-            .db
+        let existing_uuid = db
             .meta
             .custom_icons
             .icons
@@ -151,11 +156,15 @@ impl KdbxService {
             uuid
         } else {
             let uuid = Uuid::new_v4();
-            open_db.db.meta.custom_icons.icons.push(Icon {
+            db.meta.custom_icons.icons.push(Icon {
                 uuid,
                 data: icon_bytes.to_vec(),
             });
             uuid
+        };
+
+        let Some((entry, _group_id)) = find_entry_by_id_mut(&mut db.root, entry_id) else {
+            return Err(AppError::EntryNotFound(entry_id.to_string()));
         };
 
         if entry.custom_icon_uuid == Some(icon_uuid) {
@@ -546,12 +555,13 @@ mod tests {
         let normalized = KdbxService::normalize_path(&db_path);
         let databases = service.lock_databases().expect("lock databases");
         let open_db = databases.get(&normalized).expect("open db");
-        assert_eq!(open_db.db.meta.custom_icons.icons.len(), 1);
+        let db = open_db.db_or_locked().expect("unlocked db");
+        assert_eq!(db.meta.custom_icons.icons.len(), 1);
 
-        let icon_a = find_entry_by_id_ref(&open_db.db.root, &entry_a)
+        let icon_a = find_entry_by_id_ref(&db.root, &entry_a)
             .and_then(|entry| entry.custom_icon_uuid)
             .expect("entry A icon");
-        let icon_b = find_entry_by_id_ref(&open_db.db.root, &entry_b)
+        let icon_b = find_entry_by_id_ref(&db.root, &entry_b)
             .and_then(|entry| entry.custom_icon_uuid)
             .expect("entry B icon");
         assert_eq!(icon_a, icon_b);
@@ -584,7 +594,8 @@ mod tests {
         let normalized = KdbxService::normalize_path(&db_path);
         let databases = service.lock_databases().expect("lock databases");
         let open_db = databases.get(&normalized).expect("open db");
-        let entry = find_entry_by_id_ref(&open_db.db.root, &entry_a).expect("entry");
+        let db = open_db.db_or_locked().expect("unlocked db");
+        let entry = find_entry_by_id_ref(&db.root, &entry_a).expect("entry");
         assert!(entry.custom_icon_uuid.is_none());
     }
 }

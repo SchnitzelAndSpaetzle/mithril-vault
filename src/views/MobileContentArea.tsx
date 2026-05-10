@@ -27,7 +27,7 @@ export default function MobileContentArea() {
   const { groupName, entryCount, activeTag } = useEntryListHeader();
   const navigate = useNavigate();
   const { tab, dbId } = useActiveDatabase();
-  const removeTab = useDatabaseTabs((s) => s.removeTab);
+  const updateTabInfo = useDatabaseTabs((s) => s.updateTabInfo);
   const { preferences } = useAppPreferences();
   const clearClipboardOnLock = Boolean(
     preferences?.security.clearClipboardOnLock
@@ -81,14 +81,14 @@ export default function MobileContentArea() {
               console.error("Failed to clear clipboard before lock:", error);
             }
           }
-          await database.close(dbId);
-          removeTab(tab.id);
-          void navigate({ to: "/" });
+          const info = await database.lock(dbId);
+          updateTabInfo(tab.id, info);
+          void navigate({ to: "/unlock", search: { path: dbId } });
         } catch {
           // lock failed silently
         }
       })();
-    }, [tab, dbId, removeTab, navigate, clearClipboardOnLock]),
+    }, [tab, dbId, updateTabInfo, navigate, clearClipboardOnLock]),
     Boolean(dbId)
   );
 

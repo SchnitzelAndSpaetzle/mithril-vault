@@ -19,3 +19,8 @@ allow-licenses:
   - Zlib
 allow-dependencies-licenses:
   - pkg:cargo/rust-argon2
+  # libdbus-sys declares license as "Apache-2.0/MIT" (pre-SPDX slash form).
+  # GitHub's dependency-review-action can't parse it and tags it
+  # LicenseRef-bad-apache-2.0mit. Both Apache-2.0 and MIT are already
+  # allowed; cargo-deny parses the slash form correctly.
+  - pkg:cargo/libdbus-sys

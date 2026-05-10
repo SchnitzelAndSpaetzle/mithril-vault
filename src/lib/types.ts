@@ -224,7 +224,7 @@ export const GeneralSettingsSchema = z.object({
 export type GeneralSettings = z.infer<typeof GeneralSettingsSchema>;
 
 export const SecuritySettingsSchema = z.object({
-  autoLockTimeout: z.number().int().positive(),
+  autoLockTimeout: z.number().int().nonnegative(),
   clipboardClearTimeout: z.number().int().positive(),
   clearClipboardOnLock: z.boolean(),
   showClipboardCountdown: z.boolean(),

@@ -14,6 +14,7 @@ interface UnlockViewProps extends React.ComponentProps<"div"> {
   initialPath?: string | undefined;
   initialKeyfile?: string | undefined;
   rememberKeyfile?: boolean | undefined;
+  isLocked?: boolean | undefined;
 }
 
 function getDirectoryFromPath(path: string | undefined): string {
@@ -28,6 +29,7 @@ export function UnlockView({
   initialPath,
   initialKeyfile,
   rememberKeyfile,
+  isLocked,
   ...props
 }: UnlockViewProps) {
   const { t } = useTranslation();
@@ -39,11 +41,16 @@ export function UnlockView({
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-xl">
-            {filename
-              ? t("unlock.titleWithName", { filename })
-              : t("unlock.title")}
+            {isLocked
+              ? t("unlock.lockedTitle", { filename: filename ?? "" })
+              : filename
+                ? t("unlock.titleWithName", { filename })
+                : t("unlock.title")}
           </CardTitle>
-          {directory && (
+          {isLocked && (
+            <CardDescription>{t("unlock.lockedDescription")}</CardDescription>
+          )}
+          {!isLocked && directory && (
             <CardDescription>
               <code className="bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-xs font-semibold">
                 {directory}
@@ -56,6 +63,7 @@ export function UnlockView({
             initialPath={initialPath}
             initialKeyfile={initialKeyfile}
             rememberKeyfile={rememberKeyfile}
+            isLocked={isLocked}
           />
         </CardContent>
       </Card>

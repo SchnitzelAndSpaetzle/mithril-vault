@@ -89,7 +89,7 @@ export interface FileRoutesByFullPath {
   '/unlock': typeof authUnlockRoute
   '/': typeof authIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
-  '/settings': typeof SettingsIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/dashboard/entry/$id': typeof DashboardEntryIdRoute
   '/dashboard/entry/edit': typeof DashboardEntryEditRoute
   '/dashboard/entry/new': typeof DashboardEntryNewRoute
@@ -131,7 +131,7 @@ export interface FileRouteTypes {
     | '/unlock'
     | '/'
     | '/dashboard/'
-    | '/settings'
+    | '/settings/'
     | '/dashboard/entry/$id'
     | '/dashboard/entry/edit'
     | '/dashboard/entry/new'
@@ -189,7 +189,7 @@ declare module '@tanstack/react-router' {
     '/settings/': {
       id: '/settings/'
       path: '/settings'
-      fullPath: '/settings'
+      fullPath: '/settings/'
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
