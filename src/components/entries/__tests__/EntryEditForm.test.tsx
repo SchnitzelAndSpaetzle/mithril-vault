@@ -724,6 +724,44 @@ describe("EntryEditForm", () => {
     });
   });
 
+  it("auto-fetches favicon after creating via Save and create another", async () => {
+    mockAutoDownloadFavicons.value = true;
+    const created = {
+      ...mockEntry,
+      id: "entry-new",
+      url: "https://newsite.example.com",
+    };
+    mockCreateEntry.mockResolvedValueOnce(created);
+    mockFetchFavicon.mockResolvedValueOnce("updated");
+
+    render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        { target: { value: "Brand new" } }
+      );
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.urlPlaceholder"),
+        { target: { value: "https://newsite.example.com" } }
+      );
+      fireEvent.click(screen.getByText("entries.form.saveAndNew"));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateEntry).toHaveBeenCalled();
+      expect(mockFetchFavicon).toHaveBeenCalledWith("db-1", "entry-new", false);
+    });
+  });
+
   it("auto-fetches favicon after save when enabled", async () => {
     mockAutoDownloadFavicons.value = true;
     const onSave = vi.fn();

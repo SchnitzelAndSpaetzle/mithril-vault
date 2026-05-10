@@ -229,6 +229,7 @@ export function useEntryEditForm({
             ? await entriesApi.setCustomIcon(dbId, entry.id, nextUuid)
             : await entriesApi.clearCustomIcon(dbId, entry.id);
           if (customIconChanged) {
+            await database.save(dbId);
             await refreshFaviconQueries(entry.id);
           }
         }
@@ -309,7 +310,7 @@ export function useEntryEditForm({
       toCustomFieldPayload(values);
 
     try {
-      await createEntry.mutateAsync({
+      const result = await createEntry.mutateAsync({
         dbId,
         groupId: values.groupId ?? groupId,
         data: {
@@ -327,6 +328,7 @@ export function useEntryEditForm({
       toast.success(t("entries.toast.created"));
       form.reset(getEntryFormDefaults(null, values.groupId ?? groupId));
       void generateNewPassword();
+      void maybeAutoFetchFavicon(result.id, values.url);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(t("entries.toast.createFailed", { error: message }));

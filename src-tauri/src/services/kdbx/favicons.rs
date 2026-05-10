@@ -67,7 +67,15 @@ impl KdbxService {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(5))
             .timeout(std::time::Duration::from_secs(10))
-            .redirect(Policy::limited(5))
+            .redirect(Policy::custom(|attempt| {
+                if attempt.url().scheme() != "https" {
+                    attempt.stop()
+                } else if attempt.previous().len() >= 5 {
+                    attempt.error("too many redirects")
+                } else {
+                    attempt.follow()
+                }
+            }))
             .user_agent("MithrilVault/0.1")
             .build()
             .map_err(|error| AppError::Io(error.to_string()))?;
@@ -765,6 +773,32 @@ mod tests {
         .concat();
         let (url, handle) = serve_once(response);
         let client = reqwest::Client::new();
+
+        let fetched = tauri::async_runtime::block_on(fetch_favicon_bytes(&client, &url));
+        handle.join().expect("server finishes");
+
+        assert!(fetched.is_none());
+    }
+
+    #[test]
+    fn fetch_favicon_bytes_rejects_non_https_redirects() {
+        // Server replies with a redirect to an http:// target. The redirect
+        // policy should stop following, so the final response stays 302 and
+        // is_success() filters it out.
+        let response = b"HTTP/1.1 302 Found\r\nLocation: http://example.invalid/favicon.ico\r\nContent-Length: 0\r\n\r\n".to_vec();
+        let (url, handle) = serve_once(response);
+        let client = reqwest::Client::builder()
+            .redirect(Policy::custom(|attempt| {
+                if attempt.url().scheme() != "https" {
+                    attempt.stop()
+                } else if attempt.previous().len() >= 5 {
+                    attempt.error("too many redirects")
+                } else {
+                    attempt.follow()
+                }
+            }))
+            .build()
+            .expect("client");
 
         let fetched = tauri::async_runtime::block_on(fetch_favicon_bytes(&client, &url));
         handle.join().expect("server finishes");
