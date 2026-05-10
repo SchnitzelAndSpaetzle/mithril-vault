@@ -26,7 +26,7 @@ pub struct KdbxService {
 }
 
 impl KdbxService {
-    pub const FAVICON_FAILURE_COOLDOWN: Duration = Duration::from_secs(15 * 60);
+    pub const FAVICON_FAILURE_COOLDOWN: Duration = Duration::from_mins(15);
 
     /// Creates a new KDBX service.
     pub fn new() -> Self {
