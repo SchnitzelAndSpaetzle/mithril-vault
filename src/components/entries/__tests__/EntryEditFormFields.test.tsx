@@ -43,6 +43,7 @@ const defaultValues: EntryFormValues = {
   url: "",
   notes: "",
   iconId: 0,
+  customIconUuid: null,
   tags: [],
   customFields: [],
 };
@@ -69,6 +70,9 @@ describe("EntryEditForm field components", () => {
         canFetchFavicon={false}
         isFetchingFavicon={false}
         isClearingCustomIcon={false}
+        customIcons={{}}
+        onIconChange={vi.fn()}
+        onCustomIconChange={vi.fn()}
         onFetchFavicon={vi.fn()}
         onClearCustomIcon={vi.fn()}
       />

@@ -65,6 +65,13 @@ export type CustomIconData = z.infer<typeof CustomIconDataSchema>;
 export const CustomIconMapSchema = z.record(z.string(), CustomIconDataSchema);
 export type CustomIconMap = z.infer<typeof CustomIconMapSchema>;
 
+export const FaviconFetchOutcomeSchema = z.enum([
+  "updated",
+  "unchanged",
+  "notFound",
+]);
+export type FaviconFetchOutcome = z.infer<typeof FaviconFetchOutcomeSchema>;
+
 export const PasswordGeneratorOptionsSchema = z.object({
   length: z.number().int().min(1).max(128),
   uppercase: z.boolean(),

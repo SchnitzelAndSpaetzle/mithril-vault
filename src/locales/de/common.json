@@ -202,6 +202,7 @@
       "secretLoadFailed": "Geschützte Werte für diesen Eintrag konnten nicht geladen werden.",
       "secretRetryRequired": "Laden Sie die geschützten Werte erneut, bevor Sie speichern.",
       "faviconUpdated": "Favicon aktualisiert",
+      "faviconAlreadyUpToDate": "Favicon ist bereits aktuell.",
       "faviconNotFound": "Für diese URL konnte kein Favicon abgerufen werden.",
       "faviconUpdateFailed": "Favicon konnte nicht aktualisiert werden: {{error}}",
       "customIconCleared": "Benutzerdefiniertes Symbol entfernt",
@@ -491,7 +492,10 @@
     "excellent": "Ausgezeichnet"
   },
   "iconPicker": {
-    "chooseIcon": "Symbol auswählen"
+    "chooseIcon": "Symbol auswählen",
+    "customIcons": "Benutzerdefinierte Symbole",
+    "builtInIcons": "Integrierte Symbole",
+    "customIconLabel": "Benutzerdefiniertes Symbol {{uuid}}"
   },
   "errors": {
     "failedToLoadSettings": "Einstellungen konnten nicht geladen werden: {{error}}",

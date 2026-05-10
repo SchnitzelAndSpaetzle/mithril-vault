@@ -37,9 +37,14 @@ describe("tauri wrappers validation", () => {
   it("fetches and clears entry custom icons through entry wrappers", async () => {
     const dbId = "/tmp/test.kdbx";
     const entryId = crypto.randomUUID();
-    vi.mocked(invoke).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    vi.mocked(invoke)
+      .mockResolvedValueOnce("updated")
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
 
-    await expect(entries.fetchFavicon(dbId, entryId, true)).resolves.toBe(true);
+    await expect(entries.fetchFavicon(dbId, entryId, true)).resolves.toBe(
+      "updated"
+    );
     expect(invoke).toHaveBeenNthCalledWith(1, "fetch_entry_favicon", {
       dbId,
       id: entryId,
@@ -50,6 +55,16 @@ describe("tauri wrappers validation", () => {
     expect(invoke).toHaveBeenNthCalledWith(2, "clear_entry_custom_icon", {
       dbId,
       id: entryId,
+    });
+
+    const iconUuid = crypto.randomUUID();
+    await expect(entries.setCustomIcon(dbId, entryId, iconUuid)).resolves.toBe(
+      true
+    );
+    expect(invoke).toHaveBeenNthCalledWith(3, "set_entry_custom_icon", {
+      dbId,
+      id: entryId,
+      iconUuid,
     });
   });
 

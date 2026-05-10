@@ -202,6 +202,7 @@
       "secretLoadFailed": "Failed to load protected values for this entry.",
       "secretRetryRequired": "Retry loading protected values before saving.",
       "faviconUpdated": "Favicon updated",
+      "faviconAlreadyUpToDate": "Favicon is already up to date.",
       "faviconNotFound": "No favicon could be fetched for this URL.",
       "faviconUpdateFailed": "Failed to update favicon: {{error}}",
       "customIconCleared": "Custom icon cleared",
@@ -493,7 +494,10 @@
     "excellent": "Excellent"
   },
   "iconPicker": {
-    "chooseIcon": "Choose an icon"
+    "chooseIcon": "Choose an icon",
+    "customIcons": "Custom icons",
+    "builtInIcons": "Built-in icons",
+    "customIconLabel": "Custom icon {{uuid}}"
   },
   "errors": {
     "failedToLoadSettings": "Failed to load settings: {{error}}",

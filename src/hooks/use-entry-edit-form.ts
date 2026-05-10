@@ -35,6 +35,7 @@ function getEntryFormDefaults(
       url: "",
       notes: "",
       iconId: 0,
+      customIconUuid: null,
       tags: [],
       customFields: [],
       groupId: defaultGroupId,
@@ -48,6 +49,7 @@ function getEntryFormDefaults(
     url: entry.url ?? "",
     notes: entry.notes ?? "",
     iconId: entry.iconId ?? 0,
+    customIconUuid: entry.customIconUuid ?? null,
     tags: [...entry.tags],
     customFields: entry.customFieldMeta.map((meta) => ({
       key: meta.key,
@@ -221,6 +223,16 @@ export function useEntryEditForm({
           },
         });
 
+        if (form.formState.dirtyFields.customIconUuid) {
+          const nextUuid = values.customIconUuid;
+          const customIconChanged = nextUuid
+            ? await entriesApi.setCustomIcon(dbId, entry.id, nextUuid)
+            : await entriesApi.clearCustomIcon(dbId, entry.id);
+          if (customIconChanged) {
+            await refreshFaviconQueries(entry.id);
+          }
+        }
+
         if (values.groupId && values.groupId !== entry.groupId) {
           result = await moveEntry.mutateAsync({
             dbId,
@@ -335,11 +347,13 @@ export function useEntryEditForm({
     if (!entryId) return;
     setIsFetchingFavicon(true);
     try {
-      const changed = await entriesApi.fetchFavicon(dbId, entryId, true);
-      if (changed) {
+      const outcome = await entriesApi.fetchFavicon(dbId, entryId, true);
+      if (outcome === "updated") {
         await database.save(dbId);
         toast.success(t("entries.toast.faviconUpdated"));
         await refreshFaviconQueries(entryId);
+      } else if (outcome === "unchanged") {
+        toast.success(t("entries.toast.faviconAlreadyUpToDate"));
       } else {
         toast.error(t("entries.toast.faviconNotFound"));
       }
@@ -376,8 +390,8 @@ export function useEntryEditForm({
     if (!preferences?.security.autoDownloadFavicons) return;
     if (!urlValue.trim()) return;
     try {
-      const changed = await entriesApi.fetchFavicon(dbId, targetEntryId, false);
-      if (changed) {
+      const outcome = await entriesApi.fetchFavicon(dbId, targetEntryId, false);
+      if (outcome === "updated") {
         await database.save(dbId);
         await refreshFaviconQueries(targetEntryId);
       }
@@ -411,6 +425,7 @@ export function useEntryEditForm({
   const watchedUsername =
     useWatch({ control: form.control, name: "username" }) ?? "";
   const watchedUrl = useWatch({ control: form.control, name: "url" }) ?? "";
+  const isUrlDirty = Boolean(form.formState.dirtyFields.url);
 
   return {
     form,
@@ -432,7 +447,7 @@ export function useEntryEditForm({
     isFetchingFavicon,
     isClearingCustomIcon,
     hasCustomIcon: Boolean(entry?.customIconUuid),
-    canFetchFavicon: Boolean(entryId && watchedUrl.trim()),
+    canFetchFavicon: Boolean(entryId && watchedUrl.trim() && !isUrlDirty),
     fetchFaviconFromUrl,
     clearCustomIcon,
   };

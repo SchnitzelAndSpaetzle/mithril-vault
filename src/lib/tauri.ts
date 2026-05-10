@@ -13,6 +13,7 @@ import type {
   DatabaseHeaderInfo,
   DatabaseInfo,
   Entry,
+  FaviconFetchOutcome,
   GeneratedPassphrase,
   GeneratedPassword,
   Group,
@@ -31,6 +32,7 @@ import {
   DatabaseHeaderInfoSchema,
   DatabaseInfoSchema,
   EntrySchema,
+  FaviconFetchOutcomeSchema,
   GeneratedPassphraseSchema,
   GeneratedPasswordSchema,
   GroupSchema,
@@ -348,18 +350,33 @@ export const entries = {
     dbId: string,
     id: string,
     force?: boolean
-  ): Promise<boolean> {
+  ): Promise<FaviconFetchOutcome> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
     ForceSchema.parse({ force });
     const result = await invoke("fetch_entry_favicon", { dbId, id, force });
-    return z.boolean().parse(result);
+    return FaviconFetchOutcomeSchema.parse(result);
   },
 
   async clearCustomIcon(dbId: string, id: string): Promise<boolean> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
     const result = await invoke("clear_entry_custom_icon", { dbId, id });
+    return z.boolean().parse(result);
+  },
+
+  async setCustomIcon(
+    dbId: string,
+    id: string,
+    iconUuid: string
+  ): Promise<boolean> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("set_entry_custom_icon", {
+      dbId,
+      id,
+      iconUuid,
+    });
     return z.boolean().parse(result);
   },
 };

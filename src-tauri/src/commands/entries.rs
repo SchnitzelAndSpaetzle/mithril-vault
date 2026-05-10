@@ -1,5 +1,6 @@
 use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::dto::error::AppError;
+use crate::services::kdbx::favicons::FaviconFetchOutcome;
 use crate::services::kdbx::KdbxService;
 use crate::services::settings::SettingsService;
 use std::sync::Arc;
@@ -128,7 +129,7 @@ pub async fn fetch_entry_favicon(
     force: Option<bool>,
     kdbx_state: State<'_, Arc<KdbxService>>,
     settings_state: State<'_, Arc<SettingsService>>,
-) -> Result<bool, AppError> {
+) -> Result<FaviconFetchOutcome, AppError> {
     let settings = settings_state.get_settings()?;
     kdbx_state
         .fetch_entry_favicon(
@@ -148,4 +149,15 @@ pub async fn clear_entry_custom_icon(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<bool, AppError> {
     state.clear_entry_custom_icon(&db_id, &id)
+}
+
+/// Assigns an existing custom icon (already in the database) to an entry.
+#[tauri::command]
+pub async fn set_entry_custom_icon(
+    db_id: String,
+    id: String,
+    icon_uuid: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<bool, AppError> {
+    state.set_entry_custom_icon(&db_id, &id, &icon_uuid)
 }

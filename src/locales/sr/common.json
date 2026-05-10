@@ -202,6 +202,7 @@
       "secretLoadFailed": "Greška pri učitavanju zaštićenih vrednosti za ovaj unos.",
       "secretRetryRequired": "Pokušajte ponovo da učitate zaštićene vrednosti pre čuvanja.",
       "faviconUpdated": "Favikona je ažurirana",
+      "faviconAlreadyUpToDate": "Favikona je već ažurna.",
       "faviconNotFound": "Favikona za ovaj URL nije pronađena.",
       "faviconUpdateFailed": "Neuspešno ažuriranje favikone: {{error}}",
       "customIconCleared": "Prilagođena ikona je uklonjena",
@@ -491,7 +492,10 @@
     "excellent": "Odlična"
   },
   "iconPicker": {
-    "chooseIcon": "Izaberite ikonu"
+    "chooseIcon": "Izaberite ikonu",
+    "customIcons": "Prilagođene ikone",
+    "builtInIcons": "Ugrađene ikone",
+    "customIconLabel": "Prilagođena ikona {{uuid}}"
   },
   "errors": {
     "failedToLoadSettings": "Greška pri učitavanju podešavanja: {{error}}",

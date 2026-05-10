@@ -4,6 +4,7 @@ use image::ImageFormat;
 use keepass::db::{Entry as KeepassEntry, Icon, Node, Times};
 use reqwest::header::CONTENT_TYPE;
 use reqwest::redirect::Policy;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::io::Cursor;
@@ -12,9 +13,21 @@ use uuid::Uuid;
 
 use super::KdbxService;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FaviconFetchOutcome {
+    Updated,
+    Unchanged,
+    NotFound,
+}
+
 const FAVICON_MAX_BYTES: usize = 512 * 1024;
 const GOOGLE_FAVICON_URL: &str = "https://www.google.com/s2/favicons";
 const ICON_HORSE_URL: &str = "https://icon.horse/icon";
+const COMMON_MULTI_LABEL_PUBLIC_SUFFIXES: &[&str] = &[
+    "ac.uk", "co.jp", "co.uk", "com.au", "com.br", "com.mx", "com.tr", "edu.au", "gov.au",
+    "gov.uk", "net.au", "net.br", "net.uk", "org.au", "org.br", "org.uk",
+];
 
 impl KdbxService {
     pub async fn fetch_entry_favicon(
@@ -23,7 +36,7 @@ impl KdbxService {
         entry_id: &str,
         allow_third_party_fallbacks: bool,
         force: bool,
-    ) -> Result<bool, AppError> {
+    ) -> Result<FaviconFetchOutcome, AppError> {
         let (entry_url, has_custom_icon) = {
             let normalized_path = Self::normalize_path(db_id);
             let databases = self.lock_databases()?;
@@ -40,15 +53,15 @@ impl KdbxService {
         };
 
         if !force && has_custom_icon {
-            return Ok(false);
+            return Ok(FaviconFetchOutcome::Unchanged);
         }
 
         let Some(raw_url) = entry_url else {
-            return Ok(false);
+            return Ok(FaviconFetchOutcome::NotFound);
         };
 
         let Some((exact_host, root_host)) = extract_hosts(&raw_url) else {
-            return Ok(false);
+            return Ok(FaviconFetchOutcome::NotFound);
         };
 
         let client = reqwest::Client::builder()
@@ -87,14 +100,60 @@ impl KdbxService {
             let changed =
                 self.assign_entry_custom_icon(db_id, entry_id, &icon_bytes, &mime_type, force)?;
             let _ = self.clear_favicon_domain_failure(&candidate.cooldown_domain);
-            return Ok(changed);
+            return Ok(if changed {
+                FaviconFetchOutcome::Updated
+            } else {
+                FaviconFetchOutcome::Unchanged
+            });
         }
 
         for domain in attempted_domains {
             let _ = self.mark_favicon_domain_failed(&domain);
         }
 
-        Ok(false)
+        Ok(FaviconFetchOutcome::NotFound)
+    }
+
+    pub fn set_entry_custom_icon(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        icon_uuid: &str,
+    ) -> Result<bool, AppError> {
+        let parsed_uuid = Uuid::parse_str(icon_uuid)
+            .map_err(|error| AppError::InvalidInput(error.to_string()))?;
+
+        let normalized_path = Self::normalize_path(db_id);
+        let mut databases = self.lock_databases()?;
+        let open_db = databases
+            .get_mut(&normalized_path)
+            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        let db = open_db.db_mut_or_locked()?;
+
+        let icon_exists = db
+            .meta
+            .custom_icons
+            .icons
+            .iter()
+            .any(|icon| icon.uuid == parsed_uuid);
+        if !icon_exists {
+            return Err(AppError::InvalidInput(format!(
+                "custom icon {icon_uuid} not found in database"
+            )));
+        }
+
+        let Some((entry, _group_id)) = find_entry_by_id_mut(&mut db.root, entry_id) else {
+            return Err(AppError::EntryNotFound(entry_id.to_string()));
+        };
+
+        if entry.custom_icon_uuid == Some(parsed_uuid) {
+            return Ok(false);
+        }
+
+        entry.custom_icon_uuid = Some(parsed_uuid);
+        entry.times.set_last_modification(Times::now());
+        open_db.is_modified = true;
+        Ok(true)
     }
 
     pub fn clear_entry_custom_icon(&self, db_id: &str, entry_id: &str) -> Result<bool, AppError> {
@@ -237,7 +296,15 @@ fn get_root_host(host: &str) -> Option<String> {
         return None;
     }
 
-    Some(parts[parts.len() - 2..].join("."))
+    let suffix = parts[parts.len() - 2..].join(".");
+    if COMMON_MULTI_LABEL_PUBLIC_SUFFIXES.contains(&suffix.as_str()) {
+        if parts.len() < 4 {
+            return None;
+        }
+        return Some(parts[parts.len() - 3..].join("."));
+    }
+
+    Some(suffix)
 }
 
 async fn fetch_favicon_bytes(
@@ -245,6 +312,13 @@ async fn fetch_favicon_bytes(
     fetch_url: &str,
 ) -> Option<(Vec<u8>, Option<String>)> {
     let response = client.get(fetch_url).send().await.ok()?;
+    let requested_https = Url::parse(fetch_url)
+        .map(|url| url.scheme() == "https")
+        .unwrap_or(false);
+    if requested_https && response.url().scheme() != "https" {
+        return None;
+    }
+
     if !response.status().is_success() {
         return None;
     }
@@ -524,18 +598,18 @@ mod tests {
     }
 
     #[test]
-    fn fetch_entry_favicon_returns_false_without_url() {
+    fn fetch_entry_favicon_returns_not_found_without_url() {
         let (service, _dir, db_path, entry_id, _entry_b) = create_test_database();
-        let changed = tauri::async_runtime::block_on(
+        let outcome = tauri::async_runtime::block_on(
             service.fetch_entry_favicon(&db_path, &entry_id, false, true),
         )
         .expect("fetch favicon");
 
-        assert!(!changed);
+        assert_eq!(outcome, FaviconFetchOutcome::NotFound);
     }
 
     #[test]
-    fn fetch_entry_favicon_returns_false_for_invalid_url() {
+    fn fetch_entry_favicon_returns_not_found_for_invalid_url() {
         let (service, _dir, db_path, entry_id, _entry_b) = create_test_database();
         service
             .update_entry(
@@ -555,12 +629,51 @@ mod tests {
             )
             .expect("set invalid url");
 
-        let changed = tauri::async_runtime::block_on(
+        let outcome = tauri::async_runtime::block_on(
             service.fetch_entry_favicon(&db_path, &entry_id, false, true),
         )
         .expect("fetch favicon");
 
-        assert!(!changed);
+        assert_eq!(outcome, FaviconFetchOutcome::NotFound);
+    }
+
+    #[test]
+    fn set_entry_custom_icon_assigns_existing_icon() {
+        let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 99];
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("seed icon");
+
+        let icon_uuid = {
+            let normalized = KdbxService::normalize_path(&db_path);
+            let databases = service.lock_databases().expect("lock databases");
+            let open_db = databases.get(&normalized).expect("open db");
+            let db = open_db.db_or_locked().expect("unlocked db");
+            db.meta.custom_icons.icons[0].uuid.to_string()
+        };
+
+        let changed = service
+            .set_entry_custom_icon(&db_path, &entry_b, &icon_uuid)
+            .expect("set icon on b");
+        assert!(changed);
+
+        let unchanged = service
+            .set_entry_custom_icon(&db_path, &entry_b, &icon_uuid)
+            .expect("set icon on b again");
+        assert!(!unchanged);
+    }
+
+    #[test]
+    fn set_entry_custom_icon_rejects_unknown_uuid() {
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let result = service.set_entry_custom_icon(
+            &db_path,
+            &entry_a,
+            "00000000-0000-0000-0000-000000000000",
+        );
+
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
     }
 
     #[test]
@@ -569,6 +682,13 @@ mod tests {
 
         assert_eq!(hosts.0, "app.example.com");
         assert_eq!(hosts.1.as_deref(), Some("example.com"));
+        assert_eq!(
+            extract_hosts("https://login.example.co.uk")
+                .expect("extract multi-label public suffix root")
+                .1
+                .as_deref(),
+            Some("example.co.uk")
+        );
         assert!(extract_hosts("http://127.0.0.1:3000").is_some());
         assert_eq!(extract_hosts("not a url"), None);
     }

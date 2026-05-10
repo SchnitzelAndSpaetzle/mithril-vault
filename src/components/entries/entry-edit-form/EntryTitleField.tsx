@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { useTranslation } from "react-i18next";
-import { type Control, Controller } from "react-hook-form";
+import { type Control, Controller, useWatch } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { getKeepassIcon } from "@/lib/keepass-icons";
 import { IconPickerPopover } from "@/components/entries/IconPickerPopover";
 import type { EntryFormValues } from "@/lib/formTypes";
+import type { CustomIconMap } from "@/lib/types";
 
 interface EntryTitleFieldProps {
   control: Control<EntryFormValues>;
@@ -18,6 +19,9 @@ interface EntryTitleFieldProps {
   canFetchFavicon: boolean;
   isFetchingFavicon: boolean;
   isClearingCustomIcon: boolean;
+  customIcons: CustomIconMap;
+  onIconChange: (iconId: number) => void;
+  onCustomIconChange: (iconUuid: string) => void;
   onFetchFavicon: () => Promise<void> | void;
   onClearCustomIcon: () => Promise<void> | void;
 }
@@ -31,38 +35,51 @@ export function EntryTitleField({
   canFetchFavicon,
   isFetchingFavicon,
   isClearingCustomIcon,
+  customIcons,
+  onIconChange,
+  onCustomIconChange,
   onFetchFavicon,
   onClearCustomIcon,
 }: EntryTitleFieldProps) {
   const { t } = useTranslation();
   const showFaviconActions = isEditMode;
+  const iconId = useWatch({ control, name: "iconId" }) ?? 0;
+  const customIconUuid = useWatch({ control, name: "customIconUuid" }) ?? null;
+  const selectedCustomIcon = customIconUuid
+    ? customIcons[customIconUuid]
+    : null;
 
   return (
     <Field>
       <FieldLabel htmlFor="title">{t("entries.form.title")}</FieldLabel>
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <Controller
-            name="iconId"
-            control={control}
-            render={({ field }) => (
-              <IconPickerPopover
-                selectedIconId={field.value}
-                onSelect={field.onChange}
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label={t("entries.form.chooseIcon")}
-                >
-                  {createElement(getKeepassIcon(field.value), {
-                    className: "size-4",
-                  })}
-                </Button>
-              </IconPickerPopover>
-            )}
-          />
+          <IconPickerPopover
+            selectedIconId={iconId}
+            selectedCustomIconUuid={customIconUuid}
+            customIcons={customIcons}
+            onSelect={onIconChange}
+            onSelectCustomIcon={onCustomIconChange}
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label={t("entries.form.chooseIcon")}
+            >
+              {selectedCustomIcon ? (
+                <img
+                  src={`data:${selectedCustomIcon.mimeType};base64,${selectedCustomIcon.data}`}
+                  alt=""
+                  className="size-4 object-contain"
+                />
+              ) : (
+                createElement(getKeepassIcon(iconId), {
+                  className: "size-4",
+                })
+              )}
+            </Button>
+          </IconPickerPopover>
           <Controller
             name="title"
             control={control}

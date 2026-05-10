@@ -70,6 +70,7 @@ const entryFormBaseSchema = z.object({
   url: z.string(),
   notes: z.string(),
   iconId: z.number().int(),
+  customIconUuid: z.string().nullable(),
   tags: z.array(z.string()),
   customFields: z.array(entryCustomFieldSchema),
   groupId: z.string().optional(),
