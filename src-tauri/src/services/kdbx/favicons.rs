@@ -319,7 +319,7 @@ async fn fetch_favicon_bytes(
     client: &reqwest::Client,
     fetch_url: &str,
 ) -> Option<(Vec<u8>, Option<String>)> {
-    let response = client.get(fetch_url).send().await.ok()?;
+    let mut response = client.get(fetch_url).send().await.ok()?;
     let requested_https = Url::parse(fetch_url).is_ok_and(|url| url.scheme() == "https");
     if requested_https && response.url().scheme() != "https" {
         return None;
@@ -341,8 +341,27 @@ async fn fetch_favicon_bytes(
         }
     }
 
-    let bytes = response.bytes().await.ok()?;
-    if bytes.is_empty() || bytes.len() > FAVICON_MAX_BYTES {
+    if let Some(len) = response.content_length() {
+        if len > FAVICON_MAX_BYTES as u64 {
+            return None;
+        }
+    }
+
+    let mut bytes: Vec<u8> = Vec::new();
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) => {
+                if bytes.len().saturating_add(chunk.len()) > FAVICON_MAX_BYTES {
+                    return None;
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            Ok(None) => break,
+            Err(_) => return None,
+        }
+    }
+
+    if bytes.is_empty() {
         return None;
     }
 
@@ -350,7 +369,7 @@ async fn fetch_favicon_bytes(
         return None;
     }
 
-    Some((bytes.to_vec(), content_type))
+    Some((bytes, content_type))
 }
 
 fn normalize_content_type(value: &str) -> String {
@@ -572,7 +591,10 @@ mod tests {
             let (mut stream, _) = listener.accept().expect("accept request");
             let mut request = [0_u8; 1024];
             let _ = stream.read(&mut request);
-            stream.write_all(&response).expect("write response");
+            // Client may close the connection mid-write (e.g. when the
+            // streaming cap rejects an oversized body), so a broken pipe
+            // here is expected.
+            let _ = stream.write_all(&response);
         });
 
         (format!("http://{address}/favicon.ico"), handle)
@@ -776,6 +798,28 @@ mod tests {
 
         let fetched = tauri::async_runtime::block_on(fetch_favicon_bytes(&client, &url));
         handle.join().expect("server finishes");
+
+        assert!(fetched.is_none());
+    }
+
+    #[test]
+    fn fetch_favicon_bytes_caps_streamed_body_without_content_length() {
+        // No Content-Length header — the streaming reader must enforce the
+        // cap on its own and short-circuit before buffering the whole body.
+        let oversized = vec![0_u8; FAVICON_MAX_BYTES + 1];
+        let response = [
+            b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nTransfer-Encoding: chunked\r\n\r\n"
+                .as_slice(),
+            format!("{:x}\r\n", oversized.len()).as_bytes(),
+            oversized.as_slice(),
+            b"\r\n0\r\n\r\n",
+        ]
+        .concat();
+        let (url, handle) = serve_once(response);
+        let client = reqwest::Client::new();
+
+        let fetched = tauri::async_runtime::block_on(fetch_favicon_bytes(&client, &url));
+        let _ = handle.join();
 
         assert!(fetched.is_none());
     }

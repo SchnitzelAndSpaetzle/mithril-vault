@@ -18,6 +18,7 @@ const {
   mockUpdateEntry,
   mockMoveEntry,
   mockListEntries,
+  mockGetEntry,
   mockGetPassword,
   mockGetProtectedCustomField,
   mockDatabaseSave,
@@ -30,6 +31,7 @@ const {
   mockCreateEntry: vi.fn(),
   mockUpdateEntry: vi.fn(),
   mockMoveEntry: vi.fn(),
+  mockGetEntry: vi.fn(),
   mockListEntries: vi.fn(() =>
     Promise.resolve([
       {
@@ -106,6 +108,7 @@ vi.mock("@/lib/tauri", () => ({
   },
   entries: {
     list: mockListEntries,
+    get: mockGetEntry,
     getPassword: mockGetPassword,
     getProtectedCustomField: mockGetProtectedCustomField,
     fetchFavicon: mockFetchFavicon,
@@ -598,8 +601,12 @@ describe("EntryEditForm", () => {
     });
   });
 
-  it("fetches favicon from URL via manual action", async () => {
+  it("fetches favicon from URL via manual action and syncs form icon state", async () => {
     mockFetchFavicon.mockResolvedValueOnce("updated");
+    mockGetEntry.mockResolvedValueOnce({
+      ...mockEntry,
+      customIconUuid: "fetched-uuid",
+    });
 
     render(
       <EntryEditForm
@@ -627,6 +634,7 @@ describe("EntryEditForm", () => {
     await waitFor(() => {
       expect(mockFetchFavicon).toHaveBeenCalledWith("db-1", "entry-1", true);
       expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
+      expect(mockGetEntry).toHaveBeenCalledWith("db-1", "entry-1");
     });
   });
 

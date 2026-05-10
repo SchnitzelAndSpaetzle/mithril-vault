@@ -352,6 +352,10 @@ export function useEntryEditForm({
       const outcome = await entriesApi.fetchFavicon(dbId, entryId, true);
       if (outcome === "updated") {
         await database.save(dbId);
+        const refreshed = await entriesApi.get(dbId, entryId);
+        form.setValue("customIconUuid", refreshed.customIconUuid ?? null, {
+          shouldDirty: false,
+        });
         toast.success(t("entries.toast.faviconUpdated"));
         await refreshFaviconQueries(entryId);
       } else if (outcome === "unchanged") {
@@ -374,6 +378,7 @@ export function useEntryEditForm({
       const changed = await entriesApi.clearCustomIcon(dbId, entryId);
       if (changed) {
         await database.save(dbId);
+        form.setValue("customIconUuid", null, { shouldDirty: false });
         toast.success(t("entries.toast.customIconCleared"));
         await refreshFaviconQueries(entryId);
       }
