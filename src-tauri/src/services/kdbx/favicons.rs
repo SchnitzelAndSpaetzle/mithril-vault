@@ -312,9 +312,7 @@ async fn fetch_favicon_bytes(
     fetch_url: &str,
 ) -> Option<(Vec<u8>, Option<String>)> {
     let response = client.get(fetch_url).send().await.ok()?;
-    let requested_https = Url::parse(fetch_url)
-        .map(|url| url.scheme() == "https")
-        .unwrap_or(false);
+    let requested_https = Url::parse(fetch_url).is_ok_and(|url| url.scheme() == "https");
     if requested_https && response.url().scheme() != "https" {
         return None;
     }
