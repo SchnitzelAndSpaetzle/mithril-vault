@@ -407,6 +407,10 @@ mod tests {
     use crate::domain::secure::SecureString;
     use crate::dto::database::DatabaseCreationOptions;
     use crate::dto::entry::CreateEntryData;
+    use image::{ImageBuffer, Rgba};
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
     use tempfile::TempDir;
 
     fn create_test_database() -> (KdbxService, TempDir, String, String, String) {
@@ -470,6 +474,28 @@ mod tests {
             .expect("create entry B");
 
         (service, dir, db_path_str, entry_a.id, entry_b.id)
+    }
+
+    fn tiny_png() -> Vec<u8> {
+        let image = ImageBuffer::from_pixel(2, 2, Rgba([0_u8, 128, 255, 255]));
+        let mut output = Cursor::new(Vec::new());
+        image
+            .write_to(&mut output, ImageFormat::Png)
+            .expect("write png");
+        output.into_inner()
+    }
+
+    fn serve_once(response: Vec<u8>) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let address = listener.local_addr().expect("read local addr");
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request);
+            stream.write_all(&response).expect("write response");
+        });
+
+        (format!("http://{address}/favicon.ico"), handle)
     }
 
     #[test]
@@ -538,6 +564,116 @@ mod tests {
     }
 
     #[test]
+    fn extract_hosts_normalizes_subdomain_and_root_host() {
+        let hosts = extract_hosts("https://APP.Example.COM/login").expect("extract hosts");
+
+        assert_eq!(hosts.0, "app.example.com");
+        assert_eq!(hosts.1.as_deref(), Some("example.com"));
+        assert!(extract_hosts("http://127.0.0.1:3000").is_some());
+        assert_eq!(extract_hosts("not a url"), None);
+    }
+
+    #[test]
+    fn detect_icon_mime_recognizes_supported_signatures() {
+        assert_eq!(
+            detect_icon_mime(b"  \n<svg viewBox=\"0 0 1 1\" />"),
+            "image/svg+xml"
+        );
+        assert_eq!(detect_icon_mime(&[0x89, b'P', b'N', b'G']), "image/png");
+        assert_eq!(detect_icon_mime(&[0xFF, 0xD8, 0xFF]), "image/jpeg");
+        assert_eq!(detect_icon_mime(b"GIF89a"), "image/gif");
+        assert_eq!(detect_icon_mime(&[0x00, 0x00, 0x01, 0x00]), "image/x-icon");
+        assert_eq!(detect_icon_mime(b"BM..."), "image/bmp");
+        assert_eq!(detect_icon_mime(b"RIFF....WEBP"), "image/webp");
+        assert_eq!(detect_icon_mime(&[0x49, 0x49, 0x2A, 0x00]), "image/tiff");
+        assert_eq!(detect_icon_mime(b"plain text"), "application/octet-stream");
+    }
+
+    #[test]
+    fn normalize_favicon_bytes_resizes_decodable_images_to_png() {
+        let original = tiny_png();
+        let (normalized, mime_type) =
+            normalize_favicon_bytes(&original, Some("image/png".to_string()));
+
+        assert_eq!(mime_type, "image/png");
+        assert!(normalized.starts_with(&[0x89, b'P', b'N', b'G']));
+        assert!(
+            image::load_from_memory(&normalized).is_ok(),
+            "normalized favicon should remain a decodable image"
+        );
+    }
+
+    #[test]
+    fn normalize_favicon_bytes_preserves_svg_with_content_type() {
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg"></svg>"#;
+        let (normalized, mime_type) =
+            normalize_favicon_bytes(svg, Some("image/svg+xml".to_string()));
+
+        assert_eq!(normalized, svg);
+        assert_eq!(mime_type, "image/svg+xml");
+    }
+
+    #[test]
+    fn fetch_favicon_bytes_accepts_valid_image_responses() {
+        let png = tiny_png();
+        let response = [
+            b"HTTP/1.1 200 OK\r\nContent-Type: image/png; charset=utf-8\r\nContent-Length: "
+                .as_slice(),
+            png.len().to_string().as_bytes(),
+            b"\r\n\r\n",
+            png.as_slice(),
+        ]
+        .concat();
+        let (url, handle) = serve_once(response);
+        let client = reqwest::Client::new();
+
+        let fetched =
+            tauri::async_runtime::block_on(fetch_favicon_bytes(&client, &url)).expect("fetch png");
+        handle.join().expect("server finishes");
+
+        assert_eq!(fetched.0, png);
+        assert_eq!(fetched.1.as_deref(), Some("image/png"));
+    }
+
+    #[test]
+    fn fetch_favicon_bytes_rejects_non_image_content_type() {
+        let body = b"<html>not an icon</html>";
+        let response = [
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ".as_slice(),
+            body.len().to_string().as_bytes(),
+            b"\r\n\r\n",
+            body.as_slice(),
+        ]
+        .concat();
+        let (url, handle) = serve_once(response);
+        let client = reqwest::Client::new();
+
+        let fetched = tauri::async_runtime::block_on(fetch_favicon_bytes(&client, &url));
+        handle.join().expect("server finishes");
+
+        assert!(fetched.is_none());
+    }
+
+    #[test]
+    fn fetch_favicon_bytes_rejects_oversized_icons() {
+        let oversized = vec![0_u8; FAVICON_MAX_BYTES + 1];
+        let response = [
+            b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: ".as_slice(),
+            oversized.len().to_string().as_bytes(),
+            b"\r\n\r\n",
+            oversized.as_slice(),
+        ]
+        .concat();
+        let (url, handle) = serve_once(response);
+        let client = reqwest::Client::new();
+
+        let fetched = tauri::async_runtime::block_on(fetch_favicon_bytes(&client, &url));
+        handle.join().expect("server finishes");
+
+        assert!(fetched.is_none());
+    }
+
+    #[test]
     fn assign_entry_custom_icon_deduplicates_icon_bytes() {
         let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
         let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
@@ -597,5 +733,29 @@ mod tests {
         let db = open_db.db_or_locked().expect("unlocked db");
         let entry = find_entry_by_id_ref(&db.root, &entry_a).expect("entry");
         assert!(entry.custom_icon_uuid.is_none());
+    }
+
+    #[test]
+    fn assign_entry_custom_icon_respects_existing_icon_without_force() {
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let first_icon = [0x89, b'P', b'N', b'G', 1];
+        let replacement_icon = [0x89, b'P', b'N', b'G', 2];
+
+        assert!(service
+            .assign_entry_custom_icon(&db_path, &entry_a, &first_icon, "image/png", true)
+            .expect("assign first icon"));
+        assert!(
+            !service
+                .assign_entry_custom_icon(&db_path, &entry_a, &replacement_icon, "image/png", false)
+                .expect("skip replacement"),
+            "non-forced favicon fetches should preserve a user-selected icon"
+        );
+
+        let normalized = KdbxService::normalize_path(&db_path);
+        let databases = service.lock_databases().expect("lock databases");
+        let open_db = databases.get(&normalized).expect("open db");
+        let db = open_db.db_or_locked().expect("unlocked db");
+        assert_eq!(db.meta.custom_icons.icons.len(), 1);
+        assert_eq!(db.meta.custom_icons.icons[0].data, first_icon);
     }
 }

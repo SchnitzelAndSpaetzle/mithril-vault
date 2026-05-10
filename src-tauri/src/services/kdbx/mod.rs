@@ -116,3 +116,79 @@ impl Default for KdbxService {
         Self::new()
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn favicon_domain_cooldown_tracks_recent_failures() {
+        let service = KdbxService::new();
+
+        service
+            .mark_favicon_domain_failed("example.com")
+            .expect("mark domain failed");
+
+        assert!(
+            service
+                .is_favicon_domain_on_cooldown("example.com")
+                .expect("read cooldown"),
+            "recent failures should suppress repeated favicon fetches"
+        );
+        assert!(
+            !service
+                .is_favicon_domain_on_cooldown("other.example.com")
+                .expect("read cooldown"),
+            "cooldown is scoped to the failing domain"
+        );
+    }
+
+    #[test]
+    fn favicon_domain_cooldown_expires_and_removes_stale_failures() {
+        let service = KdbxService::new();
+        {
+            let mut failures = service
+                .favicon_failed_domains
+                .lock()
+                .expect("lock cooldown map");
+            let stale_failure_at = Instant::now()
+                .checked_sub(KdbxService::FAVICON_FAILURE_COOLDOWN)
+                .and_then(|instant| instant.checked_sub(Duration::from_secs(1)))
+                .expect("build stale favicon failure timestamp");
+            failures.insert("example.com".to_string(), stale_failure_at);
+        }
+
+        assert!(
+            !service
+                .is_favicon_domain_on_cooldown("example.com")
+                .expect("read cooldown"),
+            "expired favicon failures should not block a retry"
+        );
+
+        let failures = service
+            .favicon_failed_domains
+            .lock()
+            .expect("lock cooldown map");
+        assert!(!failures.contains_key("example.com"));
+    }
+
+    #[test]
+    fn clear_favicon_domain_failure_allows_immediate_retry() {
+        let service = KdbxService::new();
+        service
+            .mark_favicon_domain_failed("example.com")
+            .expect("mark domain failed");
+
+        service
+            .clear_favicon_domain_failure("example.com")
+            .expect("clear domain failure");
+
+        assert!(
+            !service
+                .is_favicon_domain_on_cooldown("example.com")
+                .expect("read cooldown"),
+            "clearing a failure should allow an explicit retry after a later success"
+        );
+    }
+}
