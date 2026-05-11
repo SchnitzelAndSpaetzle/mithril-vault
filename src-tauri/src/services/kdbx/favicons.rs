@@ -2,7 +2,6 @@ use crate::dto::error::AppError;
 use image::imageops::FilterType;
 use image::ImageFormat;
 use keepass::db::{Entry as KeepassEntry, Icon, Node, Times};
-use public_suffix::{EffectiveTLDProvider, DEFAULT_PROVIDER};
 use reqwest::header::CONTENT_TYPE;
 use reqwest::redirect::Policy;
 use serde::Serialize;
@@ -25,26 +24,6 @@ pub enum FaviconFetchOutcome {
 const FAVICON_MAX_BYTES: usize = 512 * 1024;
 const GOOGLE_FAVICON_URL: &str = "https://www.google.com/s2/favicons";
 const ICON_HORSE_URL: &str = "https://icon.horse/icon";
-
-// RFC 6761 / 6762 / 8375 special-use names plus common corporate suffixes.
-// Hosts under these must never be sent to third-party favicon services even
-// when the user opts into fallbacks. public-suffix falls back to a wildcard
-// rule for unknown TLDs (returning the last label as the suffix), so an
-// explicit blocklist is needed to keep these private.
-const SPECIAL_USE_TLDS: &[&str] = &[
-    "local",
-    "localhost",
-    "test",
-    "example",
-    "invalid",
-    "onion",
-    "internal",
-    "intranet",
-    "lan",
-    "home",
-    "corp",
-    "private",
-];
 
 impl KdbxService {
     pub async fn fetch_entry_favicon(
@@ -360,20 +339,20 @@ fn get_public_registrable_domain(host: &str) -> Option<String> {
         return None;
     }
 
-    // Block special-use / private-network suffixes (.local, .internal, etc.)
-    // outright. public-suffix falls back to a wildcard "*" rule for unknown
-    // TLDs and would otherwise treat these as eTLD+1.
-    if let Some(tld) = host.rsplit('.').next() {
-        if SPECIAL_USE_TLDS.contains(&tld) {
-            return None;
-        }
+    // Only allow hosts whose suffix is in the Public Suffix List. PSL marks
+    // suffixes derived via the implicit "*" wildcard rule (i.e. unknown
+    // TLDs like .local, .internal, or any private/special-use name) as
+    // unknown — those must not be sent to third-party favicon services.
+    if !psl::suffix(host.as_bytes())?.is_known() {
+        return None;
     }
 
     // For PSL-aware hosts, take the registrable domain (eTLD+1). When the
-    // host is itself a public suffix (plain `github.io`, `co.uk`) the call
-    // errors and we return None so the caller skips the root-host fallback.
-    let registrable = DEFAULT_PROVIDER.effective_tld_plus_one(host).ok()?;
-    Some(registrable.to_ascii_lowercase())
+    // host already IS the registrable apex (example.co.uk) or sits on a
+    // PSL platform suffix (user.github.io, app.netlify.app), domain_str
+    // returns the host itself and the caller's equality check skips the
+    // root-host fallback.
+    psl::domain_str(host).map(str::to_ascii_lowercase)
 }
 
 async fn fetch_favicon_bytes(

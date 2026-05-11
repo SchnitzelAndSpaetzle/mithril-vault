@@ -47,7 +47,10 @@ secstr = "0.5"
 arboard = "3"
 tokio = { version = "1", features = ["time", "rt"] }
 chrono = { version = "0.4", features = ["serde"] } # Timestamp handling
-public-suffix = "0.1"
+psl = "2"
+
+[profile.dev.package.scrypt]
+opt-level = 3
 
 [dev-dependencies]
 tempfile = "3"
