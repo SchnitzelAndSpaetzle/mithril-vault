@@ -1101,6 +1101,35 @@ mod tests {
     }
 
     #[test]
+    fn entry_with_custom_icon_serializes_iconid_as_number() {
+        // Regression: keepass 0.12 collapsed builtin+custom icons into a
+        // single `Icon` enum, so entries with a custom favicon return
+        // Icon::Custom from keepass-rs with no separate builtin index.
+        // The frontend Zod schema requires `iconId` to be a number, so
+        // convert_entry must still emit Some(0) alongside customIconUuid.
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 7];
+
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign favicon");
+
+        let entries = service.list_entries(&db_path, None).expect("list entries");
+        let entry = entries
+            .iter()
+            .find(|e| e.id == entry_a)
+            .expect("entry returned by list_entries");
+        assert!(
+            entry.icon_id.is_some(),
+            "iconId must be Some so the frontend Zod schema accepts it"
+        );
+        assert!(
+            entry.custom_icon_uuid.is_some(),
+            "customIconUuid must round-trip alongside iconId"
+        );
+    }
+
+    #[test]
     fn assign_entry_custom_icon_deduplicates_icon_bytes() {
         let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
         let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
