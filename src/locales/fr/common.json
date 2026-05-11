@@ -57,6 +57,8 @@
       "showPasswordByDefault": "Afficher les mots de passe par défaut",
       "minimizeToTray": "Réduire dans la barre des tâches",
       "startMinimized": "Démarrer réduit",
+      "autoDownloadFavicons": "Télécharger automatiquement les favicons depuis les URL des entrées",
+      "allowThirdPartyFaviconFallbacks": "Autoriser les services tiers de secours pour les favicons",
       "preventScreenCapture": "Empêcher la capture d'écran",
       "preventScreenCaptureNote": "Masque la fenêtre des captures et enregistrements d'écran sur macOS et Windows 10 build 2004 ou ultérieur. Les versions plus anciennes de Windows ne bloquent que les captures. Linux n'est pas pris en charge.",
       "preventScreenCaptureUnsupported": "(non pris en charge sur cette plateforme)"
@@ -187,7 +189,10 @@
       "addField": "Ajouter un champ",
       "noCustomFields": "Aucun champ personnalisé.",
       "fieldNamePlaceholder": "Nom du champ",
-      "removeField": "Supprimer le champ personnalisé"
+      "removeField": "Supprimer le champ personnalisé",
+      "fetchFavicon": "Récupérer le favicon depuis l'URL",
+      "refreshFavicon": "Actualiser le favicon depuis l'URL",
+      "clearCustomIcon": "Supprimer l'icône personnalisée"
     },
     "toast": {
       "created": "Entrée créée",
@@ -195,7 +200,14 @@
       "createFailed": "Échec de la création de l'entrée : {{error}}",
       "updateFailed": "Échec de la mise à jour de l'entrée : {{error}}",
       "secretLoadFailed": "Échec du chargement des valeurs protégées pour cette entrée.",
-      "secretRetryRequired": "Réessayez de charger les valeurs protégées avant d'enregistrer."
+      "secretRetryRequired": "Réessayez de charger les valeurs protégées avant d'enregistrer.",
+      "faviconUpdated": "Favicon mis à jour",
+      "faviconAlreadyUpToDate": "Le favicon est déjà à jour.",
+      "faviconNotFound": "Aucun favicon n'a pu être récupéré pour cette URL.",
+      "faviconUpdateFailed": "Échec de la mise à jour du favicon : {{error}}",
+      "customIconCleared": "Icône personnalisée supprimée",
+      "customIconClearFailed": "Échec de la suppression de l'icône personnalisée : {{error}}",
+      "customIconAssignFailed": "Entrée enregistrée, mais l'icône personnalisée n'a pas pu être attribuée : {{error}}"
     },
     "unsavedChanges": {
       "message": "Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir les abandonner ?",
@@ -481,7 +493,10 @@
     "excellent": "Excellent"
   },
   "iconPicker": {
-    "chooseIcon": "Choisir une icône"
+    "chooseIcon": "Choisir une icône",
+    "customIcons": "Icônes personnalisées",
+    "builtInIcons": "Icônes intégrées",
+    "customIconLabel": "Icône personnalisée {{uuid}}"
   },
   "errors": {
     "failedToLoadSettings": "Échec du chargement des paramètres : {{error}}",

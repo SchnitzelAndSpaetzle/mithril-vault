@@ -13,6 +13,7 @@ import type {
   DatabaseHeaderInfo,
   DatabaseInfo,
   Entry,
+  FaviconFetchOutcome,
   GeneratedPassphrase,
   GeneratedPassword,
   Group,
@@ -31,6 +32,7 @@ import {
   DatabaseHeaderInfoSchema,
   DatabaseInfoSchema,
   EntrySchema,
+  FaviconFetchOutcomeSchema,
   GeneratedPassphraseSchema,
   GeneratedPasswordSchema,
   GroupSchema,
@@ -104,6 +106,10 @@ const CopyProtectedFieldSchema = z.object({
   entryId: KeepassIdSchema,
   fieldKey: z.string().min(1),
   timeoutSecs: z.number().int().positive().optional(),
+});
+
+const ForceSchema = z.object({
+  force: z.boolean().optional(),
 });
 
 const CreateDatabaseSchema = z.object({
@@ -338,6 +344,40 @@ export const entries = {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
     return invoke("delete_entry", { dbId, id });
+  },
+
+  async fetchFavicon(
+    dbId: string,
+    id: string,
+    force?: boolean
+  ): Promise<FaviconFetchOutcome> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    ForceSchema.parse({ force });
+    const result = await invoke("fetch_entry_favicon", { dbId, id, force });
+    return FaviconFetchOutcomeSchema.parse(result);
+  },
+
+  async clearCustomIcon(dbId: string, id: string): Promise<boolean> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("clear_entry_custom_icon", { dbId, id });
+    return z.boolean().parse(result);
+  },
+
+  async setCustomIcon(
+    dbId: string,
+    id: string,
+    iconUuid: string
+  ): Promise<boolean> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("set_entry_custom_icon", {
+      dbId,
+      id,
+      iconUuid,
+    });
+    return z.boolean().parse(result);
   },
 };
 

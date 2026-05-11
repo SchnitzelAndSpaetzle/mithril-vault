@@ -104,6 +104,17 @@ MithrilVault is a cross-platform password manager that:
 - **Database settings** are currently read-only in UI and loaded from `get_database_config`.
 - `reset_app_preferences` resets only preference fields and preserves `recent_databases`.
 - Do not add a separate frontend settings store; use Tauri commands + React Query hooks (`useAppPreferences`).
+- Favicon privacy controls live in `AppPreferences.security`:
+  - `autoDownloadFavicons` (default `false`)
+  - `allowThirdPartyFaviconFallbacks` (default `false`)
+
+### Favicon + Custom Icon Conventions
+
+- Store downloaded entry icons in KDBX metadata (`db.meta.custom_icons`) and link entries via `entry.custom_icon_uuid`; this is the canonical portable store.
+- Keep entry create/update commands network-free. Favicon retrieval must run as separate async follow-up commands (`fetch_entry_favicon`) so save latency and reliability are unaffected by network conditions.
+- Use HTTPS-only favicon sources. Third-party fallback providers must remain opt-in through preferences.
+- IPC icon payloads are MIME-aware objects (`{ mimeType, data }`), not PNG-assumed strings. Frontend renderers must use MIME-aware data URLs.
+- Deduplicate custom icons by content hash before creating a new UUID. Reuse existing icon UUID when bytes match.
 
 ---
 

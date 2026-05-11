@@ -15,6 +15,13 @@ pub struct DatabaseInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CustomIconData {
+    pub mime_type: String,
+    pub data: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DatabaseStats {
     pub entry_count: usize,
     pub group_count: usize,

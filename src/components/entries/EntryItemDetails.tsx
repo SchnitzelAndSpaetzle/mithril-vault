@@ -60,16 +60,16 @@ export default function EntryItemDetails({
   const customIcon = entry.customIconUuid
     ? customIcons?.[entry.customIconUuid]
     : null;
+  const customIconSrc = customIcon
+    ? `data:${customIcon.mimeType};base64,${customIcon.data}`
+    : undefined;
 
   return (
     <>
       {/* Title section */}
       <div className="flex items-center gap-4 px-4">
         <Avatar>
-          <AvatarImage
-            src={customIcon ? `data:image/png;base64,${customIcon}` : undefined}
-            alt=""
-          />
+          <AvatarImage src={customIconSrc} alt="" />
           <AvatarFallback>
             {createElement(iconComponent, { className: "h-4 w-4" })}
           </AvatarFallback>

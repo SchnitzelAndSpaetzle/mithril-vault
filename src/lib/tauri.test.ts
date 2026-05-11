@@ -2,7 +2,14 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { groups, settings, tags, windowProtection } from "./tauri";
+import {
+  database,
+  entries,
+  groups,
+  settings,
+  tags,
+  windowProtection,
+} from "./tauri";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -11,6 +18,64 @@ vi.mock("@tauri-apps/api/core", () => ({
 describe("tauri wrappers validation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("gets custom icons as MIME-aware payloads", async () => {
+    const dbId = "/tmp/test.kdbx";
+    const customIcons = {
+      "icon-1": {
+        mimeType: "image/svg+xml",
+        data: "PHN2Zy8+",
+      },
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(customIcons);
+
+    await expect(database.getCustomIcons(dbId)).resolves.toEqual(customIcons);
+    expect(invoke).toHaveBeenCalledWith("get_custom_icons", { dbId });
+  });
+
+  it("fetches and clears entry custom icons through entry wrappers", async () => {
+    const dbId = "/tmp/test.kdbx";
+    const entryId = crypto.randomUUID();
+    vi.mocked(invoke)
+      .mockResolvedValueOnce("updated")
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    await expect(entries.fetchFavicon(dbId, entryId, true)).resolves.toBe(
+      "updated"
+    );
+    expect(invoke).toHaveBeenNthCalledWith(1, "fetch_entry_favicon", {
+      dbId,
+      id: entryId,
+      force: true,
+    });
+
+    await expect(entries.clearCustomIcon(dbId, entryId)).resolves.toBe(false);
+    expect(invoke).toHaveBeenNthCalledWith(2, "clear_entry_custom_icon", {
+      dbId,
+      id: entryId,
+    });
+
+    const iconUuid = crypto.randomUUID();
+    await expect(entries.setCustomIcon(dbId, entryId, iconUuid)).resolves.toBe(
+      true
+    );
+    expect(invoke).toHaveBeenNthCalledWith(3, "set_entry_custom_icon", {
+      dbId,
+      id: entryId,
+      iconUuid,
+    });
+  });
+
+  it("validates favicon entry ids before invoking backend", async () => {
+    await expect(
+      entries.fetchFavicon("/tmp/test.kdbx", "not-a-uuid")
+    ).rejects.toThrow();
+    await expect(
+      entries.clearCustomIcon("/tmp/test.kdbx", "not-a-uuid")
+    ).rejects.toThrow();
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("validates groups.update payload before invoking", async () => {
@@ -80,6 +145,8 @@ describe("tauri wrappers validation", () => {
         minimizeToTray: true,
         startMinimized: false,
         preventScreenCapture: true,
+        autoDownloadFavicons: false,
+        allowThirdPartyFaviconFallbacks: false,
       },
       appearance: {
         theme: "system",
@@ -138,6 +205,8 @@ describe("tauri wrappers validation", () => {
           minimizeToTray: true,
           startMinimized: false,
           preventScreenCapture: true,
+          autoDownloadFavicons: false,
+          allowThirdPartyFaviconFallbacks: false,
         },
         appearance: {
           theme: "system",

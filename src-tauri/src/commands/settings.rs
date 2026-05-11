@@ -64,6 +64,8 @@ pub struct SecuritySettings {
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
     pub prevent_screen_capture: bool,
+    pub auto_download_favicons: bool,
+    pub allow_third_party_favicon_fallbacks: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +117,8 @@ pub struct AppSettings {
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
     pub prevent_screen_capture: bool,
+    pub auto_download_favicons: bool,
+    pub allow_third_party_favicon_fallbacks: bool,
     pub theme: String,
     pub color_preset: String,
     pub font_size: u8,
@@ -142,6 +146,8 @@ impl Default for AppSettings {
             minimize_to_tray: true,
             start_minimized: false,
             prevent_screen_capture: true,
+            auto_download_favicons: false,
+            allow_third_party_favicon_fallbacks: false,
             theme: "system".into(),
             color_preset: "default".into(),
             font_size: 14,
@@ -174,6 +180,8 @@ impl AppPreferences {
                 minimize_to_tray: settings.minimize_to_tray,
                 start_minimized: settings.start_minimized,
                 prevent_screen_capture: settings.prevent_screen_capture,
+                auto_download_favicons: settings.auto_download_favicons,
+                allow_third_party_favicon_fallbacks: settings.allow_third_party_favicon_fallbacks,
             },
             appearance: AppearanceSettings {
                 theme: settings.theme.clone(),
@@ -211,6 +219,9 @@ impl AppPreferences {
         settings.minimize_to_tray = self.security.minimize_to_tray;
         settings.start_minimized = self.security.start_minimized;
         settings.prevent_screen_capture = self.security.prevent_screen_capture;
+        settings.auto_download_favicons = self.security.auto_download_favicons;
+        settings.allow_third_party_favicon_fallbacks =
+            self.security.allow_third_party_favicon_fallbacks;
         settings.theme.clone_from(&self.appearance.theme);
         settings
             .color_preset

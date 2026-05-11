@@ -6,6 +6,7 @@ allow-licenses:
   - BSD-3-Clause
   - BSL-1.0
   - CC0-1.0
+  - CDLA-Permissive-2.0
   - ISC
   - MIT
   - MIT OR Apache-2.0
@@ -24,3 +25,7 @@ allow-dependencies-licenses:
   # LicenseRef-bad-apache-2.0mit. Both Apache-2.0 and MIT are already
   # allowed; cargo-deny parses the slash form correctly.
   - pkg:cargo/libdbus-sys
+  # psl declares license as "MIT/Apache-2.0" (same deprecated slash form),
+  # which GitHub tags LicenseRef-bad-mitapache-2.0. The real license is
+  # MIT OR Apache-2.0, both already allowed; cargo-deny accepts it.
+  - pkg:cargo/psl

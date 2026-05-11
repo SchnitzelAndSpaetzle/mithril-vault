@@ -31,6 +31,9 @@ const EntryListItem = memo(function EntryListItem({
 }: EntryListItemProps) {
   const iconComponent = getKeepassIcon(iconId ?? 0);
   const customIcon = customIconUuid ? customIcons[customIconUuid] : null;
+  const customIconSrc = customIcon
+    ? `data:${customIcon.mimeType};base64,${customIcon.data}`
+    : undefined;
 
   const handleClick = () => {
     onClick?.(id);
@@ -49,12 +52,7 @@ const EntryListItem = memo(function EntryListItem({
       <a className="w-full min-w-0 overflow-hidden" onClick={handleClick}>
         <ItemMedia>
           <Avatar className="size-10">
-            <AvatarImage
-              src={
-                customIcon ? `data:image/png;base64,${customIcon}` : undefined
-              }
-              alt=""
-            />
+            <AvatarImage src={customIconSrc} alt="" />
             <AvatarFallback>
               {createElement(iconComponent, { className: "h-4 w-4" })}
             </AvatarFallback>

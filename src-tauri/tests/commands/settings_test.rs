@@ -101,6 +101,8 @@ fn app_preferences_commands() {
     let mut prefs =
         tauri::async_runtime::block_on(get_app_preferences(app.state())).expect("get preferences");
     assert_eq!(prefs.security.clipboard_clear_timeout, 30);
+    assert!(!prefs.security.auto_download_favicons);
+    assert!(!prefs.security.allow_third_party_favicon_fallbacks);
     assert_eq!(
         prefs.general.startup_behavior,
         StartupBehavior::ShowUnlockScreen
@@ -110,6 +112,8 @@ fn app_preferences_commands() {
     prefs.general.language = "de".into();
     prefs.general.startup_behavior = StartupBehavior::OpenLastDatabase;
     prefs.security.clipboard_clear_timeout = 12;
+    prefs.security.auto_download_favicons = true;
+    prefs.security.allow_third_party_favicon_fallbacks = true;
     prefs.appearance.theme = "light".into();
     prefs.browser_integration.enabled = true;
     prefs.browser_integration.allowed_sites = vec!["example.com".into()];
@@ -126,6 +130,8 @@ fn app_preferences_commands() {
         StartupBehavior::OpenLastDatabase
     );
     assert_eq!(refreshed.security.clipboard_clear_timeout, 12);
+    assert!(refreshed.security.auto_download_favicons);
+    assert!(refreshed.security.allow_third_party_favicon_fallbacks);
     assert_eq!(refreshed.appearance.theme, "light");
     assert!(refreshed.browser_integration.enabled);
     assert_eq!(
@@ -138,6 +144,8 @@ fn app_preferences_commands() {
         tauri::async_runtime::block_on(reset_app_preferences(app.state())).expect("reset prefs");
     assert_eq!(reset.general.language, "en");
     assert_eq!(reset.security.clipboard_clear_timeout, 30);
+    assert!(!reset.security.auto_download_favicons);
+    assert!(!reset.security.allow_third_party_favicon_fallbacks);
     assert_eq!(reset.appearance.theme, "system");
     assert!(!reset.advanced.debug_mode);
 

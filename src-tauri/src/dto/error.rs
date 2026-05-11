@@ -103,6 +103,9 @@ pub enum AppError {
 
     #[error("Window protection error: {0}")]
     WindowProtection(String),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 }
 
 impl Serialize for AppError {

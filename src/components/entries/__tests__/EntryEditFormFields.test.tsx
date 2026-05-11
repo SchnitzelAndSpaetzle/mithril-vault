@@ -43,6 +43,7 @@ const defaultValues: EntryFormValues = {
   url: "",
   notes: "",
   iconId: 0,
+  customIconUuid: null,
   tags: [],
   customFields: [],
 };
@@ -61,7 +62,20 @@ function renderWithForm(
 describe("EntryEditForm field components", () => {
   it("renders title input and icon button", () => {
     renderWithForm((control) => (
-      <EntryTitleField control={control} isPending={false} />
+      <EntryTitleField
+        control={control}
+        isPending={false}
+        isEditMode={false}
+        hasCustomIcon={false}
+        canFetchFavicon={false}
+        isFetchingFavicon={false}
+        isClearingCustomIcon={false}
+        customIcons={{}}
+        onIconChange={vi.fn()}
+        onCustomIconChange={vi.fn()}
+        onFetchFavicon={vi.fn()}
+        onClearCustomIcon={vi.fn()}
+      />
     ));
 
     expect(

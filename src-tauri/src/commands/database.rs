@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::dto::database::{
-    DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
+    CustomIconData, DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
 };
 use crate::dto::error::AppError;
 use crate::services::auto_lock::AutoLockService;
@@ -145,7 +145,7 @@ pub async fn get_database_info(
 pub async fn get_custom_icons(
     db_id: String,
     state: State<'_, Arc<KdbxService>>,
-) -> Result<std::collections::HashMap<String, String>, AppError> {
+) -> Result<std::collections::HashMap<String, CustomIconData>, AppError> {
     state.get_custom_icons(&db_id)
 }
 

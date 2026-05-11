@@ -11,7 +11,9 @@ use mithril_vault_lib::commands::database::{
     get_database_info, inspect_database, list_open_databases, lock_database, open_database,
     open_database_with_keyfile, open_database_with_keyfile_only, save_database, unlock_database,
 };
-use mithril_vault_lib::commands::entries::{delete_tag, list_entries, rename_tag};
+use mithril_vault_lib::commands::entries::{
+    clear_entry_custom_icon, delete_tag, fetch_entry_favicon, list_entries, rename_tag,
+};
 use mithril_vault_lib::commands::generator::{
     generate_passphrase, generate_password, PassphraseGeneratorOptions, PasswordGeneratorOptions,
 };
@@ -192,6 +194,24 @@ fn entries_and_groups_commands_fail_when_not_open() {
     ))
     .expect_err("expected database not found");
     assert!(matches!(delete_tag_err, AppError::DatabaseNotFound(_)));
+
+    let fetch_favicon_err = tauri::async_runtime::block_on(fetch_entry_favicon(
+        "nonexistent.kdbx".to_string(),
+        "entry-id".to_string(),
+        Some(true),
+        app.state(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(fetch_favicon_err, AppError::DatabaseNotFound(_)));
+
+    let clear_icon_err = tauri::async_runtime::block_on(clear_entry_custom_icon(
+        "nonexistent.kdbx".to_string(),
+        "entry-id".to_string(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(clear_icon_err, AppError::DatabaseNotFound(_)));
 
     let groups_err =
         tauri::async_runtime::block_on(list_groups("nonexistent.kdbx".to_string(), app.state()))

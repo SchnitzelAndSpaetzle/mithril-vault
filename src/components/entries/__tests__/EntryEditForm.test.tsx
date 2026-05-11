@@ -18,12 +18,21 @@ const {
   mockUpdateEntry,
   mockMoveEntry,
   mockListEntries,
+  mockGetEntry,
   mockGetPassword,
   mockGetProtectedCustomField,
+  mockDatabaseSave,
+  mockGetCustomIcons,
+  mockFetchFavicon,
+  mockClearCustomIcon,
+  mockSetCustomIcon,
+  mockToast,
+  mockAutoDownloadFavicons,
 } = vi.hoisted(() => ({
   mockCreateEntry: vi.fn(),
   mockUpdateEntry: vi.fn(),
   mockMoveEntry: vi.fn(),
+  mockGetEntry: vi.fn(),
   mockListEntries: vi.fn(() =>
     Promise.resolve([
       {
@@ -64,6 +73,15 @@ const {
   mockGetProtectedCustomField: vi.fn(() =>
     Promise.resolve({ key: "secret", value: "secret-value" })
   ),
+  mockDatabaseSave: vi.fn(() => Promise.resolve()),
+  mockGetCustomIcons: vi.fn(() => Promise.resolve({})),
+  mockFetchFavicon: vi.fn<
+    (...args: unknown[]) => Promise<"updated" | "unchanged" | "notFound">
+  >(() => Promise.resolve("notFound")),
+  mockClearCustomIcon: vi.fn(() => Promise.resolve(false)),
+  mockSetCustomIcon: vi.fn(() => Promise.resolve(true)),
+  mockAutoDownloadFavicons: { value: false },
+  mockToast: { success: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("@/hooks/use-entry-mutations", () => ({
@@ -75,11 +93,29 @@ vi.mock("@/hooks/use-entry-mutations", () => ({
   })),
 }));
 
+vi.mock("@/hooks/use-app-preferences", () => ({
+  useAppPreferences: () => ({
+    preferences: {
+      security: {
+        autoDownloadFavicons: mockAutoDownloadFavicons.value,
+      },
+    },
+  }),
+}));
+
 vi.mock("@/lib/tauri", () => ({
+  database: {
+    save: mockDatabaseSave,
+    getCustomIcons: mockGetCustomIcons,
+  },
   entries: {
     list: mockListEntries,
+    get: mockGetEntry,
     getPassword: mockGetPassword,
     getProtectedCustomField: mockGetProtectedCustomField,
+    fetchFavicon: mockFetchFavicon,
+    clearCustomIcon: mockClearCustomIcon,
+    setCustomIcon: mockSetCustomIcon,
   },
   generator: {
     generate: vi.fn(() =>
@@ -93,7 +129,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: mockToast,
 }));
 
 // Mock PasswordStrengthIndicator to avoid zxcvbn setup
@@ -135,6 +171,12 @@ const mockEntryTwo: Entry = {
   accessedAt: "2024-02-17T15:58:43Z",
 };
 
+const mockEntryWithCustomIcon: Entry = {
+  ...mockEntry,
+  id: "entry-3",
+  customIconUuid: "abc123",
+};
+
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -150,6 +192,7 @@ function createWrapper() {
 describe("EntryEditForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAutoDownloadFavicons.value = false;
   });
 
   it("renders empty form in create mode", () => {
@@ -557,6 +600,343 @@ describe("EntryEditForm", () => {
 
     await waitFor(() => {
       expect(onDirtyChange).toHaveBeenCalledWith(true);
+    });
+  });
+
+  it("fetches favicon from URL via manual action and syncs form icon state", async () => {
+    mockFetchFavicon.mockResolvedValueOnce("updated");
+    mockGetEntry.mockResolvedValueOnce({
+      ...mockEntry,
+      customIconUuid: "fetched-uuid",
+    });
+
+    render(
+      <EntryEditForm
+        entry={mockEntry}
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "entries.form.fetchFavicon" })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "entries.form.fetchFavicon" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockFetchFavicon).toHaveBeenCalledWith("db-1", "entry-1", true);
+      expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
+      expect(mockGetEntry).toHaveBeenCalledWith("db-1", "entry-1");
+    });
+  });
+
+  it("does not save the database when refetch returns unchanged", async () => {
+    mockFetchFavicon.mockResolvedValueOnce("unchanged");
+
+    render(
+      <EntryEditForm
+        entry={mockEntryWithCustomIcon}
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "entries.form.refreshFavicon" })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "entries.form.refreshFavicon" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockFetchFavicon).toHaveBeenCalledWith("db-1", "entry-3", true);
+    });
+    expect(mockDatabaseSave).not.toHaveBeenCalled();
+  });
+
+  it("disables manual favicon fetch while URL edits are unsaved", async () => {
+    render(
+      <EntryEditForm
+        entry={mockEntry}
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "entries.form.fetchFavicon" })
+      ).not.toBeDisabled();
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("entries.form.urlPlaceholder"),
+      {
+        target: { value: "https://changed.example.com" },
+      }
+    );
+
+    expect(
+      screen.getByRole("button", { name: "entries.form.fetchFavicon" })
+    ).toBeDisabled();
+  });
+
+  it("clears custom icon via manual action", async () => {
+    mockClearCustomIcon.mockResolvedValueOnce(true);
+
+    render(
+      <EntryEditForm
+        entry={mockEntryWithCustomIcon}
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "entries.form.clearCustomIcon" })
+      ).not.toBeDisabled();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "entries.form.clearCustomIcon" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockClearCustomIcon).toHaveBeenCalledWith("db-1", "entry-3");
+      expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
+    });
+  });
+
+  it("applies a picked custom icon when creating an entry", async () => {
+    const created = { ...mockEntry, id: "entry-new", customIconUuid: null };
+    mockCreateEntry.mockResolvedValueOnce(created);
+    mockGetCustomIcons.mockResolvedValueOnce({
+      "icon-uuid-1": { mimeType: "image/png", data: "AAA=" },
+    });
+    mockSetCustomIcon.mockResolvedValueOnce(true);
+
+    render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    // Wait for useCustomIcons to populate, then open the picker and click
+    // the custom-icon tile.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "entries.form.chooseIcon" })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "entries.form.chooseIcon" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: "iconPicker.customIconLabel",
+        })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "iconPicker.customIconLabel" })
+      );
+    });
+
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        { target: { value: "Brand new" } }
+      );
+      fireEvent.click(screen.getByText("entries.form.createEntry"));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateEntry).toHaveBeenCalled();
+      expect(mockSetCustomIcon).toHaveBeenCalledWith(
+        "db-1",
+        "entry-new",
+        "icon-uuid-1"
+      );
+      expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
+    });
+  });
+
+  it("reports a successful create even when the custom-icon assignment fails", async () => {
+    const created = { ...mockEntry, id: "entry-new", customIconUuid: null };
+    mockCreateEntry.mockResolvedValueOnce(created);
+    mockGetCustomIcons.mockResolvedValueOnce({
+      "icon-uuid-1": { mimeType: "image/png", data: "AAA=" },
+    });
+    mockSetCustomIcon.mockRejectedValueOnce(new Error("uuid not found"));
+    const onSave = vi.fn();
+
+    render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "entries.form.chooseIcon" })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "entries.form.chooseIcon" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "iconPicker.customIconLabel" })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "iconPicker.customIconLabel" })
+      );
+    });
+
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        { target: { value: "Brand new" } }
+      );
+      fireEvent.click(screen.getByText("entries.form.createEntry"));
+    });
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(created);
+    });
+    expect(mockToast.success).toHaveBeenCalledWith("entries.toast.created");
+    expect(mockToast.error).toHaveBeenCalledWith(
+      "entries.toast.customIconAssignFailed"
+    );
+    expect(mockToast.error).not.toHaveBeenCalledWith(
+      "entries.toast.createFailed"
+    );
+  });
+
+  it("auto-fetches favicon after creating via Save and create another", async () => {
+    mockAutoDownloadFavicons.value = true;
+    const created = {
+      ...mockEntry,
+      id: "entry-new",
+      url: "https://newsite.example.com",
+    };
+    mockCreateEntry.mockResolvedValueOnce(created);
+    mockFetchFavicon.mockResolvedValueOnce("updated");
+
+    render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        { target: { value: "Brand new" } }
+      );
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.urlPlaceholder"),
+        { target: { value: "https://newsite.example.com" } }
+      );
+      fireEvent.click(screen.getByText("entries.form.saveAndNew"));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateEntry).toHaveBeenCalled();
+      expect(mockFetchFavicon).toHaveBeenCalledWith("db-1", "entry-new", false);
+    });
+  });
+
+  it("auto-fetches favicon after save when enabled", async () => {
+    mockAutoDownloadFavicons.value = true;
+    const onSave = vi.fn();
+    const mockResult = { ...mockEntry, id: "entry-1", title: "Updated Title" };
+    mockUpdateEntry.mockResolvedValueOnce(mockResult);
+    mockFetchFavicon.mockResolvedValueOnce("unchanged");
+
+    render(
+      <EntryEditForm
+        entry={mockEntry}
+        dbId="db-1"
+        groupId="group-1"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder")
+      ).toHaveValue("Test Entry");
+    });
+
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        {
+          target: { value: "Updated Title" },
+        }
+      );
+      fireEvent.click(screen.getByText("entries.form.saveChanges"));
+    });
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(mockResult);
+      expect(mockFetchFavicon).toHaveBeenCalledWith("db-1", "entry-1", false);
     });
   });
 });

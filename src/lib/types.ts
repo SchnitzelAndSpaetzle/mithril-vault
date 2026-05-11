@@ -56,8 +56,21 @@ export const GroupSchema: z.ZodType<Group> = z.lazy(() =>
   })
 );
 
-export const CustomIconMapSchema = z.record(z.string(), z.string());
+export const CustomIconDataSchema = z.object({
+  mimeType: z.string().min(1),
+  data: z.string(),
+});
+export type CustomIconData = z.infer<typeof CustomIconDataSchema>;
+
+export const CustomIconMapSchema = z.record(z.string(), CustomIconDataSchema);
 export type CustomIconMap = z.infer<typeof CustomIconMapSchema>;
+
+export const FaviconFetchOutcomeSchema = z.enum([
+  "updated",
+  "unchanged",
+  "notFound",
+]);
+export type FaviconFetchOutcome = z.infer<typeof FaviconFetchOutcomeSchema>;
 
 export const PasswordGeneratorOptionsSchema = z.object({
   length: z.number().int().min(1).max(128),
@@ -226,6 +239,8 @@ export const SecuritySettingsSchema = z.object({
   minimizeToTray: z.boolean(),
   startMinimized: z.boolean(),
   preventScreenCapture: z.boolean(),
+  autoDownloadFavicons: z.boolean(),
+  allowThirdPartyFaviconFallbacks: z.boolean(),
 });
 export type SecuritySettings = z.infer<typeof SecuritySettingsSchema>;
 
@@ -272,6 +287,8 @@ export const AppSettingsSchema = z.object({
   minimizeToTray: z.boolean(),
   startMinimized: z.boolean(),
   preventScreenCapture: z.boolean(),
+  autoDownloadFavicons: z.boolean(),
+  allowThirdPartyFaviconFallbacks: z.boolean(),
   theme: ThemePreferenceSchema,
   colorPreset: z.string().default("default"),
   fontSize: z.number().int().min(10).max(24),

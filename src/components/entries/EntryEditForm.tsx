@@ -11,6 +11,7 @@ import {
   EntryUrlField,
   EntryUsernameField,
 } from "@/components/entries/entry-edit-form";
+import { useCustomIcons } from "@/hooks/use-custom-icons";
 import { useEntryEditForm } from "@/hooks/use-entry-edit-form";
 import { useUsernameSuggestions } from "@/hooks/use-username-suggestions";
 import type { Entry } from "@/lib/types";
@@ -52,6 +53,12 @@ export function EntryEditForm({
     saveAndCreateAnother,
     retrySecretLoad,
     setGeneratedPassword,
+    isFetchingFavicon,
+    isClearingCustomIcon,
+    hasCustomIcon,
+    canFetchFavicon,
+    fetchFaviconFromUrl,
+    clearCustomIcon,
   } = useEntryEditForm({
     entry,
     dbId,
@@ -60,6 +67,14 @@ export function EntryEditForm({
     onCancel,
     onDirtyChange,
   });
+  const { data: customIcons } = useCustomIcons(dbId);
+  const handleIconChange = (iconId: number) => {
+    form.setValue("iconId", iconId, { shouldDirty: true });
+    form.setValue("customIconUuid", null, { shouldDirty: true });
+  };
+  const handleCustomIconChange = (iconUuid: string) => {
+    form.setValue("customIconUuid", iconUuid, { shouldDirty: true });
+  };
   const {
     usernameSuggestions,
     activeUsernameSuggestionIndex,
@@ -94,6 +109,16 @@ export function EntryEditForm({
           control={form.control}
           isPending={isPending}
           autoFocus={!isEditMode}
+          isEditMode={isEditMode}
+          hasCustomIcon={hasCustomIcon}
+          canFetchFavicon={canFetchFavicon}
+          isFetchingFavicon={isFetchingFavicon}
+          isClearingCustomIcon={isClearingCustomIcon}
+          customIcons={customIcons ?? {}}
+          onIconChange={handleIconChange}
+          onCustomIconChange={handleCustomIconChange}
+          onFetchFavicon={fetchFaviconFromUrl}
+          onClearCustomIcon={clearCustomIcon}
         />
         <EntryUsernameField
           control={form.control}

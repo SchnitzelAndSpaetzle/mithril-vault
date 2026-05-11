@@ -13,7 +13,7 @@ import { buildGroupPathMap, type SearchResult } from "@/lib/search-utils";
 import SearchResultItem from "@/components/search/SearchResultItem";
 import { SearchX } from "lucide-react";
 
-const EMPTY_ICONS: Record<string, string> = {};
+const EMPTY_ICONS = {};
 const ESTIMATED_ITEM_HEIGHT = 75;
 
 interface SearchResultsListProps {

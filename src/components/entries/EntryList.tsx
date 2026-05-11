@@ -13,7 +13,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 import { entryHasTag } from "@/lib/tag-utils";
 
-const EMPTY_ICONS: Record<string, string> = {};
+const EMPTY_ICONS = {};
 const ESTIMATED_ITEM_HEIGHT = 65;
 
 interface EntryListProps {
