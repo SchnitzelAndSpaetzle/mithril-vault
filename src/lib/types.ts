@@ -25,7 +25,7 @@ export const EntrySchema = z.object({
   username: z.string(),
   url: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
-  iconId: z.number().int().optional(),
+  iconId: z.number().int().nullable().optional(),
   customIconUuid: z.string().nullable().optional(),
   tags: z.array(z.string()),
   customFields: z.record(z.string(), z.string()),

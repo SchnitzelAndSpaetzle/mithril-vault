@@ -4,9 +4,10 @@ use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
 use crate::services::kdbx::key::build_database_key;
 use keepass::error::{
-    BlockStreamError, CompressionConfigError, CryptographyError, DatabaseIntegrityError,
-    DatabaseKeyError, DatabaseOpenError, InnerCipherConfigError, KdfConfigError,
-    OuterCipherConfigError,
+    BlockStreamError, CompressionConfigError, CryptographyError, DatabaseFormatError,
+    DatabaseKeyError, DatabaseOpenError, DatabaseVersionParseError, InnerCipherConfigError,
+    Kdbx3OpenError, Kdbx3OuterHeaderError, Kdbx4InnerHeaderError, Kdbx4OpenError,
+    Kdbx4OuterHeaderError, KdfConfigError, OuterCipherConfigError,
 };
 use keepass::{Database, DatabaseKey};
 use std::fs::File;
@@ -30,8 +31,8 @@ impl KdbxService {
         let key = DatabaseKey::new().with_password(password);
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root.uuid.to_string();
-        let name = db.root.name.clone();
+        let root_group_id = db.root().id().uuid().to_string();
+        let name = db.root().name.clone();
         let version = format_database_version(&db.config.version);
 
         databases.insert(
@@ -84,8 +85,8 @@ impl KdbxService {
 
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root.uuid.to_string();
-        let name = db.root.name.clone();
+        let root_group_id = db.root().id().uuid().to_string();
+        let name = db.root().name.clone();
         let version = format_database_version(&db.config.version);
 
         databases.insert(
@@ -135,8 +136,8 @@ impl KdbxService {
 
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root.uuid.to_string();
-        let name = db.root.name.clone();
+        let root_group_id = db.root().id().uuid().to_string();
+        let name = db.root().name.clone();
         let version = format_database_version(&db.config.version);
 
         databases.insert(
@@ -260,8 +261,8 @@ impl KdbxService {
         let key = build_database_key(password, keyfile_path.as_deref())?;
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        open_db.name.clone_from(&db.root.name);
-        open_db.root_group_id = db.root.uuid.to_string();
+        open_db.name.clone_from(&db.root().name);
+        open_db.root_group_id = db.root().id().uuid().to_string();
         open_db.version = format_database_version(&db.config.version);
         open_db.db = Some(db);
         open_db.password = password.map(SecureString::from);
@@ -282,25 +283,26 @@ fn map_open_error(err: DatabaseOpenError) -> AppError {
     match err {
         // Authentication errors - incorrect credentials
         DatabaseOpenError::Key(DatabaseKeyError::IncorrectKey)
-        | DatabaseOpenError::DatabaseIntegrity(
-            DatabaseIntegrityError::BlockStream(BlockStreamError::BlockHashMismatch { .. })
-            | DatabaseIntegrityError::Cryptography(
-                CryptographyError::Unpadding(_) | CryptographyError::Padding(_),
-            ),
+        | DatabaseOpenError::Cryptography(CryptographyError::InvalidPadding(_))
+        | DatabaseOpenError::Format(
+            DatabaseFormatError::Kdbx3(Kdbx3OpenError::BlockHashMismatch(_))
+            | DatabaseFormatError::Kdbx4(Kdbx4OpenError::BlockStream(
+                BlockStreamError::BlockHashMismatch { .. },
+            )),
         ) => AppError::InvalidPassword,
 
-        // Header integrity errors
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::HeaderHashMismatch) => {
-            AppError::HeaderIntegrityError
-        }
+        // Header integrity errors (KDBX4 only - KDBX3 has no header hash)
+        DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(
+            Kdbx4OpenError::HeaderHashMismatch,
+        )) => AppError::HeaderIntegrityError,
 
         // Invalid KDBX file format
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::InvalidKDBXIdentifier) => {
+        DatabaseOpenError::VersionParse(DatabaseVersionParseError::InvalidKDBXIdentifier) => {
             AppError::InvalidKdbxFile
         }
 
         // Unsupported KDBX version
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::InvalidKDBXVersion {
+        DatabaseOpenError::VersionParse(DatabaseVersionParseError::InvalidKDBXVersion {
             file_major_version,
             file_minor_version,
             ..
@@ -308,28 +310,59 @@ fn map_open_error(err: DatabaseOpenError) -> AppError {
             "KDBX {file_major_version}.{file_minor_version}"
         )),
 
-        // Unsupported outer cipher
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::OuterCipher(
-            OuterCipherConfigError::InvalidOuterCipherID { cid },
-        )) => AppError::UnsupportedCipher(format!("Unknown outer cipher ID: {cid:?}")),
+        DatabaseOpenError::UnsupportedVersion => {
+            AppError::UnsupportedKdbxVersion("unsupported".to_string())
+        }
 
-        // Unsupported inner cipher
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::InnerCipher(
-            InnerCipherConfigError::InvalidInnerCipherID { cid },
-        )) => AppError::UnsupportedCipher(format!("Unknown inner cipher ID: {cid}")),
+        // Unsupported outer cipher (KDBX3 or KDBX4)
+        DatabaseOpenError::Format(
+            DatabaseFormatError::Kdbx3(Kdbx3OpenError::OuterHeader(
+                Kdbx3OuterHeaderError::OuterCipher(OuterCipherConfigError::InvalidOuterCipherID {
+                    cid,
+                }),
+            ))
+            | DatabaseFormatError::Kdbx4(Kdbx4OpenError::OuterHeader(
+                Kdbx4OuterHeaderError::OuterCipherConfig(
+                    OuterCipherConfigError::InvalidOuterCipherID { cid },
+                ),
+            )),
+        ) => AppError::UnsupportedCipher(format!("Unknown outer cipher ID: {cid:?}")),
 
-        // Unsupported compression
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::Compression(
-            CompressionConfigError::InvalidCompressionSuite { cid },
-        )) => AppError::HeaderParseError(format!("Unknown compression ID: {cid}")),
+        // Unsupported inner cipher (KDBX3 outer header or KDBX4 inner header)
+        DatabaseOpenError::Format(
+            DatabaseFormatError::Kdbx3(Kdbx3OpenError::OuterHeader(
+                Kdbx3OuterHeaderError::InnerCipher(InnerCipherConfigError::InvalidInnerCipherID {
+                    cid,
+                }),
+            ))
+            | DatabaseFormatError::Kdbx4(Kdbx4OpenError::InnerHeader(
+                Kdbx4InnerHeaderError::InnerCipherConfig(
+                    InnerCipherConfigError::InvalidInnerCipherID { cid },
+                ),
+            )),
+        ) => AppError::UnsupportedCipher(format!("Unknown inner cipher ID: {cid}")),
 
-        // Unsupported KDF
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::KdfSettings(
-            KdfConfigError::InvalidKDFUUID { uuid },
-        )) => AppError::UnsupportedKdf(format!("Unknown KDF UUID: {uuid:?}")),
-        DatabaseOpenError::DatabaseIntegrity(DatabaseIntegrityError::KdfSettings(
-            KdfConfigError::InvalidKDFVersion { version },
-        )) => AppError::UnsupportedKdf(format!("Unsupported KDF version: {version}")),
+        // Unsupported compression (KDBX3 or KDBX4)
+        DatabaseOpenError::Format(
+            DatabaseFormatError::Kdbx3(Kdbx3OpenError::OuterHeader(
+                Kdbx3OuterHeaderError::Compression(
+                    CompressionConfigError::InvalidCompressionSuite { cid },
+                ),
+            ))
+            | DatabaseFormatError::Kdbx4(Kdbx4OpenError::OuterHeader(
+                Kdbx4OuterHeaderError::CompressionConfig(
+                    CompressionConfigError::InvalidCompressionSuite { cid },
+                ),
+            )),
+        ) => AppError::HeaderParseError(format!("Unknown compression ID: {cid}")),
+
+        // Unsupported KDF (KDBX4 only)
+        DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(Kdbx4OpenError::OuterHeader(
+            Kdbx4OuterHeaderError::KdfConfig(KdfConfigError::InvalidKDFUUID { uuid }),
+        ))) => AppError::UnsupportedKdf(format!("Unknown KDF UUID: {uuid:?}")),
+        DatabaseOpenError::Format(DatabaseFormatError::Kdbx4(Kdbx4OpenError::OuterHeader(
+            Kdbx4OuterHeaderError::KdfConfig(KdfConfigError::InvalidKDFVersion { version }),
+        ))) => AppError::UnsupportedKdf(format!("Unsupported KDF version: {version}")),
 
         // All other errors
         other => AppError::Kdbx(other.to_string()),

@@ -1,7 +1,7 @@
 use crate::dto::error::AppError;
 use image::imageops::FilterType;
 use image::ImageFormat;
-use keepass::db::{Entry as KeepassEntry, Icon, Node, Times};
+use keepass::db::{Icon, Times};
 use reqwest::header::CONTENT_TYPE;
 use reqwest::redirect::Policy;
 use serde::Serialize;
@@ -11,6 +11,7 @@ use std::io::Cursor;
 use url::Url;
 use uuid::Uuid;
 
+use super::mapping::find_entry_id;
 use super::KdbxService;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -40,11 +41,14 @@ impl KdbxService {
                 .get(&normalized_path)
                 .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
             let db = open_db.db_or_locked()?;
-            let entry = find_entry_by_id_ref(&db.root, entry_id)
+            let eid = find_entry_id(db, entry_id)
+                .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+            let entry = db
+                .entry(eid)
                 .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
             (
                 entry.get_url().map(str::to_string),
-                entry.custom_icon_uuid.is_some(),
+                matches!(entry.icon(), Some(Icon::Custom(_))),
             )
         };
 
@@ -129,28 +133,30 @@ impl KdbxService {
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
         let db = open_db.db_mut_or_locked()?;
 
-        let icon_exists = db
-            .meta
-            .custom_icons
-            .icons
-            .iter()
-            .any(|icon| icon.uuid == parsed_uuid);
-        if !icon_exists {
+        let icon_cid = db
+            .iter_all_custom_icons()
+            .find(|icon| icon.id().uuid() == parsed_uuid)
+            .map(|icon| icon.id());
+        let Some(icon_cid) = icon_cid else {
             return Err(AppError::InvalidInput(format!(
                 "custom icon {icon_uuid} not found in database"
             )));
-        }
-
-        let Some((entry, _group_id)) = find_entry_by_id_mut(&mut db.root, entry_id) else {
-            return Err(AppError::EntryNotFound(entry_id.to_string()));
         };
 
-        if entry.custom_icon_uuid == Some(parsed_uuid) {
+        let eid = find_entry_id(db, entry_id)
+            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+        let mut entry = db
+            .entry_mut(eid)
+            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+
+        if matches!(entry.icon(), Some(Icon::Custom(cid)) if *cid == icon_cid) {
             return Ok(false);
         }
 
-        entry.custom_icon_uuid = Some(parsed_uuid);
-        entry.times.set_last_modification(Times::now());
+        entry
+            .set_icon_custom(icon_cid)
+            .map_err(|e| AppError::Kdbx(e.to_string()))?;
+        entry.times.last_modification = Some(Times::now());
         open_db.is_modified = true;
         Ok(true)
     }
@@ -162,16 +168,19 @@ impl KdbxService {
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
         let db = open_db.db_mut_or_locked()?;
-        let Some((entry, _group_id)) = find_entry_by_id_mut(&mut db.root, entry_id) else {
-            return Err(AppError::EntryNotFound(entry_id.to_string()));
-        };
 
-        if entry.custom_icon_uuid.is_none() {
+        let eid = find_entry_id(db, entry_id)
+            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+        let mut entry = db
+            .entry_mut(eid)
+            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+
+        if !matches!(entry.icon(), Some(Icon::Custom(_))) {
             return Ok(false);
         }
 
-        entry.custom_icon_uuid = None;
-        entry.times.set_last_modification(Times::now());
+        entry.set_icon_none();
+        entry.times.last_modification = Some(Times::now());
         open_db.is_modified = true;
         Ok(true)
     }
@@ -192,45 +201,43 @@ impl KdbxService {
 
         let db = open_db.db_mut_or_locked()?;
 
-        let already_has = {
-            let entry_ref = find_entry_by_id_ref(&db.root, entry_id)
-                .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-            entry_ref.custom_icon_uuid.is_some()
-        };
+        let eid = find_entry_id(db, entry_id)
+            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+
+        let already_has = matches!(
+            db.entry(eid).and_then(|e| e.icon().cloned()),
+            Some(Icon::Custom(_))
+        );
 
         if !force && already_has {
             return Ok(false);
         }
 
         let target_hash = hash_bytes(icon_bytes);
-        let existing_uuid = db
-            .meta
-            .custom_icons
-            .icons
-            .iter()
-            .find_map(|icon| (hash_bytes(&icon.data) == target_hash).then_some(icon.uuid));
+        let existing_cid = db
+            .iter_all_custom_icons()
+            .find(|icon| hash_bytes(&icon.data) == target_hash)
+            .map(|icon| icon.id());
 
-        let icon_uuid = if let Some(uuid) = existing_uuid {
-            uuid
-        } else {
-            let uuid = Uuid::new_v4();
-            db.meta.custom_icons.icons.push(Icon {
-                uuid,
-                data: icon_bytes.to_vec(),
-            });
-            uuid
-        };
+        let mut entry = db
+            .entry_mut(eid)
+            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
 
-        let Some((entry, _group_id)) = find_entry_by_id_mut(&mut db.root, entry_id) else {
-            return Err(AppError::EntryNotFound(entry_id.to_string()));
-        };
-
-        if entry.custom_icon_uuid == Some(icon_uuid) {
-            return Ok(false);
+        match existing_cid {
+            Some(cid) => {
+                if matches!(entry.icon(), Some(Icon::Custom(current)) if *current == cid) {
+                    return Ok(false);
+                }
+                entry
+                    .set_icon_custom(cid)
+                    .map_err(|e| AppError::Kdbx(e.to_string()))?;
+            }
+            None => {
+                entry.set_icon_custom_new(icon_bytes.to_vec());
+            }
         }
 
-        entry.custom_icon_uuid = Some(icon_uuid);
-        entry.times.set_last_modification(Times::now());
+        entry.times.last_modification = Some(Times::now());
         open_db.is_modified = true;
         Ok(true)
     }
@@ -495,48 +502,6 @@ fn hash_bytes(bytes: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hasher.finalize().into()
-}
-
-fn find_entry_by_id_ref<'a>(group: &'a keepass::db::Group, id: &str) -> Option<&'a KeepassEntry> {
-    for node in &group.children {
-        match node {
-            Node::Entry(entry) => {
-                if entry.uuid.to_string() == id {
-                    return Some(entry);
-                }
-            }
-            Node::Group(child) => {
-                if let Some(found) = find_entry_by_id_ref(child, id) {
-                    return Some(found);
-                }
-            }
-        }
-    }
-    None
-}
-
-fn find_entry_by_id_mut<'a>(
-    group: &'a mut keepass::db::Group,
-    id: &str,
-) -> Option<(&'a mut KeepassEntry, String)> {
-    let group_id = group.uuid.to_string();
-
-    for node in &mut group.children {
-        match node {
-            Node::Entry(entry) => {
-                if entry.uuid.to_string() == id {
-                    return Some((entry, group_id));
-                }
-            }
-            Node::Group(child) => {
-                if let Some(found) = find_entry_by_id_mut(child, id) {
-                    return Some(found);
-                }
-            }
-        }
-    }
-
-    None
 }
 
 #[cfg(test)]
@@ -859,7 +824,14 @@ mod tests {
             let databases = service.lock_databases().expect("lock databases");
             let open_db = databases.get(&normalized).expect("open db");
             let db = open_db.db_or_locked().expect("unlocked db");
-            db.meta.custom_icons.icons[0].uuid.to_string()
+            let icon_uuid = db
+                .iter_all_custom_icons()
+                .next()
+                .expect("custom icon exists")
+                .id()
+                .uuid()
+                .to_string();
+            icon_uuid
         };
 
         let changed = service
@@ -1129,6 +1101,115 @@ mod tests {
     }
 
     #[test]
+    fn entry_with_custom_icon_reports_no_builtin_icon_id() {
+        // keepass 0.12 made builtin and custom icons mutually exclusive on
+        // Entry. convert_entry must reflect that honestly: when a custom
+        // icon is set, iconId is null and customIconUuid carries the UUID.
+        // The previous "always emit iconId=0" workaround caused the
+        // frontend to echo iconId=0 back on the next save and silently
+        // destroy the custom icon — see
+        // update_entry_without_icon_id_preserves_custom_icon.
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 7];
+
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign favicon");
+
+        let entries = service.list_entries(&db_path, None).expect("list entries");
+        let entry = entries
+            .iter()
+            .find(|e| e.id == entry_a)
+            .expect("entry returned by list_entries");
+        assert!(
+            entry.icon_id.is_none(),
+            "iconId must be None when the entry has only a custom icon"
+        );
+        assert!(
+            entry.custom_icon_uuid.is_some(),
+            "customIconUuid must round-trip"
+        );
+    }
+
+    #[test]
+    fn update_entry_without_icon_id_preserves_custom_icon() {
+        // Regression: editing a non-icon field on a favicon-bearing entry
+        // used to destroy the favicon because the frontend echoed back
+        // iconId=0 and set_icon_builtin(0) cleared Icon::Custom. Sending
+        // icon_id: None must leave the entry's icon untouched.
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 9];
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign favicon");
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                crate::dto::entry::UpdateEntryData {
+                    title: Some("Renamed".to_string()),
+                    username: None,
+                    password: None,
+                    url: None,
+                    notes: None,
+                    icon_id: None,
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                },
+            )
+            .expect("update title");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.custom_icon_uuid.is_some(),
+            "favicon must survive an unrelated field update"
+        );
+        assert!(
+            entry.icon_id.is_none(),
+            "the entry has no builtin icon and the update didn't touch one"
+        );
+    }
+
+    #[test]
+    fn update_entry_with_builtin_zero_switches_off_custom_icon() {
+        // Picker-to-Key (icon 0) path on a custom-icon entry: the frontend
+        // sends iconId=Some(0) (dirty) and the customIconUuid clear is
+        // applied separately. The backend must end in Icon::BuiltIn(0).
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 10];
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign favicon");
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                crate::dto::entry::UpdateEntryData {
+                    title: None,
+                    username: None,
+                    password: None,
+                    url: None,
+                    notes: None,
+                    icon_id: Some(0),
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                },
+            )
+            .expect("update icon to builtin 0");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert_eq!(entry.icon_id, Some(0));
+        assert!(
+            entry.custom_icon_uuid.is_none(),
+            "switching to builtin 0 must drop the custom icon"
+        );
+    }
+
+    #[test]
     fn assign_entry_custom_icon_deduplicates_icon_bytes() {
         let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
         let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
@@ -1147,15 +1228,17 @@ mod tests {
         let databases = service.lock_databases().expect("lock databases");
         let open_db = databases.get(&normalized).expect("open db");
         let db = open_db.db_or_locked().expect("unlocked db");
-        assert_eq!(db.meta.custom_icons.icons.len(), 1);
+        assert_eq!(db.iter_all_custom_icons().count(), 1);
 
-        let icon_a = find_entry_by_id_ref(&db.root, &entry_a)
-            .and_then(|entry| entry.custom_icon_uuid)
-            .expect("entry A icon");
-        let icon_b = find_entry_by_id_ref(&db.root, &entry_b)
-            .and_then(|entry| entry.custom_icon_uuid)
-            .expect("entry B icon");
-        assert_eq!(icon_a, icon_b);
+        let icon_for = |entry_id: &str| -> uuid::Uuid {
+            let eid = find_entry_id(db, entry_id).expect("entry id");
+            let entry = db.entry(eid).expect("entry ref");
+            match entry.icon() {
+                Some(Icon::Custom(cid)) => cid.uuid(),
+                other => unreachable!("entry {entry_id} has no custom icon: {other:?}"),
+            }
+        };
+        assert_eq!(icon_for(&entry_a), icon_for(&entry_b));
     }
 
     #[test]
@@ -1186,8 +1269,9 @@ mod tests {
         let databases = service.lock_databases().expect("lock databases");
         let open_db = databases.get(&normalized).expect("open db");
         let db = open_db.db_or_locked().expect("unlocked db");
-        let entry = find_entry_by_id_ref(&db.root, &entry_a).expect("entry");
-        assert!(entry.custom_icon_uuid.is_none());
+        let eid = find_entry_id(db, &entry_a).expect("entry id");
+        let entry = db.entry(eid).expect("entry ref");
+        assert!(!matches!(entry.icon(), Some(Icon::Custom(_))));
     }
 
     #[test]
@@ -1210,7 +1294,11 @@ mod tests {
         let databases = service.lock_databases().expect("lock databases");
         let open_db = databases.get(&normalized).expect("open db");
         let db = open_db.db_or_locked().expect("unlocked db");
-        assert_eq!(db.meta.custom_icons.icons.len(), 1);
-        assert_eq!(db.meta.custom_icons.icons[0].data, first_icon);
+        let mut icons: Vec<Vec<u8>> = db
+            .iter_all_custom_icons()
+            .map(|icon| icon.data.clone())
+            .collect();
+        assert_eq!(icons.len(), 1);
+        assert_eq!(icons.pop().expect("icon data"), first_icon);
     }
 }

@@ -216,7 +216,12 @@ export function useEntryEditForm({
             password: values.password,
             url: values.url || undefined,
             notes: values.notes || undefined,
-            iconId: values.iconId,
+            // Only send iconId when the user actually picked an icon — the
+            // backend's set_icon_builtin clears any existing custom icon, so
+            // an unconditional echo would destroy favicons on plain edits.
+            iconId: form.formState.dirtyFields.iconId
+              ? values.iconId
+              : undefined,
             tags: values.tags,
             customFields,
             protectedCustomFields,
