@@ -1101,12 +1101,14 @@ mod tests {
     }
 
     #[test]
-    fn entry_with_custom_icon_serializes_iconid_as_number() {
-        // Regression: keepass 0.12 collapsed builtin+custom icons into a
-        // single `Icon` enum, so entries with a custom favicon return
-        // Icon::Custom from keepass-rs with no separate builtin index.
-        // The frontend Zod schema requires `iconId` to be a number, so
-        // convert_entry must still emit Some(0) alongside customIconUuid.
+    fn entry_with_custom_icon_reports_no_builtin_icon_id() {
+        // keepass 0.12 made builtin and custom icons mutually exclusive on
+        // Entry. convert_entry must reflect that honestly: when a custom
+        // icon is set, iconId is null and customIconUuid carries the UUID.
+        // The previous "always emit iconId=0" workaround caused the
+        // frontend to echo iconId=0 back on the next save and silently
+        // destroy the custom icon — see
+        // update_entry_without_icon_id_preserves_custom_icon.
         let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
         let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 7];
 
@@ -1120,12 +1122,90 @@ mod tests {
             .find(|e| e.id == entry_a)
             .expect("entry returned by list_entries");
         assert!(
-            entry.icon_id.is_some(),
-            "iconId must be Some so the frontend Zod schema accepts it"
+            entry.icon_id.is_none(),
+            "iconId must be None when the entry has only a custom icon"
         );
         assert!(
             entry.custom_icon_uuid.is_some(),
-            "customIconUuid must round-trip alongside iconId"
+            "customIconUuid must round-trip"
+        );
+    }
+
+    #[test]
+    fn update_entry_without_icon_id_preserves_custom_icon() {
+        // Regression: editing a non-icon field on a favicon-bearing entry
+        // used to destroy the favicon because the frontend echoed back
+        // iconId=0 and set_icon_builtin(0) cleared Icon::Custom. Sending
+        // icon_id: None must leave the entry's icon untouched.
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 9];
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign favicon");
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                crate::dto::entry::UpdateEntryData {
+                    title: Some("Renamed".to_string()),
+                    username: None,
+                    password: None,
+                    url: None,
+                    notes: None,
+                    icon_id: None,
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                },
+            )
+            .expect("update title");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.custom_icon_uuid.is_some(),
+            "favicon must survive an unrelated field update"
+        );
+        assert!(
+            entry.icon_id.is_none(),
+            "the entry has no builtin icon and the update didn't touch one"
+        );
+    }
+
+    #[test]
+    fn update_entry_with_builtin_zero_switches_off_custom_icon() {
+        // Picker-to-Key (icon 0) path on a custom-icon entry: the frontend
+        // sends iconId=Some(0) (dirty) and the customIconUuid clear is
+        // applied separately. The backend must end in Icon::BuiltIn(0).
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 10];
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign favicon");
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                crate::dto::entry::UpdateEntryData {
+                    title: None,
+                    username: None,
+                    password: None,
+                    url: None,
+                    notes: None,
+                    icon_id: Some(0),
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                },
+            )
+            .expect("update icon to builtin 0");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert_eq!(entry.icon_id, Some(0));
+        assert!(
+            entry.custom_icon_uuid.is_none(),
+            "switching to builtin 0 must drop the custom icon"
         );
     }
 

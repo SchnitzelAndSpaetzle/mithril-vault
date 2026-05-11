@@ -58,16 +58,15 @@ pub(crate) fn group_has_children(group: &GroupRef<'_>) -> bool {
 
 pub(crate) fn convert_entry(entry: &EntryRef<'_>, group_id: &str) -> Entry {
     // keepass 0.12 collapsed builtin/custom icons into a single Icon enum:
-    // an entry has either Icon::BuiltIn(n) or Icon::Custom(cid), never both.
-    // The DTO contract (and the frontend) still expects a numeric `iconId`
-    // alongside an optional `customIconUuid` — old keepass 0.8 entries with
-    // a favicon carried IconID=0 + CustomIconUUID together. Default iconId
-    // to 0 (KeePass "Key") whenever the entry has no builtin icon so the
-    // frontend's Zod schema accepts the payload.
+    // an entry has either Icon::BuiltIn(n) or Icon::Custom(cid) or no icon.
+    // Mirror that shape faithfully to the frontend so update_entry can use
+    // `data.icon_id.is_some()` as "user explicitly picked a builtin" — a
+    // synthesized echo would silently overwrite the entry's custom icon on
+    // the round-trip through the update form.
     let (icon_id, custom_icon_uuid) = match entry.icon() {
-        Some(Icon::BuiltIn(n)) => (Some(u32::try_from(*n).unwrap_or(0)), None),
-        Some(Icon::Custom(cid)) => (Some(0), Some(cid.uuid().to_string())),
-        None => (Some(0), None),
+        Some(Icon::BuiltIn(n)) => (u32::try_from(*n).ok(), None),
+        Some(Icon::Custom(cid)) => (None, Some(cid.uuid().to_string())),
+        None => (None, None),
     };
     let (custom_fields, custom_field_meta) = collect_custom_fields(entry);
 
