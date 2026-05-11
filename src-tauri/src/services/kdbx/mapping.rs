@@ -101,10 +101,14 @@ pub(crate) fn convert_group(group: &GroupRef<'_>, parent_id: Option<&str>) -> Gr
         Some(Icon::Custom(cid)) => (None, Some(cid.uuid().to_string())),
         None => (None, None),
     };
-    let children = group
+    // keepass 0.12 stores child groups in a HashSet, so iteration order is
+    // nondeterministic. Sort by (name, id) so the sidebar renders stably
+    // across reloads.
+    let mut children: Vec<Group> = group
         .groups()
         .map(|child| convert_group(&child, Some(&id)))
         .collect();
+    children.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
 
     Group {
         id: id.clone(),

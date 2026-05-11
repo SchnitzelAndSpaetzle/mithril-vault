@@ -169,10 +169,32 @@ impl KdbxService {
                 .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?
                 .remove();
         } else {
-            // Move to recycle bin
-            let recycle_bin_uuid = ensure_recycle_bin(db);
-            let recycle_gid = find_group_id(db, &recycle_bin_uuid)
-                .ok_or_else(|| AppError::GroupNotFound(recycle_bin_uuid.clone()))?;
+            // If the user soft-deletes the recycle bin itself, create a fresh
+            // replacement recycle bin under root and move the old one into it.
+            // We can't go through ensure_recycle_bin here because both its
+            // lookups (recyclebin_uuid and find-by-name) would resolve to the
+            // group being deleted; move_to would then fail with WouldCreateCycle.
+            let is_self_recycle = db
+                .meta
+                .recyclebin_uuid
+                .is_some_and(|uuid| uuid == gid.uuid());
+
+            let recycle_gid = if is_self_recycle {
+                let new_id = {
+                    let mut root = db.root_mut();
+                    let mut new_group = root.add_group();
+                    new_group.name = "Recycle Bin".to_string();
+                    new_group.id()
+                };
+                db.meta.recyclebin_enabled = Some(true);
+                db.meta.recyclebin_uuid = Some(new_id.uuid());
+                db.meta.recyclebin_changed = Some(Times::now());
+                new_id
+            } else {
+                let recycle_bin_uuid = ensure_recycle_bin(db);
+                find_group_id(db, &recycle_bin_uuid)
+                    .ok_or_else(|| AppError::GroupNotFound(recycle_bin_uuid.clone()))?
+            };
 
             let now = Times::now();
             {
