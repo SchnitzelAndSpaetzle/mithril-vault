@@ -2,6 +2,7 @@ use crate::dto::error::AppError;
 use image::imageops::FilterType;
 use image::ImageFormat;
 use keepass::db::{Entry as KeepassEntry, Icon, Node, Times};
+use public_suffix::{EffectiveTLDProvider, DEFAULT_PROVIDER};
 use reqwest::header::CONTENT_TYPE;
 use reqwest::redirect::Policy;
 use serde::Serialize;
@@ -24,6 +25,26 @@ pub enum FaviconFetchOutcome {
 const FAVICON_MAX_BYTES: usize = 512 * 1024;
 const GOOGLE_FAVICON_URL: &str = "https://www.google.com/s2/favicons";
 const ICON_HORSE_URL: &str = "https://icon.horse/icon";
+
+// RFC 6761 / 6762 / 8375 special-use names plus common corporate suffixes.
+// Hosts under these must never be sent to third-party favicon services even
+// when the user opts into fallbacks. public-suffix falls back to a wildcard
+// rule for unknown TLDs (returning the last label as the suffix), so an
+// explicit blocklist is needed to keep these private.
+const SPECIAL_USE_TLDS: &[&str] = &[
+    "local",
+    "localhost",
+    "test",
+    "example",
+    "invalid",
+    "onion",
+    "internal",
+    "intranet",
+    "lan",
+    "home",
+    "corp",
+    "private",
+];
 
 impl KdbxService {
     pub async fn fetch_entry_favicon(
@@ -56,7 +77,7 @@ impl KdbxService {
             return Ok(FaviconFetchOutcome::NotFound);
         };
 
-        let Some((exact_host, root_host)) = extract_hosts(&raw_url) else {
+        let Some(hosts) = extract_hosts(&raw_url) else {
             return Ok(FaviconFetchOutcome::NotFound);
         };
 
@@ -76,11 +97,7 @@ impl KdbxService {
             .build()
             .map_err(|error| AppError::Io(error.to_string()))?;
 
-        let candidates = build_favicon_candidates(
-            &exact_host,
-            root_host.as_deref(),
-            allow_third_party_fallbacks,
-        );
+        let candidates = build_favicon_candidates(&hosts, allow_third_party_fallbacks);
         let mut attempted_domains = HashSet::new();
 
         for candidate in candidates {
@@ -246,35 +263,53 @@ struct FaviconCandidate {
     cooldown_domain: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FaviconLookup {
+    exact_authority: String,
+    hostname: String,
+    root_domain: Option<String>,
+}
+
 fn build_favicon_candidates(
-    exact_host: &str,
-    root_host: Option<&str>,
+    hosts: &FaviconLookup,
     allow_third_party_fallbacks: bool,
 ) -> Vec<FaviconCandidate> {
-    let mut hosts = vec![exact_host.to_string()];
-    if let Some(root) = root_host {
-        if root != exact_host {
-            hosts.push(root.to_string());
+    let mut direct_hosts = vec![(hosts.exact_authority.as_str(), hosts.hostname.as_str())];
+    if let Some(root) = hosts.root_domain.as_deref() {
+        if root != hosts.hostname {
+            direct_hosts.push((root, root));
         }
     }
 
     let mut candidates = Vec::new();
-    for host in &hosts {
+    for (fetch_host, cooldown_domain) in &direct_hosts {
         candidates.push(FaviconCandidate {
-            fetch_url: format!("https://{host}/favicon.ico"),
-            cooldown_domain: host.clone(),
+            fetch_url: format!("https://{fetch_host}/favicon.ico"),
+            cooldown_domain: (*cooldown_domain).to_string(),
         });
     }
 
     if allow_third_party_fallbacks {
-        for host in &hosts {
+        let mut third_party_domains = Vec::new();
+        if let Some(domain) = get_public_registrable_domain(&hosts.hostname) {
+            third_party_domains.push(domain);
+        }
+        if let Some(root) = hosts.root_domain.as_deref() {
+            if let Some(domain) = get_public_registrable_domain(root) {
+                if !third_party_domains.contains(&domain) {
+                    third_party_domains.push(domain);
+                }
+            }
+        }
+
+        for domain in &third_party_domains {
             candidates.push(FaviconCandidate {
-                fetch_url: format!("{GOOGLE_FAVICON_URL}?domain={host}&sz=64"),
-                cooldown_domain: host.clone(),
+                fetch_url: format!("{GOOGLE_FAVICON_URL}?domain={domain}&sz=64"),
+                cooldown_domain: domain.clone(),
             });
             candidates.push(FaviconCandidate {
-                fetch_url: format!("{ICON_HORSE_URL}/{host}"),
-                cooldown_domain: host.clone(),
+                fetch_url: format!("{ICON_HORSE_URL}/{domain}"),
+                cooldown_domain: domain.clone(),
             });
         }
     }
@@ -282,31 +317,62 @@ fn build_favicon_candidates(
     candidates
 }
 
-fn extract_hosts(entry_url: &str) -> Option<(String, Option<String>)> {
+fn extract_hosts(entry_url: &str) -> Option<FaviconLookup> {
     let parsed = Url::parse(entry_url).ok()?;
     match parsed.scheme() {
         "http" | "https" => {}
         _ => return None,
     }
     let host = parsed.host_str()?.to_ascii_lowercase();
-    let root = get_root_host(&host);
-    Some((host, root))
+    let exact_authority = format_fetch_host(&host, parsed.port());
+    let root = get_root_domain(&host);
+    Some(FaviconLookup {
+        exact_authority,
+        hostname: host,
+        root_domain: root,
+    })
 }
 
-fn get_root_host(host: &str) -> Option<String> {
+fn format_fetch_host(host: &str, port: Option<u16>) -> String {
+    let host_for_url = if host.parse::<std::net::Ipv6Addr>().is_ok() {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    };
+
+    if let Some(port) = port {
+        format!("{host_for_url}:{port}")
+    } else {
+        host_for_url
+    }
+}
+
+fn get_root_domain(host: &str) -> Option<String> {
+    let registrable = get_public_registrable_domain(host)?;
+    if registrable.eq_ignore_ascii_case(host) {
+        return None;
+    }
+    Some(registrable)
+}
+
+fn get_public_registrable_domain(host: &str) -> Option<String> {
     if host.parse::<std::net::Ipv4Addr>().is_ok() || host.parse::<std::net::Ipv6Addr>().is_ok() {
         return None;
     }
 
-    // Use the Public Suffix List to find the registrable domain (eTLD+1).
-    // If the host already IS the registrable apex (e.g. example.co.uk) or
-    // sits directly on a public suffix that we shouldn't generalize to
-    // (e.g. user.github.io, app.netlify.app), domain_str returns the host
-    // itself and we skip the root-host fallback.
-    let registrable = psl::domain_str(host)?;
-    if registrable.eq_ignore_ascii_case(host) {
-        return None;
+    // Block special-use / private-network suffixes (.local, .internal, etc.)
+    // outright. public-suffix falls back to a wildcard "*" rule for unknown
+    // TLDs and would otherwise treat these as eTLD+1.
+    if let Some(tld) = host.rsplit('.').next() {
+        if SPECIAL_USE_TLDS.contains(&tld) {
+            return None;
+        }
     }
+
+    // For PSL-aware hosts, take the registrable domain (eTLD+1). When the
+    // host is itself a public suffix (plain `github.io`, `co.uk`) the call
+    // errors and we return None so the caller skips the root-host fallback.
+    let registrable = DEFAULT_PROVIDER.effective_tld_plus_one(host).ok()?;
     Some(registrable.to_ascii_lowercase())
 }
 
@@ -596,8 +662,13 @@ mod tests {
     }
 
     #[test]
-    fn build_candidates_tries_exact_host_before_root_host() {
-        let candidates = build_favicon_candidates("app.example.com", Some("example.com"), false);
+    fn build_candidates_tries_hostname_before_root_domain() {
+        let hosts = FaviconLookup {
+            exact_authority: "app.example.com".to_string(),
+            hostname: "app.example.com".to_string(),
+            root_domain: Some("example.com".to_string()),
+        };
+        let candidates = build_favicon_candidates(&hosts, false);
         let urls: Vec<&str> = candidates
             .iter()
             .map(|candidate| candidate.fetch_url.as_str())
@@ -609,15 +680,40 @@ mod tests {
     }
 
     #[test]
-    fn build_candidates_adds_opt_in_third_party_sources() {
-        let candidates = build_favicon_candidates("app.example.com", Some("example.com"), true);
+    fn build_candidates_adds_opt_in_third_party_sources_for_public_domains() {
+        let hosts = FaviconLookup {
+            exact_authority: "app.example.com".to_string(),
+            hostname: "app.example.com".to_string(),
+            root_domain: Some("example.com".to_string()),
+        };
+        let candidates = build_favicon_candidates(&hosts, true);
 
         assert!(candidates.iter().any(|candidate| {
-            candidate.fetch_url == "https://www.google.com/s2/favicons?domain=app.example.com&sz=64"
+            candidate.fetch_url == "https://www.google.com/s2/favicons?domain=example.com&sz=64"
         }));
         assert!(candidates
             .iter()
-            .any(|candidate| candidate.fetch_url == "https://icon.horse/icon/app.example.com"));
+            .any(|candidate| candidate.fetch_url == "https://icon.horse/icon/example.com"));
+        assert!(!candidates.iter().any(|candidate| {
+            candidate.fetch_url.contains("domain=app.example.com")
+                || candidate.fetch_url.ends_with("/app.example.com")
+        }));
+    }
+
+    #[test]
+    fn build_candidates_omits_third_party_sources_for_private_hosts() {
+        let hosts = FaviconLookup {
+            exact_authority: "nas.local:5001".to_string(),
+            hostname: "nas.local".to_string(),
+            root_domain: None,
+        };
+        let candidates = build_favicon_candidates(&hosts, true);
+        let urls: Vec<&str> = candidates
+            .iter()
+            .map(|candidate| candidate.fetch_url.as_str())
+            .collect();
+
+        assert_eq!(urls, vec!["https://nas.local:5001/favicon.ico"]);
     }
 
     #[test]
@@ -811,31 +907,59 @@ mod tests {
     }
 
     #[test]
-    fn extract_hosts_normalizes_subdomain_and_root_host() {
+    fn extract_hosts_normalizes_subdomain_and_root_domain() {
         let hosts = extract_hosts("https://APP.Example.COM/login").expect("extract hosts");
 
-        assert_eq!(hosts.0, "app.example.com");
-        assert_eq!(hosts.1.as_deref(), Some("example.com"));
+        assert_eq!(hosts.exact_authority, "app.example.com");
+        assert_eq!(hosts.hostname, "app.example.com");
+        assert_eq!(hosts.root_domain.as_deref(), Some("example.com"));
         assert_eq!(
             extract_hosts("https://login.example.co.uk")
                 .expect("extract multi-label public suffix root")
-                .1
+                .root_domain
                 .as_deref(),
             Some("example.co.uk")
         );
 
         let bare = extract_hosts("https://example.co.uk").expect("registrable apex");
-        assert_eq!(bare.0, "example.co.uk");
+        assert_eq!(bare.hostname, "example.co.uk");
         assert!(
-            bare.1.is_none(),
+            bare.root_domain.is_none(),
             "the registrable apex has no further root to fall back to"
         );
 
         let ip = extract_hosts("http://127.0.0.1:3000").expect("ip literal");
-        assert_eq!(ip.0, "127.0.0.1");
-        assert!(ip.1.is_none(), "ip literals never produce a root host");
+        assert_eq!(ip.exact_authority, "127.0.0.1:3000");
+        assert_eq!(ip.hostname, "127.0.0.1");
+        assert!(
+            ip.root_domain.is_none(),
+            "ip literals never produce a root host"
+        );
 
         assert_eq!(extract_hosts("not a url"), None);
+    }
+
+    #[test]
+    fn extract_hosts_preserves_explicit_ports_for_exact_fetches() {
+        let hosts = extract_hosts("https://app.example.com:8443/login").expect("extract hosts");
+
+        assert_eq!(hosts.exact_authority, "app.example.com:8443");
+        assert_eq!(hosts.hostname, "app.example.com");
+        assert_eq!(hosts.root_domain.as_deref(), Some("example.com"));
+
+        let candidates = build_favicon_candidates(&hosts, true);
+        let urls: Vec<&str> = candidates
+            .iter()
+            .map(|candidate| candidate.fetch_url.as_str())
+            .collect();
+
+        assert_eq!(urls[0], "https://app.example.com:8443/favicon.ico");
+        assert_eq!(urls[1], "https://example.com/favicon.ico");
+        assert!(urls.contains(&"https://www.google.com/s2/favicons?domain=example.com&sz=64"));
+        assert!(!urls
+            .iter()
+            .skip(2)
+            .any(|url| url.contains("app.example.com:8443")));
     }
 
     #[test]
@@ -869,9 +993,9 @@ mod tests {
         ] {
             let url = format!("https://{host}/");
             let parsed = extract_hosts(&url).expect("parse psl host");
-            assert_eq!(parsed.0, host);
+            assert_eq!(parsed.hostname, host);
             assert!(
-                parsed.1.is_none(),
+                parsed.root_domain.is_none(),
                 "{host} should not produce a root-host fallback"
             );
         }
