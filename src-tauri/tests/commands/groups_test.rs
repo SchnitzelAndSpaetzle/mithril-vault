@@ -812,3 +812,90 @@ fn test_get_custom_icons_database_not_open() {
         "Should fail with DatabaseNotFound when database is not open"
     );
 }
+
+#[test]
+fn test_list_groups_children_order_is_deterministic() {
+    // keepass 0.12 stores child groups in a HashSet, so without explicit
+    // sorting the sidebar would render in random order across reloads.
+    // Adding many children stresses the HashSet ordering and lets us catch
+    // accidental regressions.
+    let (service, _dir, db_path_str) = create_test_database();
+    let root_id = service
+        .get_info(&db_path_str)
+        .expect("get database info")
+        .root_group_id;
+
+    let mut created: Vec<String> = (0..12)
+        .map(|i| {
+            service
+                .create_group(&db_path_str, Some(&root_id), &format!("g-{i:02}"), None)
+                .expect("create group")
+                .name
+        })
+        .collect();
+    created.sort();
+
+    let roots = service.list_groups(&db_path_str).expect("list groups");
+    let actual: Vec<String> = roots[0]
+        .children
+        .iter()
+        .filter(|g| g.name.starts_with("g-"))
+        .map(|g| g.name.clone())
+        .collect();
+    assert_eq!(actual, created, "child groups must be returned sorted");
+
+    // Repeat the list call and confirm the order doesn't drift between calls.
+    let roots_again = service.list_groups(&db_path_str).expect("list groups #2");
+    let actual_again: Vec<String> = roots_again[0]
+        .children
+        .iter()
+        .filter(|g| g.name.starts_with("g-"))
+        .map(|g| g.name.clone())
+        .collect();
+    assert_eq!(actual, actual_again, "order must be stable across calls");
+}
+
+#[test]
+fn test_soft_delete_recycle_bin_creates_replacement() {
+    // Soft-deleting the recycle bin itself used to try to move it into
+    // itself (WouldCreateCycle). The fix creates a fresh replacement bin
+    // and nests the old one inside it.
+    let (service, _dir, db_path_str) = create_test_database();
+
+    // Make the recycle bin exist by soft-deleting any group.
+    let throwaway = service
+        .create_group(&db_path_str, None, "throwaway", None)
+        .expect("create throwaway");
+    service
+        .delete_group(&db_path_str, &throwaway.id, false, false)
+        .expect("soft delete throwaway");
+
+    let old_recycle_id = service
+        .get_recycle_bin_id(&db_path_str)
+        .expect("get recycle bin id")
+        .expect("recycle bin exists");
+
+    // Now soft-delete the recycle bin itself. Without the fix this returns
+    // a WouldCreateCycle error from keepass.
+    service
+        .delete_group(&db_path_str, &old_recycle_id, true, false)
+        .expect("soft delete recycle bin");
+
+    let new_recycle_id = service
+        .get_recycle_bin_id(&db_path_str)
+        .expect("get recycle bin id after self-delete")
+        .expect("a replacement recycle bin should exist");
+    assert_ne!(
+        new_recycle_id, old_recycle_id,
+        "soft-deleting the recycle bin must create a new replacement"
+    );
+
+    let new_recycle = service
+        .get_group(&db_path_str, &new_recycle_id)
+        .expect("fetch new recycle bin");
+    assert_eq!(new_recycle.name, "Recycle Bin");
+    assert!(
+        new_recycle.children.iter().any(|c| c.id == old_recycle_id),
+        "old recycle bin should be nested inside the new one"
+    );
+}
