@@ -24,10 +24,6 @@ pub enum FaviconFetchOutcome {
 const FAVICON_MAX_BYTES: usize = 512 * 1024;
 const GOOGLE_FAVICON_URL: &str = "https://www.google.com/s2/favicons";
 const ICON_HORSE_URL: &str = "https://icon.horse/icon";
-const COMMON_MULTI_LABEL_PUBLIC_SUFFIXES: &[&str] = &[
-    "ac.uk", "co.jp", "co.uk", "com.au", "com.br", "com.mx", "com.tr", "edu.au", "gov.au",
-    "gov.uk", "net.au", "net.br", "net.uk", "org.au", "org.br", "org.uk",
-];
 
 impl KdbxService {
     pub async fn fetch_entry_favicon(
@@ -288,6 +284,10 @@ fn build_favicon_candidates(
 
 fn extract_hosts(entry_url: &str) -> Option<(String, Option<String>)> {
     let parsed = Url::parse(entry_url).ok()?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => return None,
+    }
     let host = parsed.host_str()?.to_ascii_lowercase();
     let root = get_root_host(&host);
     Some((host, root))
@@ -298,20 +298,16 @@ fn get_root_host(host: &str) -> Option<String> {
         return None;
     }
 
-    let parts: Vec<&str> = host.split('.').filter(|label| !label.is_empty()).collect();
-    if parts.len() < 3 {
+    // Use the Public Suffix List to find the registrable domain (eTLD+1).
+    // If the host already IS the registrable apex (e.g. example.co.uk) or
+    // sits directly on a public suffix that we shouldn't generalize to
+    // (e.g. user.github.io, app.netlify.app), domain_str returns the host
+    // itself and we skip the root-host fallback.
+    let registrable = psl::domain_str(host)?;
+    if registrable.eq_ignore_ascii_case(host) {
         return None;
     }
-
-    let suffix = parts[parts.len() - 2..].join(".");
-    if COMMON_MULTI_LABEL_PUBLIC_SUFFIXES.contains(&suffix.as_str()) {
-        if parts.len() < 4 {
-            return None;
-        }
-        return Some(parts[parts.len() - 3..].join("."));
-    }
-
-    Some(suffix)
+    Some(registrable.to_ascii_lowercase())
 }
 
 async fn fetch_favicon_bytes(
@@ -827,8 +823,58 @@ mod tests {
                 .as_deref(),
             Some("example.co.uk")
         );
-        assert!(extract_hosts("http://127.0.0.1:3000").is_some());
+
+        let bare = extract_hosts("https://example.co.uk").expect("registrable apex");
+        assert_eq!(bare.0, "example.co.uk");
+        assert!(
+            bare.1.is_none(),
+            "the registrable apex has no further root to fall back to"
+        );
+
+        let ip = extract_hosts("http://127.0.0.1:3000").expect("ip literal");
+        assert_eq!(ip.0, "127.0.0.1");
+        assert!(ip.1.is_none(), "ip literals never produce a root host");
+
         assert_eq!(extract_hosts("not a url"), None);
+    }
+
+    #[test]
+    fn extract_hosts_rejects_non_http_schemes() {
+        // Non-web entries (ssh, db, ldap, etc.) must not trigger favicon
+        // network activity. extract_hosts returns None so fetch_entry_favicon
+        // short-circuits with NotFound before any DNS or HTTP traffic.
+        for url in [
+            "ssh://bastion.corp.example/",
+            "postgres://db.internal:5432/prod",
+            "ldap://corp-ad.internal/",
+            "file:///etc/hosts",
+            "ftp://files.example.com/",
+            "obsidian://open?vault=Notes",
+        ] {
+            assert_eq!(extract_hosts(url), None, "expected no fetch for {url}");
+        }
+    }
+
+    #[test]
+    fn extract_hosts_skips_root_fallback_for_psl_hosting_platforms() {
+        // PSL entries like github.io / netlify.app / vercel.app are public
+        // suffixes themselves, so user.github.io is already the registrable
+        // apex. The root-host fallback must be skipped so we never fetch
+        // the provider's marketing-page favicon by accident.
+        for host in [
+            "user.github.io",
+            "team.netlify.app",
+            "demo.vercel.app",
+            "tenant.azurewebsites.net",
+        ] {
+            let url = format!("https://{host}/");
+            let parsed = extract_hosts(&url).expect("parse psl host");
+            assert_eq!(parsed.0, host);
+            assert!(
+                parsed.1.is_none(),
+                "{host} should not produce a root-host fallback"
+            );
+        }
     }
 
     #[test]
