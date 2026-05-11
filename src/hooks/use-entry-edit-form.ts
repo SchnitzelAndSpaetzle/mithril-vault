@@ -263,6 +263,17 @@ export function useEntryEditForm({
           protectedCustomFields,
         },
       });
+      if (values.customIconUuid) {
+        const customIconChanged = await entriesApi.setCustomIcon(
+          dbId,
+          result.id,
+          values.customIconUuid
+        );
+        if (customIconChanged) {
+          await database.save(dbId);
+          await refreshFaviconQueries(result.id);
+        }
+      }
       toast.success(t("entries.toast.created"));
       onSave(result);
       void maybeAutoFetchFavicon(result.id, values.url);
@@ -325,6 +336,17 @@ export function useEntryEditForm({
           protectedCustomFields,
         },
       });
+      if (values.customIconUuid) {
+        const customIconChanged = await entriesApi.setCustomIcon(
+          dbId,
+          result.id,
+          values.customIconUuid
+        );
+        if (customIconChanged) {
+          await database.save(dbId);
+          await refreshFaviconQueries(result.id);
+        }
+      }
       toast.success(t("entries.toast.created"));
       form.reset(getEntryFormDefaults(null, values.groupId ?? groupId));
       void generateNewPassword();

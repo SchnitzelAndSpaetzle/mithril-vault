@@ -88,11 +88,10 @@ impl KdbxService {
         let mut attempted_domains = HashSet::new();
 
         for candidate in candidates {
-            attempted_domains.insert(candidate.cooldown_domain.clone());
-
             if self.is_favicon_domain_on_cooldown(&candidate.cooldown_domain)? {
                 continue;
             }
+            attempted_domains.insert(candidate.cooldown_domain.clone());
 
             let Some((downloaded_bytes, content_type)) =
                 fetch_favicon_bytes(&client, &candidate.fetch_url).await
@@ -634,6 +633,61 @@ mod tests {
         .expect("fetch favicon");
 
         assert_eq!(outcome, FaviconFetchOutcome::NotFound);
+    }
+
+    #[test]
+    fn fetch_entry_favicon_does_not_refresh_cooldown_for_skipped_domain() {
+        let (service, _dir, db_path, entry_id, _entry_b) = create_test_database();
+        service
+            .update_entry(
+                &db_path,
+                &entry_id,
+                crate::dto::entry::UpdateEntryData {
+                    title: None,
+                    username: None,
+                    password: None,
+                    url: Some("https://example.com".to_string()),
+                    notes: None,
+                    icon_id: None,
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                },
+            )
+            .expect("set url");
+
+        // Stamp a fixed failure timestamp in the past so we can detect any
+        // refresh as a change in the value.
+        let initial_stamp = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(30))
+            .expect("build initial cooldown stamp");
+        {
+            let mut failures = service
+                .favicon_failed_domains
+                .lock()
+                .expect("lock cooldown map");
+            failures.insert("example.com".to_string(), initial_stamp);
+        }
+
+        let outcome = tauri::async_runtime::block_on(
+            service.fetch_entry_favicon(&db_path, &entry_id, false, true),
+        )
+        .expect("fetch favicon");
+
+        assert_eq!(outcome, FaviconFetchOutcome::NotFound);
+
+        let failures = service
+            .favicon_failed_domains
+            .lock()
+            .expect("lock cooldown map");
+        let stamp = failures
+            .get("example.com")
+            .copied()
+            .expect("cooldown entry preserved");
+        assert_eq!(
+            stamp, initial_stamp,
+            "cooldown stamp must not be refreshed when the only candidate is already cooling down"
+        );
     }
 
     #[test]

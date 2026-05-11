@@ -732,6 +732,71 @@ describe("EntryEditForm", () => {
     });
   });
 
+  it("applies a picked custom icon when creating an entry", async () => {
+    const created = { ...mockEntry, id: "entry-new", customIconUuid: null };
+    mockCreateEntry.mockResolvedValueOnce(created);
+    mockGetCustomIcons.mockResolvedValueOnce({
+      "icon-uuid-1": { mimeType: "image/png", data: "AAA=" },
+    });
+    mockSetCustomIcon.mockResolvedValueOnce(true);
+
+    render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    // Wait for useCustomIcons to populate, then open the picker and click
+    // the custom-icon tile.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "entries.form.chooseIcon" })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "entries.form.chooseIcon" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: "iconPicker.customIconLabel",
+        })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "iconPicker.customIconLabel" })
+      );
+    });
+
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        { target: { value: "Brand new" } }
+      );
+      fireEvent.click(screen.getByText("entries.form.createEntry"));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateEntry).toHaveBeenCalled();
+      expect(mockSetCustomIcon).toHaveBeenCalledWith(
+        "db-1",
+        "entry-new",
+        "icon-uuid-1"
+      );
+      expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
+    });
+  });
+
   it("auto-fetches favicon after creating via Save and create another", async () => {
     mockAutoDownloadFavicons.value = true;
     const created = {
