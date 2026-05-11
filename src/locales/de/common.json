@@ -206,7 +206,8 @@
       "faviconNotFound": "Für diese URL konnte kein Favicon abgerufen werden.",
       "faviconUpdateFailed": "Favicon konnte nicht aktualisiert werden: {{error}}",
       "customIconCleared": "Benutzerdefiniertes Symbol entfernt",
-      "customIconClearFailed": "Benutzerdefiniertes Symbol konnte nicht entfernt werden: {{error}}"
+      "customIconClearFailed": "Benutzerdefiniertes Symbol konnte nicht entfernt werden: {{error}}",
+      "customIconAssignFailed": "Eintrag gespeichert, das benutzerdefinierte Symbol konnte aber nicht zugewiesen werden: {{error}}"
     },
     "unsavedChanges": {
       "message": "Sie haben ungespeicherte Änderungen. Möchten Sie diese wirklich verwerfen?",

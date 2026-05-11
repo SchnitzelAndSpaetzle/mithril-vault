@@ -206,7 +206,8 @@
       "faviconNotFound": "Favikona za ovaj URL nije pronađena.",
       "faviconUpdateFailed": "Neuspešno ažuriranje favikone: {{error}}",
       "customIconCleared": "Prilagođena ikona je uklonjena",
-      "customIconClearFailed": "Neuspešno uklanjanje prilagođene ikone: {{error}}"
+      "customIconClearFailed": "Neuspešno uklanjanje prilagođene ikone: {{error}}",
+      "customIconAssignFailed": "Unos je sačuvan, ali dodela prilagođene ikone nije uspela: {{error}}"
     },
     "unsavedChanges": {
       "message": "Imate nesačuvane izmene. Da li ste sigurni da želite da ih odbacite?",

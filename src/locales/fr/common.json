@@ -206,7 +206,8 @@
       "faviconNotFound": "Aucun favicon n'a pu être récupéré pour cette URL.",
       "faviconUpdateFailed": "Échec de la mise à jour du favicon : {{error}}",
       "customIconCleared": "Icône personnalisée supprimée",
-      "customIconClearFailed": "Échec de la suppression de l'icône personnalisée : {{error}}"
+      "customIconClearFailed": "Échec de la suppression de l'icône personnalisée : {{error}}",
+      "customIconAssignFailed": "Entrée enregistrée, mais l'icône personnalisée n'a pas pu être attribuée : {{error}}"
     },
     "unsavedChanges": {
       "message": "Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir les abandonner ?",

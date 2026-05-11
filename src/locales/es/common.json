@@ -206,7 +206,8 @@
       "faviconNotFound": "No se pudo obtener un favicon para esta URL.",
       "faviconUpdateFailed": "No se pudo actualizar el favicon: {{error}}",
       "customIconCleared": "Icono personalizado eliminado",
-      "customIconClearFailed": "No se pudo eliminar el icono personalizado: {{error}}"
+      "customIconClearFailed": "No se pudo eliminar el icono personalizado: {{error}}",
+      "customIconAssignFailed": "Entrada guardada, pero no se pudo asignar el icono personalizado: {{error}}"
     },
     "unsavedChanges": {
       "message": "Tiene cambios sin guardar. ¿Está seguro de que desea descartarlos?",

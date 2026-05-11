@@ -88,7 +88,7 @@ impl KdbxService {
         let mut attempted_domains = HashSet::new();
 
         for candidate in candidates {
-            if self.is_favicon_domain_on_cooldown(&candidate.cooldown_domain)? {
+            if !force && self.is_favicon_domain_on_cooldown(&candidate.cooldown_domain)? {
                 continue;
             }
             attempted_domains.insert(candidate.cooldown_domain.clone());
@@ -636,7 +636,7 @@ mod tests {
     }
 
     #[test]
-    fn fetch_entry_favicon_does_not_refresh_cooldown_for_skipped_domain() {
+    fn auto_fetch_does_not_refresh_cooldown_for_skipped_domain() {
         let (service, _dir, db_path, entry_id, _entry_b) = create_test_database();
         service
             .update_entry(
@@ -656,8 +656,6 @@ mod tests {
             )
             .expect("set url");
 
-        // Stamp a fixed failure timestamp in the past so we can detect any
-        // refresh as a change in the value.
         let initial_stamp = std::time::Instant::now()
             .checked_sub(std::time::Duration::from_secs(30))
             .expect("build initial cooldown stamp");
@@ -669,8 +667,10 @@ mod tests {
             failures.insert("example.com".to_string(), initial_stamp);
         }
 
+        // Non-forced (auto-fetch) path must honor the cooldown and must not
+        // bump the timestamp of a domain it never contacted.
         let outcome = tauri::async_runtime::block_on(
-            service.fetch_entry_favicon(&db_path, &entry_id, false, true),
+            service.fetch_entry_favicon(&db_path, &entry_id, false, false),
         )
         .expect("fetch favicon");
 
@@ -686,7 +686,63 @@ mod tests {
             .expect("cooldown entry preserved");
         assert_eq!(
             stamp, initial_stamp,
-            "cooldown stamp must not be refreshed when the only candidate is already cooling down"
+            "auto-fetch must not refresh a cooldown stamp for a skipped domain"
+        );
+    }
+
+    #[test]
+    fn manual_force_fetch_bypasses_cooldown_and_attempts_the_domain() {
+        let (service, _dir, db_path, entry_id, _entry_b) = create_test_database();
+        service
+            .update_entry(
+                &db_path,
+                &entry_id,
+                crate::dto::entry::UpdateEntryData {
+                    title: None,
+                    username: None,
+                    password: None,
+                    url: Some("https://example.com".to_string()),
+                    notes: None,
+                    icon_id: None,
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                },
+            )
+            .expect("set url");
+
+        let initial_stamp = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(30))
+            .expect("build initial cooldown stamp");
+        {
+            let mut failures = service
+                .favicon_failed_domains
+                .lock()
+                .expect("lock cooldown map");
+            failures.insert("example.com".to_string(), initial_stamp);
+        }
+
+        // Force=true mirrors the manual "Refetch favicon" path. The cooldown
+        // gate must be bypassed so the user actually retries the host. The
+        // attempt then fails (no network in tests) and refreshes the stamp.
+        let outcome = tauri::async_runtime::block_on(
+            service.fetch_entry_favicon(&db_path, &entry_id, false, true),
+        )
+        .expect("fetch favicon");
+
+        assert_eq!(outcome, FaviconFetchOutcome::NotFound);
+
+        let failures = service
+            .favicon_failed_domains
+            .lock()
+            .expect("lock cooldown map");
+        let stamp = failures
+            .get("example.com")
+            .copied()
+            .expect("cooldown entry preserved");
+        assert!(
+            stamp > initial_stamp,
+            "force=true must contact the domain, which refreshes the failure stamp on miss"
         );
     }
 

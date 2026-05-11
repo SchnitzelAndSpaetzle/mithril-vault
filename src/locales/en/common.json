@@ -206,7 +206,8 @@
       "faviconNotFound": "No favicon could be fetched for this URL.",
       "faviconUpdateFailed": "Failed to update favicon: {{error}}",
       "customIconCleared": "Custom icon cleared",
-      "customIconClearFailed": "Failed to clear custom icon: {{error}}"
+      "customIconClearFailed": "Failed to clear custom icon: {{error}}",
+      "customIconAssignFailed": "Entry saved, but assigning the custom icon failed: {{error}}"
     },
     "unsavedChanges": {
       "message": "You have unsaved changes. Are you sure you want to discard them?",

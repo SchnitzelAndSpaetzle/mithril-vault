@@ -224,14 +224,7 @@ export function useEntryEditForm({
         });
 
         if (form.formState.dirtyFields.customIconUuid) {
-          const nextUuid = values.customIconUuid;
-          const customIconChanged = nextUuid
-            ? await entriesApi.setCustomIcon(dbId, entry.id, nextUuid)
-            : await entriesApi.clearCustomIcon(dbId, entry.id);
-          if (customIconChanged) {
-            await database.save(dbId);
-            await refreshFaviconQueries(entry.id);
-          }
+          await applyCustomIconChange(entry.id, values.customIconUuid);
         }
 
         if (values.groupId && values.groupId !== entry.groupId) {
@@ -264,15 +257,7 @@ export function useEntryEditForm({
         },
       });
       if (values.customIconUuid) {
-        const customIconChanged = await entriesApi.setCustomIcon(
-          dbId,
-          result.id,
-          values.customIconUuid
-        );
-        if (customIconChanged) {
-          await database.save(dbId);
-          await refreshFaviconQueries(result.id);
-        }
+        await applyCustomIconChange(result.id, values.customIconUuid);
       }
       toast.success(t("entries.toast.created"));
       onSave(result);
@@ -337,15 +322,7 @@ export function useEntryEditForm({
         },
       });
       if (values.customIconUuid) {
-        const customIconChanged = await entriesApi.setCustomIcon(
-          dbId,
-          result.id,
-          values.customIconUuid
-        );
-        if (customIconChanged) {
-          await database.save(dbId);
-          await refreshFaviconQueries(result.id);
-        }
+        await applyCustomIconChange(result.id, values.customIconUuid);
       }
       toast.success(t("entries.toast.created"));
       form.reset(getEntryFormDefaults(null, values.groupId ?? groupId));
@@ -365,6 +342,26 @@ export function useEntryEditForm({
 
   function setGeneratedPassword(password: string) {
     form.setValue("password", password, { shouldDirty: true });
+  }
+
+  async function applyCustomIconChange(
+    targetEntryId: string,
+    nextUuid: string | null
+  ) {
+    try {
+      const changed = nextUuid
+        ? await entriesApi.setCustomIcon(dbId, targetEntryId, nextUuid)
+        : await entriesApi.clearCustomIcon(dbId, targetEntryId);
+      if (changed) {
+        await database.save(dbId);
+        await refreshFaviconQueries(targetEntryId);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(
+        t("entries.toast.customIconAssignFailed", { error: message })
+      );
+    }
   }
 
   async function fetchFaviconFromUrl() {
@@ -454,6 +451,8 @@ export function useEntryEditForm({
   const watchedUsername =
     useWatch({ control: form.control, name: "username" }) ?? "";
   const watchedUrl = useWatch({ control: form.control, name: "url" }) ?? "";
+  const watchedCustomIconUuid =
+    useWatch({ control: form.control, name: "customIconUuid" }) ?? null;
   const isUrlDirty = Boolean(form.formState.dirtyFields.url);
 
   return {
@@ -475,7 +474,7 @@ export function useEntryEditForm({
     setGeneratedPassword,
     isFetchingFavicon,
     isClearingCustomIcon,
-    hasCustomIcon: Boolean(entry?.customIconUuid),
+    hasCustomIcon: Boolean(watchedCustomIconUuid),
     canFetchFavicon: Boolean(entryId && watchedUrl.trim() && !isUrlDirty),
     fetchFaviconFromUrl,
     clearCustomIcon,

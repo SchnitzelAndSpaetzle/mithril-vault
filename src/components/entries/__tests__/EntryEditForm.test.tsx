@@ -26,6 +26,7 @@ const {
   mockFetchFavicon,
   mockClearCustomIcon,
   mockSetCustomIcon,
+  mockToast,
   mockAutoDownloadFavicons,
 } = vi.hoisted(() => ({
   mockCreateEntry: vi.fn(),
@@ -80,6 +81,7 @@ const {
   mockClearCustomIcon: vi.fn(() => Promise.resolve(false)),
   mockSetCustomIcon: vi.fn(() => Promise.resolve(true)),
   mockAutoDownloadFavicons: { value: false },
+  mockToast: { success: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("@/hooks/use-entry-mutations", () => ({
@@ -127,7 +129,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: mockToast,
 }));
 
 // Mock PasswordStrengthIndicator to avoid zxcvbn setup
@@ -795,6 +797,69 @@ describe("EntryEditForm", () => {
       );
       expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
     });
+  });
+
+  it("reports a successful create even when the custom-icon assignment fails", async () => {
+    const created = { ...mockEntry, id: "entry-new", customIconUuid: null };
+    mockCreateEntry.mockResolvedValueOnce(created);
+    mockGetCustomIcons.mockResolvedValueOnce({
+      "icon-uuid-1": { mimeType: "image/png", data: "AAA=" },
+    });
+    mockSetCustomIcon.mockRejectedValueOnce(new Error("uuid not found"));
+    const onSave = vi.fn();
+
+    render(
+      <EntryEditForm
+        dbId="db-1"
+        groupId="group-1"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "entries.form.chooseIcon" })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "entries.form.chooseIcon" })
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "iconPicker.customIconLabel" })
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "iconPicker.customIconLabel" })
+      );
+    });
+
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+        { target: { value: "Brand new" } }
+      );
+      fireEvent.click(screen.getByText("entries.form.createEntry"));
+    });
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(created);
+    });
+    expect(mockToast.success).toHaveBeenCalledWith("entries.toast.created");
+    expect(mockToast.error).toHaveBeenCalledWith(
+      "entries.toast.customIconAssignFailed"
+    );
+    expect(mockToast.error).not.toHaveBeenCalledWith(
+      "entries.toast.createFailed"
+    );
   });
 
   it("auto-fetches favicon after creating via Save and create another", async () => {
