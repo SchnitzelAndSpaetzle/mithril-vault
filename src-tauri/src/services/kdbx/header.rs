@@ -8,7 +8,7 @@ use crate::dto::error::AppError;
 use keepass::config::{
     CompressionConfig, DatabaseVersion, InnerCipherConfig, KdfConfig, OuterCipherConfig,
 };
-use keepass::error::DatabaseIntegrityError;
+use keepass::error::{DatabaseOpenError, DatabaseVersionParseError};
 use keepass::Database;
 use std::fs::File;
 
@@ -64,17 +64,16 @@ fn is_version_supported(version: &DatabaseVersion) -> bool {
 }
 
 /// Maps version retrieval errors to appropriate `AppError` variants.
-fn map_version_error(
-    err: DatabaseIntegrityError,
-    path: &str,
-) -> Result<DatabaseHeaderInfo, AppError> {
+fn map_version_error(err: DatabaseOpenError, path: &str) -> Result<DatabaseHeaderInfo, AppError> {
     match err {
-        DatabaseIntegrityError::InvalidKDBXIdentifier => Err(AppError::InvalidKdbxFile),
-        DatabaseIntegrityError::InvalidKDBXVersion {
+        DatabaseOpenError::VersionParse(DatabaseVersionParseError::InvalidKDBXIdentifier) => {
+            Err(AppError::InvalidKdbxFile)
+        }
+        DatabaseOpenError::VersionParse(DatabaseVersionParseError::InvalidKDBXVersion {
             version,
             file_major_version,
             file_minor_version,
-        } => {
+        }) => {
             // File has valid KDBX magic bytes but unsupported version
             let version_str =
                 format!("KDBX {file_major_version}.{file_minor_version} (internal: {version})");
@@ -92,26 +91,28 @@ fn map_version_error(
 /// Converts keepass `OuterCipherConfig` to our `OuterCipher` DTO.
 fn convert_outer_cipher(config: &OuterCipherConfig) -> OuterCipher {
     match config {
-        OuterCipherConfig::AES256 => OuterCipher::Aes256,
         OuterCipherConfig::Twofish => OuterCipher::Twofish,
         OuterCipherConfig::ChaCha20 => OuterCipher::ChaCha20,
+        // `OuterCipherConfig` is `#[non_exhaustive]`; default unknown variants
+        // (and AES256) to AES256.
+        OuterCipherConfig::AES256 | _ => OuterCipher::Aes256,
     }
 }
 
 /// Converts keepass `InnerCipherConfig` to our `InnerCipher` DTO.
 fn convert_inner_cipher(config: &InnerCipherConfig) -> InnerCipher {
     match config {
-        InnerCipherConfig::Plain => InnerCipher::Plain,
         InnerCipherConfig::Salsa20 => InnerCipher::Salsa20,
         InnerCipherConfig::ChaCha20 => InnerCipher::ChaCha20,
+        InnerCipherConfig::Plain | _ => InnerCipher::Plain,
     }
 }
 
 /// Converts keepass `CompressionConfig` to our `Compression` DTO.
 fn convert_compression(config: &CompressionConfig) -> Compression {
     match config {
-        CompressionConfig::None => Compression::None,
         CompressionConfig::GZip => Compression::GZip,
+        CompressionConfig::None | _ => Compression::None,
     }
 }
 
@@ -139,6 +140,7 @@ fn convert_kdf(config: &KdfConfig) -> KdfSettings {
             iterations: *iterations,
             parallelism: *parallelism,
         },
+        _ => KdfSettings::AesKdf { rounds: 0 },
     }
 }
 

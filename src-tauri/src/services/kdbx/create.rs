@@ -48,36 +48,35 @@ impl KdbxService {
             return Err(AppError::NoCredentials);
         }
 
-        let config = DatabaseConfig {
-            version: DatabaseVersion::KDB4(0),
-            outer_cipher_config: OuterCipherConfig::AES256,
-            compression_config: CompressionConfig::GZip,
-            inner_cipher_config: InnerCipherConfig::ChaCha20,
-            kdf_config: KdfConfig::Argon2id {
-                iterations: options.iterations(),
-                memory: options.memory_bytes(),
-                parallelism: options.parallelism(),
-                version: argon2::Version::Version13,
-            },
-            public_custom_data: None,
+        let mut config = DatabaseConfig::default();
+        config.version = DatabaseVersion::KDB4(0);
+        config.outer_cipher_config = OuterCipherConfig::AES256;
+        config.compression_config = CompressionConfig::GZip;
+        config.inner_cipher_config = InnerCipherConfig::ChaCha20;
+        config.kdf_config = KdfConfig::Argon2id {
+            iterations: options.iterations(),
+            memory: options.memory_bytes(),
+            parallelism: options.parallelism(),
+            version: argon2::Version::Version13,
         };
 
-        let mut db = Database::new(config);
-        db.root.name = name.to_string();
+        let mut db = Database::with_config(config);
         db.meta.database_name = Some(name.to_string());
         db.meta.generator = Some(String::from("MithrilVault"));
         if let Some(description) = &options.description {
             db.meta.database_description = Some(description.clone());
         }
 
-        if options.create_default_groups {
-            for group_name in DEFAULT_GROUP_NAMES {
-                let group = keepass::db::Group::new(group_name);
-                db.root.add_child(group);
+        let root_group_id = db.root().id().uuid().to_string();
+        {
+            let mut root = db.root_mut();
+            root.name = name.to_string();
+            if options.create_default_groups {
+                for group_name in DEFAULT_GROUP_NAMES {
+                    root.add_group().name = (*group_name).to_string();
+                }
             }
         }
-
-        let root_group_id = db.root.uuid.to_string();
         let password_owned = password.map(String::from);
         let keyfile_path_owned = keyfile_path.map(String::from);
 

@@ -3,13 +3,14 @@ use crate::dto::error::AppError;
 use crate::dto::group::{Group, UpdateGroupData};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use keepass::db::{Group as KeepassGroup, Node, Times};
+use keepass::db::{GroupId, GroupRef, Times};
+
 use std::collections::HashMap;
 
 use super::favicons::detect_icon_mime;
 use super::mapping::{
-    convert_group, ensure_recycle_bin, find_group_by_id, find_group_by_id_mut,
-    find_parent_group_id, group_has_children, is_ancestor_of, remove_group_by_id,
+    convert_group, ensure_recycle_bin, find_group_by_id, find_group_id, find_parent_group_id,
+    group_has_children, is_ancestor_of,
 };
 use super::KdbxService;
 
@@ -23,7 +24,7 @@ impl KdbxService {
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let db = open_db.db_or_locked()?;
-        let root = convert_group(&db.root, None);
+        let root = convert_group(&db.root(), None);
         Ok(vec![root])
     }
 
@@ -36,8 +37,8 @@ impl KdbxService {
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let db = open_db.db_or_locked()?;
-        find_group_by_id(&db.root, id)
-            .map(|g| convert_group(g, None))
+        find_group_by_id(db, id)
+            .map(|g| convert_group(&g, None))
             .ok_or_else(|| AppError::GroupNotFound(id.to_string()))
     }
 
@@ -57,25 +58,30 @@ impl KdbxService {
 
         let db = open_db.db_mut_or_locked()?;
 
-        // Find the parent group (root if parent_id is None)
-        let (parent, parent_uuid) = if let Some(pid) = parent_id {
-            let parent = find_group_by_id_mut(&mut db.root, pid)
-                .ok_or_else(|| AppError::GroupNotFound(pid.to_string()))?;
-            let uuid = parent.uuid.to_string();
-            (parent, Some(uuid))
+        // Resolve the parent group id (root if parent_id is None)
+        let resolved_parent: GroupId = if let Some(pid) = parent_id {
+            find_group_id(db, pid).ok_or_else(|| AppError::GroupNotFound(pid.to_string()))?
         } else {
-            let uuid = db.root.uuid.to_string();
-            (&mut db.root, Some(uuid))
+            db.root().id()
+        };
+        let parent_uuid = resolved_parent.uuid().to_string();
+
+        let new_gid = {
+            let mut parent = db
+                .group_mut(resolved_parent)
+                .ok_or_else(|| AppError::GroupNotFound(parent_uuid.clone()))?;
+            let mut new_group = parent.add_group();
+            new_group.name = name.to_string();
+            if let Some(icon_id) = icon {
+                new_group.set_icon_builtin(icon_id as usize);
+            }
+            new_group.id()
         };
 
-        // Create the new group
-        let mut new_group = KeepassGroup::new(name);
-        if let Some(icon_id) = icon {
-            new_group.icon_id = Some(icon_id as usize);
-        }
-
-        let group_model = convert_group(&new_group, parent_uuid.as_deref());
-        parent.add_child(new_group);
+        let group_model = db
+            .group(new_gid)
+            .map(|g| convert_group(&g, Some(&parent_uuid)))
+            .ok_or_else(|| AppError::GroupNotFound(new_gid.uuid().to_string()))?;
         open_db.is_modified = true;
 
         Ok(group_model)
@@ -96,21 +102,30 @@ impl KdbxService {
 
         let db = open_db.db_mut_or_locked()?;
 
-        // Find parent ID before mutating (for return value)
-        let parent_id = find_parent_group_id(&db.root, id);
+        let parent_id = find_parent_group_id(db, id);
+        let gid = find_group_id(db, id).ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
 
-        let group = find_group_by_id_mut(&mut db.root, id)
+        {
+            let mut group = db
+                .group_mut(gid)
+                .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
+            if let Some(name) = data.name {
+                group.name = name;
+            }
+            if let Some(icon) = data.icon {
+                if let Some(idx) = icon.parse::<u32>().ok().map(|i| i as usize) {
+                    group.set_icon_builtin(idx);
+                } else {
+                    group.set_icon_none();
+                }
+            }
+            group.times.last_modification = Some(Times::now());
+        }
+
+        let result = db
+            .group(gid)
+            .map(|g| convert_group(&g, parent_id.as_deref()))
             .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
-
-        if let Some(name) = data.name {
-            group.name = name;
-        }
-        if let Some(icon) = data.icon {
-            group.icon_id = icon.parse().ok().map(|i: u32| i as usize);
-        }
-
-        group.times.set_last_modification(Times::now());
-        let result = convert_group(group, parent_id.as_deref());
         open_db.is_modified = true;
 
         Ok(result)
@@ -135,36 +150,41 @@ impl KdbxService {
         let db = open_db.db_mut_or_locked()?;
 
         // Cannot delete root group
-        if db.root.uuid.to_string() == id {
+        if db.root().id().uuid().to_string() == id {
             return Err(AppError::CannotDeleteRootGroup);
         }
 
         // Check if group exists and whether it has children
-        {
-            let group = find_group_by_id(&db.root, id)
-                .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
-
-            if !recursive && group_has_children(group) {
+        let gid = {
+            let group =
+                find_group_by_id(db, id).ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
+            if !recursive && group_has_children(&group) {
                 return Err(AppError::GroupNotEmpty(id.to_string()));
             }
-        }
-
-        // Remove the group from its parent
-        let mut removed_group = remove_group_by_id(&mut db.root, id)
-            .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
+            group.id()
+        };
 
         if permanent {
-            // Permanently deleted, nothing more to do
+            db.group_mut(gid)
+                .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?
+                .remove();
         } else {
             // Move to recycle bin
-            let recycle_bin_id = ensure_recycle_bin(db);
-            let recycle_bin = find_group_by_id_mut(&mut db.root, &recycle_bin_id)
-                .ok_or_else(|| AppError::GroupNotFound(recycle_bin_id.clone()))?;
+            let recycle_bin_uuid = ensure_recycle_bin(db);
+            let recycle_gid = find_group_id(db, &recycle_bin_uuid)
+                .ok_or_else(|| AppError::GroupNotFound(recycle_bin_uuid.clone()))?;
 
             let now = Times::now();
-            removed_group.times.set_last_modification(now);
-            removed_group.times.set_location_changed(now);
-            recycle_bin.add_child(removed_group);
+            {
+                let mut group = db
+                    .group_mut(gid)
+                    .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
+                group.times.last_modification = Some(now);
+                group.times.location_changed = Some(now);
+                group
+                    .move_to(recycle_gid)
+                    .map_err(|e| AppError::Kdbx(e.to_string()))?;
+            }
         }
 
         open_db.is_modified = true;
@@ -186,46 +206,41 @@ impl KdbxService {
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         let db = open_db.db_mut_or_locked()?;
-        let root_id = db.root.uuid.to_string();
+        let root_id = db.root().id().uuid().to_string();
 
         // Cannot move root group
         if root_id == id {
             return Err(AppError::CannotMoveRootGroup);
         }
 
-        // Verify the group exists
-        if find_group_by_id(&db.root, id).is_none() {
-            return Err(AppError::GroupNotFound(id.to_string()));
-        }
+        let gid = find_group_id(db, id).ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
 
-        // Determine target parent ID (root if None)
-        let target_id = target_parent_id.unwrap_or(&root_id);
+        let target_id_str = target_parent_id.unwrap_or(&root_id).to_string();
 
         // Check for circular reference (cannot move a group into itself or its descendants)
-        if is_ancestor_of(&db.root, id, target_id) {
+        if is_ancestor_of(db, id, &target_id_str) {
             return Err(AppError::CircularReference);
         }
 
-        // Verify target parent exists
-        if find_group_by_id(&db.root, target_id).is_none() {
-            return Err(AppError::GroupNotFound(target_id.to_string()));
+        let target_gid = find_group_id(db, &target_id_str)
+            .ok_or_else(|| AppError::GroupNotFound(target_id_str.clone()))?;
+
+        let now = Times::now();
+        {
+            let mut group = db
+                .group_mut(gid)
+                .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
+            group.times.last_modification = Some(now);
+            group.times.location_changed = Some(now);
+            group
+                .move_to(target_gid)
+                .map_err(|e| AppError::Kdbx(e.to_string()))?;
         }
 
-        // Remove the group from its current parent
-        let mut group = remove_group_by_id(&mut db.root, id)
+        let group_model = db
+            .group(gid)
+            .map(|g| convert_group(&g, Some(&target_id_str)))
             .ok_or_else(|| AppError::GroupNotFound(id.to_string()))?;
-
-        // Update timestamps
-        let now = Times::now();
-        group.times.set_last_modification(now);
-        group.times.set_location_changed(now);
-
-        // Add to new parent
-        let target_parent = find_group_by_id_mut(&mut db.root, target_id)
-            .ok_or_else(|| AppError::GroupNotFound(target_id.to_string()))?;
-
-        let group_model = convert_group(&group, Some(target_id));
-        target_parent.add_child(group);
         open_db.is_modified = true;
 
         Ok(group_model)
@@ -244,9 +259,9 @@ impl KdbxService {
 
         let db = open_db.db_or_locked()?;
         let mut icons = HashMap::new();
-        for icon in &db.meta.custom_icons.icons {
+        for icon in db.iter_all_custom_icons() {
             icons.insert(
-                icon.uuid.to_string(),
+                icon.id().uuid().to_string(),
                 CustomIconData {
                     mime_type: detect_icon_mime(&icon.data),
                     data: STANDARD.encode(&icon.data),
@@ -267,7 +282,12 @@ impl KdbxService {
 
         let db = open_db.db_or_locked()?;
         let mut counts = HashMap::new();
-        collect_entry_counts(&db.root, &mut counts);
+        for group in db.iter_all_groups() {
+            counts.insert(
+                group.id().uuid().to_string(),
+                collect_direct_entry_count(&group),
+            );
+        }
         Ok(counts)
     }
 
@@ -283,7 +303,7 @@ impl KdbxService {
         // Check if recycle bin is set in metadata and the group actually exists
         if let Some(recycle_uuid) = db.meta.recyclebin_uuid {
             let recycle_id = recycle_uuid.to_string();
-            if find_group_by_id(&db.root, &recycle_id).is_some() {
+            if find_group_by_id(db, &recycle_id).is_some() {
                 return Ok(Some(recycle_id));
             }
         }
@@ -292,21 +312,6 @@ impl KdbxService {
     }
 }
 
-/// Recursively collects entry counts for each group.
-fn collect_entry_counts(group: &KeepassGroup, counts: &mut HashMap<String, u32>) {
-    let group_id = group.uuid.to_string();
-    let mut count = 0u32;
-
-    for node in &group.children {
-        match node {
-            Node::Entry(_) => {
-                count += 1;
-            }
-            Node::Group(child) => {
-                collect_entry_counts(child, counts);
-            }
-        }
-    }
-
-    counts.insert(group_id, count);
+fn collect_direct_entry_count(group: &GroupRef<'_>) -> u32 {
+    u32::try_from(group.entries().count()).unwrap_or(u32::MAX)
 }
