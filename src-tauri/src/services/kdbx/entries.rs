@@ -1,6 +1,6 @@
 use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::dto::error::AppError;
-use keepass::db::{Entry as KeepassEntry, Times, Value};
+use keepass::db::{Entry as KeepassEntry, EntryRef, Times, Value};
 use keepass::Database;
 
 use super::mapping::{
@@ -33,7 +33,17 @@ impl KdbxService {
                 entries.push(convert_entry(&entry, &group_uuid));
             }
         } else {
+            // The unfiltered "all entries" view hides anything inside the
+            // recycle bin so deleted entries don't appear to come back. The
+            // recycle bin group is still navigable directly through the
+            // `Some(gid)` branch above.
+            let recycle_uuid = db.meta.recyclebin_uuid;
             for entry in db.iter_all_entries() {
+                if let Some(rid) = recycle_uuid {
+                    if is_in_recycle_bin(db, &entry, rid) {
+                        continue;
+                    }
+                }
                 let group_uuid = entry.parent().id().uuid().to_string();
                 entries.push(convert_entry(&entry, &group_uuid));
             }
@@ -339,6 +349,23 @@ impl KdbxService {
     }
 }
 
+fn is_in_recycle_bin(db: &Database, entry: &EntryRef<'_>, recycle_uuid: uuid::Uuid) -> bool {
+    // Walk ancestors by GroupId rather than holding a GroupRef across the
+    // loop — re-looking up via db.group(gid) gives each iteration its own
+    // borrow scope, matching is_ancestor_of's pattern in mapping.rs.
+    let mut current_id = Some(entry.parent().id());
+    while let Some(gid) = current_id {
+        if gid.uuid() == recycle_uuid {
+            return true;
+        }
+        let Some(group) = db.group(gid) else {
+            return false;
+        };
+        current_id = group.parent().map(|p| p.id());
+    }
+    false
+}
+
 fn populate_entry(entry: &mut keepass::db::EntryMut<'_>, data: &CreateEntryData) {
     entry
         .fields
@@ -520,4 +547,124 @@ fn dedupe_preserving_order(tags: &mut Vec<String>) {
         }
     }
     *tags = deduped;
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::domain::secure::SecureString;
+    use crate::dto::database::DatabaseCreationOptions;
+    use tempfile::TempDir;
+
+    fn create_test_database() -> (KdbxService, TempDir, String, String, String) {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let db_path = dir.path().join("entries-tests.kdbx");
+        let db_path_str = db_path.to_string_lossy().to_string();
+
+        let options = DatabaseCreationOptions {
+            create_default_groups: true,
+            kdf_memory: Some(1024 * 1024),
+            kdf_iterations: Some(1),
+            kdf_parallelism: Some(1),
+            description: None,
+        };
+
+        let service = KdbxService::new();
+        service
+            .create_database(
+                &db_path_str,
+                Some("testpass"),
+                None,
+                "Entries Tests",
+                &options,
+            )
+            .expect("create db");
+        let info = service.get_info(&db_path_str).expect("database info");
+
+        let entry_a = service
+            .create_entry(
+                &db_path_str,
+                &info.root_group_id,
+                CreateEntryData {
+                    title: "Entry A".to_string(),
+                    username: "alice".to_string(),
+                    password: SecureString::from("secret"),
+                    url: None,
+                    notes: None,
+                    icon_id: Some(0),
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                },
+            )
+            .expect("create entry A");
+        let entry_b = service
+            .create_entry(
+                &db_path_str,
+                &info.root_group_id,
+                CreateEntryData {
+                    title: "Entry B".to_string(),
+                    username: "bob".to_string(),
+                    password: SecureString::from("secret"),
+                    url: None,
+                    notes: None,
+                    icon_id: Some(0),
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                },
+            )
+            .expect("create entry B");
+
+        (service, dir, db_path_str, entry_a.id, entry_b.id)
+    }
+
+    #[test]
+    fn list_entries_without_group_filter_hides_recycle_bin_entries() {
+        // Regression: deleting an entry moves it to the recycle bin, but the
+        // unfiltered list view used to keep returning it (since
+        // db.iter_all_entries() walks the whole tree). The user observed:
+        // entry vanishes from details, stays in list, "isn't really deleted".
+        let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
+
+        let initial = service
+            .list_entries(&db_path, None)
+            .expect("list all entries");
+        let initial_ids: Vec<&str> = initial.iter().map(|e| e.id.as_str()).collect();
+        assert!(initial_ids.contains(&entry_a.as_str()));
+        assert!(initial_ids.contains(&entry_b.as_str()));
+
+        service
+            .delete_entry(&db_path, &entry_a)
+            .expect("delete entry A");
+
+        let after = service
+            .list_entries(&db_path, None)
+            .expect("list all entries after delete");
+        let after_ids: Vec<&str> = after.iter().map(|e| e.id.as_str()).collect();
+        assert!(
+            !after_ids.contains(&entry_a.as_str()),
+            "deleted entry should not appear in the unfiltered list"
+        );
+        assert!(
+            after_ids.contains(&entry_b.as_str()),
+            "non-deleted siblings should remain"
+        );
+
+        // The entry is still in the database — just inside the recycle bin —
+        // and accessible when the recycle bin group is queried directly.
+        let recycle_id = service
+            .get_recycle_bin_id(&db_path)
+            .expect("get recycle bin id")
+            .expect("recycle bin should exist after a delete");
+        let in_recycle = service
+            .list_entries(&db_path, Some(&recycle_id))
+            .expect("list recycle bin entries");
+        let recycle_ids: Vec<&str> = in_recycle.iter().map(|e| e.id.as_str()).collect();
+        assert!(
+            recycle_ids.contains(&entry_a.as_str()),
+            "deleted entry should be visible inside the recycle bin group"
+        );
+    }
 }

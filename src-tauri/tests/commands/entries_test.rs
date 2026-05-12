@@ -487,8 +487,20 @@ fn test_delete_entry_moves_to_recycle_bin() {
         .list_entries(&db_path_str, None)
         .expect("all entries");
     assert!(
-        all_entries.iter().any(|item| item.id == entry.id),
-        "Entry should remain in database after delete"
+        !all_entries.iter().any(|item| item.id == entry.id),
+        "Recycle-bin entries should be hidden from the unfiltered list"
+    );
+
+    let recycle_id = service
+        .get_recycle_bin_id(&db_path_str)
+        .expect("get recycle bin id")
+        .expect("recycle bin should exist after a delete");
+    let recycle_entries = service
+        .list_entries(&db_path_str, Some(&recycle_id))
+        .expect("recycle bin entries");
+    assert!(
+        recycle_entries.iter().any(|item| item.id == entry.id),
+        "Deleted entry should remain in the database, inside the recycle bin"
     );
 
     let moved_entry = service
