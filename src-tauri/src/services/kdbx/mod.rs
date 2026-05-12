@@ -1,3 +1,4 @@
+pub mod conversions;
 pub mod create;
 pub mod custom_icons;
 pub mod entries;
@@ -6,9 +7,9 @@ pub mod groups;
 pub mod header;
 pub mod key;
 pub mod keyfile;
-pub mod mapping;
 pub mod open;
 pub mod save;
+pub mod vault;
 
 use crate::domain::kdbx::OpenDatabase;
 use crate::dto::database::DatabaseInfo;

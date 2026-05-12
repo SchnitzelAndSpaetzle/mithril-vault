@@ -1,60 +1,8 @@
 use crate::domain::secure::SecureString;
 use crate::dto::entry::{CustomFieldMeta, Entry};
 use crate::dto::group::Group;
-use keepass::db::{
-    Entry as KeepassEntry, EntryId, EntryRef, GroupId, GroupRef, Icon, Times, Value,
-};
-use keepass::Database;
+use keepass::db::{Entry as KeepassEntry, EntryRef, GroupRef, Icon, Value};
 use std::collections::BTreeMap;
-
-pub(crate) fn find_group_id(db: &Database, id: &str) -> Option<GroupId> {
-    db.iter_all_groups()
-        .find(|g| g.id().uuid().to_string() == id)
-        .map(|g| g.id())
-}
-
-pub(crate) fn find_entry_id(db: &Database, id: &str) -> Option<EntryId> {
-    db.iter_all_entries()
-        .find(|e| e.id().uuid().to_string() == id)
-        .map(|e| e.id())
-}
-
-pub(crate) fn find_group_by_id<'a>(db: &'a Database, id: &str) -> Option<GroupRef<'a>> {
-    find_group_id(db, id).and_then(|gid| db.group(gid))
-}
-
-pub(crate) fn find_group_by_name<'a>(db: &'a Database, name: &str) -> Option<GroupRef<'a>> {
-    db.iter_all_groups().find(|g| g.name == name)
-}
-
-pub(crate) fn find_parent_group_id(db: &Database, target_id: &str) -> Option<String> {
-    let target = find_group_by_id(db, target_id)?;
-    target.parent().map(|p| p.id().uuid().to_string())
-}
-
-pub(crate) fn is_ancestor_of(db: &Database, ancestor_id: &str, descendant_id: &str) -> bool {
-    if ancestor_id == descendant_id {
-        return true;
-    }
-    let Some(start) = find_group_by_id(db, descendant_id) else {
-        return false;
-    };
-    let mut current_id = start.parent().map(|p| p.id());
-    while let Some(gid) = current_id {
-        let Some(parent) = db.group(gid) else {
-            return false;
-        };
-        if parent.id().uuid().to_string() == ancestor_id {
-            return true;
-        }
-        current_id = parent.parent().map(|p| p.id());
-    }
-    false
-}
-
-pub(crate) fn group_has_children(group: &GroupRef<'_>) -> bool {
-    group.groups().next().is_some() || group.entries().next().is_some()
-}
 
 pub(crate) fn convert_entry(entry: &EntryRef<'_>, group_id: &str) -> Entry {
     // keepass 0.12 collapsed builtin/custom icons into a single Icon enum:
@@ -210,36 +158,4 @@ pub(crate) fn collect_custom_fields(
     }
 
     (custom_fields, custom_field_meta)
-}
-
-/// Ensures a recycle bin exists and returns its UUID as a string.
-pub(crate) fn ensure_recycle_bin(db: &mut Database) -> String {
-    if let Some(uuid) = db.meta.recyclebin_uuid {
-        if find_group_by_id(db, &uuid.to_string()).is_some() {
-            db.meta.recyclebin_enabled = Some(true);
-            db.meta.recyclebin_changed = Some(Times::now());
-            return uuid.to_string();
-        }
-    }
-
-    if let Some(existing) = find_group_by_name(db, "Recycle Bin") {
-        let uuid = existing.id().uuid();
-        db.meta.recyclebin_enabled = Some(true);
-        db.meta.recyclebin_uuid = Some(uuid);
-        db.meta.recyclebin_changed = Some(Times::now());
-        return uuid.to_string();
-    }
-
-    let new_uuid = {
-        let mut root = db.root_mut();
-        let mut new_group = root.add_group();
-        new_group.name = "Recycle Bin".to_string();
-        new_group.id().uuid()
-    };
-
-    db.meta.recyclebin_enabled = Some(true);
-    db.meta.recyclebin_uuid = Some(new_uuid);
-    db.meta.recyclebin_changed = Some(Times::now());
-
-    new_uuid.to_string()
 }
