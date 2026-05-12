@@ -122,12 +122,18 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
     app.manage(Arc::new(secure_storage));
 
     let kdbx_service = KdbxService::new();
-    app.manage(Arc::new(kdbx_service));
+    let kdbx_arc = Arc::new(kdbx_service);
+    app.manage(Arc::clone(&kdbx_arc));
 
     let clipboard_service = ClipboardService::new();
     app.manage(Arc::new(clipboard_service));
 
     let settings_service = SettingsService::new(app)?;
+    // Push the persisted backup config into the KDBX service so the save
+    // hook honours it from first save onward.
+    if let Ok(prefs) = settings_service.get_app_preferences() {
+        let _ = kdbx_arc.set_backup_settings(prefs.backups);
+    }
     app.manage(Arc::new(settings_service));
 
     let auto_lock_service = AutoLockService::new();

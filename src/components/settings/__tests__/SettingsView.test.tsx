@@ -77,6 +77,9 @@ function makePreferences(): AppPreferences {
       debugMode: false,
       dataLocation: "/tmp/mithril-vault",
     },
+    backups: {
+      enabled: true,
+    },
   };
 }
 
@@ -138,8 +141,43 @@ describe("SettingsView", () => {
       screen.getByRole("heading", { name: "settings.advanced.title" })
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("heading", { name: "settings.backups.title" })
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("heading", { name: "settings.database.title" })
     ).toBeInTheDocument();
+  });
+
+  it("persists backups.enabled toggle", async () => {
+    const updatePreferences = vi.fn().mockResolvedValue(undefined);
+    mockUseAppPreferences.mockReturnValue({
+      preferences: makePreferences(),
+      isLoading: false,
+      error: null,
+      updatePreferences,
+      isUpdating: false,
+      resetPreferences: vi.fn().mockResolvedValue(makePreferences()),
+      isResetting: false,
+    });
+
+    render(<SettingsView />);
+
+    const toggle = screen.getByLabelText("settings.backups.enabled.label");
+    fireEvent.click(toggle);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.saveChanges" })
+    );
+
+    await waitFor(() => {
+      expect(updatePreferences).toHaveBeenCalledTimes(1);
+    });
+
+    expect(updatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backups: expect.objectContaining({ enabled: false }),
+      })
+    );
   });
 
   it("renders loading state", () => {

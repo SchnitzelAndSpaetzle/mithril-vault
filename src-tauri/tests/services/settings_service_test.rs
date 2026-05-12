@@ -389,6 +389,76 @@ fn clear_recent_databases_surfaces_save_error() {
 }
 
 #[test]
+fn backups_enabled_defaults_to_true_and_roundtrips() {
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let service = new_service(&app);
+    let prefs = service.get_app_preferences().expect("get prefs");
+    assert!(
+        prefs.backups.enabled,
+        "backups.enabled should default to true"
+    );
+
+    let mut updated = prefs.clone();
+    updated.backups.enabled = false;
+    service
+        .update_app_preferences(&updated)
+        .expect("update prefs");
+
+    let reloaded = new_service(&app);
+    let after = reloaded.get_app_preferences().expect("get prefs");
+    assert!(
+        !after.backups.enabled,
+        "backups.enabled should persist across reload"
+    );
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn missing_backup_enabled_field_defaults_to_true() {
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let path = settings_file_path(&app);
+    std::fs::write(&path, "{}").expect("write empty settings");
+
+    let service = new_service(&app);
+    let prefs = service.get_app_preferences().expect("get prefs");
+    assert!(
+        prefs.backups.enabled,
+        "missing backup_enabled in settings.json should load as true"
+    );
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn reset_app_preferences_restores_backups_default() {
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let service = new_service(&app);
+    let mut prefs = service.get_app_preferences().expect("get prefs");
+    prefs.backups.enabled = false;
+    service
+        .update_app_preferences(&prefs)
+        .expect("update prefs");
+
+    let reset = service.reset_app_preferences().expect("reset prefs");
+    assert!(
+        reset.backups.enabled,
+        "reset should restore backups.enabled to true"
+    );
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
 fn app_preferences_roundtrip_and_reset_preserves_recents() {
     let _lock = crate::settings_test_lock();
     let app = setup_app();

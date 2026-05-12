@@ -1,7 +1,9 @@
 use crate::domain::secure::SecureString;
 use crate::dto::error::AppError;
+use crate::services::kdbx::backups;
 use crate::services::kdbx::key::build_database_key;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
+use std::path::Path;
 
 use super::KdbxService;
 
@@ -29,6 +31,12 @@ impl KdbxService {
             .db
             .as_ref()
             .ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
+
+        // Fail-closed pre-image snapshot. Returns Ok(None) when the source
+        // does not yet exist (first save of a brand-new vault or first save
+        // after save_as to a fresh path) — those proceed without a backup.
+        let backup_settings = self.current_backup_settings()?;
+        backups::snapshot(Path::new(&path), &backup_settings)?;
 
         atomic_write(
             &path,
