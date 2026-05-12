@@ -3,7 +3,9 @@
 
 #![allow(clippy::expect_used)]
 
-use mithril_vault_lib::commands::settings::{AppSettings, StartupBehavior};
+use mithril_vault_lib::commands::settings::{
+    AppPreferences, AppSettings, SecuritySettings, StartupBehavior,
+};
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::settings::SettingsService;
 use tauri::test::mock_app;
@@ -69,12 +71,17 @@ fn default_settings_when_missing() {
     let service = new_service(&app);
     let settings = service.get_settings().expect("get settings");
 
-    assert_eq!(settings.auto_lock_timeout, 300);
-    assert_eq!(settings.clipboard_clear_timeout, 30);
-    assert_eq!(settings.theme, "system");
-    assert!(!settings.auto_download_favicons);
-    assert!(!settings.allow_third_party_favicon_fallbacks);
-    assert!(settings.prevent_screen_capture);
+    assert_eq!(settings.preferences.security.auto_lock_timeout, 300);
+    assert_eq!(settings.preferences.security.clipboard_clear_timeout, 30);
+    assert_eq!(settings.preferences.appearance.theme, "system");
+    assert!(!settings.preferences.security.auto_download_favicons);
+    assert!(
+        !settings
+            .preferences
+            .security
+            .allow_third_party_favicon_fallbacks
+    );
+    assert!(settings.preferences.security.prevent_screen_capture);
     assert!(settings.recent_databases.is_empty());
 
     cleanup_settings_file(&app);
@@ -91,7 +98,7 @@ fn missing_prevent_screen_capture_field_defaults_to_true() {
 
     let service = new_service(&app);
     let settings = service.get_settings().expect("get settings");
-    assert!(settings.prevent_screen_capture);
+    assert!(settings.preferences.security.prevent_screen_capture);
 
     cleanup_settings_file(&app);
 }
@@ -103,19 +110,29 @@ fn prevent_screen_capture_persists_across_reload() {
     cleanup_settings_file(&app);
 
     let service = new_service(&app);
-    let updated = AppSettings {
-        prevent_screen_capture: false,
-        auto_download_favicons: true,
-        allow_third_party_favicon_fallbacks: true,
-        ..AppSettings::default()
+    let prefs = AppPreferences {
+        security: SecuritySettings {
+            prevent_screen_capture: false,
+            auto_download_favicons: true,
+            allow_third_party_favicon_fallbacks: true,
+            ..SecuritySettings::default()
+        },
+        ..AppPreferences::default()
     };
-    service.update_settings(updated).expect("update settings");
+    service
+        .update_app_preferences(&prefs)
+        .expect("update preferences");
 
     let reloaded = new_service(&app);
     let settings = reloaded.get_settings().expect("get settings");
-    assert!(!settings.prevent_screen_capture);
-    assert!(settings.auto_download_favicons);
-    assert!(settings.allow_third_party_favicon_fallbacks);
+    assert!(!settings.preferences.security.prevent_screen_capture);
+    assert!(settings.preferences.security.auto_download_favicons);
+    assert!(
+        settings
+            .preferences
+            .security
+            .allow_third_party_favicon_fallbacks
+    );
 
     cleanup_settings_file(&app);
 }
@@ -127,20 +144,18 @@ fn update_persists_across_reload() {
     cleanup_settings_file(&app);
 
     let service = new_service(&app);
-    let updated = AppSettings {
-        auto_lock_timeout: 45,
-        theme: "light".into(),
-        ..AppSettings::default()
-    };
+    let mut prefs = AppPreferences::default();
+    prefs.security.auto_lock_timeout = 45;
+    prefs.appearance.theme = "light".into();
 
     service
-        .update_settings(updated.clone())
-        .expect("update settings");
+        .update_app_preferences(&prefs)
+        .expect("update preferences");
 
     let reloaded = new_service(&app);
     let settings = reloaded.get_settings().expect("get settings");
-    assert_eq!(settings.auto_lock_timeout, 45);
-    assert_eq!(settings.theme, "light");
+    assert_eq!(settings.preferences.security.auto_lock_timeout, 45);
+    assert_eq!(settings.preferences.appearance.theme, "light");
 
     cleanup_settings_file(&app);
 }
@@ -152,26 +167,35 @@ fn load_settings_from_existing_file() {
     cleanup_settings_file(&app);
 
     let settings_path = settings_file_path(&app);
-    let settings = AppSettings {
-        auto_lock_timeout: 120,
-        clipboard_clear_timeout: 45,
-        show_password_by_default: true,
-        minimize_to_tray: false,
-        start_minimized: true,
-        theme: "dark".into(),
+    let on_disk = AppSettings {
+        preferences: AppPreferences {
+            security: SecuritySettings {
+                auto_lock_timeout: 120,
+                clipboard_clear_timeout: 45,
+                show_password_by_default: true,
+                minimize_to_tray: false,
+                start_minimized: true,
+                ..SecuritySettings::default()
+            },
+            appearance: mithril_vault_lib::commands::settings::AppearanceSettings {
+                theme: "dark".into(),
+                ..Default::default()
+            },
+            ..AppPreferences::default()
+        },
         ..AppSettings::default()
     };
-    let content = serde_json::to_string_pretty(&settings).expect("serialize settings");
+    let content = serde_json::to_string_pretty(&on_disk).expect("serialize settings");
     std::fs::write(&settings_path, content).expect("write settings");
 
     let service = new_service(&app);
     let loaded = service.get_settings().expect("get settings");
-    assert_eq!(loaded.auto_lock_timeout, 120);
-    assert_eq!(loaded.clipboard_clear_timeout, 45);
-    assert!(loaded.show_password_by_default);
-    assert!(!loaded.minimize_to_tray);
-    assert!(loaded.start_minimized);
-    assert_eq!(loaded.theme, "dark");
+    assert_eq!(loaded.preferences.security.auto_lock_timeout, 120);
+    assert_eq!(loaded.preferences.security.clipboard_clear_timeout, 45);
+    assert!(loaded.preferences.security.show_password_by_default);
+    assert!(!loaded.preferences.security.minimize_to_tray);
+    assert!(loaded.preferences.security.start_minimized);
+    assert_eq!(loaded.preferences.appearance.theme, "dark");
 
     cleanup_settings_file(&app);
 }
@@ -189,9 +213,9 @@ fn invalid_settings_falls_back_and_backs_up() {
     let service = new_service(&app);
     let settings = service.get_settings().expect("get settings");
 
-    assert_eq!(settings.auto_lock_timeout, 300);
-    assert_eq!(settings.clipboard_clear_timeout, 30);
-    assert_eq!(settings.theme, "system");
+    assert_eq!(settings.preferences.security.auto_lock_timeout, 300);
+    assert_eq!(settings.preferences.security.clipboard_clear_timeout, 30);
+    assert_eq!(settings.preferences.appearance.theme, "system");
 
     let backups = std::fs::read_dir(&data_dir)
         .expect("read data dir")
@@ -311,13 +335,11 @@ fn save_error_surfaces_as_io_error() {
     let app = setup_app();
     let service = new_service(&app);
     let settings_path = create_settings_dir(&app);
-    let updated = AppSettings {
-        theme: "light".into(),
-        ..AppSettings::default()
-    };
+    let mut prefs = AppPreferences::default();
+    prefs.appearance.theme = "light".into();
 
     let err = service
-        .update_settings(updated)
+        .update_app_preferences(&prefs)
         .expect_err("expected io error");
     assert!(matches!(err, AppError::Io(_)));
 

@@ -4,7 +4,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
   AppPreferences,
-  AppSettings,
   CreateEntryData,
   CustomFieldValue,
   CustomIconMap,
@@ -19,11 +18,11 @@ import type {
   Group,
   PassphraseGeneratorOptions,
   PasswordGeneratorOptions,
+  RecentDatabase,
   UpdateEntryData,
 } from "./types";
 import {
   AppPreferencesSchema,
-  AppSettingsSchema,
   CreateEntryDataSchema,
   CustomFieldValueSchema,
   CustomIconMapSchema,
@@ -38,6 +37,7 @@ import {
   GroupSchema,
   PassphraseGeneratorOptionsSchema,
   PasswordGeneratorOptionsSchema,
+  RecentDatabaseSchema,
   UpdateEntryDataSchema,
 } from "./types";
 
@@ -572,14 +572,9 @@ export const keyfile = {
  * Application settings including recent databases and preferences.
  */
 export const settings = {
-  async get(): Promise<AppSettings> {
-    const result = await invoke("get_settings");
-    return AppSettingsSchema.parse(result);
-  },
-
-  async update(newSettings: AppSettings): Promise<void> {
-    AppSettingsSchema.parse(newSettings);
-    return invoke("update_settings", { newSettings });
+  async getRecentDatabases(): Promise<RecentDatabase[]> {
+    const result = await invoke("get_recent_databases");
+    return z.array(RecentDatabaseSchema).parse(result);
   },
 
   async getPreferences(): Promise<AppPreferences> {

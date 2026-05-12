@@ -56,28 +56,27 @@ impl SettingsService {
         Ok(())
     }
 
+    /// Returns a snapshot of the persisted settings. Internal use only —
+    /// the IPC surface goes through `get_app_preferences` / `get_recent_databases`.
     pub fn get_settings(&self) -> Result<AppSettings, AppError> {
         let settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         Ok(settings.clone())
     }
 
-    pub fn update_settings(&self, new_settings: AppSettings) -> Result<(), AppError> {
-        let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
-        *settings = new_settings;
-        self.save(&settings)
-    }
-
     pub fn get_app_preferences(&self) -> Result<AppPreferences, AppError> {
         let settings = self.settings.lock().map_err(|_| AppError::Lock)?;
-        Ok(AppPreferences::from_settings(
-            &settings,
-            self.data_location_display(),
-        ))
+        let mut preferences = settings.preferences.clone();
+        preferences.advanced.data_location = self.data_location_display();
+        Ok(preferences)
     }
 
     pub fn update_app_preferences(&self, new_preferences: &AppPreferences) -> Result<(), AppError> {
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
-        new_preferences.apply_to_settings(&mut settings);
+        settings.preferences = new_preferences.clone();
+        // data_location is derived at read time; don't trust the value the
+        // frontend echoed back. Persist as empty so the on-disk file doesn't
+        // carry a stale path if the user moves their app data later.
+        settings.preferences.advanced.data_location.clear();
         self.save(&settings)
     }
 
@@ -85,14 +84,18 @@ impl SettingsService {
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         let recent_databases = settings.recent_databases.clone();
         *settings = AppSettings {
+            preferences: AppPreferences::default(),
             recent_databases,
-            ..AppSettings::default()
         };
         self.save(&settings)?;
-        Ok(AppPreferences::from_settings(
-            &settings,
-            self.data_location_display(),
-        ))
+        let mut preferences = settings.preferences.clone();
+        preferences.advanced.data_location = self.data_location_display();
+        Ok(preferences)
+    }
+
+    pub fn get_recent_databases(&self) -> Result<Vec<RecentDatabase>, AppError> {
+        let settings = self.settings.lock().map_err(|_| AppError::Lock)?;
+        Ok(settings.recent_databases.clone())
     }
 
     pub fn add_recent_database(
