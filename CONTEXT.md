@@ -9,6 +9,10 @@ Architecture vocabulary (Module, Interface, Seam, Adapter, Depth) is separate an
 ### Vault
 A KDBX-format password database (KDBX3 or KDBX4) that MithrilVault has opened. Identified by its filesystem path. May be **locked** (encrypted, no decrypted state in memory) or **unlocked** (decrypted KDBX tree is live in memory and editable). Multiple Vaults can be open at once, keyed by path.
 
+Access to an unlocked Vault always happens inside a scoped callback: `KdbxService::with_vault` (read) or `with_vault_mut` (write). The callback receives a `Vault<'_>` / `VaultMut<'_>` handle that owns the databases-map lock for the duration of the call and exposes the tree-query and mutation API (`find_entry`, `find_group_id`, `entry_mut`, `ensure_recycle_bin`, …). After a successful mutation, callers explicitly call `vault.mark_modified()` to flip the Vault's dirty flag.
+
+This pattern is load-bearing for unlocked KDBX tree reads and mutations. Entry, group, custom-icon, and favicon code goes through `with_vault[_mut]`; database lifecycle and metadata operations such as create, open, lock, unlock, save, and header inspection may still access `KdbxService::lock_databases` / `OpenDatabase` directly.
+
 ### Entry
 A single credential record inside a Vault. Has a title, URL, username, password, optional notes, tags, custom fields, and an icon. Password material is read separately from the rest (see CLAUDE.md "minimal data in list views").
 

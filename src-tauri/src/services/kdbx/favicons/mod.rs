@@ -10,7 +10,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use super::mapping::find_entry_id;
 use super::KdbxService;
 use candidates::build_favicon_candidates;
 use http::{build_client, fetch_favicon_bytes};
@@ -158,23 +157,13 @@ impl KdbxService {
         allow_third_party_fallbacks: bool,
         force: bool,
     ) -> Result<FaviconFetchOutcome, AppError> {
-        let (entry_url, has_custom_icon) = {
-            let normalized_path = Self::normalize_path(db_id);
-            let databases = self.lock_databases()?;
-            let open_db = databases
-                .get(&normalized_path)
-                .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-            let db = open_db.db_or_locked()?;
-            let eid = find_entry_id(db, entry_id)
-                .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-            let entry = db
-                .entry(eid)
-                .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-            (
+        let (entry_url, has_custom_icon) = self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(entry_id)?;
+            Ok((
                 entry.get_url().map(str::to_string),
                 matches!(entry.icon(), Some(Icon::Custom(_))),
-            )
-        };
+            ))
+        })?;
 
         if !force && has_custom_icon {
             return Ok(FaviconFetchOutcome::Unchanged);

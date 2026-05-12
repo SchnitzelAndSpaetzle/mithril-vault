@@ -7,7 +7,6 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use super::mapping::find_entry_id;
 use super::KdbxService;
 
 impl KdbxService {
@@ -16,25 +15,19 @@ impl KdbxService {
         &self,
         db_id: &str,
     ) -> Result<HashMap<String, CustomIconData>, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let databases = self.lock_databases()?;
-        let open_db = databases
-            .get(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-
-        let db = open_db.db_or_locked()?;
-        let mut icons = HashMap::new();
-        for icon in db.iter_all_custom_icons() {
-            icons.insert(
-                icon.id().uuid().to_string(),
-                CustomIconData {
-                    mime_type: detect_icon_mime(&icon.data),
-                    data: STANDARD.encode(&icon.data),
-                },
-            );
-        }
-
-        Ok(icons)
+        self.with_vault(db_id, |vault| {
+            let mut icons = HashMap::new();
+            for icon in vault.db().iter_all_custom_icons() {
+                icons.insert(
+                    icon.id().uuid().to_string(),
+                    CustomIconData {
+                        mime_type: detect_icon_mime(&icon.data),
+                        data: STANDARD.encode(&icon.data),
+                    },
+                );
+            }
+            Ok(icons)
+        })
     }
 
     pub fn set_entry_custom_icon(
@@ -46,63 +39,56 @@ impl KdbxService {
         let parsed_uuid = Uuid::parse_str(icon_uuid)
             .map_err(|error| AppError::InvalidInput(error.to_string()))?;
 
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        let db = open_db.db_mut_or_locked()?;
+        self.with_vault_mut(db_id, |vault| {
+            let icon_cid = vault
+                .db()
+                .iter_all_custom_icons()
+                .find(|icon| icon.id().uuid() == parsed_uuid)
+                .map(|icon| icon.id());
+            let Some(icon_cid) = icon_cid else {
+                return Err(AppError::InvalidInput(format!(
+                    "custom icon {icon_uuid} not found in database"
+                )));
+            };
 
-        let icon_cid = db
-            .iter_all_custom_icons()
-            .find(|icon| icon.id().uuid() == parsed_uuid)
-            .map(|icon| icon.id());
-        let Some(icon_cid) = icon_cid else {
-            return Err(AppError::InvalidInput(format!(
-                "custom icon {icon_uuid} not found in database"
-            )));
-        };
+            let changed = {
+                let mut entry = vault.entry_mut(entry_id)?;
+                if matches!(entry.icon(), Some(Icon::Custom(cid)) if *cid == icon_cid) {
+                    false
+                } else {
+                    entry
+                        .set_icon_custom(icon_cid)
+                        .map_err(|e| AppError::Kdbx(e.to_string()))?;
+                    entry.times.last_modification = Some(Times::now());
+                    true
+                }
+            };
 
-        let eid = find_entry_id(db, entry_id)
-            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-        let mut entry = db
-            .entry_mut(eid)
-            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-
-        if matches!(entry.icon(), Some(Icon::Custom(cid)) if *cid == icon_cid) {
-            return Ok(false);
-        }
-
-        entry
-            .set_icon_custom(icon_cid)
-            .map_err(|e| AppError::Kdbx(e.to_string()))?;
-        entry.times.last_modification = Some(Times::now());
-        open_db.is_modified = true;
-        Ok(true)
+            if changed {
+                vault.mark_modified();
+            }
+            Ok(changed)
+        })
     }
 
     pub fn clear_entry_custom_icon(&self, db_id: &str, entry_id: &str) -> Result<bool, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        let db = open_db.db_mut_or_locked()?;
+        self.with_vault_mut(db_id, |vault| {
+            let changed = {
+                let mut entry = vault.entry_mut(entry_id)?;
+                if matches!(entry.icon(), Some(Icon::Custom(_))) {
+                    entry.set_icon_none();
+                    entry.times.last_modification = Some(Times::now());
+                    true
+                } else {
+                    false
+                }
+            };
 
-        let eid = find_entry_id(db, entry_id)
-            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-        let mut entry = db
-            .entry_mut(eid)
-            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-
-        if !matches!(entry.icon(), Some(Icon::Custom(_))) {
-            return Ok(false);
-        }
-
-        entry.set_icon_none();
-        entry.times.last_modification = Some(Times::now());
-        open_db.is_modified = true;
-        Ok(true)
+            if changed {
+                vault.mark_modified();
+            }
+            Ok(changed)
+        })
     }
 
     /// Writes `icon_bytes` to the Vault as a Custom Icon and links it to the
@@ -117,53 +103,57 @@ impl KdbxService {
         _mime_type: &str,
         force: bool,
     ) -> Result<bool, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        self.with_vault_mut(db_id, |vault| {
+            let eid = vault.find_entry_id(entry_id)?;
 
-        let db = open_db.db_mut_or_locked()?;
+            let already_has = matches!(
+                vault.db().entry(eid).and_then(|e| e.icon().cloned()),
+                Some(Icon::Custom(_))
+            );
 
-        let eid = find_entry_id(db, entry_id)
-            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+            if !force && already_has {
+                return Ok(false);
+            }
 
-        let already_has = matches!(
-            db.entry(eid).and_then(|e| e.icon().cloned()),
-            Some(Icon::Custom(_))
-        );
+            let target_hash = hash_bytes(icon_bytes);
+            let existing_cid = vault
+                .db()
+                .iter_all_custom_icons()
+                .find(|icon| hash_bytes(&icon.data) == target_hash)
+                .map(|icon| icon.id());
 
-        if !force && already_has {
-            return Ok(false);
-        }
+            let changed = {
+                let mut entry = vault
+                    .db_mut()
+                    .entry_mut(eid)
+                    .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
 
-        let target_hash = hash_bytes(icon_bytes);
-        let existing_cid = db
-            .iter_all_custom_icons()
-            .find(|icon| hash_bytes(&icon.data) == target_hash)
-            .map(|icon| icon.id());
-
-        let mut entry = db
-            .entry_mut(eid)
-            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-
-        match existing_cid {
-            Some(cid) => {
-                if matches!(entry.icon(), Some(Icon::Custom(current)) if *current == cid) {
-                    return Ok(false);
+                match existing_cid {
+                    Some(cid)
+                        if matches!(entry.icon(), Some(Icon::Custom(current)) if *current == cid) =>
+                    {
+                        false
+                    }
+                    Some(cid) => {
+                        entry
+                            .set_icon_custom(cid)
+                            .map_err(|e| AppError::Kdbx(e.to_string()))?;
+                        entry.times.last_modification = Some(Times::now());
+                        true
+                    }
+                    None => {
+                        entry.set_icon_custom_new(icon_bytes.to_vec());
+                        entry.times.last_modification = Some(Times::now());
+                        true
+                    }
                 }
-                entry
-                    .set_icon_custom(cid)
-                    .map_err(|e| AppError::Kdbx(e.to_string()))?;
-            }
-            None => {
-                entry.set_icon_custom_new(icon_bytes.to_vec());
-            }
-        }
+            };
 
-        entry.times.last_modification = Some(Times::now());
-        open_db.is_modified = true;
-        Ok(true)
+            if changed {
+                vault.mark_modified();
+            }
+            Ok(changed)
+        })
     }
 }
 
@@ -310,20 +300,18 @@ mod tests {
             .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
             .expect("seed icon");
 
-        let icon_uuid = {
-            let normalized = KdbxService::normalize_path(&db_path);
-            let databases = service.lock_databases().expect("lock databases");
-            let open_db = databases.get(&normalized).expect("open db");
-            let db = open_db.db_or_locked().expect("unlocked db");
-            let uuid = db
-                .iter_all_custom_icons()
-                .next()
-                .expect("custom icon exists")
-                .id()
-                .uuid()
-                .to_string();
-            uuid
-        };
+        let icon_uuid = service
+            .with_vault(&db_path, |vault| {
+                Ok(vault
+                    .db()
+                    .iter_all_custom_icons()
+                    .next()
+                    .expect("custom icon exists")
+                    .id()
+                    .uuid()
+                    .to_string())
+            })
+            .expect("vault scope");
 
         let changed = service
             .set_entry_custom_icon(&db_path, &entry_b, &icon_uuid)
@@ -472,21 +460,21 @@ mod tests {
         assert!(changed_a);
         assert!(changed_b);
 
-        let normalized = KdbxService::normalize_path(&db_path);
-        let databases = service.lock_databases().expect("lock databases");
-        let open_db = databases.get(&normalized).expect("open db");
-        let db = open_db.db_or_locked().expect("unlocked db");
-        assert_eq!(db.iter_all_custom_icons().count(), 1);
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(vault.db().iter_all_custom_icons().count(), 1);
 
-        let icon_for = |entry_id: &str| -> uuid::Uuid {
-            let eid = find_entry_id(db, entry_id).expect("entry id");
-            let entry = db.entry(eid).expect("entry ref");
-            match entry.icon() {
-                Some(Icon::Custom(cid)) => cid.uuid(),
-                other => unreachable!("entry {entry_id} has no custom icon: {other:?}"),
-            }
-        };
-        assert_eq!(icon_for(&entry_a), icon_for(&entry_b));
+                let icon_for = |entry_id: &str| -> uuid::Uuid {
+                    let entry = vault.find_entry(entry_id).expect("entry ref");
+                    match entry.icon() {
+                        Some(Icon::Custom(cid)) => cid.uuid(),
+                        other => unreachable!("entry {entry_id} has no custom icon: {other:?}"),
+                    }
+                };
+                assert_eq!(icon_for(&entry_a), icon_for(&entry_b));
+                Ok(())
+            })
+            .expect("vault scope");
     }
 
     #[test]
@@ -513,13 +501,13 @@ mod tests {
         assert!(cleared);
         assert!(!cleared_again);
 
-        let normalized = KdbxService::normalize_path(&db_path);
-        let databases = service.lock_databases().expect("lock databases");
-        let open_db = databases.get(&normalized).expect("open db");
-        let db = open_db.db_or_locked().expect("unlocked db");
-        let eid = find_entry_id(db, &entry_a).expect("entry id");
-        let entry = db.entry(eid).expect("entry ref");
-        assert!(!matches!(entry.icon(), Some(Icon::Custom(_))));
+        service
+            .with_vault(&db_path, |vault| {
+                let entry = vault.find_entry(&entry_a).expect("entry ref");
+                assert!(!matches!(entry.icon(), Some(Icon::Custom(_))));
+                Ok(())
+            })
+            .expect("vault scope");
     }
 
     #[test]
@@ -538,15 +526,17 @@ mod tests {
             "non-forced favicon fetches should preserve a user-selected icon"
         );
 
-        let normalized = KdbxService::normalize_path(&db_path);
-        let databases = service.lock_databases().expect("lock databases");
-        let open_db = databases.get(&normalized).expect("open db");
-        let db = open_db.db_or_locked().expect("unlocked db");
-        let mut icons: Vec<Vec<u8>> = db
-            .iter_all_custom_icons()
-            .map(|icon| icon.data.clone())
-            .collect();
-        assert_eq!(icons.len(), 1);
-        assert_eq!(icons.pop().expect("icon data"), first_icon);
+        service
+            .with_vault(&db_path, |vault| {
+                let mut icons: Vec<Vec<u8>> = vault
+                    .db()
+                    .iter_all_custom_icons()
+                    .map(|icon| icon.data.clone())
+                    .collect();
+                assert_eq!(icons.len(), 1);
+                assert_eq!(icons.pop().expect("icon data"), first_icon);
+                Ok(())
+            })
+            .expect("vault scope");
     }
 }

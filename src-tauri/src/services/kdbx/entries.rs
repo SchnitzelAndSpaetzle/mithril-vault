@@ -3,9 +3,8 @@ use crate::dto::error::AppError;
 use keepass::db::{Entry as KeepassEntry, EntryRef, Times, Value};
 use keepass::Database;
 
-use super::mapping::{
-    apply_custom_fields, convert_entry, ensure_recycle_bin, find_entry_id, find_group_by_id,
-    find_group_id, is_standard_entry_field, replace_custom_fields,
+use super::conversions::{
+    apply_custom_fields, convert_entry, is_standard_entry_field, replace_custom_fields,
 };
 use super::KdbxService;
 
@@ -16,76 +15,54 @@ impl KdbxService {
         db_id: &str,
         group_id: Option<&str>,
     ) -> Result<Vec<Entry>, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let databases = self.lock_databases()?;
-        let open_db = databases
-            .get(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        let db = open_db.db_or_locked()?;
+        self.with_vault(db_id, |vault| {
+            let mut entries = Vec::new();
 
-        let mut entries = Vec::new();
-
-        if let Some(gid) = group_id {
-            let group = find_group_by_id(db, gid)
-                .ok_or_else(|| AppError::GroupNotFound(gid.to_string()))?;
-            let group_uuid = group.id().uuid().to_string();
-            for entry in group.entries() {
-                entries.push(convert_entry(&entry, &group_uuid));
-            }
-        } else {
-            // The unfiltered "all entries" view hides anything inside the
-            // recycle bin so deleted entries don't appear to come back. The
-            // recycle bin group is still navigable directly through the
-            // `Some(gid)` branch above.
-            let recycle_uuid = db.meta.recyclebin_uuid;
-            for entry in db.iter_all_entries() {
-                if let Some(rid) = recycle_uuid {
-                    if is_in_recycle_bin(db, &entry, rid) {
-                        continue;
-                    }
+            if let Some(gid) = group_id {
+                let group = vault.find_group(gid)?;
+                let group_uuid = group.id().uuid().to_string();
+                for entry in group.entries() {
+                    entries.push(convert_entry(&entry, &group_uuid));
                 }
-                let group_uuid = entry.parent().id().uuid().to_string();
-                entries.push(convert_entry(&entry, &group_uuid));
+            } else {
+                // The unfiltered "all entries" view hides anything inside the
+                // recycle bin so deleted entries don't appear to come back. The
+                // recycle bin group is still navigable directly through the
+                // `Some(gid)` branch above.
+                let recycle_uuid = vault.db().meta.recyclebin_uuid;
+                for entry in vault.db().iter_all_entries() {
+                    if let Some(rid) = recycle_uuid {
+                        if is_in_recycle_bin(vault.db(), &entry, rid) {
+                            continue;
+                        }
+                    }
+                    let group_uuid = entry.parent().id().uuid().to_string();
+                    entries.push(convert_entry(&entry, &group_uuid));
+                }
             }
-        }
 
-        Ok(entries)
+            Ok(entries)
+        })
     }
 
     /// Fetches an entry by ID.
     pub fn get_entry(&self, db_id: &str, id: &str) -> Result<Entry, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let databases = self.lock_databases()?;
-        let open_db = databases
-            .get(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        let db = open_db.db_or_locked()?;
-
-        let eid = find_entry_id(db, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-        let entry = db
-            .entry(eid)
-            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-        let group_uuid = entry.parent().id().uuid().to_string();
-        Ok(convert_entry(&entry, &group_uuid))
+        self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(id)?;
+            let group_uuid = entry.parent().id().uuid().to_string();
+            Ok(convert_entry(&entry, &group_uuid))
+        })
     }
 
     /// Fetches an entry password.
     pub fn get_entry_password(&self, db_id: &str, id: &str) -> Result<String, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let databases = self.lock_databases()?;
-        let open_db = databases
-            .get(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        let db = open_db.db_or_locked()?;
-
-        let eid = find_entry_id(db, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-        let entry = db
-            .entry(eid)
-            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-        Ok(entry
-            .get_password()
-            .map(std::string::ToString::to_string)
-            .unwrap_or_default())
+        self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(id)?;
+            Ok(entry
+                .get_password()
+                .map(std::string::ToString::to_string)
+                .unwrap_or_default())
+        })
     }
 
     /// Fetches a protected custom field value.
@@ -95,35 +72,26 @@ impl KdbxService {
         entry_id: &str,
         key: &str,
     ) -> Result<CustomFieldValue, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let databases = self.lock_databases()?;
-        let open_db = databases
-            .get(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        let db = open_db.db_or_locked()?;
+        self.with_vault(db_id, |vault| {
+            if is_standard_entry_field(key) {
+                return Err(AppError::CustomFieldNotFound(key.to_string()));
+            }
 
-        if is_standard_entry_field(key) {
-            return Err(AppError::CustomFieldNotFound(key.to_string()));
-        }
+            let entry = vault.find_entry(entry_id)?;
 
-        let eid = find_entry_id(db, entry_id)
-            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
-        let entry = db
-            .entry(eid)
-            .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+            let value = entry
+                .fields
+                .get(key)
+                .ok_or_else(|| AppError::CustomFieldNotFound(key.to_string()))?;
 
-        let value = entry
-            .fields
-            .get(key)
-            .ok_or_else(|| AppError::CustomFieldNotFound(key.to_string()))?;
-
-        match value {
-            Value::Protected(_) => Ok(CustomFieldValue {
-                key: key.to_string(),
-                value: value.get().clone(),
-            }),
-            Value::Unprotected(_) => Err(AppError::CustomFieldNotProtected(key.to_string())),
-        }
+            match value {
+                Value::Protected(_) => Ok(CustomFieldValue {
+                    key: key.to_string(),
+                    value: value.get().clone(),
+                }),
+                Value::Unprotected(_) => Err(AppError::CustomFieldNotProtected(key.to_string())),
+            }
+        })
     }
 
     /// Creates a new entry in a group.
@@ -134,32 +102,23 @@ impl KdbxService {
         group_id: &str,
         data: CreateEntryData,
     ) -> Result<Entry, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        let db = open_db.db_mut_or_locked()?;
+        self.with_vault_mut(db_id, |vault| {
+            let new_eid = {
+                let mut group = vault.group_mut(group_id)?;
+                let mut entry = group.add_entry();
+                populate_entry(&mut entry, &data);
+                entry.id()
+            };
 
-        let gid = find_group_id(db, group_id)
-            .ok_or_else(|| AppError::GroupNotFound(group_id.to_string()))?;
+            let entry_ref = vault
+                .db()
+                .entry(new_eid)
+                .ok_or_else(|| AppError::EntryNotFound(new_eid.uuid().to_string()))?;
+            let entry_model = convert_entry(&entry_ref, group_id);
+            vault.mark_modified();
 
-        let new_eid = {
-            let mut group = db
-                .group_mut(gid)
-                .ok_or_else(|| AppError::GroupNotFound(group_id.to_string()))?;
-            let mut entry = group.add_entry();
-            populate_entry(&mut entry, &data);
-            entry.id()
-        };
-
-        let entry_ref = db
-            .entry(new_eid)
-            .ok_or_else(|| AppError::EntryNotFound(new_eid.uuid().to_string()))?;
-        let entry_model = convert_entry(&entry_ref, group_id);
-        open_db.is_modified = true;
-
-        Ok(entry_model)
+            Ok(entry_model)
+        })
     }
 
     /// Updates an existing entry.
@@ -169,144 +128,126 @@ impl KdbxService {
         id: &str,
         data: UpdateEntryData,
     ) -> Result<Entry, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        self.with_vault_mut(db_id, |vault| {
+            let eid = vault.find_entry_id(id)?;
 
-        let db = open_db.db_mut_or_locked()?;
-        let eid = find_entry_id(db, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+            let group_uuid = {
+                let mut entry = vault
+                    .db_mut()
+                    .entry_mut(eid)
+                    .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
 
-        let group_uuid = {
-            let mut entry = db
-                .entry_mut(eid)
+                if let Some(title) = data.title {
+                    entry
+                        .fields
+                        .insert("Title".to_string(), Value::Unprotected(title));
+                }
+                if let Some(username) = data.username {
+                    entry
+                        .fields
+                        .insert("UserName".to_string(), Value::Unprotected(username));
+                }
+                if let Some(ref password) = data.password {
+                    entry.fields.insert(
+                        "Password".to_string(),
+                        Value::protected(password.as_str().to_string()),
+                    );
+                }
+                if let Some(url) = data.url {
+                    entry
+                        .fields
+                        .insert("URL".to_string(), Value::Unprotected(url));
+                }
+                if let Some(notes) = data.notes {
+                    entry
+                        .fields
+                        .insert("Notes".to_string(), Value::Unprotected(notes));
+                }
+                if let Some(icon_id) = data.icon_id {
+                    entry.set_icon_builtin(icon_id as usize);
+                }
+                if let Some(tags) = data.tags {
+                    entry.tags = tags;
+                }
+                if data.custom_fields.is_some() || data.protected_custom_fields.is_some() {
+                    replace_custom_fields(
+                        &mut entry,
+                        data.custom_fields.as_ref(),
+                        data.protected_custom_fields.as_ref(),
+                    );
+                }
+
+                entry.times.last_modification = Some(Times::now());
+                entry.as_ref().parent().id().uuid().to_string()
+            };
+
+            let entry_ref = vault
+                .db()
+                .entry(eid)
                 .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+            let result = convert_entry(&entry_ref, &group_uuid);
+            vault.mark_modified();
 
-            if let Some(title) = data.title {
-                entry
-                    .fields
-                    .insert("Title".to_string(), Value::Unprotected(title));
-            }
-            if let Some(username) = data.username {
-                entry
-                    .fields
-                    .insert("UserName".to_string(), Value::Unprotected(username));
-            }
-            if let Some(ref password) = data.password {
-                entry.fields.insert(
-                    "Password".to_string(),
-                    Value::protected(password.as_str().to_string()),
-                );
-            }
-            if let Some(url) = data.url {
-                entry
-                    .fields
-                    .insert("URL".to_string(), Value::Unprotected(url));
-            }
-            if let Some(notes) = data.notes {
-                entry
-                    .fields
-                    .insert("Notes".to_string(), Value::Unprotected(notes));
-            }
-            if let Some(icon_id) = data.icon_id {
-                entry.set_icon_builtin(icon_id as usize);
-            }
-            if let Some(tags) = data.tags {
-                entry.tags = tags;
-            }
-            if data.custom_fields.is_some() || data.protected_custom_fields.is_some() {
-                replace_custom_fields(
-                    &mut entry,
-                    data.custom_fields.as_ref(),
-                    data.protected_custom_fields.as_ref(),
-                );
-            }
-
-            entry.times.last_modification = Some(Times::now());
-            entry.as_ref().parent().id().uuid().to_string()
-        };
-
-        let entry_ref = db
-            .entry(eid)
-            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-        let result = convert_entry(&entry_ref, &group_uuid);
-        open_db.is_modified = true;
-
-        Ok(result)
+            Ok(result)
+        })
     }
 
     /// Deletes an entry by moving it to recycle bin.
     pub fn delete_entry(&self, db_id: &str, id: &str) -> Result<(), AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        self.with_vault_mut(db_id, |vault| {
+            let eid = vault.find_entry_id(id)?;
+            let recycle_uuid = vault.ensure_recycle_bin();
+            let recycle_gid = vault.find_group_id(&recycle_uuid)?;
 
-        let db = open_db.db_mut_or_locked()?;
-        let eid = find_entry_id(db, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+            let now = Times::now();
+            {
+                let mut entry = vault
+                    .db_mut()
+                    .entry_mut(eid)
+                    .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+                entry.times.last_modification = Some(now);
+                entry.times.location_changed = Some(now);
+                entry
+                    .move_to(recycle_gid)
+                    .map_err(|e| AppError::Kdbx(e.to_string()))?;
+            }
 
-        let recycle_uuid = ensure_recycle_bin(db);
-        let recycle_gid = find_group_id(db, &recycle_uuid)
-            .ok_or_else(|| AppError::GroupNotFound(recycle_uuid.clone()))?;
-
-        let now = Times::now();
-        {
-            let mut entry = db
-                .entry_mut(eid)
-                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-            entry.times.last_modification = Some(now);
-            entry.times.location_changed = Some(now);
-            entry
-                .move_to(recycle_gid)
-                .map_err(|e| AppError::Kdbx(e.to_string()))?;
-        }
-
-        open_db.is_modified = true;
-        Ok(())
+            vault.mark_modified();
+            Ok(())
+        })
     }
 
     /// Renames a tag across all entries in the database.
     /// Returns the number of entries that were modified.
     pub fn rename_tag(&self, db_id: &str, old_name: &str, new_name: &str) -> Result<u32, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        self.with_vault_mut(db_id, |vault| {
+            if old_name == new_name {
+                return Ok(0);
+            }
 
-        if old_name == new_name {
-            return Ok(0);
-        }
+            let count =
+                vault.modify_all_entries(&|entry| rename_tag_in_entry(entry, old_name, new_name));
 
-        let db = open_db.db_mut_or_locked()?;
-        let count = modify_all_entries(db, &|entry| rename_tag_in_entry(entry, old_name, new_name));
+            if count > 0 {
+                vault.mark_modified();
+            }
 
-        if count > 0 {
-            open_db.is_modified = true;
-        }
-
-        Ok(count)
+            Ok(count)
+        })
     }
 
     /// Deletes a tag from all entries in the database.
     /// Returns the number of entries that were modified.
     pub fn delete_tag(&self, db_id: &str, tag_name: &str) -> Result<u32, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        self.with_vault_mut(db_id, |vault| {
+            let count = vault.modify_all_entries(&|entry| delete_tag_in_entry(entry, tag_name));
 
-        let db = open_db.db_mut_or_locked()?;
-        let count = modify_all_entries(db, &|entry| delete_tag_in_entry(entry, tag_name));
+            if count > 0 {
+                vault.mark_modified();
+            }
 
-        if count > 0 {
-            open_db.is_modified = true;
-        }
-
-        Ok(count)
+            Ok(count)
+        })
     }
 
     /// Moves an entry to another group.
@@ -316,36 +257,32 @@ impl KdbxService {
         id: &str,
         target_group_id: &str,
     ) -> Result<Entry, AppError> {
-        let normalized_path = Self::normalize_path(db_id);
-        let mut databases = self.lock_databases()?;
-        let open_db = databases
-            .get_mut(&normalized_path)
-            .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
+        self.with_vault_mut(db_id, |vault| {
+            let eid = vault.find_entry_id(id)?;
+            let target_gid = vault.find_group_id(target_group_id)?;
 
-        let db = open_db.db_mut_or_locked()?;
-        let eid = find_entry_id(db, id).ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-        let target_gid = find_group_id(db, target_group_id)
-            .ok_or_else(|| AppError::GroupNotFound(target_group_id.to_string()))?;
+            let now = Times::now();
+            {
+                let mut entry = vault
+                    .db_mut()
+                    .entry_mut(eid)
+                    .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+                entry.times.last_modification = Some(now);
+                entry.times.location_changed = Some(now);
+                entry
+                    .move_to(target_gid)
+                    .map_err(|e| AppError::Kdbx(e.to_string()))?;
+            }
 
-        let now = Times::now();
-        {
-            let mut entry = db
-                .entry_mut(eid)
+            let entry_ref = vault
+                .db()
+                .entry(eid)
                 .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-            entry.times.last_modification = Some(now);
-            entry.times.location_changed = Some(now);
-            entry
-                .move_to(target_gid)
-                .map_err(|e| AppError::Kdbx(e.to_string()))?;
-        }
+            let entry_model = convert_entry(&entry_ref, target_group_id);
+            vault.mark_modified();
 
-        let entry_ref = db
-            .entry(eid)
-            .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
-        let entry_model = convert_entry(&entry_ref, target_group_id);
-        open_db.is_modified = true;
-
-        Ok(entry_model)
+            Ok(entry_model)
+        })
     }
 }
 
@@ -400,17 +337,6 @@ fn populate_entry(entry: &mut keepass::db::EntryMut<'_>, data: &CreateEntryData)
         data.custom_fields.as_ref(),
         data.protected_custom_fields.as_ref(),
     );
-}
-
-fn modify_all_entries(db: &mut Database, modify_fn: &dyn Fn(&mut KeepassEntry) -> bool) -> u32 {
-    let mut count = 0u32;
-    db.foreach_entry_mut(|mut entry| {
-        if modify_fn(&mut entry) {
-            entry.times.last_modification = Some(Times::now());
-            count += 1;
-        }
-    });
-    count
 }
 
 fn rename_tag_in_entry(entry: &mut KeepassEntry, old_name: &str, new_name: &str) -> bool {
