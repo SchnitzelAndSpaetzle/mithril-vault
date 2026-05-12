@@ -1,3 +1,4 @@
+pub mod backups;
 pub mod conversions;
 pub mod create;
 pub mod custom_icons;
@@ -11,6 +12,7 @@ pub mod open;
 pub mod save;
 pub mod vault;
 
+use crate::commands::settings::BackupSettings;
 use crate::domain::kdbx::OpenDatabase;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
@@ -25,6 +27,7 @@ pub struct KdbxService {
     /// The key is the canonical/normalized path to ensure consistent lookups.
     databases: Mutex<HashMap<String, OpenDatabase>>,
     pub(crate) favicons: FaviconCooldown,
+    backup_settings: Mutex<BackupSettings>,
 }
 
 impl KdbxService {
@@ -33,7 +36,23 @@ impl KdbxService {
         Self {
             databases: Mutex::new(HashMap::new()),
             favicons: FaviconCooldown::new(),
+            backup_settings: Mutex::new(BackupSettings::default()),
         }
+    }
+
+    /// Replaces the backup settings the save hook reads on each save.
+    ///
+    /// Called from app setup with the persisted value and from the settings
+    /// update command whenever the user changes the toggle.
+    pub fn set_backup_settings(&self, settings: BackupSettings) -> Result<(), AppError> {
+        let mut guard = self.backup_settings.lock().map_err(|_| AppError::Lock)?;
+        *guard = settings;
+        Ok(())
+    }
+
+    pub fn current_backup_settings(&self) -> Result<BackupSettings, AppError> {
+        let guard = self.backup_settings.lock().map_err(|_| AppError::Lock)?;
+        Ok(guard.clone())
     }
 
     /// Normalizes a database path for consistent `HashMap` keys.

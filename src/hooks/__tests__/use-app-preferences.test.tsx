@@ -58,6 +58,9 @@ function makePreferences(): AppPreferences {
       debugMode: false,
       dataLocation: "/tmp/mithril-vault",
     },
+    backups: {
+      enabled: true,
+    },
   };
 }
 

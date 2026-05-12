@@ -106,6 +106,9 @@ pub enum AppError {
 
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+
+    #[error("Backup failed for {path}: {reason}")]
+    BackupFailed { path: String, reason: String },
 }
 
 impl Serialize for AppError {
@@ -120,5 +123,18 @@ impl Serialize for AppError {
 impl From<std::io::Error> for AppError {
     fn from(err: std::io::Error) -> Self {
         Self::Io(err.to_string())
+    }
+}
+
+impl From<crate::services::kdbx::backups::BackupError> for AppError {
+    fn from(err: crate::services::kdbx::backups::BackupError) -> Self {
+        match err {
+            crate::services::kdbx::backups::BackupError::BackupFailed { path, source } => {
+                Self::BackupFailed {
+                    path: path.to_string_lossy().into_owned(),
+                    reason: source.to_string(),
+                }
+            }
+        }
     }
 }

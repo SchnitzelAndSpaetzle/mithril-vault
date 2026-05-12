@@ -266,12 +266,18 @@ export const AdvancedSettingsSchema = z.object({
 });
 export type AdvancedSettings = z.infer<typeof AdvancedSettingsSchema>;
 
+export const BackupSettingsSchema = z.object({
+  enabled: z.boolean(),
+});
+export type BackupSettings = z.infer<typeof BackupSettingsSchema>;
+
 export const AppPreferencesSchema = z.object({
   general: GeneralSettingsSchema,
   security: SecuritySettingsSchema,
   appearance: AppearanceSettingsSchema,
   browserIntegration: BrowserIntegrationSettingsSchema,
   advanced: AdvancedSettingsSchema,
+  backups: BackupSettingsSchema,
 });
 export type AppPreferences = z.infer<typeof AppPreferencesSchema>;
 

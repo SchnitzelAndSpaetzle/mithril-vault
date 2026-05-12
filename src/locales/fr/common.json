@@ -107,6 +107,17 @@
       "enableDebugMode": "Activer le mode débogage",
       "dataLocation": "Emplacement des données"
     },
+    "backups": {
+      "title": "Backups",
+      "description": "Automatic snapshots of your vault file before every save.",
+      "enabled": {
+        "label": "Enable backups",
+        "description": "Before saving, copy the previous vault bytes into a .kdbx-backups/ folder next to the file."
+      },
+      "error": {
+        "failed": "Backup failed for {{path}}: {{reason}}. The vault was not saved."
+      }
+    },
     "shortcuts": {
       "title": "Raccourcis clavier",
       "description": "Voir tous les raccourcis clavier disponibles."

@@ -26,6 +26,7 @@ import {
 import { isColorPresetId } from "@/lib/theme-presets";
 import { AdvancedSettingsSection } from "@/components/settings/sections/AdvancedSettingsSection";
 import { AppearanceSettingsSection } from "@/components/settings/sections/AppearanceSettingsSection";
+import { BackupsSettingsSection } from "@/components/settings/sections/BackupsSettingsSection";
 import { BrowserIntegrationSettingsSection } from "@/components/settings/sections/BrowserIntegrationSettingsSection";
 import { DatabaseSettingsSection } from "@/components/settings/sections/DatabaseSettingsSection";
 import { GeneralSettingsSection } from "@/components/settings/sections/GeneralSettingsSection";
@@ -277,6 +278,7 @@ export function SettingsEditor({
       <KeyboardShortcutsSettingsSection />
       <PasswordGeneratorSettingsSection />
       <AdvancedSettingsSection draft={draft} updateDraft={updateDraft} />
+      <BackupsSettingsSection draft={draft} updateDraft={updateDraft} />
       <DatabaseSettingsSection
         dbId={dbId}
         databaseConfig={databaseConfig}
