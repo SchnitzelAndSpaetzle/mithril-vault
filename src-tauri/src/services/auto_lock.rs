@@ -59,7 +59,9 @@ pub fn start_auto_lock_task<R: Runtime>(app_handle: &tauri::AppHandle<R>) {
                 continue;
             };
 
-            let timeout = settings.get_settings().map_or(300, |s| s.auto_lock_timeout);
+            let timeout = settings
+                .get_settings()
+                .map_or(300, |s| s.preferences.security.auto_lock_timeout);
 
             // 0 means disabled
             if timeout == 0 {

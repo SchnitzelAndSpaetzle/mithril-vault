@@ -275,34 +275,6 @@ export const AppPreferencesSchema = z.object({
 });
 export type AppPreferences = z.infer<typeof AppPreferencesSchema>;
 
-export const AppSettingsSchema = z.object({
-  language: z.string().min(1),
-  startupBehavior: StartupBehaviorSchema,
-  defaultDatabasePath: z.string().nullable(),
-  autoLockTimeout: z.number().int(),
-  clipboardClearTimeout: z.number().int(),
-  clearClipboardOnLock: z.boolean(),
-  showClipboardCountdown: z.boolean(),
-  showPasswordByDefault: z.boolean(),
-  minimizeToTray: z.boolean(),
-  startMinimized: z.boolean(),
-  preventScreenCapture: z.boolean(),
-  autoDownloadFavicons: z.boolean(),
-  allowThirdPartyFaviconFallbacks: z.boolean(),
-  theme: ThemePreferenceSchema,
-  colorPreset: z.string().default("default"),
-  fontSize: z.number().int().min(10).max(24),
-  entryListShowUsername: z.boolean(),
-  entryListShowUrl: z.boolean(),
-  entryListShowModifiedAt: z.boolean(),
-  entryListShowTags: z.boolean(),
-  browserIntegrationEnabled: z.boolean(),
-  browserAllowedSites: z.array(z.string()),
-  debugMode: z.boolean(),
-  recentDatabases: z.array(RecentDatabaseSchema),
-});
-export type AppSettings = z.infer<typeof AppSettingsSchema>;
-
 export type GroupEntryCounts = Record<string, number>;
 
 export const EntrySortFieldSchema = z.enum([

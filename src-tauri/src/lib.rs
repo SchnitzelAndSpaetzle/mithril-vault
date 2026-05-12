@@ -15,12 +15,13 @@ use commands::{
     generate_passphrase, generate_password, get_app_preferences, get_custom_icons,
     get_database_config, get_database_info, get_entry, get_entry_password,
     get_entry_protected_custom_field, get_group, get_group_entry_counts, get_keyfile_for_database,
-    get_recycle_bin_id, get_settings, get_window_content_protection_supported, has_session_key,
-    inspect_database, list_entries, list_groups, list_open_databases, lock_database, move_entry,
-    move_group, open_database, open_database_with_keyfile, open_database_with_keyfile_only,
-    remove_recent_database, rename_group, rename_tag, report_activity, reset_app_preferences,
-    save_database, set_entry_custom_icon, set_window_content_protected, store_session_key,
-    unlock_database, update_app_preferences, update_entry, update_group, update_settings,
+    get_recent_databases, get_recycle_bin_id, get_window_content_protection_supported,
+    has_session_key, inspect_database, list_entries, list_groups, list_open_databases,
+    lock_database, move_entry, move_group, open_database, open_database_with_keyfile,
+    open_database_with_keyfile_only, remove_recent_database, rename_group, rename_tag,
+    report_activity, reset_app_preferences, save_database, set_entry_custom_icon,
+    set_window_content_protected, store_session_key, unlock_database, update_app_preferences,
+    update_entry, update_group,
 };
 use services::auto_lock::AutoLockService;
 use services::clipboard::ClipboardService;
@@ -82,11 +83,10 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             get_recycle_bin_id,
             generate_password,
             generate_passphrase,
-            get_settings,
-            update_settings,
             get_app_preferences,
             update_app_preferences,
             reset_app_preferences,
+            get_recent_databases,
             add_recent_database,
             remove_recent_database,
             clear_recent_databases,
@@ -108,7 +108,7 @@ fn apply_initial_window_protection<R: Runtime>(app: &AppHandle<R>) {
     let enabled = match app.try_state::<Arc<SettingsService>>() {
         Some(service) => service
             .get_settings()
-            .map_or(true, |s| s.prevent_screen_capture),
+            .map_or(true, |s| s.preferences.security.prevent_screen_capture),
         None => true,
     };
     if let Err(err) = WindowProtectionService::apply_to_all(app, enabled) {

@@ -21,10 +21,7 @@ export const recentDatabasesQueryOptions = queryOptions<
   Error
 >({
   queryKey: queryKeys.settings.recentDatabases(),
-  queryFn: async () => {
-    const appSettings = await settings.get();
-    return appSettings.recentDatabases;
-  },
+  queryFn: () => settings.getRecentDatabases(),
   retry: false,
   refetchOnWindowFocus: true,
 });
