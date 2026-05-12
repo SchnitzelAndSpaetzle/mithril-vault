@@ -5,8 +5,8 @@
 
 use mithril_vault_lib::commands::settings::{
     add_recent_database, clear_recent_databases, get_app_preferences, get_keyfile_for_database,
-    get_settings, remove_recent_database, reset_app_preferences, update_app_preferences,
-    update_settings, StartupBehavior,
+    get_recent_databases, remove_recent_database, reset_app_preferences, update_app_preferences,
+    StartupBehavior,
 };
 use mithril_vault_lib::services::settings::SettingsService;
 use std::sync::Arc;
@@ -30,25 +30,27 @@ fn cleanup_settings_file(app: &tauri::App<tauri::test::MockRuntime>) {
 }
 
 #[test]
-fn get_and_update_settings_commands() {
+fn get_and_update_preferences_commands() {
     let app = setup_app();
 
-    let settings = tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
-    assert_eq!(settings.auto_lock_timeout, 300);
-    assert!(settings.prevent_screen_capture);
+    let prefs =
+        tauri::async_runtime::block_on(get_app_preferences(app.state())).expect("get preferences");
+    assert_eq!(prefs.security.auto_lock_timeout, 300);
+    assert!(prefs.security.prevent_screen_capture);
 
-    let mut updated = settings.clone();
-    updated.auto_lock_timeout = 90;
-    updated.theme = "light".into();
-    updated.prevent_screen_capture = false;
+    let mut updated = prefs.clone();
+    updated.security.auto_lock_timeout = 90;
+    updated.appearance.theme = "light".into();
+    updated.security.prevent_screen_capture = false;
 
-    tauri::async_runtime::block_on(update_settings(updated, app.state())).expect("update settings");
+    tauri::async_runtime::block_on(update_app_preferences(updated, app.state()))
+        .expect("update preferences");
 
     let refreshed =
-        tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
-    assert_eq!(refreshed.auto_lock_timeout, 90);
-    assert_eq!(refreshed.theme, "light");
-    assert!(!refreshed.prevent_screen_capture);
+        tauri::async_runtime::block_on(get_app_preferences(app.state())).expect("get preferences");
+    assert_eq!(refreshed.security.auto_lock_timeout, 90);
+    assert_eq!(refreshed.appearance.theme, "light");
+    assert!(!refreshed.security.prevent_screen_capture);
 
     cleanup_settings_file(&app);
 }
@@ -72,8 +74,9 @@ fn recent_database_commands() {
     tauri::async_runtime::block_on(remove_recent_database("db-1.kdbx".into(), app.state()))
         .expect("remove recent database");
 
-    let settings = tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
-    assert!(settings.recent_databases.is_empty());
+    let recent =
+        tauri::async_runtime::block_on(get_recent_databases(app.state())).expect("get recent");
+    assert!(recent.is_empty());
 
     tauri::async_runtime::block_on(add_recent_database("db-2.kdbx".into(), None, app.state()))
         .expect("add recent database");
@@ -81,8 +84,9 @@ fn recent_database_commands() {
     tauri::async_runtime::block_on(clear_recent_databases(app.state()))
         .expect("clear recent databases");
 
-    let settings = tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
-    assert!(settings.recent_databases.is_empty());
+    let recent =
+        tauri::async_runtime::block_on(get_recent_databases(app.state())).expect("get recent");
+    assert!(recent.is_empty());
 
     cleanup_settings_file(&app);
 }
@@ -149,8 +153,9 @@ fn app_preferences_commands() {
     assert_eq!(reset.appearance.theme, "system");
     assert!(!reset.advanced.debug_mode);
 
-    let settings = tauri::async_runtime::block_on(get_settings(app.state())).expect("get settings");
-    assert_eq!(settings.recent_databases.len(), 1);
+    let recent =
+        tauri::async_runtime::block_on(get_recent_databases(app.state())).expect("get recent");
+    assert_eq!(recent.len(), 1);
 
     cleanup_settings_file(&app);
 }

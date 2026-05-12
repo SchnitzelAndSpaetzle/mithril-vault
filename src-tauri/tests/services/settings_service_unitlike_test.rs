@@ -3,7 +3,7 @@
 
 #![allow(clippy::expect_used)]
 
-use mithril_vault_lib::commands::settings::AppSettings;
+use mithril_vault_lib::commands::settings::{AppPreferences, SecuritySettings};
 use mithril_vault_lib::services::settings::SettingsService;
 use tauri::test::mock_app;
 use tauri::Manager;
@@ -38,11 +38,16 @@ fn load_or_default_returns_default_when_missing() {
     let service = SettingsService::new(app.handle()).expect("create service");
     let settings = service.get_settings().expect("get settings");
 
-    assert_eq!(settings.auto_lock_timeout, 300);
-    assert_eq!(settings.clipboard_clear_timeout, 30);
-    assert_eq!(settings.theme, "system");
-    assert!(!settings.auto_download_favicons);
-    assert!(!settings.allow_third_party_favicon_fallbacks);
+    assert_eq!(settings.preferences.security.auto_lock_timeout, 300);
+    assert_eq!(settings.preferences.security.clipboard_clear_timeout, 30);
+    assert_eq!(settings.preferences.appearance.theme, "system");
+    assert!(!settings.preferences.security.auto_download_favicons);
+    assert!(
+        !settings
+            .preferences
+            .security
+            .allow_third_party_favicon_fallbacks
+    );
     assert!(settings.recent_databases.is_empty());
 
     cleanup_settings_file(&app);
@@ -55,30 +60,43 @@ fn save_and_load_roundtrip() {
     cleanup_settings_file(&app);
     let service = SettingsService::new(app.handle()).expect("create service");
 
-    let settings = AppSettings {
-        auto_lock_timeout: 120,
-        clipboard_clear_timeout: 15,
-        show_password_by_default: true,
-        auto_download_favicons: true,
-        allow_third_party_favicon_fallbacks: true,
-        minimize_to_tray: false,
-        start_minimized: true,
-        theme: "dark".into(),
-        ..AppSettings::default()
+    let prefs = AppPreferences {
+        security: SecuritySettings {
+            auto_lock_timeout: 120,
+            clipboard_clear_timeout: 15,
+            show_password_by_default: true,
+            auto_download_favicons: true,
+            allow_third_party_favicon_fallbacks: true,
+            minimize_to_tray: false,
+            start_minimized: true,
+            ..SecuritySettings::default()
+        },
+        appearance: mithril_vault_lib::commands::settings::AppearanceSettings {
+            theme: "dark".into(),
+            ..Default::default()
+        },
+        ..AppPreferences::default()
     };
 
-    service.update_settings(settings).expect("save settings");
+    service
+        .update_app_preferences(&prefs)
+        .expect("save preferences");
     let reloaded = SettingsService::new(app.handle()).expect("create service");
     let loaded = reloaded.get_settings().expect("get settings");
 
-    assert_eq!(loaded.auto_lock_timeout, 120);
-    assert_eq!(loaded.clipboard_clear_timeout, 15);
-    assert!(loaded.show_password_by_default);
-    assert!(loaded.auto_download_favicons);
-    assert!(loaded.allow_third_party_favicon_fallbacks);
-    assert!(!loaded.minimize_to_tray);
-    assert!(loaded.start_minimized);
-    assert_eq!(loaded.theme, "dark");
+    assert_eq!(loaded.preferences.security.auto_lock_timeout, 120);
+    assert_eq!(loaded.preferences.security.clipboard_clear_timeout, 15);
+    assert!(loaded.preferences.security.show_password_by_default);
+    assert!(loaded.preferences.security.auto_download_favicons);
+    assert!(
+        loaded
+            .preferences
+            .security
+            .allow_third_party_favicon_fallbacks
+    );
+    assert!(!loaded.preferences.security.minimize_to_tray);
+    assert!(loaded.preferences.security.start_minimized);
+    assert_eq!(loaded.preferences.appearance.theme, "dark");
     assert!(loaded.recent_databases.is_empty());
 
     cleanup_settings_file(&app);
@@ -91,24 +109,22 @@ fn update_and_get_settings_persist() {
     cleanup_settings_file(&app);
     let service = SettingsService::new(app.handle()).expect("create service");
 
-    let updated = AppSettings {
-        auto_lock_timeout: 45,
-        theme: "light".into(),
-        ..AppSettings::default()
-    };
+    let mut prefs = AppPreferences::default();
+    prefs.security.auto_lock_timeout = 45;
+    prefs.appearance.theme = "light".into();
 
     service
-        .update_settings(updated.clone())
-        .expect("update settings");
+        .update_app_preferences(&prefs)
+        .expect("update preferences");
 
     let fetched = service.get_settings().expect("get settings");
-    assert_eq!(fetched.auto_lock_timeout, 45);
-    assert_eq!(fetched.theme, "light");
+    assert_eq!(fetched.preferences.security.auto_lock_timeout, 45);
+    assert_eq!(fetched.preferences.appearance.theme, "light");
 
     let reloaded = SettingsService::new(app.handle()).expect("create service");
     let loaded = reloaded.get_settings().expect("get settings");
-    assert_eq!(loaded.auto_lock_timeout, 45);
-    assert_eq!(loaded.theme, "light");
+    assert_eq!(loaded.preferences.security.auto_lock_timeout, 45);
+    assert_eq!(loaded.preferences.appearance.theme, "light");
 
     cleanup_settings_file(&app);
 }

@@ -135,7 +135,10 @@ pub async fn fetch_entry_favicon(
         .fetch_entry_favicon(
             &db_id,
             &id,
-            settings.allow_third_party_favicon_fallbacks,
+            settings
+                .preferences
+                .security
+                .allow_third_party_favicon_fallbacks,
             force.unwrap_or(false),
         )
         .await
