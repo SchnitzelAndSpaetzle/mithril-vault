@@ -8,6 +8,7 @@ use mithril_vault_lib::commands::settings::{
     get_recent_databases, remove_recent_database, reset_app_preferences, update_app_preferences,
     StartupBehavior,
 };
+use mithril_vault_lib::services::kdbx::KdbxService;
 use mithril_vault_lib::services::settings::SettingsService;
 use std::sync::Arc;
 use tauri::test::mock_app;
@@ -17,6 +18,7 @@ fn setup_app() -> tauri::App<tauri::test::MockRuntime> {
     let app = mock_app();
     let settings_service = SettingsService::new(app.handle()).expect("create settings service");
     app.manage(Arc::new(settings_service));
+    app.manage(Arc::new(KdbxService::new()));
     app
 }
 
@@ -43,7 +45,7 @@ fn get_and_update_preferences_commands() {
     updated.appearance.theme = "light".into();
     updated.security.prevent_screen_capture = false;
 
-    tauri::async_runtime::block_on(update_app_preferences(updated, app.state()))
+    tauri::async_runtime::block_on(update_app_preferences(updated, app.state(), app.state()))
         .expect("update preferences");
 
     let refreshed =
@@ -123,8 +125,12 @@ fn app_preferences_commands() {
     prefs.browser_integration.allowed_sites = vec!["example.com".into()];
     prefs.advanced.debug_mode = true;
 
-    tauri::async_runtime::block_on(update_app_preferences(prefs.clone(), app.state()))
-        .expect("update preferences");
+    tauri::async_runtime::block_on(update_app_preferences(
+        prefs.clone(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("update preferences");
 
     let refreshed =
         tauri::async_runtime::block_on(get_app_preferences(app.state())).expect("get preferences");
@@ -144,8 +150,8 @@ fn app_preferences_commands() {
     );
     assert!(refreshed.advanced.debug_mode);
 
-    let reset =
-        tauri::async_runtime::block_on(reset_app_preferences(app.state())).expect("reset prefs");
+    let reset = tauri::async_runtime::block_on(reset_app_preferences(app.state(), app.state()))
+        .expect("reset prefs");
     assert_eq!(reset.general.language, "en");
     assert_eq!(reset.security.clipboard_clear_timeout, 30);
     assert!(!reset.security.auto_download_favicons);
@@ -156,6 +162,37 @@ fn app_preferences_commands() {
     let recent =
         tauri::async_runtime::block_on(get_recent_databases(app.state())).expect("get recent");
     assert_eq!(recent.len(), 1);
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn update_app_preferences_propagates_backups_to_kdbx_service() {
+    let app = setup_app();
+
+    let mut prefs =
+        tauri::async_runtime::block_on(get_app_preferences(app.state())).expect("get preferences");
+    assert!(
+        prefs.backups.enabled,
+        "default backups.enabled should be true"
+    );
+
+    prefs.backups.enabled = false;
+    tauri::async_runtime::block_on(update_app_preferences(
+        prefs.clone(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("update preferences");
+
+    let kdbx: tauri::State<'_, Arc<KdbxService>> = app.state();
+    let current = kdbx
+        .current_backup_settings()
+        .expect("read current backup settings");
+    assert!(
+        !current.enabled,
+        "KdbxService should see backups disabled after update"
+    );
 
     cleanup_settings_file(&app);
 }

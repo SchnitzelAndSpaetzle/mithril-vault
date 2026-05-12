@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::dto::error::AppError;
+use crate::services::kdbx::KdbxService;
 use crate::services::settings::SettingsService;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -138,6 +139,19 @@ pub struct AdvancedSettings {
     pub data_location: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct BackupSettings {
+    pub enabled: bool,
+}
+
+impl Default for BackupSettings {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
@@ -147,6 +161,7 @@ pub struct AppPreferences {
     pub appearance: AppearanceSettings,
     pub browser_integration: BrowserIntegrationSettings,
     pub advanced: AdvancedSettings,
+    pub backups: BackupSettings,
 }
 
 /// Persisted shape written to `settings.json`. Combines the editable
@@ -171,15 +186,21 @@ pub async fn get_app_preferences(
 pub async fn update_app_preferences(
     new_preferences: AppPreferences,
     settings_service: State<'_, Arc<SettingsService>>,
+    kdbx_service: State<'_, Arc<KdbxService>>,
 ) -> Result<(), AppError> {
-    settings_service.update_app_preferences(&new_preferences)
+    settings_service.update_app_preferences(&new_preferences)?;
+    kdbx_service.set_backup_settings(new_preferences.backups)?;
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn reset_app_preferences(
     settings_service: State<'_, Arc<SettingsService>>,
+    kdbx_service: State<'_, Arc<KdbxService>>,
 ) -> Result<AppPreferences, AppError> {
-    settings_service.reset_app_preferences()
+    let prefs = settings_service.reset_app_preferences()?;
+    kdbx_service.set_backup_settings(prefs.backups.clone())?;
+    Ok(prefs)
 }
 
 #[tauri::command]

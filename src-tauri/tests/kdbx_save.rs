@@ -1,6 +1,8 @@
 #![allow(clippy::expect_used)]
 
+use mithril_vault_lib::commands::settings::BackupSettings;
 use mithril_vault_lib::dto::error::AppError;
+use mithril_vault_lib::services::kdbx::backups::BACKUP_SUBDIR;
 use mithril_vault_lib::services::kdbx::KdbxService;
 use tempfile::tempdir;
 
@@ -448,6 +450,136 @@ fn test_save_preserves_existing_permissions() {
     assert_eq!(
         mode_after, 0o640,
         "Permissions should be preserved after save, got {mode_after:o}"
+    );
+}
+
+#[test]
+fn test_save_creates_pre_image_backup_when_enabled() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("with-backups.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path_str, "pw", "Backed Up")
+        .expect("create");
+
+    // First save after create: file exists on disk, snapshot the pre-image bytes.
+    let pre_image_bytes = std::fs::read(&db_path).expect("read pre-image");
+    service.save(&db_path_str).expect("save");
+
+    assert!(backup_dir.exists(), ".kdbx-backups/ should be created");
+    let entries: Vec<_> = std::fs::read_dir(&backup_dir)
+        .expect("read backup dir")
+        .filter_map(Result::ok)
+        .collect();
+    assert_eq!(entries.len(), 1, "exactly one backup should be created");
+
+    let backup_bytes = std::fs::read(entries[0].path()).expect("read backup");
+    assert_eq!(
+        backup_bytes, pre_image_bytes,
+        "backup bytes should equal pre-save vault bytes"
+    );
+}
+
+#[test]
+fn test_save_with_backups_disabled_creates_no_files() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("no-backups.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+
+    let service = KdbxService::new();
+    service
+        .set_backup_settings(BackupSettings { enabled: false })
+        .expect("set settings");
+    service
+        .create(&db_path_str, "pw", "Disabled")
+        .expect("create");
+
+    service.save(&db_path_str).expect("save");
+
+    assert!(
+        !backup_dir.exists(),
+        "no .kdbx-backups/ when backups disabled"
+    );
+}
+
+#[test]
+fn test_save_as_to_fresh_path_creates_no_backup_first_time() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let original_path = dir.path().join("orig.kdbx");
+    let new_path = dir.path().join("fresh.kdbx");
+    let original_str = original_path.to_string_lossy().to_string();
+    let new_str = new_path.to_string_lossy().to_string();
+    let new_backup_dir = dir.path().join(BACKUP_SUBDIR);
+
+    let service = KdbxService::new();
+    service.create(&original_str, "pw", "Orig").expect("create");
+
+    service
+        .save_as(&original_str, &new_str, None)
+        .expect("save_as");
+
+    // The fresh new_path had no pre-image when save_as targeted it. AC #5.
+    // Note: original's backup dir may or may not exist depending on whether
+    // save_as snapshots the source — per spec the hook is in save(), not save_as.
+    // The acceptance criterion here is that the *new* path's saves behave
+    // like a fresh vault — no backup until a real save happens against it.
+    let new_backup_count = std::fs::read_dir(&new_backup_dir)
+        .ok()
+        .map_or(0, |it| it.filter_map(Result::ok).count());
+    assert_eq!(
+        new_backup_count, 0,
+        "save_as to fresh path should not snapshot at new path"
+    );
+
+    // Subsequent save() at new_path should create a backup.
+    service.save(&new_str).expect("save at new path");
+    let after = std::fs::read_dir(&new_backup_dir)
+        .expect("backup dir should exist now")
+        .filter_map(Result::ok)
+        .count();
+    assert_eq!(after, 1, "subsequent save should create one backup");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_save_fails_closed_when_backup_dir_unwritable() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempdir().expect("Failed to create temp dir");
+    let db_path = dir.path().join("locked-backups.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path_str, "pw", "Locked")
+        .expect("create");
+    let pre_save_bytes = std::fs::read(&db_path).expect("read pre-save");
+
+    // Make the parent read-only so .kdbx-backups/ cannot be created.
+    let mut perms = std::fs::metadata(dir.path()).expect("meta").permissions();
+    let original = perms.mode();
+    perms.set_mode(0o500);
+    std::fs::set_permissions(dir.path(), perms).expect("ro");
+
+    let result = service.save(&db_path_str);
+
+    // Restore so cleanup works regardless of outcome.
+    let mut restore = std::fs::metadata(dir.path()).expect("meta").permissions();
+    restore.set_mode(original);
+    std::fs::set_permissions(dir.path(), restore).expect("restore");
+
+    assert!(
+        result.is_err(),
+        "save should fail when backup cannot be made"
+    );
+    let post_bytes = std::fs::read(&db_path).expect("read post");
+    assert_eq!(
+        post_bytes, pre_save_bytes,
+        "vault file must be unchanged when save aborts on backup failure"
     );
 }
 

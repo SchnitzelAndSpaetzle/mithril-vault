@@ -167,6 +167,9 @@ describe("tauri wrappers validation", () => {
         debugMode: false,
         dataLocation: "/tmp/mithril-vault",
       },
+      backups: {
+        enabled: true,
+      },
     } as const;
 
     vi.mocked(invoke)
@@ -226,6 +229,9 @@ describe("tauri wrappers validation", () => {
         advanced: {
           debugMode: false,
           dataLocation: "/tmp",
+        },
+        backups: {
+          enabled: true,
         },
       })
     ).rejects.toThrow();
