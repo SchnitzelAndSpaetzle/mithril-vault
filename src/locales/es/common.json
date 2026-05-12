@@ -513,6 +513,11 @@
     "failedToLoadSettings": "Error al cargar la configuración: {{error}}",
     "settingsUnavailable": "La configuración no está disponible."
   },
+  "database": {
+    "save": {
+      "failed": "Error al guardar la base de datos: {{error}}. Tu último cambio está en memoria pero no en disco."
+    }
+  },
   "shortcuts": {
     "title": "Atajos de teclado",
     "globalGroup": "Global",

@@ -513,6 +513,11 @@
     "failedToLoadSettings": "Einstellungen konnten nicht geladen werden: {{error}}",
     "settingsUnavailable": "Einstellungen sind nicht verfügbar."
   },
+  "database": {
+    "save": {
+      "failed": "Datenbank konnte nicht gespeichert werden: {{error}}. Die letzte Änderung ist im Speicher, aber nicht auf der Festplatte."
+    }
+  },
   "shortcuts": {
     "title": "Tastaturkürzel",
     "globalGroup": "Global",

@@ -19,6 +19,7 @@ import { GroupTreeItemActions } from "./GroupTreeItemActions";
 import type { CustomIconMap, Group } from "@/lib/types";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { useGroupMutations } from "@/hooks/use-group-mutations";
+import { SaveError } from "@/lib/save-with-error-toast";
 import {
   isFolderIcon,
   KEEPASS_ICON_MAP,
@@ -124,6 +125,7 @@ export function GroupTreeItem({
                   toast.success(t("groups.toast.created", { name }));
                 },
                 onError: (error) => {
+                  if (error instanceof SaveError) return;
                   toast.error(
                     t("groups.toast.createdIconFailed", {
                       name,
@@ -138,6 +140,7 @@ export function GroupTreeItem({
           toast.success(t("groups.toast.created", { name }));
         },
         onError: (error) => {
+          if (error instanceof SaveError) return;
           toast.error(t("groups.toast.createFailed", { error: error.message }));
         },
       }
@@ -152,6 +155,7 @@ export function GroupTreeItem({
           toast.success(t("groups.toast.updated"));
         },
         onError: (error) => {
+          if (error instanceof SaveError) return;
           toast.error(t("groups.toast.updateFailed", { error: error.message }));
         },
       }
@@ -166,6 +170,7 @@ export function GroupTreeItem({
           toast.success(t("groups.toast.deleted", { name: group.name }));
         },
         onError: (error) => {
+          if (error instanceof SaveError) return;
           toast.error(t("groups.toast.deleteFailed", { error: error.message }));
         },
       }
@@ -180,6 +185,7 @@ export function GroupTreeItem({
           toast.success(t("groups.toast.moved", { name: group.name }));
         },
         onError: (error) => {
+          if (error instanceof SaveError) return;
           toast.error(t("groups.toast.moveFailed", { error: error.message }));
         },
       }

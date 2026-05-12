@@ -513,6 +513,11 @@
     "failedToLoadSettings": "Échec du chargement des paramètres : {{error}}",
     "settingsUnavailable": "Les paramètres ne sont pas disponibles."
   },
+  "database": {
+    "save": {
+      "failed": "Échec de l'enregistrement de la base de données : {{error}}. Votre dernière modification est en mémoire mais pas sur le disque."
+    }
+  },
   "shortcuts": {
     "title": "Raccourcis clavier",
     "globalGroup": "Global",
