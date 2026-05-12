@@ -220,11 +220,11 @@ impl KdbxService {
     /// Renames a tag across all entries in the database.
     /// Returns the number of entries that were modified.
     pub fn rename_tag(&self, db_id: &str, old_name: &str, new_name: &str) -> Result<u32, AppError> {
-        if old_name == new_name {
-            return Ok(0);
-        }
-
         self.with_vault_mut(db_id, |vault| {
+            if old_name == new_name {
+                return Ok(0);
+            }
+
             let count =
                 vault.modify_all_entries(&|entry| rename_tag_in_entry(entry, old_name, new_name));
 
