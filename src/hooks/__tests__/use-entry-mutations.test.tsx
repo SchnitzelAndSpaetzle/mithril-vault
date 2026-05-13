@@ -7,11 +7,15 @@ import React from "react";
 
 const {
   mockEntriesCreate,
+  mockEntriesUpdate,
+  mockEntriesMove,
   mockEntriesDelete,
   mockDatabaseSave,
   mockToastError,
 } = vi.hoisted(() => ({
   mockEntriesCreate: vi.fn(),
+  mockEntriesUpdate: vi.fn(),
+  mockEntriesMove: vi.fn(),
   mockEntriesDelete: vi.fn(),
   mockDatabaseSave: vi.fn(),
   mockToastError: vi.fn(),
@@ -20,8 +24,8 @@ const {
 vi.mock("@/lib/tauri", () => ({
   entries: {
     create: mockEntriesCreate,
-    update: vi.fn(),
-    move: vi.fn(),
+    update: mockEntriesUpdate,
+    move: mockEntriesMove,
     delete: mockEntriesDelete,
   },
   database: { save: mockDatabaseSave },
@@ -41,6 +45,8 @@ function wrapper({ children }: { children: React.ReactNode }) {
 describe("useEntryMutations.createEntry", () => {
   beforeEach(() => {
     mockEntriesCreate.mockReset();
+    mockEntriesUpdate.mockReset();
+    mockEntriesMove.mockReset();
     mockEntriesDelete.mockReset();
     mockDatabaseSave.mockReset();
     mockToastError.mockReset();
@@ -112,6 +118,49 @@ describe("useEntryMutations.createEntry", () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalled();
     });
+  });
+
+  it("updateEntry resolves with the updated entry even when save fails", async () => {
+    mockEntriesUpdate.mockResolvedValueOnce({
+      id: "entry-1",
+      title: "Renamed",
+    });
+    mockDatabaseSave.mockRejectedValueOnce(
+      new Error("Backup failed for /v/db.kdbx: disk full")
+    );
+
+    const { useEntryMutations } = await import("../use-entry-mutations");
+    const { result } = renderHook(() => useEntryMutations("db-1"), { wrapper });
+
+    const entry = await result.current.updateEntry.mutateAsync({
+      dbId: "db-1",
+      id: "entry-1",
+      data: { title: "Renamed" } as never,
+    });
+
+    expect(entry).toEqual({ id: "entry-1", title: "Renamed" });
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("moveEntry resolves with the moved entry even when save fails", async () => {
+    mockEntriesMove.mockResolvedValueOnce({ id: "entry-1", groupId: "g-2" });
+    mockDatabaseSave.mockRejectedValueOnce(
+      new Error("Backup failed for /v/db.kdbx: disk full")
+    );
+
+    const { useEntryMutations } = await import("../use-entry-mutations");
+    const { result } = renderHook(() => useEntryMutations("db-1"), { wrapper });
+
+    const entry = await result.current.moveEntry.mutateAsync({
+      dbId: "db-1",
+      id: "entry-1",
+      targetGroupId: "g-2",
+    });
+
+    expect(entry).toEqual({ id: "entry-1", groupId: "g-2" });
+    expect(mockEntriesMove).toHaveBeenCalledWith("db-1", "entry-1", "g-2");
   });
 
   it("deleteEntry resolves even when save fails so the dialog can close", async () => {

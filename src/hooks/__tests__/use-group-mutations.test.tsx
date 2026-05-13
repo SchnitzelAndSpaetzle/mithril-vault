@@ -7,12 +7,16 @@ import React from "react";
 
 const {
   mockGroupsCreate,
+  mockGroupsUpdate,
+  mockGroupsRename,
   mockGroupsDelete,
   mockGroupsMove,
   mockDatabaseSave,
   mockToastError,
 } = vi.hoisted(() => ({
   mockGroupsCreate: vi.fn(),
+  mockGroupsUpdate: vi.fn(),
+  mockGroupsRename: vi.fn(),
   mockGroupsDelete: vi.fn(),
   mockGroupsMove: vi.fn(),
   mockDatabaseSave: vi.fn(),
@@ -22,8 +26,8 @@ const {
 vi.mock("@/lib/tauri", () => ({
   groups: {
     create: mockGroupsCreate,
-    update: vi.fn(),
-    rename: vi.fn(),
+    update: mockGroupsUpdate,
+    rename: mockGroupsRename,
     delete: mockGroupsDelete,
     move: mockGroupsMove,
   },
@@ -44,6 +48,8 @@ function wrapper({ children }: { children: React.ReactNode }) {
 describe("useGroupMutations", () => {
   beforeEach(() => {
     mockGroupsCreate.mockReset();
+    mockGroupsUpdate.mockReset();
+    mockGroupsRename.mockReset();
     mockGroupsDelete.mockReset();
     mockGroupsMove.mockReset();
     mockDatabaseSave.mockReset();
@@ -76,6 +82,50 @@ describe("useGroupMutations", () => {
     expect(mockToastError.mock.calls[0]?.[0]).toContain(
       "settings.backups.error.failed"
     );
+  });
+
+  it("updateGroup resolves with the updated group even when save fails", async () => {
+    // updateGroup is the path GroupTreeItem uses to apply a chosen icon
+    // immediately after createGroup. If the post-update save fails, the icon
+    // is already on the in-memory group; the mutation must resolve so the
+    // group dialog closes and the toast for created-with-icon fires.
+    mockGroupsUpdate.mockResolvedValueOnce({ id: "grp-1", icon: "42" });
+    mockDatabaseSave.mockRejectedValueOnce(
+      new Error("Backup failed for /v/db.kdbx: disk full")
+    );
+
+    const { useGroupMutations } = await import("../use-group-mutations");
+    const { result } = renderHook(() => useGroupMutations("db-1"), { wrapper });
+
+    const group = await result.current.updateGroup.mutateAsync({
+      dbId: "db-1",
+      id: "grp-1",
+      data: { icon: "42" },
+    });
+
+    expect(group).toEqual({ id: "grp-1", icon: "42" });
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("renameGroup resolves with the renamed group even when save fails", async () => {
+    mockGroupsRename.mockResolvedValueOnce({ id: "grp-1", name: "Renamed" });
+    mockDatabaseSave.mockRejectedValueOnce(
+      new Error("Backup failed for /v/db.kdbx: disk full")
+    );
+
+    const { useGroupMutations } = await import("../use-group-mutations");
+    const { result } = renderHook(() => useGroupMutations("db-1"), { wrapper });
+
+    const group = await result.current.renameGroup.mutateAsync({
+      dbId: "db-1",
+      id: "grp-1",
+      name: "Renamed",
+    });
+
+    expect(group).toEqual({ id: "grp-1", name: "Renamed" });
+    expect(mockGroupsRename).toHaveBeenCalledWith("db-1", "grp-1", "Renamed");
   });
 
   it("deleteGroup invalidates group + entry queries on success", async () => {
