@@ -515,6 +515,11 @@
     "failedToLoadSettings": "Failed to load settings: {{error}}",
     "settingsUnavailable": "Settings are unavailable."
   },
+  "database": {
+    "save": {
+      "failed": "Failed to save database: {{error}}. Your last change is in memory but not on disk."
+    }
+  },
   "shortcuts": {
     "title": "Keyboard Shortcuts",
     "globalGroup": "Global",
