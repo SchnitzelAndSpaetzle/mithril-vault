@@ -14,6 +14,7 @@ import { useEntryMutations } from "@/hooks/use-entry-mutations";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
+import { SaveError } from "@/lib/save-with-error-toast";
 
 export const Route = createFileRoute("/dashboard/entry/$id")({
   component: EntryMobileComponent,
@@ -57,6 +58,8 @@ function EntryMobileComponent() {
           router.history.back();
         },
         onError: (error) => {
+          // saveWithErrorToast already surfaced a save/backup error toast.
+          if (error instanceof SaveError) return;
           toast.error(`Failed to delete entry: ${error.message}`);
         },
       }

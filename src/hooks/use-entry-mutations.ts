@@ -56,7 +56,7 @@ export function useEntryMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return entry;
     },
-    onSuccess: () => invalidateAfterEntryMutation(),
+    onSettled: () => invalidateAfterEntryMutation(),
   });
 
   const updateEntry = useMutation<Entry, Error, UpdateEntryParams>({
@@ -65,7 +65,7 @@ export function useEntryMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return entry;
     },
-    onSuccess: () => invalidateAfterEntryMutation(),
+    onSettled: () => invalidateAfterEntryMutation(),
   });
 
   const moveEntry = useMutation<Entry, Error, MoveEntryParams>({
@@ -74,7 +74,7 @@ export function useEntryMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return entry;
     },
-    onSuccess: () => invalidateAfterEntryMutation(),
+    onSettled: () => invalidateAfterEntryMutation(),
   });
 
   const deleteEntry = useMutation<void, Error, DeleteEntryParams>({
@@ -82,7 +82,7 @@ export function useEntryMutations(dbId: string | null) {
       await entries.delete(dbId, id);
       await saveWithErrorToast(dbId, t);
     },
-    onSuccess: () => invalidateAfterEntryMutation(),
+    onSettled: () => invalidateAfterEntryMutation(),
   });
 
   return {

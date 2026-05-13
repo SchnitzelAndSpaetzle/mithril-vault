@@ -137,6 +137,10 @@ export default function DragRegion() {
           toast.success(t("entries.deleted"));
         },
         onError: (error) => {
+          // saveWithErrorToast already surfaced a save/backup error toast; the
+          // delete itself succeeded in memory, so skip the generic delete toast
+          // to avoid double-toasting the same failure.
+          if (error instanceof SaveError) return;
           toast.error(t("entries.deleteFailed", { error: error.message }));
         },
       }

@@ -73,6 +73,42 @@ describe("useEntryMutations.createEntry", () => {
     expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
   });
 
+  it("invalidates entry queries even when save fails after create", async () => {
+    mockEntriesCreate.mockResolvedValueOnce({ id: "entry-1" });
+    mockDatabaseSave.mockRejectedValueOnce(
+      new Error("Backup failed for /v/db.kdbx: disk full")
+    );
+
+    const { useEntryMutations } = await import("../use-entry-mutations");
+    const { SaveError } = await import("@/lib/save-with-error-toast");
+
+    const client = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const localWrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useEntryMutations("db-1"), {
+      wrapper: localWrapper,
+    });
+
+    await expect(
+      result.current.createEntry.mutateAsync({
+        dbId: "db-1",
+        groupId: "g-1",
+        data: {} as never,
+      })
+    ).rejects.toBeInstanceOf(SaveError);
+
+    // After save fails, backend memory is already mutated — cache must be
+    // invalidated so the UI reflects the change. onSettled (not onSuccess).
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalled();
+    });
+  });
+
   it("succeeds quietly (no error toast) when create + save both succeed", async () => {
     mockEntriesCreate.mockResolvedValueOnce({ id: "entry-1" });
     mockDatabaseSave.mockResolvedValueOnce(undefined);
