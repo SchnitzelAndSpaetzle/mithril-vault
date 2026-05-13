@@ -68,7 +68,7 @@ export function useGroupMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return group;
     },
-    onSettled: () => invalidateAfterGroupMutation(),
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   const updateGroup = useMutation<Group, Error, UpdateGroupParams>({
@@ -77,7 +77,7 @@ export function useGroupMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return group;
     },
-    onSettled: () => invalidateAfterGroupMutation(),
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   const renameGroup = useMutation<Group, Error, RenameGroupParams>({
@@ -86,7 +86,7 @@ export function useGroupMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return group;
     },
-    onSettled: () => invalidateAfterGroupMutation(),
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   const deleteGroup = useMutation<void, Error, DeleteGroupParams>({
@@ -94,7 +94,7 @@ export function useGroupMutations(dbId: string | null) {
       await groups.delete(dbId, id, true);
       await saveWithErrorToast(dbId, t);
     },
-    onSettled: () => invalidateAfterGroupMutation(),
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   const moveGroup = useMutation<Group, Error, MoveGroupParams>({
@@ -103,7 +103,7 @@ export function useGroupMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return group;
     },
-    onSettled: () => invalidateAfterGroupMutation(),
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   return {

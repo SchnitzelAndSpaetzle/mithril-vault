@@ -11,7 +11,6 @@ import { useTags } from "@/hooks/use-tags";
 import { PASSWORD_GENERATOR_DEFAULTS } from "@/lib/constants";
 import { entryFormSchema, type EntryFormValues } from "@/lib/formTypes";
 import { generator } from "@/lib/tauri";
-import { SaveError } from "@/lib/save-with-error-toast";
 import type { Entry } from "@/lib/types";
 
 interface UseEntryEditFormOptions {
@@ -210,7 +209,6 @@ export function useEntryEditForm({
       onSave(result);
       void maybeAutoFetchFavicon(result.id, values.url);
     } catch (error) {
-      if (error instanceof SaveError) return;
       const message = error instanceof Error ? error.message : String(error);
       toast.error(
         isEditMode
@@ -277,7 +275,6 @@ export function useEntryEditForm({
       void generateNewPassword();
       void maybeAutoFetchFavicon(result.id, values.url);
     } catch (error) {
-      if (error instanceof SaveError) return;
       const message = error instanceof Error ? error.message : String(error);
       toast.error(t("entries.toast.createFailed", { error: message }));
     }

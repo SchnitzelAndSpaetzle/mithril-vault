@@ -40,7 +40,7 @@ export function useTagMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return count;
     },
-    onSettled: () => invalidateAfterTagMutation(),
+    onSuccess: () => invalidateAfterTagMutation(),
   });
 
   const deleteTag = useMutation<number, Error, DeleteTagParams>({
@@ -49,7 +49,7 @@ export function useTagMutations(dbId: string | null) {
       await saveWithErrorToast(dbId, t);
       return count;
     },
-    onSettled: () => invalidateAfterTagMutation(),
+    onSuccess: () => invalidateAfterTagMutation(),
   });
 
   return { renameTag, deleteTag };

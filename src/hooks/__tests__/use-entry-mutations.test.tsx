@@ -41,27 +41,30 @@ describe("useEntryMutations.createEntry", () => {
     mockToastError.mockReset();
   });
 
-  it("rejects with SaveError and toasts backup failure when save fails after create", async () => {
+  it("resolves with the entry even when save fails, and surfaces the backup toast", async () => {
+    // The backend mutation succeeded in memory; only the post-mutation save
+    // step failed (backup directory unwritable). The hook must still resolve
+    // with the entity so the caller's success path (close form, navigate)
+    // runs — staying in the form would let the user retry and create a
+    // duplicate. The error toast is the user's signal to act.
     mockEntriesCreate.mockResolvedValueOnce({ id: "entry-1" });
     mockDatabaseSave.mockRejectedValueOnce(
       new Error("Backup failed for /v/db.kdbx: disk full")
     );
 
     const { useEntryMutations } = await import("../use-entry-mutations");
-    const { SaveError } = await import("@/lib/save-with-error-toast");
 
     const { result } = renderHook(() => useEntryMutations("db-1"), {
       wrapper,
     });
 
-    await expect(
-      result.current.createEntry.mutateAsync({
-        dbId: "db-1",
-        groupId: "g-1",
-        // minimal payload — mutationFn is mocked, shape doesn't matter
-        data: {} as never,
-      })
-    ).rejects.toBeInstanceOf(SaveError);
+    const entry = await result.current.createEntry.mutateAsync({
+      dbId: "db-1",
+      groupId: "g-1",
+      data: {} as never,
+    });
+
+    expect(entry).toEqual({ id: "entry-1" });
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledTimes(1);
@@ -73,14 +76,13 @@ describe("useEntryMutations.createEntry", () => {
     expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
   });
 
-  it("invalidates entry queries even when save fails after create", async () => {
+  it("invalidates entry queries on the in-memory success path", async () => {
     mockEntriesCreate.mockResolvedValueOnce({ id: "entry-1" });
     mockDatabaseSave.mockRejectedValueOnce(
       new Error("Backup failed for /v/db.kdbx: disk full")
     );
 
     const { useEntryMutations } = await import("../use-entry-mutations");
-    const { SaveError } = await import("@/lib/save-with-error-toast");
 
     const client = new QueryClient({
       defaultOptions: { mutations: { retry: false } },
@@ -94,16 +96,14 @@ describe("useEntryMutations.createEntry", () => {
       wrapper: localWrapper,
     });
 
-    await expect(
-      result.current.createEntry.mutateAsync({
-        dbId: "db-1",
-        groupId: "g-1",
-        data: {} as never,
-      })
-    ).rejects.toBeInstanceOf(SaveError);
+    await result.current.createEntry.mutateAsync({
+      dbId: "db-1",
+      groupId: "g-1",
+      data: {} as never,
+    });
 
-    // After save fails, backend memory is already mutated — cache must be
-    // invalidated so the UI reflects the change. onSettled (not onSuccess).
+    // saveWithErrorToast does not reject; mutation resolves; onSuccess fires;
+    // cache is invalidated so the UI reflects the in-memory new entry.
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalled();
     });

@@ -3,7 +3,6 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useTags } from "@/hooks/use-tags";
 import { useTagMutations } from "@/hooks/use-tag-mutations";
-import { SaveError } from "@/lib/save-with-error-toast";
 
 interface UseNavTagsControllerResult {
   tagList: string[];
@@ -82,7 +81,6 @@ export function useNavTagsController(dbId: string): UseNavTagsControllerResult {
           }
         },
         onError: (error) => {
-          if (error instanceof SaveError) return;
           toast.error(`Failed to rename tag: ${error.message}`);
         },
       }
@@ -110,7 +108,6 @@ export function useNavTagsController(dbId: string): UseNavTagsControllerResult {
           }
         },
         onError: (error) => {
-          if (error instanceof SaveError) return;
           toast.error(`Failed to delete tag: ${error.message}`);
         },
       }

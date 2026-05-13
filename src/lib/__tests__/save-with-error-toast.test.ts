@@ -32,26 +32,26 @@ describe("saveWithErrorToast", () => {
     mockToastError.mockReset();
   });
 
-  it("resolves quietly when database.save succeeds", async () => {
+  it("resolves true when database.save succeeds", async () => {
     mockDatabaseSave.mockResolvedValueOnce(undefined);
     const { saveWithErrorToast } = await import("../save-with-error-toast");
 
-    await expect(saveWithErrorToast("db-1", fakeT)).resolves.toBeUndefined();
+    await expect(saveWithErrorToast("db-1", fakeT)).resolves.toBe(true);
 
     expect(mockDatabaseSave).toHaveBeenCalledWith("db-1");
     expect(mockToastError).not.toHaveBeenCalled();
   });
 
-  it("toasts the backup i18n key and throws SaveError on BackupFailed", async () => {
+  it("toasts backup i18n key and resolves false on BackupFailed", async () => {
     mockDatabaseSave.mockRejectedValueOnce(
       new Error("Backup failed for /vaults/work.kdbx: No space left on device")
     );
-    const { saveWithErrorToast, SaveError } =
-      await import("../save-with-error-toast");
+    const { saveWithErrorToast } = await import("../save-with-error-toast");
 
-    await expect(saveWithErrorToast("db-1", fakeT)).rejects.toBeInstanceOf(
-      SaveError
-    );
+    // The helper must NOT throw — the backend mutation that preceded this
+    // call has already succeeded in memory, so the React Query mutation
+    // should resolve and onSuccess cleanup should still run.
+    await expect(saveWithErrorToast("db-1", fakeT)).resolves.toBe(false);
 
     expect(mockToastError).toHaveBeenCalledTimes(1);
     expect(mockToastError).toHaveBeenCalledWith(
@@ -59,14 +59,11 @@ describe("saveWithErrorToast", () => {
     );
   });
 
-  it("toasts the generic save i18n key and throws SaveError for non-backup errors", async () => {
+  it("toasts generic save i18n key and resolves false for non-backup errors", async () => {
     mockDatabaseSave.mockRejectedValueOnce(new Error("Lock error"));
-    const { saveWithErrorToast, SaveError } =
-      await import("../save-with-error-toast");
+    const { saveWithErrorToast } = await import("../save-with-error-toast");
 
-    await expect(saveWithErrorToast("db-1", fakeT)).rejects.toBeInstanceOf(
-      SaveError
-    );
+    await expect(saveWithErrorToast("db-1", fakeT)).resolves.toBe(false);
 
     expect(mockToastError).toHaveBeenCalledTimes(1);
     expect(mockToastError).toHaveBeenCalledWith(

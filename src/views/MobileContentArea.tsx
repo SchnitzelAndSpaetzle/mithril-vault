@@ -19,7 +19,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { SHORTCUTS } from "@/lib/shortcuts";
 import { clipboard, database } from "@/lib/tauri";
-import { SaveError, saveWithErrorToast } from "@/lib/save-with-error-toast";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 
 const MOBILE_SEARCH_INPUT_ID = "mobile-global-search-input";
 
@@ -63,11 +63,9 @@ export default function MobileContentArea() {
     useCallback(() => {
       if (!dbId) return;
       void (async () => {
-        try {
-          await saveWithErrorToast(dbId, t);
+        const saved = await saveWithErrorToast(dbId, t);
+        if (saved) {
           toast.success(t("shortcuts.toast.saved"));
-        } catch (error) {
-          if (!(error instanceof SaveError)) throw error;
         }
       })();
     }, [dbId, t]),

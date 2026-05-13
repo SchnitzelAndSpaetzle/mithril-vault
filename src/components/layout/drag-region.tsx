@@ -38,7 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { SHORTCUTS } from "@/lib/shortcuts";
 import { queryKeys } from "@/lib/query-keys";
 import { clipboard, database } from "@/lib/tauri";
-import { SaveError, saveWithErrorToast } from "@/lib/save-with-error-toast";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import type { Entry } from "@/lib/types";
 
 type EditMode = "view" | "edit" | "create";
@@ -137,10 +137,6 @@ export default function DragRegion() {
           toast.success(t("entries.deleted"));
         },
         onError: (error) => {
-          // saveWithErrorToast already surfaced a save/backup error toast; the
-          // delete itself succeeded in memory, so skip the generic delete toast
-          // to avoid double-toasting the same failure.
-          if (error instanceof SaveError) return;
           toast.error(t("entries.deleteFailed", { error: error.message }));
         },
       }
@@ -184,11 +180,9 @@ export default function DragRegion() {
     useCallback(() => {
       if (!dbId) return;
       void (async () => {
-        try {
-          await saveWithErrorToast(dbId, t);
+        const saved = await saveWithErrorToast(dbId, t);
+        if (saved) {
           toast.success(t("shortcuts.toast.saved"));
-        } catch (error) {
-          if (!(error instanceof SaveError)) throw error;
         }
       })();
     }, [dbId, t]),
