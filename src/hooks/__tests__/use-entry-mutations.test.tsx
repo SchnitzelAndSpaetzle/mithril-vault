@@ -5,20 +5,24 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
-const { mockEntriesCreate, mockDatabaseSave, mockToastError } = vi.hoisted(
-  () => ({
-    mockEntriesCreate: vi.fn(),
-    mockDatabaseSave: vi.fn(),
-    mockToastError: vi.fn(),
-  })
-);
+const {
+  mockEntriesCreate,
+  mockEntriesDelete,
+  mockDatabaseSave,
+  mockToastError,
+} = vi.hoisted(() => ({
+  mockEntriesCreate: vi.fn(),
+  mockEntriesDelete: vi.fn(),
+  mockDatabaseSave: vi.fn(),
+  mockToastError: vi.fn(),
+}));
 
 vi.mock("@/lib/tauri", () => ({
   entries: {
     create: mockEntriesCreate,
     update: vi.fn(),
     move: vi.fn(),
-    delete: vi.fn(),
+    delete: mockEntriesDelete,
   },
   database: { save: mockDatabaseSave },
 }));
@@ -37,6 +41,7 @@ function wrapper({ children }: { children: React.ReactNode }) {
 describe("useEntryMutations.createEntry", () => {
   beforeEach(() => {
     mockEntriesCreate.mockReset();
+    mockEntriesDelete.mockReset();
     mockDatabaseSave.mockReset();
     mockToastError.mockReset();
   });
@@ -107,6 +112,34 @@ describe("useEntryMutations.createEntry", () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalled();
     });
+  });
+
+  it("deleteEntry resolves even when save fails so the dialog can close", async () => {
+    // The delete already removed the entry from the in-memory database. The
+    // mutation must resolve so the caller closes the confirmation dialog and
+    // clears the selection — otherwise the user sees a stale entry that no
+    // longer exists in memory and may try to act on it.
+    mockEntriesDelete.mockResolvedValueOnce(undefined);
+    mockDatabaseSave.mockRejectedValueOnce(
+      new Error("Backup failed for /v/db.kdbx: read-only fs")
+    );
+
+    const { useEntryMutations } = await import("../use-entry-mutations");
+    const { result } = renderHook(() => useEntryMutations("db-1"), {
+      wrapper,
+    });
+
+    await expect(
+      result.current.deleteEntry.mutateAsync({
+        dbId: "db-1",
+        id: "entry-1",
+      })
+    ).resolves.toBeUndefined();
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledTimes(1);
+    });
+    expect(mockEntriesDelete).toHaveBeenCalledWith("db-1", "entry-1");
   });
 
   it("succeeds quietly (no error toast) when create + save both succeed", async () => {
