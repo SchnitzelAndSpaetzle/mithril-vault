@@ -865,6 +865,61 @@ fn snapshot_on_open_skips_when_on_open_flag_is_false() {
     );
 }
 
+#[test]
+fn snapshot_on_open_dedups_within_filesystem_mtime_tolerance() {
+    // Cross-filesystem dedup: when the backup override lives on a coarser
+    // filesystem (FAT/exFAT round to 2s, SMB shares often similar), the
+    // snapshot's stamped mtime can land a fraction of a second away from
+    // the source's mtime even though nothing about the source has changed.
+    // Without tolerance, every lock/unlock would burn a rotation slot.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"unchanged data").expect("write source");
+
+    // First snapshot.
+    snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("first ok")
+        .expect("first created");
+
+    // Simulate a coarse-mtime destination by rounding the latest snapshot's
+    // mtime down to whole seconds. The source keeps its sub-second mtime.
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let latest_snapshot = std::fs::read_dir(&backup_dir)
+        .expect("read backup dir")
+        .find_map(Result::ok)
+        .expect("at least one snapshot")
+        .path();
+    let snapshot_mtime = std::fs::metadata(&latest_snapshot)
+        .expect("snapshot meta")
+        .modified()
+        .expect("snapshot mtime");
+    let since_epoch = snapshot_mtime
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("post-epoch");
+    let rounded = std::time::UNIX_EPOCH + std::time::Duration::from_secs(since_epoch.as_secs());
+    let snapshot_file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(&latest_snapshot)
+        .expect("open snapshot");
+    snapshot_file
+        .set_modified(rounded)
+        .expect("round snapshot mtime");
+
+    // Source is byte-identical; only the snapshot's filesystem-rounded mtime
+    // differs by less than a second. Dedup must still fire.
+    let second = snapshot_on_open(&vault_path, &on_open_enabled()).expect("second ok");
+    assert!(
+        second.is_none(),
+        "sub-second mtime drift from coarse filesystem must not defeat dedup, got {second:?}"
+    );
+    let count = std::fs::read_dir(&backup_dir)
+        .expect("read backup dir")
+        .filter_map(Result::ok)
+        .filter(|e| e.path().is_file())
+        .count();
+    assert_eq!(count, 1, "exactly one snapshot survives the tolerant dedup");
+}
+
 #[cfg(unix)]
 #[test]
 fn snapshot_on_open_rejects_symlinked_backup_dir_even_when_dedup_would_match() {

@@ -204,6 +204,19 @@ fn latest_snapshot_for(dir: &Path, vault_filename: &str) -> Option<PathBuf> {
 /// Compares size+mtime of two filesystem entries. Used by `snapshot_on_open`
 /// to decide whether the latest existing snapshot already captures what the
 /// source currently holds.
+///
+/// The mtime comparison uses a 2-second tolerance to survive cross-filesystem
+/// rounding. We stamp the snapshot file to the source's mtime after writing,
+/// but the destination filesystem may quantize that timestamp: FAT/exFAT
+/// rounds to 2 seconds, many SMB shares are similar. Without tolerance, an
+/// override pointed at an external drive would fail dedup on every unchanged
+/// open and silently fill the rotation bucket — defeating the whole purpose
+/// of the open-side dedup. Two seconds is the widest common quantum; a false
+/// dedup would require a save that produced an identical size AND landed
+/// within 2 s of a prior snapshot's source mtime, which is vanishingly rare
+/// and recoverable via an explicit save.
+const MTIME_TOLERANCE: std::time::Duration = std::time::Duration::from_secs(2);
+
 fn metadata_matches(a: &Path, b: &Path) -> bool {
     let (Ok(meta_a), Ok(meta_b)) = (fs::metadata(a), fs::metadata(b)) else {
         return false;
@@ -212,7 +225,14 @@ fn metadata_matches(a: &Path, b: &Path) -> bool {
         return false;
     }
     match (meta_a.modified(), meta_b.modified()) {
-        (Ok(t_a), Ok(t_b)) => t_a == t_b,
+        (Ok(t_a), Ok(t_b)) => {
+            let delta = if t_a > t_b {
+                t_a.duration_since(t_b)
+            } else {
+                t_b.duration_since(t_a)
+            };
+            delta.map(|d| d <= MTIME_TOLERANCE).unwrap_or(false)
+        }
         _ => false,
     }
 }
