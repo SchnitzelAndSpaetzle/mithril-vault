@@ -593,6 +593,70 @@ fn snapshot_fails_closed_when_override_is_unwritable() {
 }
 
 #[test]
+fn override_isolates_same_named_vaults_in_shared_directory() {
+    // Two vaults with identical basenames (e.g. work/vault.kdbx and
+    // personal/vault.kdbx) pointed at the same override directory must keep
+    // independent rotation histories. Without per-source isolation, rotation
+    // would key on basename alone and saving one vault would prune the
+    // other's snapshots.
+    let work_dir = tempdir().expect("tempdir work");
+    let personal_dir = tempdir().expect("tempdir personal");
+    let override_dir = tempdir().expect("tempdir override");
+
+    let work_vault = work_dir.path().join("vault.kdbx");
+    let personal_vault = personal_dir.path().join("vault.kdbx");
+
+    let settings = BackupSettings {
+        enabled: true,
+        max_versions: 2,
+        directory: Some(override_dir.path().to_string_lossy().into_owned()),
+    };
+
+    // Drive 4 saves of each vault, interleaved. With per-basename rotation
+    // and cap=2, the second vault's saves would have pruned the first
+    // vault's older snapshots — we'd end up with <4 surviving files.
+    for i in 0..4u32 {
+        std::fs::write(&work_vault, format!("w{i}").as_bytes()).expect("write work");
+        snapshot(&work_vault, &settings)
+            .expect("snapshot work ok")
+            .expect("created work");
+        std::fs::write(&personal_vault, format!("p{i}").as_bytes()).expect("write personal");
+        snapshot(&personal_vault, &settings)
+            .expect("snapshot personal ok")
+            .expect("created personal");
+    }
+
+    let surviving_files: Vec<_> = walkdir_files(override_dir.path());
+    assert_eq!(
+        surviving_files.len(),
+        4,
+        "each vault should retain cap=2 snapshots; got {surviving_files:#?}"
+    );
+}
+
+fn walkdir_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let Ok(ft) = entry.file_type() else {
+                continue;
+            };
+            let path = entry.path();
+            if ft.is_dir() {
+                stack.push(path);
+            } else if ft.is_file() {
+                out.push(path);
+            }
+        }
+    }
+    out
+}
+
+#[test]
 fn rotation_runs_inside_override_directory() {
     // Rotation must apply to the override directory, not the default subdir.
     // Otherwise switching to an override would silently disable trimming and
@@ -613,11 +677,9 @@ fn rotation_runs_inside_override_directory() {
             .expect("created");
     }
 
-    let kept: Vec<_> = std::fs::read_dir(override_dir.path())
-        .expect("read override")
-        .filter_map(Result::ok)
-        .filter(|e| e.path().is_file())
-        .collect();
+    // Snapshots live in a per-vault subdir of the override; walk recursively
+    // so the assertion stays correct regardless of isolation strategy.
+    let kept = walkdir_files(override_dir.path());
     assert_eq!(
         kept.len(),
         3,
