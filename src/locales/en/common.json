@@ -144,6 +144,10 @@
         "kind": {
           "auto": "Auto",
           "manual": "Manual"
+        },
+        "createNow": {
+          "button": "Create backup now",
+          "success": "Manual backup created."
         }
       }
     },

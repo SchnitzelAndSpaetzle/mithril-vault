@@ -13,7 +13,10 @@ import type { ReactNode } from "react";
 
 const listMock = vi.fn();
 const deleteMock = vi.fn();
+const createManualMock = vi.fn();
 const listenMock = vi.fn();
+const toastSuccessMock = vi.fn();
+const toastErrorMock = vi.fn();
 const tauriEventListeners = new Map<
   string,
   (event: { payload: unknown }) => void
@@ -23,11 +26,19 @@ vi.mock("@/lib/tauri", () => ({
   backups: {
     list: (...args: unknown[]) => listMock(...args),
     delete: (...args: unknown[]) => deleteMock(...args),
+    createManual: (...args: unknown[]) => createManualMock(...args),
   },
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (...args: unknown[]) => listenMock(...args),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: (...args: unknown[]) => toastSuccessMock(...args),
+    error: (...args: unknown[]) => toastErrorMock(...args),
+  },
 }));
 
 beforeAll(() => {
@@ -56,7 +67,10 @@ describe("BackupsListSection", () => {
   beforeEach(() => {
     listMock.mockReset();
     deleteMock.mockReset();
+    createManualMock.mockReset();
     listenMock.mockReset();
+    toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
     tauriEventListeners.clear();
 
     // Default: listen() resolves to a noop unlisten and captures the handler
@@ -200,6 +214,97 @@ describe("BackupsListSection", () => {
     await waitFor(() => {
       expect(listMock).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("renders a Create backup now button at the top of the section", async () => {
+    listMock.mockResolvedValueOnce([]);
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <BackupsListSection dbId="/tmp/vault.kdbx" backupsEnabled={true} />
+      </Wrapper>
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: "settings.backups.list.createNow.button",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("disables Create backup now when no vault is open", () => {
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <BackupsListSection dbId={null} backupsEnabled={true} />
+      </Wrapper>
+    );
+
+    const button = screen.getByRole("button", {
+      name: "settings.backups.list.createNow.button",
+    });
+    expect(button).toBeDisabled();
+  });
+
+  it("disables Create backup now when backups are disabled", async () => {
+    listMock.mockResolvedValueOnce([]);
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <BackupsListSection dbId="/tmp/vault.kdbx" backupsEnabled={false} />
+      </Wrapper>
+    );
+
+    const button = await screen.findByRole("button", {
+      name: "settings.backups.list.createNow.button",
+    });
+    expect(button).toBeDisabled();
+  });
+
+  it("invokes backups.createManual and surfaces a success toast on click", async () => {
+    listMock.mockResolvedValueOnce([]);
+    createManualMock.mockResolvedValueOnce({
+      path: "/tmp/.kdbx-backups/vault.kdbx.backup.manual.20260515T120000.000Z.kdbx",
+    });
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <BackupsListSection dbId="/tmp/vault.kdbx" backupsEnabled={true} />
+      </Wrapper>
+    );
+
+    const button = await screen.findByRole("button", {
+      name: "settings.backups.list.createNow.button",
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(createManualMock).toHaveBeenCalledWith("/tmp/vault.kdbx");
+    });
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalled();
+    });
+  });
+
+  it("surfaces an error toast when create_manual_backup fails", async () => {
+    listMock.mockResolvedValueOnce([]);
+    createManualMock.mockRejectedValueOnce(new Error("disk full"));
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <BackupsListSection dbId="/tmp/vault.kdbx" backupsEnabled={true} />
+      </Wrapper>
+    );
+
+    const button = await screen.findByRole("button", {
+      name: "settings.backups.list.createNow.button",
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalled();
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
   });
 
   it("refetches when a backup-deleted event fires", async () => {

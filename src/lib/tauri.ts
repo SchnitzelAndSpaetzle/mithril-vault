@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
   AppPreferences,
+  BackupInfo,
   BackupListEntry,
   CreateEntryData,
   CustomFieldValue,
@@ -24,6 +25,7 @@ import type {
 } from "./types";
 import {
   AppPreferencesSchema,
+  BackupInfoSchema,
   BackupListEntrySchema,
   CreateEntryDataSchema,
   CustomFieldValueSchema,
@@ -630,6 +632,12 @@ export const backups = {
   async delete(backupPath: string): Promise<void> {
     PathOnlySchema.parse({ path: backupPath });
     return invoke("delete_backup", { backupPath });
+  },
+
+  async createManual(databasePath: string): Promise<BackupInfo> {
+    PathOnlySchema.parse({ path: databasePath });
+    const result = await invoke("create_manual_backup", { databasePath });
+    return BackupInfoSchema.parse(result);
   },
 };
 

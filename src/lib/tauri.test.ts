@@ -309,6 +309,19 @@ describe("tauri wrappers validation", () => {
     await expect(backups.list("/tmp/vault.kdbx")).rejects.toThrow();
   });
 
+  it("invokes create_manual_backup and returns the typed BackupInfo", async () => {
+    const dbPath = "/tmp/vault.kdbx";
+    const payload = {
+      path: "/tmp/.kdbx-backups/vault.kdbx.backup.manual.20260515T120000.000Z.kdbx",
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(payload);
+
+    await expect(backups.createManual(dbPath)).resolves.toEqual(payload);
+    expect(invoke).toHaveBeenCalledWith("create_manual_backup", {
+      databasePath: dbPath,
+    });
+  });
+
   it("invokes delete_backup with the supplied path", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(undefined);
 

@@ -280,7 +280,7 @@ export function SettingsEditor({
       <PasswordGeneratorSettingsSection />
       <AdvancedSettingsSection draft={draft} updateDraft={updateDraft} />
       <BackupsSettingsSection draft={draft} updateDraft={updateDraft} />
-      <BackupsListSection dbId={dbId} />
+      <BackupsListSection dbId={dbId} backupsEnabled={draft.backups.enabled} />
       <DatabaseSettingsSection
         dbId={dbId}
         databaseConfig={databaseConfig}

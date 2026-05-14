@@ -306,6 +306,13 @@ export const BackupListEntrySchema = z.object({
 });
 export type BackupListEntry = z.infer<typeof BackupListEntrySchema>;
 
+/// Result of a manual backup snapshot — the path of the file just written.
+/// Used by the Settings → "Create backup now" toast.
+export const BackupInfoSchema = z.object({
+  path: z.string().min(1),
+});
+export type BackupInfo = z.infer<typeof BackupInfoSchema>;
+
 export const EntrySortFieldSchema = z.enum([
   "title",
   "username",

@@ -5,7 +5,7 @@ use crate::dto::database::{
 };
 use crate::dto::error::AppError;
 use crate::services::auto_lock::AutoLockService;
-use crate::services::kdbx::backups::{BackupError, BackupListEntry};
+use crate::services::kdbx::backups::{BackupError, BackupInfo, BackupListEntry};
 use crate::services::kdbx::KdbxService;
 use serde::Serialize;
 use std::sync::Arc;
@@ -232,6 +232,30 @@ pub async fn get_custom_icons(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<std::collections::HashMap<String, CustomIconData>, AppError> {
     state.get_custom_icons(&db_id)
+}
+
+/// Creates a manual (rotation-exempt) backup snapshot for an open vault.
+///
+/// Emits `backup-created` on success so the Settings → Backups list refreshes
+/// live without polling. Returns the snapshot path so the caller can show a
+/// confirmation toast referencing the new file.
+///
+/// Manual snapshots ignore `backups.enabled` — the UI hides the button when
+/// the auto-backup toggle is off, but the command itself does not gate on it.
+#[tauri::command]
+pub async fn create_manual_backup<R: Runtime>(
+    database_path: String,
+    app: AppHandle<R>,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<BackupInfo, AppError> {
+    let info = state.create_manual_backup(&database_path)?;
+    let _ = app.emit(
+        "backup-created",
+        BackupEventPayload {
+            path: info.path.to_string_lossy().into_owned(),
+        },
+    );
+    Ok(info)
 }
 
 /// Lists snapshot backups for a vault on disk, newest-first.

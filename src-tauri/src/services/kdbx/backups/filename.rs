@@ -35,6 +35,18 @@ pub fn parse_backup_filename(filename: &str) -> Option<(String, DateTime<Utc>)> 
     Some((vault_filename.to_string(), ts))
 }
 
+/// Builds the manual-snapshot filename for a Vault and a timestamp.
+///
+/// Manual snapshots use the reserved `.backup.manual.` infix so the rotation
+/// glob (auto only) excludes them: a manually-taken snapshot is never evicted
+/// by subsequent auto saves.
+pub fn make_manual_backup_filename(vault_filename: &str, ts: DateTime<Utc>) -> String {
+    format!(
+        "{vault_filename}{MANUAL_INFIX}{}{BACKUP_SUFFIX}",
+        ts.format(TIMESTAMP_FMT)
+    )
+}
+
 /// Parses a manual-snapshot filename back into the source Vault filename and
 /// its timestamp. Returns `None` if the name does not match the manual-snapshot
 /// pattern (`<vault>.backup.manual.<YYYYMMDDTHHMMSS.mmmZ>.kdbx`).
@@ -79,6 +91,26 @@ mod tests {
 
     fn ts(ms: i64) -> DateTime<Utc> {
         Utc.timestamp_millis_opt(ms).single().expect("valid ts")
+    }
+
+    #[test]
+    fn make_manual_filename_matches_expected_pattern() {
+        let t = Utc
+            .with_ymd_and_hms(2026, 5, 12, 14, 30, 45)
+            .single()
+            .expect("valid")
+            + chrono::Duration::milliseconds(123);
+        let name = make_manual_backup_filename("vault.kdbx", t);
+        assert_eq!(name, "vault.kdbx.backup.manual.20260512T143045.123Z.kdbx");
+    }
+
+    #[test]
+    fn manual_parse_roundtrip() {
+        let original = ts(1_715_000_000_789);
+        let name = make_manual_backup_filename("vault.kdbx", original);
+        let (vault, parsed) = parse_manual_backup_filename(&name).expect("parses");
+        assert_eq!(vault, "vault.kdbx");
+        assert_eq!(parsed, original);
     }
 
     #[test]
