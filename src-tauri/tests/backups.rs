@@ -12,7 +12,7 @@
 use mithril_vault_lib::commands::settings::BackupSettings;
 #[cfg(unix)]
 use mithril_vault_lib::services::kdbx::backups::BackupError;
-use mithril_vault_lib::services::kdbx::backups::{snapshot, BACKUP_SUBDIR};
+use mithril_vault_lib::services::kdbx::backups::{snapshot, snapshot_on_open, BACKUP_SUBDIR};
 use tempfile::tempdir;
 
 fn enabled() -> BackupSettings {
@@ -259,6 +259,7 @@ fn rotation_caps_snapshots_at_max_versions() {
         enabled: true,
         max_versions: 10,
         directory: None,
+        on_open: false,
     };
 
     // Twelve consecutive snapshots: each save mutates the source so the
@@ -296,6 +297,7 @@ fn rotation_retains_newest_snapshots_not_oldest() {
         enabled: true,
         max_versions: 3,
         directory: None,
+        on_open: false,
     };
 
     let mut all_timestamps = Vec::new();
@@ -347,6 +349,7 @@ fn rotation_keeps_two_vaults_in_same_directory_independent() {
         enabled: true,
         max_versions: 2,
         directory: None,
+        on_open: false,
     };
 
     // 5 snapshots of vault A, 4 snapshots of vault B, interleaved so they
@@ -400,6 +403,7 @@ fn rotation_preserves_foreign_files_in_backup_dir() {
         enabled: true,
         max_versions: 1,
         directory: None,
+        on_open: false,
     };
 
     // Seed one snapshot to force creation of .kdbx-backups/.
@@ -459,6 +463,7 @@ fn rotation_does_not_run_when_snapshot_fails() {
         enabled: true,
         max_versions: 5,
         directory: None,
+        on_open: false,
     };
 
     for i in 0..2u32 {
@@ -481,6 +486,7 @@ fn rotation_does_not_run_when_snapshot_fails() {
         enabled: true,
         max_versions: 1,
         directory: None,
+        on_open: false,
     };
     std::fs::write(&vault_path, b"will-fail").expect("write source");
     let original_vault_perms = std::fs::metadata(&vault_path)
@@ -610,6 +616,7 @@ fn override_isolates_same_named_vaults_in_shared_directory() {
         enabled: true,
         max_versions: 2,
         directory: Some(override_dir.path().to_string_lossy().into_owned()),
+        on_open: false,
     };
 
     // Drive 4 saves of each vault, interleaved. With per-basename rotation
@@ -668,6 +675,7 @@ fn rotation_runs_inside_override_directory() {
         enabled: true,
         max_versions: 3,
         directory: Some(override_dir.path().to_string_lossy().into_owned()),
+        on_open: false,
     };
 
     for i in 0..5u32 {
@@ -750,6 +758,111 @@ fn snapshot_uses_override_directory_when_set() {
 
     let bytes = std::fs::read(&info.path).expect("read snapshot");
     assert_eq!(bytes, b"pre-image bytes");
+}
+
+fn on_open_enabled() -> BackupSettings {
+    BackupSettings {
+        enabled: true,
+        on_open: true,
+        ..BackupSettings::default()
+    }
+}
+
+#[test]
+fn snapshot_on_open_creates_snapshot_when_no_prior_exists() {
+    // First open of a Vault on a fresh install: nothing in the backup dir
+    // yet, so dedup has nothing to compare against and a snapshot is taken.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"pre-image bytes").expect("write source");
+
+    let info = snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("snapshot ok")
+        .expect("snapshot created");
+
+    assert!(info.path.exists(), "snapshot file should exist");
+    let bytes = std::fs::read(&info.path).expect("read snapshot");
+    assert_eq!(bytes, b"pre-image bytes");
+}
+
+#[test]
+fn snapshot_on_open_dedups_when_source_unchanged() {
+    // Lock-then-unlock scenario: the user re-opens the Vault, but nothing has
+    // changed on disk between the two opens. The latest existing snapshot
+    // already captures the exact bytes, so taking another one would just
+    // burn a rotation slot for no information. The second call must skip.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"unchanged data").expect("write source");
+
+    let first = snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("first snapshot ok")
+        .expect("first snapshot created");
+
+    let second = snapshot_on_open(&vault_path, &on_open_enabled()).expect("second snapshot ok");
+    assert!(
+        second.is_none(),
+        "second open with no changes must dedup (None), got {second:?}"
+    );
+
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let count = std::fs::read_dir(&backup_dir)
+        .expect("read backup dir")
+        .filter_map(Result::ok)
+        .filter(|e| e.path().is_file())
+        .count();
+    assert_eq!(count, 1, "exactly one snapshot survives the dedup");
+    assert!(first.path.exists(), "original snapshot still present");
+}
+
+#[test]
+fn snapshot_on_open_takes_new_snapshot_after_source_changes() {
+    // If the source was modified between two opens (the user saved from
+    // another machine, or save-side took its pre-image snapshot in between),
+    // dedup must NOT fire — there is new content worth preserving.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"v1 bytes").expect("write v1");
+
+    let first = snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("first ok")
+        .expect("first created");
+
+    // Mutate source so both size and mtime advance. Sleep a millisecond to
+    // guarantee a coarse-mtime filesystem advances the mtime field.
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::fs::write(&vault_path, b"v2 bytes that are longer").expect("write v2");
+
+    let second = snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("second ok")
+        .expect("second should be created since source changed");
+
+    assert_ne!(first.path, second.path, "second snapshot must be distinct");
+    let bytes = std::fs::read(&second.path).expect("read");
+    assert_eq!(bytes, b"v2 bytes that are longer");
+}
+
+#[test]
+fn snapshot_on_open_skips_when_on_open_flag_is_false() {
+    // Default-off per #193. Even when `enabled` is true the open-side hook
+    // must do nothing unless the user has explicitly opted in.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"data").expect("write source");
+
+    let settings = BackupSettings {
+        enabled: true,
+        on_open: false,
+        ..BackupSettings::default()
+    };
+    let result = snapshot_on_open(&vault_path, &settings).expect("snapshot ok");
+    assert!(result.is_none(), "on_open=false produces no snapshot");
+
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    assert!(
+        !backup_dir.exists(),
+        "no backup dir should be created when on_open is off"
+    );
 }
 
 #[test]

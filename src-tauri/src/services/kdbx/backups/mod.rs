@@ -121,6 +121,103 @@ pub fn snapshot(
     Ok(Some(BackupInfo { path: backup_path }))
 }
 
+/// Open-side snapshot hook (issue #193).
+///
+/// Behaviour differs from [`snapshot`] in two ways:
+///
+/// - Gated on `settings.on_open` (default off). The `enabled` flag is still
+///   the master switch, so toggling off all backups disables this hook too.
+/// - Deduplicates against the latest existing snapshot for this Vault: if its
+///   size and mtime match the current source, no new snapshot is taken. This
+///   prevents flooding the rotation bucket when a user locks and unlocks an
+///   unchanged Vault repeatedly. To make the comparison meaningful — the
+///   snapshot file is just-written so its file-system mtime would otherwise
+///   be "now" — the snapshot's mtime is stamped to match the source's mtime
+///   after the bytes are written.
+///
+/// Failure semantics are the caller's concern. This function still returns
+/// `Err(BackupFailed)` on I/O failure; the open-path command converts that
+/// into a non-blocking `backup-warning` event so the unlock itself never
+/// fails because of a backup problem.
+pub fn snapshot_on_open(
+    source: &Path,
+    settings: &BackupSettings,
+) -> Result<Option<BackupInfo>, BackupError> {
+    if !settings.enabled || !settings.on_open {
+        return Ok(None);
+    }
+
+    // Dedup before taking the snapshot. If the latest existing snapshot
+    // already matches the source's size+mtime there is nothing new to
+    // capture — silently skip so a locked/unlocked unchanged Vault doesn't
+    // burn a rotation slot per cycle.
+    let source_exists = source.try_exists().map_err(|e| BackupError::BackupFailed {
+        path: source.to_path_buf(),
+        source: e,
+    })?;
+    if source_exists {
+        let backup_dir = resolve_backup_dir(source, settings)?;
+        if let Some(vault_filename) = source.file_name().and_then(|n| n.to_str()) {
+            if let Some(latest) = latest_snapshot_for(&backup_dir, vault_filename) {
+                if metadata_matches(&latest, source) {
+                    return Ok(None);
+                }
+            }
+        }
+    }
+
+    let info = snapshot(source, settings)?;
+    if let Some(info) = info.as_ref() {
+        stamp_source_mtime(&info.path, source).map_err(|e| BackupError::BackupFailed {
+            path: info.path.clone(),
+            source: e,
+        })?;
+    }
+    Ok(info)
+}
+
+/// Finds the most recent auto-snapshot for `vault_filename` inside `dir`,
+/// using the timestamp parsed out of the filename. Returns `None` when the
+/// directory does not exist or holds no snapshots for this Vault.
+fn latest_snapshot_for(dir: &Path, vault_filename: &str) -> Option<PathBuf> {
+    fs::read_dir(dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().to_str()?.to_string();
+            let (vault, ts) = filename::parse_backup_filename(&name)?;
+            (vault == vault_filename).then_some((ts, entry.path()))
+        })
+        .max_by_key(|(ts, _)| *ts)
+        .map(|(_, p)| p)
+}
+
+/// Compares size+mtime of two filesystem entries. Used by `snapshot_on_open`
+/// to decide whether the latest existing snapshot already captures what the
+/// source currently holds.
+fn metadata_matches(a: &Path, b: &Path) -> bool {
+    let (Ok(meta_a), Ok(meta_b)) = (fs::metadata(a), fs::metadata(b)) else {
+        return false;
+    };
+    if meta_a.len() != meta_b.len() {
+        return false;
+    }
+    match (meta_a.modified(), meta_b.modified()) {
+        (Ok(t_a), Ok(t_b)) => t_a == t_b,
+        _ => false,
+    }
+}
+
+/// Stamps `snapshot_path`'s mtime to match `source`'s mtime so that the next
+/// `snapshot_on_open` call can dedup by file metadata comparison alone.
+fn stamp_source_mtime(snapshot_path: &Path, source: &Path) -> io::Result<()> {
+    let source_meta = fs::metadata(source)?;
+    let source_mtime = source_meta.modified()?;
+    let file = fs::OpenOptions::new().write(true).open(snapshot_path)?;
+    file.set_modified(source_mtime)?;
+    Ok(())
+}
+
 /// Resolves the directory that snapshots should be written to. When
 /// `settings.directory` is set, snapshots are isolated per source vault
 /// inside it (`<override>/<basename>-<hash>/`) so two vaults sharing a

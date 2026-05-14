@@ -2,6 +2,7 @@
 
 import { Toaster } from "@/components/ui/sonner.tsx";
 import { ThemeProvider } from "@/components/theme-provider.tsx";
+import { useBackupWarning } from "@/hooks/use-backup-warning";
 import { useLanguageSync } from "@/hooks/use-language-sync";
 import React from "react";
 
@@ -10,6 +11,7 @@ interface AppProps {
 }
 function App({ children }: Readonly<AppProps>) {
   useLanguageSync();
+  useBackupWarning();
 
   return (
     <ThemeProvider defaultTheme="system" storageKey="mithril-vault-theme">

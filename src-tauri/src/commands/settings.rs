@@ -153,6 +153,11 @@ pub struct BackupSettings {
     /// rejection.
     #[serde(default)]
     pub directory: Option<String>,
+    /// When true, also take a snapshot every time a Vault successfully
+    /// unlocks. Opt-in (per #193) and silently skipped when the most recent
+    /// existing snapshot's size+mtime already match the source.
+    #[serde(default)]
+    pub on_open: bool,
 }
 
 pub(crate) const DEFAULT_MAX_VERSIONS: u32 = 10;
@@ -167,6 +172,7 @@ impl Default for BackupSettings {
             enabled: true,
             max_versions: DEFAULT_MAX_VERSIONS,
             directory: None,
+            on_open: false,
         }
     }
 }
@@ -237,6 +243,7 @@ mod backup_settings_tests {
             enabled: true,
             max_versions: 10,
             directory: Some(String::new()),
+            on_open: false,
         };
         s.normalize_directory();
         assert!(s.directory.is_none());
@@ -248,6 +255,7 @@ mod backup_settings_tests {
             enabled: true,
             max_versions: 10,
             directory: Some("/mnt/backups".into()),
+            on_open: false,
         };
         s.normalize_directory();
         assert_eq!(s.directory.as_deref(), Some("/mnt/backups"));
@@ -263,6 +271,25 @@ mod backup_settings_tests {
         assert!(
             serialized.contains(r#""directory":"/mnt/backups""#),
             "serialized json should carry the camelCase directory field: {serialized}"
+        );
+    }
+
+    #[test]
+    fn on_open_defaults_to_false_and_round_trips() {
+        // Opt-in behavior per #193: existing installs must not start taking
+        // open-side snapshots until the user flips the toggle.
+        let from_empty: BackupSettings = serde_json::from_str("{}").expect("parse {}");
+        assert!(!from_empty.on_open);
+
+        let explicit: BackupSettings =
+            serde_json::from_str(r#"{"enabled": true, "maxVersions": 10, "onOpen": true}"#)
+                .expect("parse explicit");
+        assert!(explicit.on_open);
+
+        let serialized = serde_json::to_string(&explicit).expect("serialize");
+        assert!(
+            serialized.contains(r#""onOpen":true"#),
+            "serialized json should carry camelCase onOpen field: {serialized}"
         );
     }
 }

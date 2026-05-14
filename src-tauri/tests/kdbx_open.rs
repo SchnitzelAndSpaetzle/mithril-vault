@@ -47,6 +47,154 @@ fn copy_keyfile_fixtures_to_temp(
     Some((temp_dir, db_dest, key_dest))
 }
 
+use mithril_vault_lib::commands::settings::BackupSettings;
+use mithril_vault_lib::services::kdbx::backups::{BackupError, BACKUP_SUBDIR};
+
+#[test]
+fn snapshot_after_open_creates_snapshot_when_on_open_is_true() {
+    // End-to-end through the service: an open() followed by
+    // snapshot_after_open() with on_open=true must produce a backup file
+    // alongside the source. This is the seam the command handler uses; if it
+    // returns Ok(Some(_)) here, the open path can fire-and-forget the hook.
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("vault.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path_str, "test123", "Snapshot Test")
+        .expect("create db");
+    // close so we can hit the open path (which reads from disk).
+    service.close(&db_path_str).expect("close db");
+
+    service
+        .set_backup_settings(BackupSettings {
+            enabled: true,
+            on_open: true,
+            ..BackupSettings::default()
+        })
+        .expect("set backup settings");
+
+    service
+        .open(&db_path_str, "test123")
+        .expect("open after close");
+
+    let outcome = service
+        .snapshot_after_open(&db_path_str)
+        .expect("snapshot_after_open ok");
+    assert!(
+        outcome.is_some(),
+        "first snapshot_after_open must produce a snapshot, got None"
+    );
+
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let snapshots: Vec<_> = std::fs::read_dir(&backup_dir)
+        .expect("read backup dir")
+        .filter_map(Result::ok)
+        .filter(|e| e.path().is_file())
+        .collect();
+    assert_eq!(
+        snapshots.len(),
+        1,
+        "exactly one backup file should exist post-open"
+    );
+}
+
+#[test]
+fn failed_password_open_never_produces_a_snapshot() {
+    // Acceptance criterion: a failed password attempt must produce no
+    // snapshot. The command short-circuits on the open error and never
+    // reaches snapshot_after_open — verify the underlying invariant by
+    // confirming no backup file appears even after a wrong-password open.
+    let Some((temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
+        eprintln!("Skipping test: fixture not found");
+        return;
+    };
+
+    let service = KdbxService::new();
+    service
+        .set_backup_settings(BackupSettings {
+            enabled: true,
+            on_open: true,
+            ..BackupSettings::default()
+        })
+        .expect("set backup settings");
+
+    let wrong = service.open(&path.to_string_lossy(), "wrong_password");
+    assert!(
+        matches!(wrong, Err(AppError::InvalidPassword)),
+        "expected InvalidPassword, got {wrong:?}"
+    );
+
+    let backup_dir = temp_dir.path().join(BACKUP_SUBDIR);
+    assert!(
+        !backup_dir.exists(),
+        "no backup directory should be created on a failed password attempt"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn snapshot_after_open_fails_open_when_backup_dir_is_unwritable() {
+    // Fail-open semantics from #193: a backup failure during the open path
+    // must NOT prevent the user from using the unlocked Vault. The service
+    // surfaces the BackupError so the command can emit `backup-warning`, but
+    // the database itself stays open and operational.
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("vault.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    service
+        .create(&db_path_str, "test123", "Fail Open")
+        .expect("create db");
+    service.close(&db_path_str).expect("close db");
+
+    // Point the override at a directory inside a read-only parent so neither
+    // the dir nor any file inside it can be created.
+    let blocked_root = tempdir().expect("tempdir blocked root");
+    let mut perms = std::fs::metadata(blocked_root.path())
+        .expect("meta")
+        .permissions();
+    let original_mode = perms.mode();
+    perms.set_mode(0o500);
+    std::fs::set_permissions(blocked_root.path(), perms).expect("set ro");
+    let blocked_override = blocked_root.path().join("nope");
+
+    service
+        .set_backup_settings(BackupSettings {
+            enabled: true,
+            on_open: true,
+            directory: Some(blocked_override.to_string_lossy().into_owned()),
+            ..BackupSettings::default()
+        })
+        .expect("set backup settings");
+
+    let open_result = service.open(&db_path_str, "test123");
+    let snapshot_result = service.snapshot_after_open(&db_path_str);
+
+    // Restore so tempdir cleanup works.
+    let mut restore = std::fs::metadata(blocked_root.path())
+        .expect("meta")
+        .permissions();
+    restore.set_mode(original_mode);
+    std::fs::set_permissions(blocked_root.path(), restore).expect("restore");
+
+    open_result.expect("open must succeed even when backup will fail");
+    assert!(
+        matches!(snapshot_result, Err(BackupError::BackupFailed { .. })),
+        "snapshot_after_open should surface the backup failure, got {snapshot_result:?}"
+    );
+
+    // The database must still be open and usable.
+    let info = service
+        .get_info(&db_path_str)
+        .expect("info after failed snapshot");
+    assert!(!info.is_locked, "db must remain unlocked");
+}
+
 #[test]
 fn test_open_kdbx4_with_password() {
     let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {

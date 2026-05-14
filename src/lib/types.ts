@@ -273,6 +273,9 @@ export const BackupSettingsSchema = z.object({
   // backend emits `null` when unset (the field exists but is None) and
   // omits it when the directory key is missing entirely; accept both.
   directory: z.string().nullable().optional(),
+  // Opt-in open-side snapshot (#193). Defaults to false so existing installs
+  // do not start taking extra snapshots until the user enables it.
+  onOpen: z.boolean().default(false),
 });
 export type BackupSettings = z.infer<typeof BackupSettingsSchema>;
 export const BACKUP_MAX_VERSIONS_PRESETS = [5, 10, 25, 50, 100] as const;

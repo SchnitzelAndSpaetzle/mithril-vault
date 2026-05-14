@@ -5,18 +5,52 @@ use crate::dto::database::{
 };
 use crate::dto::error::AppError;
 use crate::services::auto_lock::AutoLockService;
+use crate::services::kdbx::backups::BackupError;
 use crate::services::kdbx::KdbxService;
+use serde::Serialize;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, Runtime, State};
+
+/// Payload of the `backup-warning` event. The frontend renders this as a
+/// non-blocking toast and never as a modal — open-side backup failures must
+/// not interrupt the user.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackupWarningPayload {
+    path: String,
+    reason: String,
+}
+
+/// Invokes the open-side backup hook and converts a `BackupFailed` into a
+/// non-blocking `backup-warning` event. Never returns an error — the unlock
+/// has already succeeded by the time we reach this point and a snapshot
+/// problem must not bubble up to the caller.
+fn emit_open_backup_hook<R: Runtime>(app: &AppHandle<R>, state: &KdbxService, db_id: &str) {
+    match state.snapshot_after_open(db_id) {
+        Ok(_) => {}
+        Err(BackupError::BackupFailed { path, source }) => {
+            let _ = app.emit(
+                "backup-warning",
+                BackupWarningPayload {
+                    path: path.to_string_lossy().into_owned(),
+                    reason: source.to_string(),
+                },
+            );
+        }
+    }
+}
 
 /// Opens a database with a password.
 #[tauri::command]
-pub async fn open_database(
+pub async fn open_database<R: Runtime>(
     path: String,
     password: String,
+    app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    state.open(&path, &password)
+    let info = state.open(&path, &password)?;
+    emit_open_backup_hook(&app, &state, &path);
+    Ok(info)
 }
 
 /// Closes a specific open database.
@@ -67,23 +101,29 @@ pub async fn save_database(
 
 /// Opens a database with password and keyfile.
 #[tauri::command]
-pub async fn open_database_with_keyfile(
+pub async fn open_database_with_keyfile<R: Runtime>(
     path: String,
     password: String,
     keyfile_path: String,
+    app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    state.open_with_keyfile(&path, &password, &keyfile_path)
+    let info = state.open_with_keyfile(&path, &password, &keyfile_path)?;
+    emit_open_backup_hook(&app, &state, &path);
+    Ok(info)
 }
 
 /// Opens a database using only a keyfile.
 #[tauri::command]
-pub async fn open_database_with_keyfile_only(
+pub async fn open_database_with_keyfile_only<R: Runtime>(
     path: String,
     keyfile_path: String,
+    app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    state.open_with_keyfile_only(&path, &keyfile_path)
+    let info = state.open_with_keyfile_only(&path, &keyfile_path)?;
+    emit_open_backup_hook(&app, &state, &path);
+    Ok(info)
 }
 
 /// Locks the database session by dropping decrypted data from memory.
@@ -97,12 +137,15 @@ pub async fn lock_database(
 
 /// Unlocks the database session by re-opening from disk with optional password.
 #[tauri::command]
-pub async fn unlock_database(
+pub async fn unlock_database<R: Runtime>(
     db_id: String,
     password: Option<String>,
+    app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    state.unlock(&db_id, password.as_deref())
+    let info = state.unlock(&db_id, password.as_deref())?;
+    emit_open_backup_hook(&app, &state, &db_id);
+    Ok(info)
 }
 
 /// Inspects a KDBX file without requiring credentials.
