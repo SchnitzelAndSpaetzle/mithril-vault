@@ -10,7 +10,6 @@
 //! Unix permissions, first-save skip, fail-closed semantics, symlink resolution.
 
 use mithril_vault_lib::commands::settings::BackupSettings;
-#[cfg(unix)]
 use mithril_vault_lib::services::kdbx::backups::BackupError;
 use mithril_vault_lib::services::kdbx::backups::{
     list_for, snapshot, snapshot_on_open, BackupKind, BACKUP_SUBDIR,
@@ -1175,6 +1174,38 @@ fn list_for_returns_empty_when_backup_dir_missing() {
 
     let listed = list_for(&vault_path, &enabled()).expect("list ok");
     assert!(listed.is_empty(), "missing backup dir lists empty");
+}
+
+#[cfg(unix)]
+#[test]
+fn list_for_rejects_symlinked_backup_directory() {
+    // Defense-in-depth (Codex P2 on #212). A symlink at the per-Vault
+    // `.kdbx-backups/` path could redirect `list_for` to read an arbitrary
+    // directory and surface attacker-controlled files as this Vault's
+    // backups in the Settings UI. `snapshot` already rejects this; the
+    // listing path must apply the same guard.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"data").expect("write source");
+
+    let elsewhere = tempdir().expect("tempdir elsewhere");
+    // Plant a snapshot-shaped file inside the symlink target so a naive
+    // listing would surface it.
+    std::fs::write(
+        elsewhere
+            .path()
+            .join("vault.kdbx.backup.20260101T000000.000Z.kdbx"),
+        b"masquerade",
+    )
+    .expect("write masquerade");
+    let backup_link = dir.path().join(BACKUP_SUBDIR);
+    std::os::unix::fs::symlink(elsewhere.path(), &backup_link).expect("symlink");
+
+    let result = list_for(&vault_path, &enabled());
+    assert!(
+        matches!(result, Err(BackupError::BackupFailed { .. })),
+        "list_for must reject a symlinked backup dir, got {result:?}"
+    );
 }
 
 #[test]

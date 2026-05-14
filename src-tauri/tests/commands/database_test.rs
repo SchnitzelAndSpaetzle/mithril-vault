@@ -410,3 +410,49 @@ fn save_returns_none_when_backups_are_disabled() {
         "no snapshot must be reported when backups are disabled"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn delete_backup_rejects_paths_when_open_vaults_backup_dir_is_a_symlink() {
+    // Regression for Codex P1 on #212. Without a pre-canonicalize symlink
+    // guard, an attacker who plants a symlink at the per-Vault `.kdbx-backups/`
+    // path can shift the allowed delete boundary to the symlink target. The
+    // delete authorization would then accept any path under that target,
+    // letting `delete_backup` remove arbitrary files outside the real backup
+    // directory. The guard must reject this before canonicalization.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    let db_path_str = vault_path.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    service
+        .set_backup_settings(enabled_backup_settings())
+        .expect("set settings");
+    service
+        .create(&db_path_str, "pw", "Symlink Guard Test Vault")
+        .expect("create vault");
+
+    // Replace the (not-yet-existing) backup dir with a symlink pointing at
+    // an attacker-controlled directory.
+    let elsewhere = tempdir().expect("tempdir elsewhere");
+    let backup_link = dir
+        .path()
+        .join(mithril_vault_lib::services::kdbx::backups::BACKUP_SUBDIR);
+    std::os::unix::fs::symlink(elsewhere.path(), &backup_link).expect("symlink");
+
+    // Plant a file inside the symlink target. With the bug this file would
+    // pass the `starts_with` check after `canonicalize(&backup_dir)` follows
+    // the symlink.
+    let victim = elsewhere.path().join("victim.txt");
+    std::fs::write(&victim, b"do not delete me").expect("write victim");
+
+    let result = service.delete_backup(&victim.to_string_lossy());
+    assert!(
+        result.is_err(),
+        "delete_backup must reject when the open vault's backup dir is a symlink, got {result:?}"
+    );
+    assert!(
+        victim.exists(),
+        "the file inside the symlink target must remain on disk"
+    );
+}

@@ -424,3 +424,27 @@ fn add_recent_database_rejects_snapshot_filenames() {
 
     cleanup_settings_file(&app);
 }
+
+#[test]
+fn add_recent_database_accepts_vault_names_containing_backup_manual_substring() {
+    // Regression for Codex P2 on #212: the previous substring check rejected
+    // legitimate vault filenames that happen to carry `.backup.manual.` in the
+    // basename (e.g. `team.backup.manual.notes.kdbx`). Such a vault must still
+    // be addable to recent_databases — the guard only fires on the canonical
+    // snapshot pattern (`<basename>.backup[.manual].<YYYYMMDDTHHMMSS.mmmZ>.kdbx`).
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+    let service = SettingsService::new(app.handle()).expect("create service");
+
+    let benign = "/some/dir/team.backup.manual.notes.kdbx";
+    service
+        .add_recent_database(benign, None)
+        .expect("benign vault filename must be accepted");
+
+    let settings = service.get_settings().expect("get settings");
+    assert_eq!(settings.recent_databases.len(), 1);
+    assert_eq!(settings.recent_databases[0].path, benign);
+
+    cleanup_settings_file(&app);
+}

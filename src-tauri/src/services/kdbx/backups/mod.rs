@@ -228,6 +228,14 @@ pub fn list_for(
     settings: &BackupSettings,
 ) -> Result<Vec<BackupListEntry>, BackupError> {
     let backup_dir = resolve_backup_dir(source, settings)?;
+    // Apply the same symlink rejection the snapshot writer uses — a symlink
+    // at the backup dir would otherwise let `read_dir` enumerate an arbitrary
+    // target directory and surface those files as this Vault's backups in
+    // the Settings UI.
+    reject_symlinked_backup_dir(&backup_dir).map_err(|e| BackupError::BackupFailed {
+        path: backup_dir.clone(),
+        source: e,
+    })?;
     let vault_filename =
         source
             .file_name()
@@ -433,6 +441,15 @@ fn vault_isolation_segment(source: &Path) -> Result<String, BackupError> {
         let _ = write!(&mut hash_hex, "{byte:02x}");
     }
     Ok(format!("{basename}-{hash_hex}"))
+}
+
+/// Public façade over [`reject_symlinked_backup_dir`] for callers outside
+/// this module. Used by the delete-backup command to refuse path-safety
+/// resolution against a symlinked backup directory — without it, a planted
+/// symlink could shift the allowed delete boundary to the symlink target
+/// and let an attacker remove files outside the real backup directory.
+pub fn assert_backup_dir_not_symlinked(dir: &Path) -> io::Result<()> {
+    reject_symlinked_backup_dir(dir)
 }
 
 /// Rejects a symlink at the backup path so a stale or hostile link cannot

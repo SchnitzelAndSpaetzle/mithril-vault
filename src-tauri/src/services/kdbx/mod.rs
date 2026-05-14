@@ -113,6 +113,15 @@ impl KdbxService {
             let Ok(backup_dir) = backups::resolved_backup_dir(source, &settings) else {
                 continue;
             };
+            // Refuse to canonicalize through a symlink at the backup dir.
+            // Otherwise an attacker who plants a symlink could shift the
+            // allowed delete boundary to the symlink target and use this
+            // command to remove arbitrary files. Skip this vault's
+            // authorization path instead of bubbling the error: another
+            // open vault may legitimately own the target.
+            if backups::assert_backup_dir_not_symlinked(&backup_dir).is_err() {
+                continue;
+            }
             let Ok(canonical_dir) = fs::canonicalize(&backup_dir) else {
                 continue;
             };
