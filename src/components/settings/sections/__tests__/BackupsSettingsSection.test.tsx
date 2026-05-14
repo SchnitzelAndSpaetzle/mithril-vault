@@ -141,7 +141,8 @@ describe("BackupsSettingsSection", () => {
     });
     fireEvent.change(input, { target: { value: "/mnt/backups" } });
 
-    const firstCall = updateDraft.mock.calls.at(-1);
+    const calls = updateDraft.mock.calls;
+    const firstCall = calls[calls.length - 1];
     if (!firstCall) throw new Error("expected updateDraft to be called");
     const updater = firstCall[0] as (prev: AppPreferences) => AppPreferences;
     const next = updater(makeDraft());
@@ -162,7 +163,8 @@ describe("BackupsSettingsSection", () => {
     });
     fireEvent.change(input, { target: { value: "" } });
 
-    const lastCall = updateDraft.mock.calls.at(-1);
+    const calls = updateDraft.mock.calls;
+    const lastCall = calls[calls.length - 1];
     if (!lastCall) throw new Error("expected updateDraft to be called");
     const updater = lastCall[0] as (prev: AppPreferences) => AppPreferences;
     const next = updater(makeDraft(10, "/mnt/backups"));
@@ -191,7 +193,8 @@ describe("BackupsSettingsSection", () => {
       multiple: false,
     });
 
-    const lastCall = updateDraft.mock.calls.at(-1);
+    const calls = updateDraft.mock.calls;
+    const lastCall = calls[calls.length - 1];
     if (!lastCall) throw new Error("expected updateDraft after Browse");
     const updater = lastCall[0] as (prev: AppPreferences) => AppPreferences;
     const next = updater(makeDraft());
