@@ -17,9 +17,11 @@ use crate::domain::kdbx::OpenDatabase;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
+use self::backups::BackupListEntry;
 use self::favicons::FaviconCooldown;
 
 pub struct KdbxService {
@@ -84,6 +86,63 @@ impl KdbxService {
         let normalized = Self::normalize_path(path);
         let databases = self.lock_databases()?;
         Ok(databases.get(&normalized).map(OpenDatabase::is_locked))
+    }
+
+    /// Deletes a backup snapshot from disk after verifying that the path
+    /// resolves inside the backup directory of at least one currently-open
+    /// Vault.
+    ///
+    /// Path-safety: the supplied path is canonicalized and compared against
+    /// the canonicalized backup directory of every open Vault. A path that
+    /// does not resolve inside any of those directories is rejected without
+    /// touching the filesystem — protecting against accidental or malicious
+    /// deletes of unrelated files (e.g. system files, the Vault itself).
+    ///
+    /// Returns `InvalidInput` when the path falls outside every open vault's
+    /// backup dir.
+    pub fn delete_backup(&self, backup_path: &str) -> Result<(), AppError> {
+        let settings = self.current_backup_settings()?;
+        let target = Path::new(backup_path);
+        let canonical_target =
+            fs::canonicalize(target).map_err(|e| AppError::InvalidPath(e.to_string()))?;
+
+        let databases = self.lock_databases()?;
+        let mut authorized = false;
+        for open_db in databases.values() {
+            let source = Path::new(&open_db.path);
+            let Ok(backup_dir) = backups::resolved_backup_dir(source, &settings) else {
+                continue;
+            };
+            let Ok(canonical_dir) = fs::canonicalize(&backup_dir) else {
+                continue;
+            };
+            if canonical_target.starts_with(&canonical_dir) {
+                authorized = true;
+                break;
+            }
+        }
+        drop(databases);
+
+        if !authorized {
+            return Err(AppError::InvalidInput(format!(
+                "backup path is not inside any open vault's backup directory: {backup_path}"
+            )));
+        }
+
+        fs::remove_file(&canonical_target).map_err(|e| AppError::Io(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Enumerates snapshots that belong to `db_path`, sorted newest-first.
+    ///
+    /// Does NOT require the path to be currently open — the read is a pure
+    /// directory walk against the resolved backup directory, with filename
+    /// filtering keyed on the vault's basename. The Settings UI calls this
+    /// for the currently-active Vault, but the boundary is path-based so the
+    /// command stays simple and predictable.
+    pub fn list_backups(&self, db_path: &str) -> Result<Vec<BackupListEntry>, AppError> {
+        let settings = self.current_backup_settings()?;
+        Ok(backups::list_for(Path::new(db_path), &settings)?)
     }
 
     /// Returns a list of all currently open databases.

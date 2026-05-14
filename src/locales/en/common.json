@@ -132,6 +132,19 @@
       },
       "warning": {
         "openSide": "Open-side backup failed for {{path}}: {{reason}}. The vault is still unlocked."
+      },
+      "list": {
+        "title": "Existing backups",
+        "description": "Snapshots taken before each save (and optionally on open). Scoped to the currently open vault.",
+        "emptyNoVault": "Open a vault to see and manage its backups.",
+        "emptyNoBackups": "No backups yet for this vault.",
+        "loadError": "Failed to load backups: {{error}}",
+        "delete": "Delete",
+        "deleteConfirm": "Confirm delete",
+        "kind": {
+          "auto": "Auto",
+          "manual": "Manual"
+        }
       }
     },
     "shortcuts": {

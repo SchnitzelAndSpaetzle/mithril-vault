@@ -12,7 +12,9 @@
 use mithril_vault_lib::commands::settings::BackupSettings;
 #[cfg(unix)]
 use mithril_vault_lib::services::kdbx::backups::BackupError;
-use mithril_vault_lib::services::kdbx::backups::{snapshot, snapshot_on_open, BACKUP_SUBDIR};
+use mithril_vault_lib::services::kdbx::backups::{
+    list_for, snapshot, snapshot_on_open, BackupKind, BACKUP_SUBDIR,
+};
 use tempfile::tempdir;
 
 fn enabled() -> BackupSettings {
@@ -1073,4 +1075,130 @@ fn snapshot_handles_same_millisecond_collision() {
     assert_ne!(first.path, second.path, "collision should bump filename");
     let bytes = std::fs::read(&second.path).expect("read");
     assert_eq!(bytes, b"v2");
+}
+
+#[test]
+fn list_for_sorts_newest_first_by_parsed_timestamp() {
+    // Three save-side snapshots, each with a distinct pre-image so a new
+    // file lands each time. The listing must surface them with the newest
+    // (most-recently-saved) at index 0.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    let mut snapshot_paths = Vec::new();
+    for i in 0..3u32 {
+        std::fs::write(&vault_path, format!("v{i}").as_bytes()).expect("write source");
+        let info = snapshot(&vault_path, &enabled())
+            .expect("snapshot ok")
+            .expect("created");
+        snapshot_paths.push(info.path);
+        // Ensure the next snapshot lands in a distinct millisecond so
+        // ordering is unambiguous even on coarse-mtime filesystems.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+
+    let listed = list_for(&vault_path, &enabled()).expect("list ok");
+    assert_eq!(listed.len(), 3, "expected three listed backups");
+    let paths: Vec<_> = listed.iter().map(|e| e.path.clone()).collect();
+    // snapshot_paths is creation-order (oldest → newest); the listing must
+    // be the reverse.
+    let mut expected = snapshot_paths;
+    expected.reverse();
+    assert_eq!(paths, expected, "listing must be newest-first");
+}
+
+#[test]
+fn list_for_includes_manual_snapshots() {
+    // Manual snapshots live in the same directory as auto snapshots but use
+    // a reserved `.backup.manual.` infix. The listing must include them and
+    // classify the kind correctly.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"data").expect("write source");
+
+    // Seed the directory by taking a real auto-snapshot first.
+    let auto = snapshot(&vault_path, &enabled())
+        .expect("snapshot ok")
+        .expect("created");
+    // Plant a manual-named file alongside it.
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let manual_path = backup_dir.join("vault.kdbx.backup.manual.20260512T143045.123Z.kdbx");
+    std::fs::write(&manual_path, b"manual bytes").expect("write manual");
+
+    let listed = list_for(&vault_path, &enabled()).expect("list ok");
+    assert_eq!(listed.len(), 2, "should list both auto and manual entries");
+
+    let auto_entry = listed
+        .iter()
+        .find(|e| e.path == auto.path)
+        .expect("auto entry present");
+    assert_eq!(auto_entry.kind, BackupKind::Auto);
+
+    let manual_entry = listed
+        .iter()
+        .find(|e| e.path == manual_path)
+        .expect("manual entry present");
+    assert_eq!(manual_entry.kind, BackupKind::Manual);
+}
+
+#[test]
+fn list_for_skips_foreign_vault_snapshots() {
+    // Two Vaults sharing a directory. Listing for vault.kdbx must return
+    // only vault.kdbx's snapshots — never bleed across.
+    let dir = tempdir().expect("tempdir");
+    let vault_a = dir.path().join("vault.kdbx");
+    let vault_b = dir.path().join("other.kdbx");
+    std::fs::write(&vault_a, b"a").expect("write a");
+    std::fs::write(&vault_b, b"b").expect("write b");
+    let info_a = snapshot(&vault_a, &enabled())
+        .expect("snap a")
+        .expect("created a");
+    let info_b = snapshot(&vault_b, &enabled())
+        .expect("snap b")
+        .expect("created b");
+
+    let listed = list_for(&vault_a, &enabled()).expect("list a");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].path, info_a.path);
+
+    let listed_b = list_for(&vault_b, &enabled()).expect("list b");
+    assert_eq!(listed_b.len(), 1);
+    assert_eq!(listed_b[0].path, info_b.path);
+}
+
+#[test]
+fn list_for_returns_empty_when_backup_dir_missing() {
+    // First-open scenario: nothing has ever been saved, the backup dir
+    // does not exist. Listing must return an empty Vec, not error.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"data").expect("write source");
+
+    let listed = list_for(&vault_path, &enabled()).expect("list ok");
+    assert!(listed.is_empty(), "missing backup dir lists empty");
+}
+
+#[test]
+fn list_for_returns_existing_auto_snapshot() {
+    // Tracer bullet: after a single save-side snapshot, `list_for` must
+    // surface that snapshot — same path, classified as auto.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"pre-image bytes").expect("write source");
+
+    let info = snapshot(&vault_path, &enabled())
+        .expect("snapshot ok")
+        .expect("snapshot created");
+
+    let listed = list_for(&vault_path, &enabled()).expect("list ok");
+    assert_eq!(listed.len(), 1, "expected exactly one listed backup");
+    let entry = &listed[0];
+    assert_eq!(entry.path, info.path);
+    assert_eq!(entry.kind, BackupKind::Auto);
+    assert_eq!(entry.size_bytes, b"pre-image bytes".len() as u64);
+    // Timestamp is ISO-8601 with the same UTC stamp encoded in the filename.
+    assert!(
+        entry.timestamp.starts_with("20") && entry.timestamp.ends_with('Z'),
+        "timestamp should be ISO-8601 Zulu, got {:?}",
+        entry.timestamp
+    );
 }

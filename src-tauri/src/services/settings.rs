@@ -113,6 +113,16 @@ impl SettingsService {
         path: &str,
         keyfile_path: Option<&str>,
     ) -> Result<(), AppError> {
+        // Reject snapshot paths so `Open Recent…` never lists a backup. A
+        // user who unlocked a snapshot directly would have their next save
+        // overwrite the backup itself — corrupting the very pre-image the
+        // backup module exists to preserve.
+        if Self::is_snapshot_path(path) {
+            return Err(AppError::InvalidInput(format!(
+                "refusing to add backup snapshot path to recent databases: {path}"
+            )));
+        }
+
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
 
         // Remove existing entry with same path
@@ -153,6 +163,29 @@ impl SettingsService {
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.recent_databases.clear();
         self.save(&settings)
+    }
+
+    /// Detects whether a path's filename matches the auto- or manual-
+    /// snapshot pattern owned by the backup module. Used to keep snapshot
+    /// files out of `recent_databases` — opening one as a regular vault
+    /// would clobber the backup on the next save.
+    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    fn is_snapshot_path(path: &str) -> bool {
+        let Some(filename) = std::path::Path::new(path)
+            .file_name()
+            .and_then(|n| n.to_str())
+        else {
+            return false;
+        };
+        // Auto-snapshot: parse_backup_filename succeeds only on the canonical
+        // pattern.
+        if crate::services::kdbx::backups::filename::parse_backup_filename(filename).is_some() {
+            return true;
+        }
+        // Manual-snapshot reserves the `.backup.manual.` infix and ends with
+        // `.kdbx`. The auto-parser rejects these (the timestamp slot would
+        // be `manual.<ts>`), so check them separately.
+        filename.contains(".backup.manual.") && filename.ends_with(".kdbx")
     }
 
     /// Rejects out-of-range values on the App Preferences boundary so a

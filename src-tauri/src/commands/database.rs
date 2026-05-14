@@ -5,7 +5,7 @@ use crate::dto::database::{
 };
 use crate::dto::error::AppError;
 use crate::services::auto_lock::AutoLockService;
-use crate::services::kdbx::backups::BackupError;
+use crate::services::kdbx::backups::{BackupError, BackupListEntry};
 use crate::services::kdbx::KdbxService;
 use serde::Serialize;
 use std::sync::Arc;
@@ -21,13 +21,33 @@ struct BackupWarningPayload {
     reason: String,
 }
 
+/// Payload shared by `backup-created` and `backup-deleted` events. Carries
+/// the snapshot path so the Settings → Backups list can refresh live without
+/// re-fetching state the backend has already produced.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackupEventPayload {
+    path: String,
+}
+
 /// Invokes the open-side backup hook and converts a `BackupFailed` into a
 /// non-blocking `backup-warning` event. Never returns an error — the unlock
 /// has already succeeded by the time we reach this point and a snapshot
 /// problem must not bubble up to the caller.
+///
+/// On success, emits `backup-created` so the Settings → Backups list can
+/// refresh without polling.
 fn emit_open_backup_hook<R: Runtime>(app: &AppHandle<R>, state: &KdbxService, db_id: &str) {
     match state.snapshot_after_open(db_id) {
-        Ok(_) => {}
+        Ok(Some(info)) => {
+            let _ = app.emit(
+                "backup-created",
+                BackupEventPayload {
+                    path: info.path.to_string_lossy().into_owned(),
+                },
+            );
+        }
+        Ok(None) => {}
         Err(BackupError::BackupFailed { path, source }) => {
             let _ = app.emit(
                 "backup-warning",
@@ -91,12 +111,25 @@ pub async fn create_database(
 
 /// Saves a specific open database.
 /// The `db_id` is the path to the database file.
+///
+/// Emits `backup-created` when the save took a pre-image snapshot. The
+/// frontend Backups list subscribes to that event and refreshes live.
 #[tauri::command]
-pub async fn save_database(
+pub async fn save_database<R: Runtime>(
     db_id: String,
+    app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<(), AppError> {
-    state.save(&db_id)
+    let snapshot_info = state.save(&db_id)?;
+    if let Some(info) = snapshot_info {
+        let _ = app.emit(
+            "backup-created",
+            BackupEventPayload {
+                path: info.path.to_string_lossy().into_owned(),
+            },
+        );
+    }
+    Ok(())
 }
 
 /// Opens a database with password and keyfile.
@@ -199,6 +232,35 @@ pub async fn get_custom_icons(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<std::collections::HashMap<String, CustomIconData>, AppError> {
     state.get_custom_icons(&db_id)
+}
+
+/// Lists snapshot backups for a vault on disk, newest-first.
+///
+/// Returns an empty list when the vault has never been backed up (the backup
+/// directory does not yet exist). The frontend gates this on having a vault
+/// open and falls back to an empty state when none is.
+#[tauri::command]
+pub async fn list_backups(
+    database_path: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<Vec<BackupListEntry>, AppError> {
+    state.list_backups(&database_path)
+}
+
+/// Deletes a backup snapshot from disk after verifying it belongs to an
+/// open vault's backup directory.
+///
+/// Emits a `backup-deleted` Tauri event on success carrying the deleted
+/// path so the Backups list refreshes without a polling cycle.
+#[tauri::command]
+pub async fn delete_backup<R: Runtime>(
+    backup_path: String,
+    app: AppHandle<R>,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.delete_backup(&backup_path)?;
+    let _ = app.emit("backup-deleted", BackupEventPayload { path: backup_path });
+    Ok(())
 }
 
 /// Lists all currently open databases.
