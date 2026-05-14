@@ -866,6 +866,53 @@ fn snapshot_on_open_skips_when_on_open_flag_is_false() {
 }
 
 #[test]
+fn snapshot_on_open_streaming_compare_handles_payload_larger_than_buffer() {
+    // KDBX vaults with attachments routinely run into the MB range — well
+    // past `content_matches`'s 64 KiB read buffer. The streaming compare
+    // must iterate correctly across multiple chunks: this exercises both
+    // the "all identical" and "differs only after several chunks" paths.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+
+    let mut v1 = vec![0u8; 256 * 1024];
+    for (i, b) in v1.iter_mut().enumerate() {
+        *b = u8::try_from(i % 251).unwrap_or(0);
+    }
+    std::fs::write(&vault_path, &v1).expect("write v1");
+
+    snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("first ok")
+        .expect("first created");
+
+    // Same bytes — dedup must hold across multi-chunk streaming.
+    let dedup = snapshot_on_open(&vault_path, &on_open_enabled()).expect("dedup ok");
+    assert!(dedup.is_none(), "identical multi-chunk content must dedup");
+
+    // Flip a byte deep inside the file (past the first buffer) while
+    // keeping size identical. Restore source mtime so size+mtime would
+    // falsely match — only a byte-level compare can catch this.
+    let original_mtime = std::fs::metadata(&vault_path)
+        .expect("meta")
+        .modified()
+        .expect("mtime");
+    let mut v2 = v1.clone();
+    v2[200 * 1024] = v2[200 * 1024].wrapping_add(1);
+    std::fs::write(&vault_path, &v2).expect("write v2");
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&vault_path)
+        .expect("open")
+        .set_modified(original_mtime)
+        .expect("restore mtime");
+
+    let after_change = snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("after ok")
+        .expect("changed multi-chunk content must produce a snapshot");
+    let bytes = std::fs::read(&after_change.path).expect("read");
+    assert_eq!(bytes, v2);
+}
+
+#[test]
 fn snapshot_on_open_takes_snapshot_when_content_changes_with_same_size_and_mtime() {
     // KDBX writes encrypted blocks at fixed sizes; an external/synced save
     // that rewrites the encrypted payload can leave the file length and

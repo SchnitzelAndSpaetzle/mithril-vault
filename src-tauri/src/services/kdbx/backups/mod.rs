@@ -215,20 +215,43 @@ fn latest_snapshot_for(dir: &Path, vault_filename: &str) -> Option<PathBuf> {
 /// preserve mtime can land identical (len, mtime) on actually-changed bytes.
 /// A direct compare sidesteps both failure modes.
 ///
-/// Cost: one extra file read for the snapshot during dedup. KDBX vaults are
-/// small (typically <10 MB) and the source bytes are already in the OS page
-/// cache from the just-completed unlock, so this is invisible behind the KDF
-/// cost on the open path. Both files contain the encrypted on-disk bytes —
-/// nothing sensitive is newly exposed in memory.
+/// Comparison is streamed through two `BufReader`s so memory stays bounded
+/// regardless of vault size — KDBX databases with attachments/history can
+/// be tens of MB, and we run on the open path right after KDF; allocating
+/// two full file copies just to decide whether to skip a backup would cause
+/// a needless spike. Both files contain encrypted on-disk bytes, so the
+/// short-lived buffers don't introduce new sensitive-data exposure.
 fn content_matches(snapshot: &Path, source: &Path) -> io::Result<bool> {
+    use io::BufRead;
+    const READ_CAPACITY: usize = 64 * 1024;
+
     let snap_meta = fs::metadata(snapshot)?;
     let src_meta = fs::metadata(source)?;
     if snap_meta.len() != src_meta.len() {
         return Ok(false);
     }
-    let snap_bytes = fs::read(snapshot)?;
-    let src_bytes = fs::read(source)?;
-    Ok(snap_bytes == src_bytes)
+
+    let mut snap = io::BufReader::with_capacity(READ_CAPACITY, fs::File::open(snapshot)?);
+    let mut src = io::BufReader::with_capacity(READ_CAPACITY, fs::File::open(source)?);
+    loop {
+        let snap_buf = snap.fill_buf()?;
+        let src_buf = src.fill_buf()?;
+        if snap_buf.is_empty() && src_buf.is_empty() {
+            return Ok(true);
+        }
+        let chunk = snap_buf.len().min(src_buf.len());
+        // Defensive: lengths matched in the size check above, so reaching
+        // EOF on only one side means the file is being truncated under us.
+        // Bail out as "no match" rather than reading garbage.
+        if chunk == 0 {
+            return Ok(false);
+        }
+        if snap_buf[..chunk] != src_buf[..chunk] {
+            return Ok(false);
+        }
+        snap.consume(chunk);
+        src.consume(chunk);
+    }
 }
 
 /// Stamps `snapshot_path`'s mtime to match `source`'s mtime so that browsing
