@@ -232,9 +232,12 @@ fn additional_group_and_database_commands_fail_when_not_open() {
             .expect_err("expected database not found");
     assert!(matches!(close_err, AppError::DatabaseNotFound(_)));
 
-    let save_err =
-        tauri::async_runtime::block_on(save_database("nonexistent.kdbx".to_string(), app.state()))
-            .expect_err("expected database not found");
+    let save_err = tauri::async_runtime::block_on(save_database(
+        "nonexistent.kdbx".to_string(),
+        app.handle().clone(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
     assert!(matches!(save_err, AppError::DatabaseNotFound(_)));
 
     let config_err = tauri::async_runtime::block_on(get_database_config(

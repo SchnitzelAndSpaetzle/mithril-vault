@@ -113,6 +113,16 @@ impl SettingsService {
         path: &str,
         keyfile_path: Option<&str>,
     ) -> Result<(), AppError> {
+        // Reject snapshot paths so `Open Recent…` never lists a backup. A
+        // user who unlocked a snapshot directly would have their next save
+        // overwrite the backup itself — corrupting the very pre-image the
+        // backup module exists to preserve.
+        if Self::is_snapshot_path(path) {
+            return Err(AppError::InvalidInput(format!(
+                "refusing to add backup snapshot path to recent databases: {path}"
+            )));
+        }
+
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
 
         // Remove existing entry with same path
@@ -153,6 +163,30 @@ impl SettingsService {
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.recent_databases.clear();
         self.save(&settings)
+    }
+
+    /// Detects whether a path's filename matches the auto- or manual-
+    /// snapshot pattern owned by the backup module. Used to keep snapshot
+    /// files out of `recent_databases` — opening one as a regular vault
+    /// would clobber the backup on the next save.
+    ///
+    /// Both arms parse the canonical timestamped pattern via the backup
+    /// module's filename parsers so a legitimate vault whose basename
+    /// happens to contain `.backup.manual.` (e.g. `team.backup.manual.notes.kdbx`)
+    /// is NOT incorrectly rejected. Substring matching here would lose
+    /// `Open Recent…` history for valid files.
+    fn is_snapshot_path(path: &str) -> bool {
+        use crate::services::kdbx::backups::filename::{
+            parse_backup_filename, parse_manual_backup_filename,
+        };
+        let Some(filename) = std::path::Path::new(path)
+            .file_name()
+            .and_then(|n| n.to_str())
+        else {
+            return false;
+        };
+        parse_backup_filename(filename).is_some()
+            || parse_manual_backup_filename(filename).is_some()
     }
 
     /// Rejects out-of-range values on the App Preferences boundary so a

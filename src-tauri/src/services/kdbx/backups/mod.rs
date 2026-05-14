@@ -11,6 +11,7 @@ pub(crate) mod rotation;
 use crate::commands::settings::BackupSettings;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -26,6 +27,34 @@ pub const BACKUP_SUBDIR: &str = ".kdbx-backups";
 #[derive(Debug, Clone)]
 pub struct BackupInfo {
     pub path: PathBuf,
+}
+
+/// Snapshot classification, derived from the filename pattern.
+///
+/// `Auto` covers snapshots created by the save-side and open-side hooks.
+/// `Manual` is reserved for the future manual-backup slice (parent #61); the
+/// listing surfaces it now so the UI doesn't need to change shape later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BackupKind {
+    Auto,
+    Manual,
+}
+
+/// Listing row for the Settings → Backups table.
+///
+/// Built by walking the resolved backup directory for a single Vault and
+/// parsing each file's name. The timestamp is the one encoded in the
+/// filename (not the file mtime — mtime is preserved by snapshot writes and
+/// would order files arbitrarily after rotations).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupListEntry {
+    pub path: PathBuf,
+    /// ISO-8601 UTC timestamp parsed from the filename (e.g. `2026-05-12T14:30:45.123Z`).
+    pub timestamp: String,
+    pub size_bytes: u64,
+    pub kind: BackupKind,
 }
 
 /// Failure modes for snapshot creation.
@@ -187,6 +216,92 @@ pub fn snapshot_on_open(
     Ok(info)
 }
 
+/// Enumerates every snapshot belonging to `source` inside the resolved
+/// backup directory. The listing covers both auto- and manual-snapshot
+/// naming patterns; foreign-Vault snapshots and unrelated files are
+/// skipped.
+///
+/// Returns `Ok(vec![])` when the backup directory does not yet exist (no
+/// snapshot has ever been taken for this Vault).
+pub fn list_for(
+    source: &Path,
+    settings: &BackupSettings,
+) -> Result<Vec<BackupListEntry>, BackupError> {
+    let backup_dir = resolve_backup_dir(source, settings)?;
+    // Apply the same symlink rejection the snapshot writer uses — a symlink
+    // at the backup dir would otherwise let `read_dir` enumerate an arbitrary
+    // target directory and surface those files as this Vault's backups in
+    // the Settings UI.
+    reject_symlinked_backup_dir(&backup_dir).map_err(|e| BackupError::BackupFailed {
+        path: backup_dir.clone(),
+        source: e,
+    })?;
+    let vault_filename =
+        source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| BackupError::BackupFailed {
+                path: source.to_path_buf(),
+                source: io::Error::new(io::ErrorKind::InvalidInput, "source has no filename"),
+            })?;
+
+    let read_dir = match fs::read_dir(&backup_dir) {
+        Ok(rd) => rd,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(BackupError::BackupFailed {
+                path: backup_dir,
+                source: e,
+            })
+        }
+    };
+
+    let mut out: Vec<BackupListEntry> = Vec::new();
+    for entry in read_dir.filter_map(Result::ok) {
+        if !entry.file_type().is_ok_and(|t| t.is_file()) {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        let Some((kind, ts)) = classify_snapshot_name(&name, vault_filename) else {
+            continue;
+        };
+        let size_bytes = entry.metadata().map_or(0, |m| m.len());
+        out.push(BackupListEntry {
+            path: entry.path(),
+            timestamp: ts.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            size_bytes,
+            kind,
+        });
+    }
+    out.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    Ok(out)
+}
+
+/// Parses a snapshot filename into `(kind, timestamp)` for one specific
+/// Vault. Returns `None` for foreign-Vault snapshots and non-snapshot files.
+///
+/// Manual snapshots use the reserved `.backup.manual.` infix; auto snapshots
+/// use plain `.backup.`. The manual check runs first because a manual name
+/// also matches the auto parser if we strip the `manual.` segment off.
+fn classify_snapshot_name(
+    name: &str,
+    vault_filename: &str,
+) -> Option<(BackupKind, chrono::DateTime<Utc>)> {
+    let manual_prefix = format!("{vault_filename}.backup.manual.");
+    if let Some(rest) = name.strip_prefix(&manual_prefix) {
+        let ts_str = rest.strip_suffix(".kdbx")?;
+        let parsed = chrono::NaiveDateTime::parse_from_str(ts_str, "%Y%m%dT%H%M%S%.3fZ").ok()?;
+        return Some((
+            BackupKind::Manual,
+            chrono::TimeZone::from_utc_datetime(&Utc, &parsed),
+        ));
+    }
+    let (parsed_vault, ts) = filename::parse_backup_filename(name)?;
+    (parsed_vault == vault_filename).then_some((BackupKind::Auto, ts))
+}
+
 /// Finds the most recent auto-snapshot for `vault_filename` inside `dir`,
 /// using the timestamp parsed out of the filename. Returns `None` when the
 /// directory does not exist or holds no snapshots for this Vault.
@@ -267,6 +382,16 @@ fn stamp_source_mtime(snapshot_path: &Path, source: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Public façade over [`resolve_backup_dir`] for callers outside this
+/// module — used by the `delete_backup` command to compute the safety
+/// boundary for a given open vault.
+pub fn resolved_backup_dir(
+    source: &Path,
+    settings: &BackupSettings,
+) -> Result<PathBuf, BackupError> {
+    resolve_backup_dir(source, settings)
+}
+
 /// Resolves the directory that snapshots should be written to. When
 /// `settings.directory` is set, snapshots are isolated per source vault
 /// inside it (`<override>/<basename>-<hash>/`) so two vaults sharing a
@@ -316,6 +441,15 @@ fn vault_isolation_segment(source: &Path) -> Result<String, BackupError> {
         let _ = write!(&mut hash_hex, "{byte:02x}");
     }
     Ok(format!("{basename}-{hash_hex}"))
+}
+
+/// Public façade over [`reject_symlinked_backup_dir`] for callers outside
+/// this module. Used by the delete-backup command to refuse path-safety
+/// resolution against a symlinked backup directory — without it, a planted
+/// symlink could shift the allowed delete boundary to the symlink target
+/// and let an attacker remove files outside the real backup directory.
+pub fn assert_backup_dir_not_symlinked(dir: &Path) -> io::Result<()> {
+    reject_symlinked_backup_dir(dir)
 }
 
 /// Rejects a symlink at the backup path so a stale or hostile link cannot
