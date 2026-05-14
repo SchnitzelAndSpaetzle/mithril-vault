@@ -144,11 +144,56 @@ pub struct AdvancedSettings {
 #[serde(default)]
 pub struct BackupSettings {
     pub enabled: bool,
+    #[serde(default = "default_max_versions")]
+    pub max_versions: u32,
+}
+
+pub(crate) const DEFAULT_MAX_VERSIONS: u32 = 10;
+
+fn default_max_versions() -> u32 {
+    DEFAULT_MAX_VERSIONS
 }
 
 impl Default for BackupSettings {
     fn default() -> Self {
-        Self { enabled: true }
+        Self {
+            enabled: true,
+            max_versions: DEFAULT_MAX_VERSIONS,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod backup_settings_tests {
+    use super::BackupSettings;
+
+    #[test]
+    fn default_max_versions_is_ten() {
+        let s = BackupSettings::default();
+        assert_eq!(s.max_versions, 10);
+    }
+
+    #[test]
+    fn absent_max_versions_deserializes_to_ten_not_zero() {
+        // Existing settings.json files written before this slice have no
+        // maxVersions field. Without a field-level serde default they would
+        // deserialize as 0, which would break rotation. Cover both `{}`
+        // (whole struct missing) and `{"enabled": ..}` (field missing).
+        let from_empty: BackupSettings = serde_json::from_str("{}").expect("parse {}");
+        assert_eq!(from_empty.max_versions, 10);
+
+        let from_partial: BackupSettings =
+            serde_json::from_str(r#"{"enabled": true}"#).expect("parse partial");
+        assert_eq!(from_partial.max_versions, 10);
+    }
+
+    #[test]
+    fn explicit_max_versions_round_trips() {
+        let parsed: BackupSettings =
+            serde_json::from_str(r#"{"enabled": true, "maxVersions": 25}"#)
+                .expect("parse explicit");
+        assert_eq!(parsed.max_versions, 25);
     }
 }
 

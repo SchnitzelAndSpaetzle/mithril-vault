@@ -71,6 +71,7 @@ impl SettingsService {
     }
 
     pub fn update_app_preferences(&self, new_preferences: &AppPreferences) -> Result<(), AppError> {
+        Self::validate_preferences(new_preferences)?;
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.preferences = new_preferences.clone();
         // data_location is derived at read time; don't trust the value the
@@ -143,6 +144,20 @@ impl SettingsService {
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.recent_databases.clear();
         self.save(&settings)
+    }
+
+    /// Rejects out-of-range values on the App Preferences boundary so a
+    /// malformed IPC payload (or a future settings.json with corrupt values)
+    /// cannot push the backup module into invariant violations.
+    fn validate_preferences(prefs: &AppPreferences) -> Result<(), AppError> {
+        const MAX_VERSIONS_RANGE: std::ops::RangeInclusive<u32> = 1..=500;
+        let v = prefs.backups.max_versions;
+        if !MAX_VERSIONS_RANGE.contains(&v) {
+            return Err(AppError::InvalidInput(format!(
+                "backups.maxVersions must be in 1..=500, got {v}"
+            )));
+        }
+        Ok(())
     }
 
     fn data_location_display(&self) -> String {

@@ -6,6 +6,7 @@
 //! write itself. See parent issue #61 for the full design and #190 for this slice.
 
 pub mod filename;
+pub(crate) mod rotation;
 
 use crate::commands::settings::BackupSettings;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
@@ -107,6 +108,16 @@ pub fn snapshot(
     .map_err(|e| BackupError::BackupFailed {
         path: backup_path.clone(),
         source: io::Error::other(e.to_string()),
+    })?;
+
+    // Trim only after a successful new-snapshot write so a failed snapshot
+    // never deletes existing backups. Rotation is keyed on the source Vault's
+    // basename: two Vaults sharing a backup directory rotate independently.
+    rotation::rotate(&backup_dir, vault_filename, settings.max_versions).map_err(|e| {
+        BackupError::BackupFailed {
+            path: backup_dir.clone(),
+            source: e,
+        }
     })?;
 
     Ok(Some(BackupInfo { path: backup_path }))

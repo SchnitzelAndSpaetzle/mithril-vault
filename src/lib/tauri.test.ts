@@ -169,6 +169,7 @@ describe("tauri wrappers validation", () => {
       },
       backups: {
         enabled: true,
+        maxVersions: 10,
       },
     } as const;
 
