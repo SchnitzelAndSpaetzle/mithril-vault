@@ -64,11 +64,7 @@ pub fn snapshot(
         return Ok(None);
     }
 
-    let parent = source.parent().ok_or_else(|| BackupError::BackupFailed {
-        path: source.to_path_buf(),
-        source: io::Error::new(io::ErrorKind::InvalidInput, "source has no parent"),
-    })?;
-    let backup_dir = parent.join(BACKUP_SUBDIR);
+    let backup_dir = resolve_backup_dir(source, settings)?;
     ensure_backup_dir(&backup_dir).map_err(|e| BackupError::BackupFailed {
         path: backup_dir.clone(),
         source: e,
@@ -121,6 +117,23 @@ pub fn snapshot(
     })?;
 
     Ok(Some(BackupInfo { path: backup_path }))
+}
+
+/// Resolves the directory that snapshots should be written to. When
+/// `settings.directory` is set, snapshots go there directly (so the user
+/// can target an encrypted external drive). Otherwise the per-Vault
+/// `.kdbx-backups/` sibling subdir is used.
+fn resolve_backup_dir(source: &Path, settings: &BackupSettings) -> Result<PathBuf, BackupError> {
+    if let Some(override_path) = settings.directory.as_deref() {
+        if !override_path.is_empty() {
+            return Ok(PathBuf::from(override_path));
+        }
+    }
+    let parent = source.parent().ok_or_else(|| BackupError::BackupFailed {
+        path: source.to_path_buf(),
+        source: io::Error::new(io::ErrorKind::InvalidInput, "source has no parent"),
+    })?;
+    Ok(parent.join(BACKUP_SUBDIR))
 }
 
 fn ensure_backup_dir(dir: &Path) -> io::Result<()> {
