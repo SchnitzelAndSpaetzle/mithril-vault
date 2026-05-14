@@ -157,6 +157,15 @@ pub fn snapshot_on_open(
     })?;
     if source_exists {
         let backup_dir = resolve_backup_dir(source, settings)?;
+        // Run the symlink guard up front so the dedup short-circuit cannot
+        // silently bypass it. Without this check, an attacker who can plant
+        // a symlink at the backup-dir path AND a matching-metadata file at
+        // the link's target would suppress every open-side snapshot and
+        // every `backup-warning` event for as long as the symlink survives.
+        reject_symlinked_backup_dir(&backup_dir).map_err(|e| BackupError::BackupFailed {
+            path: backup_dir.clone(),
+            source: e,
+        })?;
         if let Some(vault_filename) = source.file_name().and_then(|n| n.to_str()) {
             if let Some(latest) = latest_snapshot_for(&backup_dir, vault_filename) {
                 if metadata_matches(&latest, source) {
@@ -269,10 +278,12 @@ fn vault_isolation_segment(source: &Path) -> Result<String, BackupError> {
     Ok(format!("{basename}-{hash_hex}"))
 }
 
-fn ensure_backup_dir(dir: &Path) -> io::Result<()> {
-    // Reject a symlink at the backup path so a stale or hostile link cannot
-    // redirect snapshot bytes outside the vault folder. `symlink_metadata`
-    // does not follow links.
+/// Rejects a symlink at the backup path so a stale or hostile link cannot
+/// redirect snapshot bytes outside the vault folder. `symlink_metadata` does
+/// not follow links. Shared between the save-side `snapshot` (via
+/// `ensure_backup_dir`) and the open-side `snapshot_on_open` so the dedup
+/// short-circuit cannot silently bypass the guard.
+fn reject_symlinked_backup_dir(dir: &Path) -> io::Result<()> {
     if let Ok(meta) = fs::symlink_metadata(dir) {
         if meta.file_type().is_symlink() {
             return Err(io::Error::new(
@@ -281,6 +292,11 @@ fn ensure_backup_dir(dir: &Path) -> io::Result<()> {
             ));
         }
     }
+    Ok(())
+}
+
+fn ensure_backup_dir(dir: &Path) -> io::Result<()> {
+    reject_symlinked_backup_dir(dir)?;
     if !dir.exists() {
         fs::create_dir_all(dir)?;
     }

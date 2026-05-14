@@ -77,6 +77,15 @@ impl KdbxService {
         Ok(databases.contains_key(&normalized))
     }
 
+    /// Reports whether an open database is currently locked. Returns
+    /// `Ok(None)` when the database is not open at all — distinct from
+    /// "open and unlocked" so callers can tell apart the two states.
+    pub fn is_database_locked(&self, path: &str) -> Result<Option<bool>, AppError> {
+        let normalized = Self::normalize_path(path);
+        let databases = self.lock_databases()?;
+        Ok(databases.get(&normalized).map(OpenDatabase::is_locked))
+    }
+
     /// Returns a list of all currently open databases.
     pub fn list_open_databases(&self) -> Result<Vec<DatabaseInfo>, AppError> {
         let databases = self.lock_databases()?;

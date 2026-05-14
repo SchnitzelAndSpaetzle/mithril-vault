@@ -865,6 +865,58 @@ fn snapshot_on_open_skips_when_on_open_flag_is_false() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn snapshot_on_open_rejects_symlinked_backup_dir_even_when_dedup_would_match() {
+    // Defence in depth: the dedup short-circuit must not bypass the symlink
+    // rejection that protects all snapshot writes. An attacker who can plant
+    // a symlink at .kdbx-backups/ and a matching-metadata file inside its
+    // target could otherwise suppress the open-side warning entirely.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"vault data").expect("write source");
+
+    // Create a real directory elsewhere and seed it with a file that mimics
+    // a valid snapshot of this Vault, with the same size as the source.
+    let elsewhere = tempdir().expect("tempdir 2");
+    let masquerade = elsewhere
+        .path()
+        .join("vault.kdbx.backup.20260101T000000.000Z.kdbx");
+    std::fs::write(&masquerade, b"vault data").expect("write masquerade");
+
+    // Then plant a symlink at the per-Vault sibling subdir so the open-side
+    // dedup would, if it ran first, see the masquerading file as the latest
+    // snapshot. Stamp the masquerade's mtime to match the source so dedup
+    // would otherwise return Ok(None).
+    let backup_link = dir.path().join(BACKUP_SUBDIR);
+    std::os::unix::fs::symlink(elsewhere.path(), &backup_link).expect("symlink");
+    let source_mtime = std::fs::metadata(&vault_path)
+        .expect("source meta")
+        .modified()
+        .expect("mtime");
+    let masquerade_file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(&masquerade)
+        .expect("open masquerade");
+    masquerade_file
+        .set_modified(source_mtime)
+        .expect("stamp masquerade");
+
+    let result = snapshot_on_open(&vault_path, &on_open_enabled());
+    assert!(
+        matches!(result, Err(BackupError::BackupFailed { .. })),
+        "symlinked backup dir must abort the on-open hook, got {result:?}"
+    );
+
+    // Confirm no bytes were written into the symlink target.
+    let extra: Vec<_> = std::fs::read_dir(elsewhere.path())
+        .expect("read elsewhere")
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name() != masquerade.file_name().unwrap_or_default())
+        .collect();
+    assert!(extra.is_empty(), "no new files via the symlink target");
+}
+
 #[test]
 fn snapshot_handles_same_millisecond_collision() {
     let dir = tempdir().expect("tempdir");

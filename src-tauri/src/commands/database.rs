@@ -143,8 +143,17 @@ pub async fn unlock_database<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseInfo, AppError> {
+    // Snapshot the locked state BEFORE calling unlock so we can tell apart
+    // an actual locked → unlocked transition from the no-op case where the
+    // caller invoked unlock on an already-unlocked DB. Without this guard
+    // the open-side backup hook would re-fire on every redundant unlock —
+    // wasted work in the happy path, and a duplicated `backup-warning`
+    // event whenever the backup dir is broken.
+    let was_locked = state.is_database_locked(&db_id)?.unwrap_or(true);
     let info = state.unlock(&db_id, password.as_deref())?;
-    emit_open_backup_hook(&app, &state, &db_id);
+    if was_locked {
+        emit_open_backup_hook(&app, &state, &db_id);
+    }
     Ok(info)
 }
 

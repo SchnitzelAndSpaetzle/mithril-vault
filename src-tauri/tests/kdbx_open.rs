@@ -135,6 +135,60 @@ fn failed_password_open_never_produces_a_snapshot() {
 
 #[cfg(unix)]
 #[test]
+fn snapshot_after_open_uses_canonical_stored_path_not_alias() {
+    // `unlock` lets you address an open DB by any path that normalizes to
+    // the same canonical form (e.g. through a symlink). The on-open backup
+    // hook must snapshot against the canonical path the service actually
+    // stores — otherwise the snapshot lands next to the alias and dedup
+    // looks in the wrong directory on the next unlock.
+    let real_dir = tempdir().expect("tempdir real");
+    let alias_dir = tempdir().expect("tempdir alias");
+    let real_path = real_dir.path().join("vault.kdbx");
+    let real_path_str = real_path.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    service
+        .create(&real_path_str, "test123", "Canonical Path")
+        .expect("create db");
+    service.close(&real_path_str).expect("close db");
+
+    // Plant a symlink in another directory pointing at the real vault.
+    let alias_path = alias_dir.path().join("link-to-vault.kdbx");
+    std::os::unix::fs::symlink(&real_path, &alias_path).expect("symlink");
+
+    service
+        .set_backup_settings(BackupSettings {
+            enabled: true,
+            on_open: true,
+            ..BackupSettings::default()
+        })
+        .expect("set backup settings");
+
+    // Open by the canonical path so the service stores that path.
+    service
+        .open(&real_path_str, "test123")
+        .expect("open canonical");
+
+    // Drive the hook through the alias path. The snapshot must land next to
+    // the canonical path, not next to the alias.
+    let outcome = service
+        .snapshot_after_open(&alias_path.to_string_lossy())
+        .expect("snapshot via alias");
+    let info = outcome.expect("snapshot should be created");
+    assert!(
+        info.path.starts_with(real_dir.path()),
+        "snapshot must live next to canonical path, got {:?}",
+        info.path
+    );
+    let alias_backup_dir = alias_dir.path().join(BACKUP_SUBDIR);
+    assert!(
+        !alias_backup_dir.exists(),
+        "no backup dir should be created next to the alias"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn snapshot_after_open_fails_open_when_backup_dir_is_unwritable() {
     // Fail-open semantics from #193: a backup failure during the open path
     // must NOT prevent the user from using the unlocked Vault. The service
