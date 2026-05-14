@@ -35,14 +35,22 @@ impl SettingsService {
     fn load_or_default(path: &PathBuf) -> Result<AppSettings, AppError> {
         if path.exists() {
             let content = std::fs::read_to_string(path)?;
-            if let Ok(settings) = serde_json::from_str(&content) {
-                Ok(settings)
-            } else {
-                let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
-                let backup_name = format!("{SETTINGS_FILE}.bad-{timestamp}");
-                let backup_path = path.with_file_name(backup_name);
-                let _ = std::fs::rename(path, backup_path);
-                Ok(AppSettings::default())
+            let parsed: Result<AppSettings, _> = serde_json::from_str(&content);
+            // Treat out-of-range values the same as a malformed file: back up
+            // the bad copy and use defaults. Otherwise a hand-edited file
+            // could push `max_versions = 0` straight to rotation and erase
+            // every snapshot on the next save.
+            match parsed {
+                Ok(settings) if Self::validate_preferences(&settings.preferences).is_ok() => {
+                    Ok(settings)
+                }
+                _ => {
+                    let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
+                    let backup_name = format!("{SETTINGS_FILE}.bad-{timestamp}");
+                    let backup_path = path.with_file_name(backup_name);
+                    let _ = std::fs::rename(path, backup_path);
+                    Ok(AppSettings::default())
+                }
             }
         } else {
             Ok(AppSettings::default())
@@ -71,6 +79,7 @@ impl SettingsService {
     }
 
     pub fn update_app_preferences(&self, new_preferences: &AppPreferences) -> Result<(), AppError> {
+        Self::validate_preferences(new_preferences)?;
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.preferences = new_preferences.clone();
         // data_location is derived at read time; don't trust the value the
@@ -143,6 +152,20 @@ impl SettingsService {
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.recent_databases.clear();
         self.save(&settings)
+    }
+
+    /// Rejects out-of-range values on the App Preferences boundary so a
+    /// malformed IPC payload (or a future settings.json with corrupt values)
+    /// cannot push the backup module into invariant violations.
+    fn validate_preferences(prefs: &AppPreferences) -> Result<(), AppError> {
+        const MAX_VERSIONS_RANGE: std::ops::RangeInclusive<u32> = 1..=500;
+        let v = prefs.backups.max_versions;
+        if !MAX_VERSIONS_RANGE.contains(&v) {
+            return Err(AppError::InvalidInput(format!(
+                "backups.maxVersions must be in 1..=500, got {v}"
+            )));
+        }
+        Ok(())
     }
 
     fn data_location_display(&self) -> String {

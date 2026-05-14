@@ -16,11 +16,17 @@ use mithril_vault_lib::services::kdbx::backups::{snapshot, BACKUP_SUBDIR};
 use tempfile::tempdir;
 
 fn enabled() -> BackupSettings {
-    BackupSettings { enabled: true }
+    BackupSettings {
+        enabled: true,
+        ..BackupSettings::default()
+    }
 }
 
 fn disabled() -> BackupSettings {
-    BackupSettings { enabled: false }
+    BackupSettings {
+        enabled: false,
+        ..BackupSettings::default()
+    }
 }
 
 #[test]
@@ -241,6 +247,262 @@ fn snapshot_rejects_symlinked_backup_directory() {
     assert!(
         exfiltrated.is_empty(),
         "no bytes should have been written via the symlink"
+    );
+}
+
+#[test]
+fn rotation_caps_snapshots_at_max_versions() {
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let settings = BackupSettings {
+        enabled: true,
+        max_versions: 10,
+    };
+
+    // Twelve consecutive snapshots: each save mutates the source so the
+    // pre-image bytes differ and there's something distinct to capture.
+    for i in 0..12u32 {
+        std::fs::write(&vault_path, format!("v{i}").as_bytes()).expect("write source");
+        snapshot(&vault_path, &settings)
+            .expect("snapshot ok")
+            .expect("created");
+    }
+
+    let kept: Vec<_> = std::fs::read_dir(&backup_dir)
+        .expect("read backup dir")
+        .filter_map(Result::ok)
+        .filter(|e| e.path().is_file())
+        .collect();
+    assert_eq!(
+        kept.len(),
+        10,
+        "after 12 saves with max_versions=10, exactly 10 snapshots remain"
+    );
+}
+
+#[test]
+fn rotation_retains_newest_snapshots_not_oldest() {
+    // Build 5 snapshots with cap=3 and confirm the *newest* 3 survive.
+    // Without this we'd silently keep the oldest 3 and lose every recent
+    // pre-image, which is the opposite of useful.
+    use mithril_vault_lib::services::kdbx::backups::filename::parse_backup_filename;
+
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let settings = BackupSettings {
+        enabled: true,
+        max_versions: 3,
+    };
+
+    let mut all_timestamps = Vec::new();
+    for i in 0..5u32 {
+        std::fs::write(&vault_path, format!("v{i}").as_bytes()).expect("write source");
+        let info = snapshot(&vault_path, &settings)
+            .expect("snapshot ok")
+            .expect("created");
+        let name = info.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let (_, ts) = parse_backup_filename(name).expect("parse");
+        all_timestamps.push(ts);
+    }
+
+    let surviving_timestamps: Vec<_> = std::fs::read_dir(&backup_dir)
+        .expect("read dir")
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let n = e.file_name().to_string_lossy().to_string();
+            parse_backup_filename(&n).map(|(_, ts)| ts)
+        })
+        .collect();
+
+    let mut newest_three = all_timestamps.clone();
+    newest_three.sort();
+    let newest_three: Vec<_> = newest_three.into_iter().rev().take(3).collect();
+
+    for ts in &newest_three {
+        assert!(
+            surviving_timestamps.contains(ts),
+            "newest snapshot {ts:?} should have been retained"
+        );
+    }
+    assert_eq!(
+        surviving_timestamps.len(),
+        3,
+        "exactly cap=3 snapshots should remain"
+    );
+}
+
+#[test]
+fn rotation_keeps_two_vaults_in_same_directory_independent() {
+    // Two Vaults that happen to share a backup directory must rotate keyed
+    // on their own basename, never touching the other's snapshots.
+    let dir = tempdir().expect("tempdir");
+    let vault_a = dir.path().join("vault-a.kdbx");
+    let vault_b = dir.path().join("vault-b.kdbx");
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let settings = BackupSettings {
+        enabled: true,
+        max_versions: 2,
+    };
+
+    // 5 snapshots of vault A, 4 snapshots of vault B, interleaved so they
+    // share the same .kdbx-backups/ directory.
+    for i in 0..5u32 {
+        std::fs::write(&vault_a, format!("a{i}").as_bytes()).expect("write a");
+        snapshot(&vault_a, &settings)
+            .expect("snapshot a ok")
+            .expect("created a");
+        if i < 4 {
+            std::fs::write(&vault_b, format!("b{i}").as_bytes()).expect("write b");
+            snapshot(&vault_b, &settings)
+                .expect("snapshot b ok")
+                .expect("created b");
+        }
+    }
+
+    let files: Vec<String> = std::fs::read_dir(&backup_dir)
+        .expect("read dir")
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+
+    let a_count = files
+        .iter()
+        .filter(|n| n.starts_with("vault-a.kdbx.backup."))
+        .count();
+    let b_count = files
+        .iter()
+        .filter(|n| n.starts_with("vault-b.kdbx.backup."))
+        .count();
+
+    assert_eq!(
+        a_count, 2,
+        "vault-a should have cap=2 snapshots, got {a_count}"
+    );
+    assert_eq!(
+        b_count, 2,
+        "vault-b should have cap=2 snapshots, got {b_count}"
+    );
+}
+
+#[test]
+fn rotation_preserves_foreign_files_in_backup_dir() {
+    // The rotation glob must never touch files outside its pattern even
+    // when they happen to live alongside our snapshots.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let settings = BackupSettings {
+        enabled: true,
+        max_versions: 1,
+    };
+
+    // Seed one snapshot to force creation of .kdbx-backups/.
+    std::fs::write(&vault_path, b"seed").expect("write source");
+    snapshot(&vault_path, &settings)
+        .expect("seed snapshot ok")
+        .expect("created");
+
+    // Plant a foreign-vault snapshot and unrelated files now that the dir exists.
+    let foreign = backup_dir.join("other.kdbx.backup.20260101T000000.000Z.kdbx");
+    let manual = backup_dir.join("vault.kdbx.backup.manual.20260101T000000.000Z.kdbx");
+    let readme = backup_dir.join("README.txt");
+    std::fs::write(&foreign, b"foreign").expect("write foreign");
+    std::fs::write(&manual, b"manual").expect("write manual");
+    std::fs::write(&readme, b"readme").expect("write readme");
+
+    // Drive several rotations of our vault.
+    for i in 0..4u32 {
+        std::fs::write(&vault_path, format!("v{i}").as_bytes()).expect("write source");
+        snapshot(&vault_path, &settings)
+            .expect("snapshot ok")
+            .expect("created");
+    }
+
+    assert!(
+        foreign.exists(),
+        "foreign-vault snapshot must not be deleted"
+    );
+    assert!(manual.exists(), "manual-marker file must not be deleted");
+    assert!(readme.exists(), "unrelated file must not be deleted");
+
+    let our_snapshots = std::fs::read_dir(&backup_dir)
+        .expect("read dir")
+        .filter_map(Result::ok)
+        .filter(|e| {
+            let n = e.file_name().to_string_lossy().to_string();
+            n.starts_with("vault.kdbx.backup.") && !n.contains(".backup.manual.")
+        })
+        .count();
+    assert_eq!(
+        our_snapshots, 1,
+        "cap=1 on our auto-snapshots, got {our_snapshots}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn rotation_does_not_run_when_snapshot_fails() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Seed two pre-existing snapshots, then force the *next* snapshot to
+    // fail by making the backup dir read-only. The existing two must remain.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    let backup_dir = dir.path().join(BACKUP_SUBDIR);
+    let settings = BackupSettings {
+        enabled: true,
+        max_versions: 5,
+    };
+
+    for i in 0..2u32 {
+        std::fs::write(&vault_path, format!("seed-{i}").as_bytes()).expect("write source");
+        snapshot(&vault_path, &settings)
+            .expect("seed ok")
+            .expect("seed created");
+    }
+    let pre_count = std::fs::read_dir(&backup_dir)
+        .expect("read backup dir")
+        .filter_map(Result::ok)
+        .count();
+    assert_eq!(pre_count, 2);
+
+    // Lower max_versions so rotation *would* delete one if it ran. Force
+    // the snapshot write to fail by making the source vault unreadable.
+    // (Making the backup directory read-only here is futile: ensure_backup_dir
+    // re-hardens it to 0700 on every call, restoring write permission.)
+    let trim_settings = BackupSettings {
+        enabled: true,
+        max_versions: 1,
+    };
+    std::fs::write(&vault_path, b"will-fail").expect("write source");
+    let original_vault_perms = std::fs::metadata(&vault_path)
+        .expect("vault meta")
+        .permissions();
+    std::fs::set_permissions(&vault_path, std::fs::Permissions::from_mode(0o000))
+        .expect("set unreadable");
+
+    let result = snapshot(&vault_path, &trim_settings);
+
+    // Restore so tempdir cleanup works.
+    std::fs::set_permissions(&vault_path, original_vault_perms).expect("restore");
+
+    assert!(
+        result.is_err(),
+        "snapshot must fail when source vault cannot be read"
+    );
+    let our_snapshots = std::fs::read_dir(&backup_dir)
+        .expect("read backup dir post")
+        .filter_map(Result::ok)
+        .filter(|e| {
+            let n = e.file_name().to_string_lossy().to_string();
+            n.starts_with("vault.kdbx.backup.") && !n.contains(".backup.manual.")
+        })
+        .count();
+    assert_eq!(
+        our_snapshots, 2,
+        "failed snapshot must leave existing backups untouched, got {our_snapshots}"
     );
 }
 
