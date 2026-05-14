@@ -231,7 +231,7 @@ fn metadata_matches(a: &Path, b: &Path) -> bool {
             } else {
                 t_b.duration_since(t_a)
             };
-            delta.map(|d| d <= MTIME_TOLERANCE).unwrap_or(false)
+            delta.is_ok_and(|d| d <= MTIME_TOLERANCE)
         }
         _ => false,
     }
