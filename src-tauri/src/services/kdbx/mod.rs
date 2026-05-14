@@ -101,15 +101,52 @@ impl KdbxService {
     /// Returns `InvalidInput` when the path falls outside every open vault's
     /// backup dir.
     pub fn delete_backup(&self, backup_path: &str) -> Result<(), AppError> {
+        use crate::services::kdbx::backups::filename::{
+            parse_backup_filename, parse_manual_backup_filename,
+        };
+
         let settings = self.current_backup_settings()?;
         let target = Path::new(backup_path);
         let canonical_target =
             fs::canonicalize(target).map_err(|e| AppError::InvalidPath(e.to_string()))?;
 
+        // Parse the filename FIRST. Authorization checks must verify both
+        // location AND shape — otherwise the command becomes "delete any
+        // file in a backup directory", which the issue text explicitly
+        // does not authorize. Refuse anything that doesn't decode as a
+        // snapshot of *some* vault; later we'll match the encoded vault
+        // basename against the open vault we authorize under.
+        let target_filename = canonical_target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!(
+                    "backup path has no filename component: {backup_path}"
+                ))
+            })?;
+        let target_vault = parse_backup_filename(target_filename)
+            .or_else(|| parse_manual_backup_filename(target_filename))
+            .map(|(v, _)| v)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!(
+                    "path is not a backup snapshot filename: {backup_path}"
+                ))
+            })?;
+
         let databases = self.lock_databases()?;
         let mut authorized = false;
         for open_db in databases.values() {
             let source = Path::new(&open_db.path);
+            // The vault basename embedded in the snapshot filename must
+            // match the open vault's basename. Without this, an attacker
+            // who plants a snapshot-shaped file for a *different* vault
+            // inside our backup dir could trick us into deleting it.
+            let Some(open_basename) = source.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if open_basename != target_vault {
+                continue;
+            }
             let Ok(backup_dir) = backups::resolved_backup_dir(source, &settings) else {
                 continue;
             };
@@ -134,7 +171,7 @@ impl KdbxService {
 
         if !authorized {
             return Err(AppError::InvalidInput(format!(
-                "backup path is not inside any open vault's backup directory: {backup_path}"
+                "backup path is not an authorized snapshot for any open vault: {backup_path}"
             )));
         }
 
@@ -144,14 +181,25 @@ impl KdbxService {
 
     /// Enumerates snapshots that belong to `db_path`, sorted newest-first.
     ///
-    /// Does NOT require the path to be currently open — the read is a pure
-    /// directory walk against the resolved backup directory, with filename
-    /// filtering keyed on the vault's basename. The Settings UI calls this
-    /// for the currently-active Vault, but the boundary is path-based so the
-    /// command stays simple and predictable.
+    /// Requires `db_path` to map to a currently-open Vault. Exposed over IPC,
+    /// this check prevents callers from enumerating snapshot metadata
+    /// (filenames, timestamps, sizes) for arbitrary paths the user has not
+    /// opened — a metadata-disclosure surface even when the bytes are
+    /// encrypted.
     pub fn list_backups(&self, db_path: &str) -> Result<Vec<BackupListEntry>, AppError> {
+        // Resolve via the open-database map so an alias path (e.g. symlink
+        // to the canonical file) is accepted iff the canonical path is open.
+        // Matches `snapshot_after_open`'s resolution behavior.
+        let normalized = Self::normalize_path(db_path);
+        let stored_path = {
+            let databases = self.lock_databases()?;
+            databases
+                .get(&normalized)
+                .map(|open_db| open_db.path.clone())
+                .ok_or_else(|| AppError::DatabaseNotFound(db_path.to_string()))?
+        };
         let settings = self.current_backup_settings()?;
-        Ok(backups::list_for(Path::new(db_path), &settings)?)
+        Ok(backups::list_for(Path::new(&stored_path), &settings)?)
     }
 
     /// Returns a list of all currently open databases.

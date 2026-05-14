@@ -253,26 +253,26 @@ fn enabled_backup_settings() -> BackupSettings {
 
 #[test]
 fn list_backups_returns_snapshot_taken_for_open_vault() {
-    // Service-level contract: after a save-side snapshot, list_backups for the
-    // same path surfaces that snapshot — same path, with metadata.
+    // Service-level contract: with the vault open, list_backups surfaces a
+    // freshly-taken snapshot — same path, with metadata.
     let dir = tempdir().expect("tempdir");
     let vault_path = dir.path().join("vault.kdbx");
-    std::fs::write(&vault_path, b"pre-image bytes").expect("write source");
+    let db_path_str = vault_path.to_string_lossy().to_string();
 
     let service = KdbxService::new();
     service
         .set_backup_settings(enabled_backup_settings())
         .expect("set settings");
+    service
+        .create(&db_path_str, "pw", "List Backups Test Vault")
+        .expect("create vault");
     let info = snapshot(&vault_path, &enabled_backup_settings())
         .expect("snapshot ok")
         .expect("snapshot created");
 
-    let listed = service
-        .list_backups(&vault_path.to_string_lossy())
-        .expect("list ok");
+    let listed = service.list_backups(&db_path_str).expect("list ok");
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].path, info.path);
-    assert_eq!(listed[0].size_bytes, b"pre-image bytes".len() as u64);
 }
 
 // ============================================================================
@@ -455,4 +455,108 @@ fn delete_backup_rejects_paths_when_open_vaults_backup_dir_is_a_symlink() {
         victim.exists(),
         "the file inside the symlink target must remain on disk"
     );
+}
+
+#[test]
+fn list_backups_rejects_paths_without_an_open_vault() {
+    // The list_backups command is exposed over IPC. Accepting any path would
+    // let a caller enumerate snapshot metadata (filenames, timestamps, sizes)
+    // for vaults the user has not opened — a metadata-disclosure footgun
+    // even if the bytes are encrypted. Scope listing to currently-open
+    // vaults, matching delete_backup's authorization model.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"data").expect("write source");
+    // Seed a snapshot so the directory walk would otherwise succeed.
+    snapshot(&vault_path, &enabled_backup_settings())
+        .expect("snapshot ok")
+        .expect("created");
+
+    // No vault is open in this service instance.
+    let service = KdbxService::new();
+    service
+        .set_backup_settings(enabled_backup_settings())
+        .expect("set settings");
+
+    let result = service.list_backups(&vault_path.to_string_lossy());
+    assert!(
+        matches!(result, Err(AppError::DatabaseNotFound(_))),
+        "list_backups must reject paths that don't map to an open vault, got {result:?}"
+    );
+}
+
+#[test]
+fn delete_backup_rejects_non_snapshot_files_inside_backup_dir() {
+    // Issue #194 specifies deleting a backup, not "any file inside the backup
+    // directory". A malformed IPC call (or a future bug) must not be able to
+    // delete a README, configuration file, or any other file someone has
+    // placed alongside the snapshots. Authorization checks must verify both
+    // location AND filename shape.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    let db_path_str = vault_path.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    service
+        .set_backup_settings(enabled_backup_settings())
+        .expect("set settings");
+    service
+        .create(&db_path_str, "pw", "Filename Guard Test Vault")
+        .expect("create vault");
+    // Seed a real snapshot so the backup directory exists.
+    snapshot(&vault_path, &enabled_backup_settings())
+        .expect("snapshot ok")
+        .expect("created");
+
+    // Plant a non-snapshot file inside the backup dir.
+    let backup_dir = dir
+        .path()
+        .join(mithril_vault_lib::services::kdbx::backups::BACKUP_SUBDIR);
+    let bystander = backup_dir.join("README.txt");
+    std::fs::write(&bystander, b"important notes, do not delete").expect("write bystander");
+
+    let result = service.delete_backup(&bystander.to_string_lossy());
+    assert!(
+        result.is_err(),
+        "delete_backup must reject non-snapshot filenames, got {result:?}"
+    );
+    assert!(
+        bystander.exists(),
+        "the non-snapshot file must remain on disk"
+    );
+}
+
+#[test]
+fn delete_backup_rejects_foreign_vaults_snapshot_inside_our_backup_dir() {
+    // Defense-in-depth: a snapshot-shaped filename belonging to a *different*
+    // vault that happens to live in our backup dir must not be deletable
+    // through our open-vault authorization. The vault basename embedded in
+    // the filename must match the open vault we authorize against.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    let db_path_str = vault_path.to_string_lossy().to_string();
+
+    let service = KdbxService::new();
+    service
+        .set_backup_settings(enabled_backup_settings())
+        .expect("set settings");
+    service
+        .create(&db_path_str, "pw", "Foreign Snapshot Test")
+        .expect("create vault");
+    snapshot(&vault_path, &enabled_backup_settings())
+        .expect("snapshot ok")
+        .expect("created");
+
+    let backup_dir = dir
+        .path()
+        .join(mithril_vault_lib::services::kdbx::backups::BACKUP_SUBDIR);
+    let foreign = backup_dir.join("other.kdbx.backup.20260101T000000.000Z.kdbx");
+    std::fs::write(&foreign, b"foreign vault snapshot").expect("write foreign");
+
+    let result = service.delete_backup(&foreign.to_string_lossy());
+    assert!(
+        result.is_err(),
+        "delete_backup must reject foreign-vault snapshots, got {result:?}"
+    );
+    assert!(foreign.exists(), "foreign snapshot must remain on disk");
 }
