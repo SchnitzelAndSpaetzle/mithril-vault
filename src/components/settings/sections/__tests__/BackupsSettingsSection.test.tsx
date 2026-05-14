@@ -28,7 +28,8 @@ import { BACKUP_MAX_VERSIONS_PRESETS, type AppPreferences } from "@/lib/types";
 
 function makeDraft(
   maxVersions = 10,
-  directory: string | null = null
+  directory: string | null = null,
+  onOpen = false
 ): AppPreferences {
   return {
     general: {
@@ -61,7 +62,7 @@ function makeDraft(
     },
     browserIntegration: { enabled: false, allowedSites: [] },
     advanced: { debugMode: false, dataLocation: "/tmp" },
-    backups: { enabled: true, maxVersions, directory },
+    backups: { enabled: true, maxVersions, directory, onOpen },
   };
 }
 
@@ -218,6 +219,29 @@ describe("BackupsSettingsSection", () => {
     await Promise.resolve();
 
     expect(updateDraft).not.toHaveBeenCalled();
+  });
+
+  it("toggles draft.backups.onOpen when the on-open checkbox is clicked", () => {
+    // Acceptance criterion for #193: the Settings → Backups section gains a
+    // 'Back up on open' toggle that drives draft.backups.onOpen.
+    const updateDraft = vi.fn();
+    render(
+      <BackupsSettingsSection draft={makeDraft()} updateDraft={updateDraft} />
+    );
+
+    const onOpenCheckbox = screen.getByRole("checkbox", {
+      name: "settings.backups.onOpen.label",
+    });
+    expect(onOpenCheckbox).not.toBeChecked();
+    fireEvent.click(onOpenCheckbox);
+
+    const calls = updateDraft.mock.calls;
+    const lastCall = calls[calls.length - 1];
+    if (!lastCall) throw new Error("expected updateDraft to be called");
+    const updater = lastCall[0] as (prev: AppPreferences) => AppPreferences;
+    const next = updater(makeDraft());
+    expect(next.backups.onOpen).toBe(true);
+    expect(next.backups.enabled).toBe(true);
   });
 
   it("updates draft.backups.maxVersions when a preset is picked", () => {

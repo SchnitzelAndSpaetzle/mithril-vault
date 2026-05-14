@@ -121,10 +121,17 @@
       "error": {
         "failed": "Backup failed for {{path}}: {{reason}}. The vault was not saved."
       },
+      "warning": {
+        "openSide": "Open-side backup failed for {{path}}: {{reason}}. The vault is still unlocked."
+      },
       "directory": {
         "label": "Backup directory",
         "placeholder": "Default: .kdbx-backups next to database.",
         "browse": "Browse"
+      },
+      "onOpen": {
+        "label": "Back up on open",
+        "description": "Also take a snapshot whenever a vault successfully unlocks. Identical-content opens are silently skipped."
       }
     },
     "shortcuts": {

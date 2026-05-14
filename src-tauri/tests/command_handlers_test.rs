@@ -140,6 +140,7 @@ fn database_commands_handle_missing_database() {
     let err = tauri::async_runtime::block_on(open_database(
         "missing.kdbx".into(),
         "password".into(),
+        app.handle().clone(),
         app.state(),
     ))
     .expect_err("expected invalid path");
@@ -158,6 +159,7 @@ fn database_commands_handle_missing_database() {
     let err = tauri::async_runtime::block_on(unlock_database(
         "missing.kdbx".to_string(),
         Some("password".into()),
+        app.handle().clone(),
         app.state(),
     ))
     .expect_err("expected database not found");
@@ -382,6 +384,7 @@ fn database_commands_cover_success_paths() {
         db_path_str.clone(),
         "password".to_string(),
         keyfile_path_str.clone(),
+        app.handle().clone(),
         app.state(),
     ))
     .expect("open database with keyfile");
@@ -408,6 +411,7 @@ fn database_commands_cover_success_paths() {
     tauri::async_runtime::block_on(open_database_with_keyfile_only(
         key_only_path_str.clone(),
         keyfile_path_str.clone(),
+        app.handle().clone(),
         app.state(),
     ))
     .expect("open with keyfile only");
