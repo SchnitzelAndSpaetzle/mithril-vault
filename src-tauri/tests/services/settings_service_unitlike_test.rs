@@ -210,6 +210,55 @@ fn keyfile_lookup_remove_and_clear() {
 }
 
 #[test]
+fn load_rejects_persisted_max_versions_out_of_range() {
+    // A hand-edited or corrupted settings.json with maxVersions=0 must not
+    // be honoured at load time; otherwise rotation would wipe every backup
+    // on the next save. The existing "back up bad file and fall back" path
+    // is reused.
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+
+    let path = settings_path(&app);
+    std::fs::write(
+        &path,
+        r#"{"preferences":{"backups":{"enabled":true,"maxVersions":0}},"recentDatabases":[]}"#,
+    )
+    .expect("write bad settings");
+
+    let service = SettingsService::new(app.handle()).expect("create service");
+    let prefs = service.get_app_preferences().expect("get prefs");
+
+    assert_eq!(
+        prefs.backups.max_versions, 10,
+        "load must reject out-of-range maxVersions and fall back to default"
+    );
+    assert!(
+        prefs.backups.enabled,
+        "fall-back uses defaults (enabled=true)"
+    );
+
+    // The corrupt file should have been moved aside, mirroring the
+    // existing behaviour for malformed JSON.
+    let bad_files: Vec<_> = std::fs::read_dir(path.parent().expect("parent"))
+        .expect("read dir")
+        .filter_map(Result::ok)
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with("settings.json.bad-")
+        })
+        .collect();
+    assert_eq!(
+        bad_files.len(),
+        1,
+        "out-of-range settings.json should be quarantined"
+    );
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
 fn reset_restores_default_max_versions() {
     let _lock = crate::settings_test_lock();
     let app = setup_app();

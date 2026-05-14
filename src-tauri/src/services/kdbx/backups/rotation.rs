@@ -18,9 +18,13 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// Substring that marks a manual backup. Reserved for the manual-backup slice
-/// (issue parent #61); auto-snapshot rotation must never touch these.
-const MANUAL_MARKER: &str = ".backup.manual.";
+/// Suffix segment marking a manual backup. Reserved for the manual-backup
+/// slice (issue parent #61); auto-snapshot rotation must never touch these.
+///
+/// Anchored to the position right after the source Vault's basename so a
+/// Vault literally named `foo.backup.manual.kdbx` does not accidentally
+/// match itself out of rotation.
+const MANUAL_SUFFIX_INFIX: &str = ".backup.manual.";
 
 /// Returns auto-snapshot filenames belonging to `vault_filename`, sorted
 /// **newest-first** by the timestamp parsed from the filename (not by file
@@ -29,7 +33,7 @@ const MANUAL_MARKER: &str = ".backup.manual.";
 ///
 /// Excluded:
 /// - Foreign-vault backups (different basename).
-/// - Files containing the `.backup.manual.` marker.
+/// - Manual-marker files for our Vault (`<vault>.backup.manual.*`).
 /// - Any name that doesn't match the auto-snapshot pattern.
 pub(crate) fn select_auto_snapshots<'a, I>(
     names: I,
@@ -38,9 +42,14 @@ pub(crate) fn select_auto_snapshots<'a, I>(
 where
     I: IntoIterator<Item = &'a str>,
 {
+    // Anchor the manual-marker check to *our* Vault's basename so a Vault
+    // whose name itself contains `.backup.manual.` (e.g. `foo.backup.manual.kdbx`)
+    // still has its auto-snapshots rotated. The marker can only appear in
+    // the backup-suffix segment, never inside the source Vault basename.
+    let manual_prefix = format!("{vault_filename}{MANUAL_SUFFIX_INFIX}");
     let mut out: Vec<(DateTime<Utc>, &str)> = names
         .into_iter()
-        .filter(|name| !name.contains(MANUAL_MARKER))
+        .filter(|name| !name.starts_with(&manual_prefix))
         .filter_map(|name| {
             let (vault, ts) = parse_backup_filename(name)?;
             if vault == vault_filename {
@@ -69,8 +78,12 @@ pub(crate) fn list_auto_snapshots(
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(e),
     };
+    // Only consider regular files. If a subdirectory happens to be named
+    // like a snapshot, `fs::remove_file` would fail with `EISDIR` later and
+    // a save that already wrote its new snapshot would error post-write.
     let names: Vec<String> = read_dir
         .filter_map(Result::ok)
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
         .filter_map(|e| e.file_name().into_string().ok())
         .collect();
     let selected = select_auto_snapshots(names.iter().map(String::as_str), vault_filename);
@@ -88,14 +101,17 @@ pub(crate) fn list_auto_snapshots(
 /// (foreign-Vault backups, manual-marker files, unrelated files).
 ///
 /// `max_versions` is expected to be in `1..=500` — validation is enforced on
-/// the App Preferences boundary, so this function trusts the caller.
+/// the App Preferences boundary. As a defensive belt-and-braces measure for
+/// hand-edited or corrupted `settings.json` files, a value of `0` is treated
+/// as `1` so a single retention slot is always preserved. A misconfiguration
+/// must never silently wipe every backup.
 pub(crate) fn rotate(
     backup_dir: &Path,
     vault_filename: &str,
     max_versions: u32,
 ) -> io::Result<usize> {
     let snapshots = list_auto_snapshots(backup_dir, vault_filename)?;
-    let keep = max_versions as usize;
+    let keep = max_versions.max(1) as usize;
     if snapshots.len() <= keep {
         return Ok(0);
     }
@@ -230,5 +246,76 @@ mod tests {
         let result =
             list_auto_snapshots(&missing, "vault.kdbx").expect("missing dir should not error");
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn manual_marker_check_is_anchored_to_vault_basename() {
+        // A Vault literally named `foo.backup.manual.kdbx` should still
+        // have its auto-snapshots rotated. The earlier broad-substring
+        // check would have filtered every snapshot of this Vault out.
+        let vault = "foo.backup.manual.kdbx";
+        let auto = name_for(vault, 1_715_000_000_000);
+        // A manual snapshot of the same Vault — must be excluded.
+        let manual = format!("{vault}.backup.manual.20260512T143045.123Z.kdbx");
+
+        let names = [auto.as_str(), manual.as_str()];
+        let kept: Vec<&str> = select_auto_snapshots(names, vault)
+            .into_iter()
+            .map(|(_, n)| n)
+            .collect();
+
+        assert_eq!(
+            kept,
+            vec![auto.as_str()],
+            "auto-snapshots of a vault whose name contains the marker must still rotate"
+        );
+    }
+
+    #[test]
+    fn rotate_clamps_max_versions_zero_to_keep_one() {
+        // Defense-in-depth for a corrupt/hand-edited settings.json file
+        // that smuggles `maxVersions = 0` past the App Preferences boundary.
+        // Rotation must never wipe every backup.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        for ms in [1_715_000_000_000i64, 1_715_000_001_000, 1_715_000_002_000] {
+            let path = tmp.path().join(name_for("vault.kdbx", ms));
+            std::fs::write(&path, b"snap").expect("write");
+        }
+
+        let deleted = rotate(tmp.path(), "vault.kdbx", 0).expect("rotate");
+
+        let surviving: Vec<_> = std::fs::read_dir(tmp.path())
+            .expect("read")
+            .filter_map(Result::ok)
+            .collect();
+        assert_eq!(deleted, 2, "should delete all but the newest");
+        assert_eq!(
+            surviving.len(),
+            1,
+            "max_versions=0 must be coerced to keep at least one snapshot"
+        );
+    }
+
+    #[test]
+    fn rotate_ignores_directories_named_like_snapshots() {
+        // A directory in the backup folder that happens to be named like a
+        // snapshot must not propagate `EISDIR` out as a failed save.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        for ms in [1_715_000_000_000i64, 1_715_000_001_000] {
+            let path = tmp.path().join(name_for("vault.kdbx", ms));
+            std::fs::write(&path, b"snap").expect("write");
+        }
+        // Plant a directory with a snapshot-shaped name (oldest timestamp
+        // so it would be the rotation target).
+        let evil_dir = tmp.path().join(name_for("vault.kdbx", 1_710_000_000_000));
+        std::fs::create_dir(&evil_dir).expect("create dir");
+
+        // cap=1 → without the file-type filter, this would attempt
+        // remove_file on `evil_dir` and surface EISDIR as a save failure.
+        let deleted = rotate(tmp.path(), "vault.kdbx", 1).expect("rotate must succeed");
+
+        assert!(evil_dir.exists(), "subdirectory must be untouched");
+        // One of the two real snapshots got trimmed.
+        assert_eq!(deleted, 1);
     }
 }
