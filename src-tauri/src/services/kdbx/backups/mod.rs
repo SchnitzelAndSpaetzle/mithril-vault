@@ -127,13 +127,15 @@ pub fn snapshot(
 ///
 /// - Gated on `settings.on_open` (default off). The `enabled` flag is still
 ///   the master switch, so toggling off all backups disables this hook too.
-/// - Deduplicates against the latest existing snapshot for this Vault: if its
-///   size and mtime match the current source, no new snapshot is taken. This
-///   prevents flooding the rotation bucket when a user locks and unlocks an
-///   unchanged Vault repeatedly. To make the comparison meaningful — the
-///   snapshot file is just-written so its file-system mtime would otherwise
-///   be "now" — the snapshot's mtime is stamped to match the source's mtime
-///   after the bytes are written.
+/// - Deduplicates against the latest existing snapshot for this Vault by
+///   direct byte-for-byte comparison (after a cheap length check). If the
+///   snapshot already captures the current bytes, no new snapshot is taken
+///   — this prevents flooding the rotation bucket when a user locks and
+///   unlocks an unchanged Vault repeatedly. See `content_matches` for why
+///   metadata proxies (size + mtime) aren't reliable on cross-filesystem
+///   overrides. The snapshot's mtime is still stamped to the source's so
+///   that browsing the backup folder shows useful timestamps; dedup does
+///   not depend on it.
 ///
 /// Failure semantics are the caller's concern. This function still returns
 /// `Err(BackupFailed)` on I/O failure; the open-path command converts that
@@ -168,7 +170,7 @@ pub fn snapshot_on_open(
         })?;
         if let Some(vault_filename) = source.file_name().and_then(|n| n.to_str()) {
             if let Some(latest) = latest_snapshot_for(&backup_dir, vault_filename) {
-                if metadata_matches(&latest, source) {
+                if content_matches(&latest, source).unwrap_or(false) {
                     return Ok(None);
                 }
             }
@@ -201,44 +203,39 @@ fn latest_snapshot_for(dir: &Path, vault_filename: &str) -> Option<PathBuf> {
         .map(|(_, p)| p)
 }
 
-/// Compares size+mtime of two filesystem entries. Used by `snapshot_on_open`
-/// to decide whether the latest existing snapshot already captures what the
-/// source currently holds.
+/// Decides whether the latest existing snapshot already captures what the
+/// source currently holds, by comparing bytes directly after a cheap length
+/// check.
 ///
-/// The mtime comparison uses a 2-second tolerance to survive cross-filesystem
-/// rounding. We stamp the snapshot file to the source's mtime after writing,
-/// but the destination filesystem may quantize that timestamp: FAT/exFAT
-/// rounds to 2 seconds, many SMB shares are similar. Without tolerance, an
-/// override pointed at an external drive would fail dedup on every unchanged
-/// open and silently fill the rotation bucket — defeating the whole purpose
-/// of the open-side dedup. Two seconds is the widest common quantum; a false
-/// dedup would require a save that produced an identical size AND landed
-/// within 2 s of a prior snapshot's source mtime, which is vanishingly rare
-/// and recoverable via an explicit save.
-const MTIME_TOLERANCE: std::time::Duration = std::time::Duration::from_secs(2);
-
-fn metadata_matches(a: &Path, b: &Path) -> bool {
-    let (Ok(meta_a), Ok(meta_b)) = (fs::metadata(a), fs::metadata(b)) else {
-        return false;
-    };
-    if meta_a.len() != meta_b.len() {
-        return false;
+/// File-metadata proxies (size + mtime) don't work reliably here: stamping
+/// the snapshot's mtime to the source's gets rounded on coarser destination
+/// filesystems (FAT/exFAT round to 2 s; many SMB shares are similar), and a
+/// fuzzy mtime match would in turn mask a real same-length content change
+/// — KDBX writes encrypted blocks at fixed sizes, and sync tools that
+/// preserve mtime can land identical (len, mtime) on actually-changed bytes.
+/// A direct compare sidesteps both failure modes.
+///
+/// Cost: one extra file read for the snapshot during dedup. KDBX vaults are
+/// small (typically <10 MB) and the source bytes are already in the OS page
+/// cache from the just-completed unlock, so this is invisible behind the KDF
+/// cost on the open path. Both files contain the encrypted on-disk bytes —
+/// nothing sensitive is newly exposed in memory.
+fn content_matches(snapshot: &Path, source: &Path) -> io::Result<bool> {
+    let snap_meta = fs::metadata(snapshot)?;
+    let src_meta = fs::metadata(source)?;
+    if snap_meta.len() != src_meta.len() {
+        return Ok(false);
     }
-    match (meta_a.modified(), meta_b.modified()) {
-        (Ok(t_a), Ok(t_b)) => {
-            let delta = if t_a > t_b {
-                t_a.duration_since(t_b)
-            } else {
-                t_b.duration_since(t_a)
-            };
-            delta.is_ok_and(|d| d <= MTIME_TOLERANCE)
-        }
-        _ => false,
-    }
+    let snap_bytes = fs::read(snapshot)?;
+    let src_bytes = fs::read(source)?;
+    Ok(snap_bytes == src_bytes)
 }
 
-/// Stamps `snapshot_path`'s mtime to match `source`'s mtime so that the next
-/// `snapshot_on_open` call can dedup by file metadata comparison alone.
+/// Stamps `snapshot_path`'s mtime to match `source`'s mtime so that browsing
+/// the backup folder in a file manager surfaces the *source's* last-saved
+/// time rather than "when the snapshot was written" (which would just be
+/// "every time you opened the Vault"). Not load-bearing for dedup — that
+/// uses `content_matches`.
 fn stamp_source_mtime(snapshot_path: &Path, source: &Path) -> io::Result<()> {
     let source_meta = fs::metadata(source)?;
     let source_mtime = source_meta.modified()?;

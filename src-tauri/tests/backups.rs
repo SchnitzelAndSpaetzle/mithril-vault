@@ -866,12 +866,48 @@ fn snapshot_on_open_skips_when_on_open_flag_is_false() {
 }
 
 #[test]
-fn snapshot_on_open_dedups_within_filesystem_mtime_tolerance() {
-    // Cross-filesystem dedup: when the backup override lives on a coarser
-    // filesystem (FAT/exFAT round to 2s, SMB shares often similar), the
-    // snapshot's stamped mtime can land a fraction of a second away from
-    // the source's mtime even though nothing about the source has changed.
-    // Without tolerance, every lock/unlock would burn a rotation slot.
+fn snapshot_on_open_takes_snapshot_when_content_changes_with_same_size_and_mtime() {
+    // KDBX writes encrypted blocks at fixed sizes; an external/synced save
+    // that rewrites the encrypted payload can leave the file length and
+    // even the mtime unchanged (some sync tools preserve mtime by design).
+    // A metadata-only dedup would treat this as "no change" and miss the
+    // snapshot. Content comparison must take a fresh snapshot.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"original-16-byte").expect("write v1");
+    let original_mtime = std::fs::metadata(&vault_path)
+        .expect("v1 meta")
+        .modified()
+        .expect("v1 mtime");
+
+    snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("first ok")
+        .expect("first created");
+
+    // Overwrite with same length but different bytes, then restore the
+    // original mtime so neither len() nor modified() betrays the change.
+    std::fs::write(&vault_path, b"REPLACED-16-byte").expect("write v2 same length");
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(&vault_path)
+        .expect("open");
+    file.set_modified(original_mtime)
+        .expect("restore mtime to mask change");
+
+    let second = snapshot_on_open(&vault_path, &on_open_enabled())
+        .expect("second ok")
+        .expect("changed content must produce a new snapshot");
+    let bytes = std::fs::read(&second.path).expect("read");
+    assert_eq!(bytes, b"REPLACED-16-byte");
+}
+
+#[test]
+fn snapshot_on_open_dedup_survives_coarse_filesystem_mtime_rounding() {
+    // Cross-filesystem regression test: when the backup override lives on a
+    // coarser filesystem (FAT/exFAT round to 2 s; many SMB shares similar)
+    // the snapshot's stamped mtime lands away from the source's. A
+    // metadata-based dedup would fail and burn a rotation slot per open.
+    // Content-based dedup must ignore the mtime drift entirely.
     let dir = tempdir().expect("tempdir");
     let vault_path = dir.path().join("vault.kdbx");
     std::fs::write(&vault_path, b"unchanged data").expect("write source");
