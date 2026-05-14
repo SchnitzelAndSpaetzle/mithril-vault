@@ -50,10 +50,10 @@ where
             }
         })
         .collect();
-    // Newest first. Stable sort isn't strictly required because timestamps
-    // are unique-by-construction (same-ms collisions bump the snapshot's
-    // chosen timestamp at write time), but stability costs nothing.
-    out.sort_by(|a, b| b.0.cmp(&a.0));
+    // Newest first. Timestamps are unique-by-construction (same-ms collisions
+    // bump the snapshot's chosen timestamp at write time) so sort stability
+    // doesn't matter here.
+    out.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     out
 }
 

@@ -104,9 +104,9 @@ describe("BackupsSettingsSection", () => {
     expect(updateDraft).toHaveBeenCalledTimes(1);
     // The section invokes updateDraft with a functional updater so the
     // surrounding SettingsView can compose draft changes safely.
-    const updater = updateDraft.mock.calls[0][0] as (
-      prev: AppPreferences
-    ) => AppPreferences;
+    const firstCall = updateDraft.mock.calls[0];
+    if (!firstCall) throw new Error("expected updateDraft to be called");
+    const updater = firstCall[0] as (prev: AppPreferences) => AppPreferences;
     const next = updater(makeDraft(10));
     expect(next.backups.maxVersions).toBe(50);
     // Other backup settings stay untouched.
