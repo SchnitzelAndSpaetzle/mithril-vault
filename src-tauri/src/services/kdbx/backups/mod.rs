@@ -259,7 +259,7 @@ pub fn list_for(
         let Some((kind, ts)) = classify_snapshot_name(&name, vault_filename) else {
             continue;
         };
-        let size_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        let size_bytes = entry.metadata().map_or(0, |m| m.len());
         out.push(BackupListEntry {
             path: entry.path(),
             timestamp: ts.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
