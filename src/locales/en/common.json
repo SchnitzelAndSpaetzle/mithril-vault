@@ -118,6 +118,11 @@
         "label": "Keep N backups",
         "description": "Older snapshots beyond this count are deleted after each successful save."
       },
+      "directory": {
+        "label": "Backup directory",
+        "placeholder": "Default: .kdbx-backups next to database.",
+        "browse": "Browse"
+      },
       "error": {
         "failed": "Backup failed for {{path}}: {{reason}}. The vault was not saved."
       }

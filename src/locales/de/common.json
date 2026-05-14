@@ -120,6 +120,11 @@
       },
       "error": {
         "failed": "Backup failed for {{path}}: {{reason}}. The vault was not saved."
+      },
+      "directory": {
+        "label": "Backup directory",
+        "placeholder": "Default: .kdbx-backups next to database.",
+        "browse": "Browse"
       }
     },
     "shortcuts": {

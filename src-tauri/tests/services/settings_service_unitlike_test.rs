@@ -369,6 +369,7 @@ fn update_rejects_when_only_backups_substruct_is_invalid() {
         backups: BackupSettings {
             enabled: true,
             max_versions: 0,
+            directory: None,
         },
         ..AppPreferences::default()
     };

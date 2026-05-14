@@ -258,6 +258,7 @@ fn rotation_caps_snapshots_at_max_versions() {
     let settings = BackupSettings {
         enabled: true,
         max_versions: 10,
+        directory: None,
     };
 
     // Twelve consecutive snapshots: each save mutates the source so the
@@ -294,6 +295,7 @@ fn rotation_retains_newest_snapshots_not_oldest() {
     let settings = BackupSettings {
         enabled: true,
         max_versions: 3,
+        directory: None,
     };
 
     let mut all_timestamps = Vec::new();
@@ -344,6 +346,7 @@ fn rotation_keeps_two_vaults_in_same_directory_independent() {
     let settings = BackupSettings {
         enabled: true,
         max_versions: 2,
+        directory: None,
     };
 
     // 5 snapshots of vault A, 4 snapshots of vault B, interleaved so they
@@ -396,6 +399,7 @@ fn rotation_preserves_foreign_files_in_backup_dir() {
     let settings = BackupSettings {
         enabled: true,
         max_versions: 1,
+        directory: None,
     };
 
     // Seed one snapshot to force creation of .kdbx-backups/.
@@ -454,6 +458,7 @@ fn rotation_does_not_run_when_snapshot_fails() {
     let settings = BackupSettings {
         enabled: true,
         max_versions: 5,
+        directory: None,
     };
 
     for i in 0..2u32 {
@@ -475,6 +480,7 @@ fn rotation_does_not_run_when_snapshot_fails() {
     let trim_settings = BackupSettings {
         enabled: true,
         max_versions: 1,
+        directory: None,
     };
     std::fs::write(&vault_path, b"will-fail").expect("write source");
     let original_vault_perms = std::fs::metadata(&vault_path)
@@ -504,6 +510,246 @@ fn rotation_does_not_run_when_snapshot_fails() {
         our_snapshots, 2,
         "failed snapshot must leave existing backups untouched, got {our_snapshots}"
     );
+}
+
+#[test]
+fn snapshot_creates_override_directory_if_missing() {
+    // Cross-volume proxy: the override points at a parent tree that shares no
+    // ancestor with the source Vault, and the leaf directory does not exist
+    // yet. The snapshot must succeed and create the directory chain — exactly
+    // what happens the first time a user points at a freshly-mounted drive.
+    let vault_dir = tempdir().expect("tempdir vault");
+    let override_root = tempdir().expect("tempdir override root");
+    let nested_override = override_root.path().join("kdbx-snapshots").join("vault");
+    assert!(!nested_override.exists(), "precondition: dir absent");
+
+    let vault_path = vault_dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"data").expect("write source");
+
+    let settings = BackupSettings {
+        enabled: true,
+        directory: Some(nested_override.to_string_lossy().into_owned()),
+        ..BackupSettings::default()
+    };
+
+    let info = snapshot(&vault_path, &settings)
+        .expect("snapshot ok")
+        .expect("snapshot created");
+
+    assert!(
+        nested_override.is_dir(),
+        "nested override dir should be created"
+    );
+    assert!(info.path.starts_with(&nested_override));
+}
+
+#[cfg(unix)]
+#[test]
+fn snapshot_fails_closed_when_override_is_unwritable() {
+    // No eager validation at settings save time means an override that exists
+    // but is read-only must surface as BackupFailed at the next save — same
+    // shape as the MVP failure mode, so the UI/error pipeline stays uniform.
+    use std::os::unix::fs::PermissionsExt;
+
+    let vault_dir = tempdir().expect("tempdir vault");
+    let override_root = tempdir().expect("tempdir override");
+    let vault_path = vault_dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"data").expect("write source");
+
+    // Make the override parent read-only so neither dir creation nor file
+    // creation inside it can succeed.
+    let mut perms = std::fs::metadata(override_root.path())
+        .expect("meta")
+        .permissions();
+    let original = perms.mode();
+    perms.set_mode(0o500);
+    std::fs::set_permissions(override_root.path(), perms).expect("set ro");
+
+    let override_dir = override_root.path().join("blocked");
+    let settings = BackupSettings {
+        enabled: true,
+        directory: Some(override_dir.to_string_lossy().into_owned()),
+        ..BackupSettings::default()
+    };
+
+    let result = snapshot(&vault_path, &settings);
+
+    // Restore so tempdir cleanup works.
+    let mut restore = std::fs::metadata(override_root.path())
+        .expect("meta")
+        .permissions();
+    restore.set_mode(original);
+    std::fs::set_permissions(override_root.path(), restore).expect("restore");
+
+    match result {
+        Err(BackupError::BackupFailed { path, .. }) => {
+            assert!(
+                path == override_dir || path.starts_with(override_dir.as_path()),
+                "BackupFailed path should name the unwritable override, got {path:?}"
+            );
+        }
+        other => panic!("expected BackupFailed, got {other:?}"),
+    }
+}
+
+#[test]
+fn override_isolates_same_named_vaults_in_shared_directory() {
+    // Two vaults with identical basenames (e.g. work/vault.kdbx and
+    // personal/vault.kdbx) pointed at the same override directory must keep
+    // independent rotation histories. Without per-source isolation, rotation
+    // would key on basename alone and saving one vault would prune the
+    // other's snapshots.
+    let work_dir = tempdir().expect("tempdir work");
+    let personal_dir = tempdir().expect("tempdir personal");
+    let override_dir = tempdir().expect("tempdir override");
+
+    let work_vault = work_dir.path().join("vault.kdbx");
+    let personal_vault = personal_dir.path().join("vault.kdbx");
+
+    let settings = BackupSettings {
+        enabled: true,
+        max_versions: 2,
+        directory: Some(override_dir.path().to_string_lossy().into_owned()),
+    };
+
+    // Drive 4 saves of each vault, interleaved. With per-basename rotation
+    // and cap=2, the second vault's saves would have pruned the first
+    // vault's older snapshots — we'd end up with <4 surviving files.
+    for i in 0..4u32 {
+        std::fs::write(&work_vault, format!("w{i}").as_bytes()).expect("write work");
+        snapshot(&work_vault, &settings)
+            .expect("snapshot work ok")
+            .expect("created work");
+        std::fs::write(&personal_vault, format!("p{i}").as_bytes()).expect("write personal");
+        snapshot(&personal_vault, &settings)
+            .expect("snapshot personal ok")
+            .expect("created personal");
+    }
+
+    let surviving_files: Vec<_> = walkdir_files(override_dir.path());
+    assert_eq!(
+        surviving_files.len(),
+        4,
+        "each vault should retain cap=2 snapshots; got {surviving_files:#?}"
+    );
+}
+
+fn walkdir_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let Ok(ft) = entry.file_type() else {
+                continue;
+            };
+            let path = entry.path();
+            if ft.is_dir() {
+                stack.push(path);
+            } else if ft.is_file() {
+                out.push(path);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn rotation_runs_inside_override_directory() {
+    // Rotation must apply to the override directory, not the default subdir.
+    // Otherwise switching to an override would silently disable trimming and
+    // the override volume would grow without bound.
+    let vault_dir = tempdir().expect("tempdir vault");
+    let override_dir = tempdir().expect("tempdir override");
+    let vault_path = vault_dir.path().join("vault.kdbx");
+    let settings = BackupSettings {
+        enabled: true,
+        max_versions: 3,
+        directory: Some(override_dir.path().to_string_lossy().into_owned()),
+    };
+
+    for i in 0..5u32 {
+        std::fs::write(&vault_path, format!("v{i}").as_bytes()).expect("write source");
+        snapshot(&vault_path, &settings)
+            .expect("snapshot ok")
+            .expect("created");
+    }
+
+    // Snapshots live in a per-vault subdir of the override; walk recursively
+    // so the assertion stays correct regardless of isolation strategy.
+    let kept = walkdir_files(override_dir.path());
+    assert_eq!(
+        kept.len(),
+        3,
+        "after 5 saves with max_versions=3 inside override, exactly 3 remain"
+    );
+
+    let default_subdir = vault_dir.path().join(BACKUP_SUBDIR);
+    assert!(
+        !default_subdir.exists(),
+        "default subdir must not be created or populated when override is in use"
+    );
+}
+
+#[test]
+fn snapshot_falls_back_to_default_subdir_when_override_cleared() {
+    // Clearing the override (None) must resume the per-Vault sibling subdir
+    // on the very next save — no app restart, no stale path resolution.
+    let dir = tempdir().expect("tempdir");
+    let vault_path = dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"data").expect("write source");
+
+    let settings = BackupSettings {
+        enabled: true,
+        directory: None,
+        ..BackupSettings::default()
+    };
+    let info = snapshot(&vault_path, &settings)
+        .expect("snapshot ok")
+        .expect("snapshot created");
+
+    let default_subdir = dir.path().join(BACKUP_SUBDIR);
+    assert!(
+        info.path.starts_with(&default_subdir),
+        "snapshot must land in default subdir when override is None, got {:?}",
+        info.path
+    );
+}
+
+#[test]
+fn snapshot_uses_override_directory_when_set() {
+    // With backups.directory = Some(absolute), snapshots must land inside
+    // that path rather than the default sibling .kdbx-backups/.
+    let vault_dir = tempdir().expect("tempdir vault");
+    let override_dir = tempdir().expect("tempdir override");
+    let vault_path = vault_dir.path().join("vault.kdbx");
+    std::fs::write(&vault_path, b"pre-image bytes").expect("write source");
+
+    let settings = BackupSettings {
+        enabled: true,
+        directory: Some(override_dir.path().to_string_lossy().into_owned()),
+        ..BackupSettings::default()
+    };
+
+    let info = snapshot(&vault_path, &settings)
+        .expect("snapshot ok")
+        .expect("snapshot created");
+
+    assert!(
+        info.path.starts_with(override_dir.path()),
+        "snapshot must live under override dir, got {:?}",
+        info.path
+    );
+    let default_subdir = vault_dir.path().join(BACKUP_SUBDIR);
+    assert!(
+        !default_subdir.exists(),
+        "default sibling subdir must not be created when override is in use"
+    );
+
+    let bytes = std::fs::read(&info.path).expect("read snapshot");
+    assert_eq!(bytes, b"pre-image bytes");
 }
 
 #[test]

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 
+import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -100,6 +103,54 @@ export function BackupsSettingsSection({
         <span className="text-muted-foreground">
           {t("settings.backups.maxVersions.description")}
         </span>
+      </div>
+
+      <div className="flex flex-col gap-2 text-sm">
+        <span id="backups-directory-label">
+          {t("settings.backups.directory.label")}
+        </span>
+        <div className="flex gap-2">
+          <Input
+            type="text"
+            aria-labelledby="backups-directory-label"
+            placeholder={t("settings.backups.directory.placeholder")}
+            value={draft.backups.directory ?? ""}
+            onChange={(event) => {
+              const raw = event.target.value;
+              updateDraft((previous) => ({
+                ...previous,
+                backups: {
+                  ...previous.backups,
+                  // Empty input means "use default" — normalize to undefined
+                  // here so the persisted JSON doesn't carry "" through the
+                  // round trip. Matches BackupSettings::normalize_directory
+                  // on the backend.
+                  directory: raw === "" ? undefined : raw,
+                },
+              }));
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={async () => {
+              const selected = await open({
+                directory: true,
+                multiple: false,
+              });
+              if (typeof selected !== "string") return;
+              updateDraft((previous) => ({
+                ...previous,
+                backups: {
+                  ...previous.backups,
+                  directory: selected,
+                },
+              }));
+            }}
+          >
+            {t("settings.backups.directory.browse")}
+          </Button>
+        </div>
       </div>
     </SettingsSection>
   );

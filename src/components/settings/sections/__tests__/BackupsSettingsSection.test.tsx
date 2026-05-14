@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+
+const openMock = vi.fn();
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: (...args: unknown[]) => openMock(...args),
+}));
 
 // jsdom doesn't implement these APIs that Radix Select reaches for when
 // the listbox opens. Stub them so the production component can be exercised
@@ -21,7 +26,10 @@ beforeAll(() => {
 import { BackupsSettingsSection } from "@/components/settings/sections/BackupsSettingsSection";
 import { BACKUP_MAX_VERSIONS_PRESETS, type AppPreferences } from "@/lib/types";
 
-function makeDraft(maxVersions = 10): AppPreferences {
+function makeDraft(
+  maxVersions = 10,
+  directory: string | null = null
+): AppPreferences {
   return {
     general: {
       language: "en",
@@ -53,11 +61,15 @@ function makeDraft(maxVersions = 10): AppPreferences {
     },
     browserIntegration: { enabled: false, allowedSites: [] },
     advanced: { debugMode: false, dataLocation: "/tmp" },
-    backups: { enabled: true, maxVersions },
+    backups: { enabled: true, maxVersions, directory },
   };
 }
 
 describe("BackupsSettingsSection", () => {
+  beforeEach(() => {
+    openMock.mockReset();
+  });
+
   it("renders the max-versions trigger with the current preset value", () => {
     render(
       <BackupsSettingsSection draft={makeDraft(25)} updateDraft={vi.fn()} />
@@ -87,6 +99,125 @@ describe("BackupsSettingsSection", () => {
         screen.getByRole("option", { name: String(preset) })
       ).toBeInTheDocument();
     }
+  });
+
+  it("renders a directory text input with the default-placeholder hint", () => {
+    render(
+      <BackupsSettingsSection draft={makeDraft()} updateDraft={vi.fn()} />
+    );
+
+    const input = screen.getByRole("textbox", {
+      name: "settings.backups.directory.label",
+    });
+    // i18n is mocked to echo keys, so the placeholder key is what appears.
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "settings.backups.directory.placeholder"
+    );
+    expect(input).toHaveValue("");
+  });
+
+  it("populates the directory input from draft.backups.directory", () => {
+    render(
+      <BackupsSettingsSection
+        draft={makeDraft(10, "/mnt/backups")}
+        updateDraft={vi.fn()}
+      />
+    );
+    const input = screen.getByRole("textbox", {
+      name: "settings.backups.directory.label",
+    });
+    expect(input).toHaveValue("/mnt/backups");
+  });
+
+  it("propagates typed directory text into draft.backups.directory", () => {
+    const updateDraft = vi.fn();
+    render(
+      <BackupsSettingsSection draft={makeDraft()} updateDraft={updateDraft} />
+    );
+
+    const input = screen.getByRole("textbox", {
+      name: "settings.backups.directory.label",
+    });
+    fireEvent.change(input, { target: { value: "/mnt/backups" } });
+
+    const calls = updateDraft.mock.calls;
+    const firstCall = calls[calls.length - 1];
+    if (!firstCall) throw new Error("expected updateDraft to be called");
+    const updater = firstCall[0] as (prev: AppPreferences) => AppPreferences;
+    const next = updater(makeDraft());
+    expect(next.backups.directory).toBe("/mnt/backups");
+  });
+
+  it("normalizes an empty directory input back to undefined", () => {
+    const updateDraft = vi.fn();
+    render(
+      <BackupsSettingsSection
+        draft={makeDraft(10, "/mnt/backups")}
+        updateDraft={updateDraft}
+      />
+    );
+
+    const input = screen.getByRole("textbox", {
+      name: "settings.backups.directory.label",
+    });
+    fireEvent.change(input, { target: { value: "" } });
+
+    const calls = updateDraft.mock.calls;
+    const lastCall = calls[calls.length - 1];
+    if (!lastCall) throw new Error("expected updateDraft to be called");
+    const updater = lastCall[0] as (prev: AppPreferences) => AppPreferences;
+    const next = updater(makeDraft(10, "/mnt/backups"));
+    expect(next.backups.directory).toBeUndefined();
+  });
+
+  it("writes the picked directory into the draft when Browse is clicked", async () => {
+    const updateDraft = vi.fn();
+    openMock.mockResolvedValueOnce("/Volumes/ExternalDrive/backups");
+
+    render(
+      <BackupsSettingsSection draft={makeDraft()} updateDraft={updateDraft} />
+    );
+
+    const browse = screen.getByRole("button", {
+      name: "settings.backups.directory.browse",
+    });
+    fireEvent.click(browse);
+
+    // Let the awaited open() promise resolve.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(openMock).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+    });
+
+    const calls = updateDraft.mock.calls;
+    const lastCall = calls[calls.length - 1];
+    if (!lastCall) throw new Error("expected updateDraft after Browse");
+    const updater = lastCall[0] as (prev: AppPreferences) => AppPreferences;
+    const next = updater(makeDraft());
+    expect(next.backups.directory).toBe("/Volumes/ExternalDrive/backups");
+  });
+
+  it("does not change the draft when the Browse picker is cancelled", async () => {
+    const updateDraft = vi.fn();
+    openMock.mockResolvedValueOnce(null);
+
+    render(
+      <BackupsSettingsSection draft={makeDraft()} updateDraft={updateDraft} />
+    );
+
+    const browse = screen.getByRole("button", {
+      name: "settings.backups.directory.browse",
+    });
+    fireEvent.click(browse);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("updates draft.backups.maxVersions when a preset is picked", () => {

@@ -82,6 +82,7 @@ impl SettingsService {
         Self::validate_preferences(new_preferences)?;
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.preferences = new_preferences.clone();
+        settings.preferences.backups.normalize_directory();
         // data_location is derived at read time; don't trust the value the
         // frontend echoed back. Persist as empty so the on-disk file doesn't
         // carry a stale path if the user moves their app data later.
@@ -165,6 +166,13 @@ impl SettingsService {
                 "backups.maxVersions must be in 1..=500, got {v}"
             )));
         }
+        if let Some(dir) = prefs.backups.directory.as_deref() {
+            if !dir.is_empty() && !std::path::Path::new(dir).is_absolute() {
+                return Err(AppError::InvalidInput(format!(
+                    "backups.directory must be an absolute path, got {dir:?}"
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -173,5 +181,61 @@ impl SettingsService {
             .parent()
             .map(|path| path.to_string_lossy().into_owned())
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic)]
+mod validate_preferences_tests {
+    use super::SettingsService;
+    use crate::commands::settings::{AppPreferences, BackupSettings};
+    use crate::dto::error::AppError;
+
+    fn prefs_with_directory(dir: Option<&str>) -> AppPreferences {
+        AppPreferences {
+            backups: BackupSettings {
+                enabled: true,
+                max_versions: 10,
+                directory: dir.map(String::from),
+            },
+            ..AppPreferences::default()
+        }
+    }
+
+    #[test]
+    fn relative_directory_path_is_rejected() {
+        // A relative override would be resolved against whatever CWD the
+        // process happens to have at save time — wildly unpredictable for a
+        // safety-net feature. Reject it at the boundary so the backup
+        // module's resolver can trust the path it sees.
+        let prefs = prefs_with_directory(Some("relative/path"));
+        match SettingsService::validate_preferences(&prefs) {
+            Err(AppError::InvalidInput(msg)) => {
+                assert!(
+                    msg.contains("absolute"),
+                    "error should mention 'absolute', got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn absolute_directory_path_is_accepted() {
+        // Use a platform-appropriate absolute path so the test runs on every
+        // supported target. The validator does not touch the filesystem.
+        let abs = if cfg!(windows) {
+            "C:/backups"
+        } else {
+            "/mnt/backups"
+        };
+        let prefs = prefs_with_directory(Some(abs));
+        SettingsService::validate_preferences(&prefs).expect("absolute path should validate");
+    }
+
+    #[test]
+    fn no_directory_override_is_accepted() {
+        let prefs = prefs_with_directory(None);
+        SettingsService::validate_preferences(&prefs).expect("None should validate");
     }
 }

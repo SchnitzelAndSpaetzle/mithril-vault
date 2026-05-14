@@ -11,7 +11,9 @@ pub(crate) mod rotation;
 use crate::commands::settings::BackupSettings;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use chrono::Utc;
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -64,11 +66,7 @@ pub fn snapshot(
         return Ok(None);
     }
 
-    let parent = source.parent().ok_or_else(|| BackupError::BackupFailed {
-        path: source.to_path_buf(),
-        source: io::Error::new(io::ErrorKind::InvalidInput, "source has no parent"),
-    })?;
-    let backup_dir = parent.join(BACKUP_SUBDIR);
+    let backup_dir = resolve_backup_dir(source, settings)?;
     ensure_backup_dir(&backup_dir).map_err(|e| BackupError::BackupFailed {
         path: backup_dir.clone(),
         source: e,
@@ -121,6 +119,57 @@ pub fn snapshot(
     })?;
 
     Ok(Some(BackupInfo { path: backup_path }))
+}
+
+/// Resolves the directory that snapshots should be written to. When
+/// `settings.directory` is set, snapshots are isolated per source vault
+/// inside it (`<override>/<basename>-<hash>/`) so two vaults sharing a
+/// custom backup directory do not contaminate each other's rotation
+/// history. Otherwise the per-Vault `.kdbx-backups/` sibling subdir is
+/// used — that one is already per-vault by virtue of being a sibling.
+fn resolve_backup_dir(source: &Path, settings: &BackupSettings) -> Result<PathBuf, BackupError> {
+    if let Some(override_path) = settings.directory.as_deref() {
+        if !override_path.is_empty() {
+            let isolation = vault_isolation_segment(source)?;
+            return Ok(PathBuf::from(override_path).join(isolation));
+        }
+    }
+    let parent = source.parent().ok_or_else(|| BackupError::BackupFailed {
+        path: source.to_path_buf(),
+        source: io::Error::new(io::ErrorKind::InvalidInput, "source has no parent"),
+    })?;
+    Ok(parent.join(BACKUP_SUBDIR))
+}
+
+/// Builds a stable per-vault directory segment: `<basename>-<short-hash>`.
+///
+/// The hash is SHA-256 of the source's canonicalized absolute path, hex
+/// truncated to 16 chars. Canonicalization resolves symlinks and `..`
+/// components so two routes to the same file collapse to one history;
+/// it falls back to the raw path when canonicalization fails (e.g. on
+/// platforms or filesystems where canonicalize misbehaves) so isolation
+/// is never weaker than "path string equality".
+///
+/// The basename is included verbatim for human recognisability when
+/// browsing the override directory.
+fn vault_isolation_segment(source: &Path) -> Result<String, BackupError> {
+    let basename =
+        source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| BackupError::BackupFailed {
+                path: source.to_path_buf(),
+                source: io::Error::new(io::ErrorKind::InvalidInput, "source has no filename"),
+            })?;
+    let canonical = fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
+    let mut hasher = Sha256::new();
+    hasher.update(canonical.as_os_str().as_encoded_bytes());
+    let digest = hasher.finalize();
+    let mut hash_hex = String::with_capacity(16);
+    for byte in digest.iter().take(8) {
+        let _ = write!(&mut hash_hex, "{byte:02x}");
+    }
+    Ok(format!("{basename}-{hash_hex}"))
 }
 
 fn ensure_backup_dir(dir: &Path) -> io::Result<()> {
