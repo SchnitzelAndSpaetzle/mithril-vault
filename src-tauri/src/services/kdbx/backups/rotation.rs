@@ -83,7 +83,7 @@ pub(crate) fn list_auto_snapshots(
     // a save that already wrote its new snapshot would error post-write.
     let names: Vec<String> = read_dir
         .filter_map(Result::ok)
-        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
         .filter_map(|e| e.file_name().into_string().ok())
         .collect();
     let selected = select_auto_snapshots(names.iter().map(String::as_str), vault_filename);
