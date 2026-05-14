@@ -268,8 +268,15 @@ export type AdvancedSettings = z.infer<typeof AdvancedSettingsSchema>;
 
 export const BackupSettingsSchema = z.object({
   enabled: z.boolean(),
+  maxVersions: z.number().int().min(1).max(500),
+  // Optional absolute-path override for snapshot storage. Serde on the
+  // backend emits `null` when unset (the field exists but is None) and
+  // omits it when the directory key is missing entirely; accept both.
+  directory: z.string().nullable().optional(),
 });
 export type BackupSettings = z.infer<typeof BackupSettingsSchema>;
+export const BACKUP_MAX_VERSIONS_PRESETS = [5, 10, 25, 50, 100] as const;
+export const DEFAULT_BACKUP_MAX_VERSIONS = 10;
 
 export const AppPreferencesSchema = z.object({
   general: GeneralSettingsSchema,

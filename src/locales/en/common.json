@@ -114,6 +114,15 @@
         "label": "Enable backups",
         "description": "Before saving, copy the previous vault bytes into a .kdbx-backups/ folder next to the file."
       },
+      "maxVersions": {
+        "label": "Keep N backups",
+        "description": "Older snapshots beyond this count are deleted after each successful save."
+      },
+      "directory": {
+        "label": "Backup directory",
+        "placeholder": "Default: .kdbx-backups next to database.",
+        "browse": "Browse"
+      },
       "error": {
         "failed": "Backup failed for {{path}}: {{reason}}. The vault was not saved."
       }
@@ -514,6 +523,11 @@
   "errors": {
     "failedToLoadSettings": "Failed to load settings: {{error}}",
     "settingsUnavailable": "Settings are unavailable."
+  },
+  "database": {
+    "save": {
+      "failed": "Failed to save database: {{error}}. Your last change is in memory but not on disk."
+    }
   },
   "shortcuts": {
     "title": "Keyboard Shortcuts",

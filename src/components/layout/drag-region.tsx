@@ -38,6 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { SHORTCUTS } from "@/lib/shortcuts";
 import { queryKeys } from "@/lib/query-keys";
 import { clipboard, database } from "@/lib/tauri";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import type { Entry } from "@/lib/types";
 
 type EditMode = "view" | "edit" | "create";
@@ -178,9 +179,12 @@ export default function DragRegion() {
     SHORTCUTS.save,
     useCallback(() => {
       if (!dbId) return;
-      void database.save(dbId).then(() => {
-        toast.success(t("shortcuts.toast.saved"));
-      });
+      void (async () => {
+        const saved = await saveWithErrorToast(dbId, t);
+        if (saved) {
+          toast.success(t("shortcuts.toast.saved"));
+        }
+      })();
     }, [dbId, t]),
     Boolean(dbId) && !isEditing
   );

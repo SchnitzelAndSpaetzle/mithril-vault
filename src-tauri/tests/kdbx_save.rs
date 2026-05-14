@@ -492,7 +492,10 @@ fn test_save_with_backups_disabled_creates_no_files() {
 
     let service = KdbxService::new();
     service
-        .set_backup_settings(BackupSettings { enabled: false })
+        .set_backup_settings(BackupSettings {
+            enabled: false,
+            ..BackupSettings::default()
+        })
         .expect("set settings");
     service
         .create(&db_path_str, "pw", "Disabled")
