@@ -197,6 +197,7 @@ mod validate_preferences_tests {
                 enabled: true,
                 max_versions: 10,
                 directory: dir.map(String::from),
+                on_open: false,
             },
             ..AppPreferences::default()
         }

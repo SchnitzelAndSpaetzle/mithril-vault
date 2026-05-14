@@ -2,6 +2,7 @@ use crate::domain::kdbx::{format_database_version, OpenDatabase};
 use crate::domain::secure::SecureString;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
+use crate::services::kdbx::backups::{self, BackupInfo};
 use crate::services::kdbx::key::build_database_key;
 use keepass::error::{
     BlockStreamError, CompressionConfigError, CryptographyError, DatabaseFormatError,
@@ -11,6 +12,7 @@ use keepass::error::{
 };
 use keepass::{Database, DatabaseKey};
 use std::fs::File;
+use std::path::Path;
 
 use super::KdbxService;
 
@@ -233,6 +235,56 @@ impl KdbxService {
         }
 
         Ok(locked_paths)
+    }
+
+    /// Open-side backup hook (issue #193).
+    ///
+    /// Run by the command layer after a successful `open` / `unlock`. Honours
+    /// the currently-loaded `BackupSettings` — silently a no-op when
+    /// `enabled` or `on_open` is false, or when the latest existing snapshot
+    /// already matches the source on disk.
+    ///
+    /// Resolves `db_id` through the open-database map so a caller passing an
+    /// alias path (e.g., a symlink resolving to the same canonical file)
+    /// snapshots against the canonical stored location. Without that
+    /// resolution the snapshot would land next to the alias and dedup would
+    /// look in the wrong directory on the next unlock.
+    ///
+    /// Errors are NOT propagated as `open` failures: callers should surface a
+    /// `backup-warning` event on `Err(BackupError)` and otherwise carry on.
+    pub fn snapshot_after_open(
+        &self,
+        db_id: &str,
+    ) -> Result<Option<BackupInfo>, backups::BackupError> {
+        let stored_path = self.resolve_open_db_path(db_id)?;
+        let settings =
+            self.current_backup_settings()
+                .map_err(|_| backups::BackupError::BackupFailed {
+                    path: std::path::PathBuf::from(db_id),
+                    source: std::io::Error::other("backup settings lock poisoned"),
+                })?;
+        backups::snapshot_on_open(Path::new(&stored_path), &settings)
+    }
+
+    /// Looks up the canonical stored path for an open database. Returns a
+    /// `BackupError::BackupFailed` shaped error if the database is not
+    /// currently open — surfaced as a non-blocking warning by the command
+    /// layer rather than as an `open` failure.
+    fn resolve_open_db_path(&self, db_id: &str) -> Result<String, backups::BackupError> {
+        let normalized = Self::normalize_path(db_id);
+        let databases = self
+            .lock_databases()
+            .map_err(|_| backups::BackupError::BackupFailed {
+                path: std::path::PathBuf::from(db_id),
+                source: std::io::Error::other("databases lock poisoned"),
+            })?;
+        databases
+            .get(&normalized)
+            .map(|open_db| open_db.path.clone())
+            .ok_or_else(|| backups::BackupError::BackupFailed {
+                path: std::path::PathBuf::from(db_id),
+                source: std::io::Error::other(format!("database not open: {db_id}")),
+            })
     }
 
     /// Unlocks a locked database by re-opening it from disk with optional password.

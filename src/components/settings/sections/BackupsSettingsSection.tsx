@@ -70,6 +70,28 @@ export function BackupsSettingsSection({
         </span>
       </label>
 
+      <label className="flex items-start gap-2 text-sm">
+        <Checkbox
+          aria-label={t("settings.backups.onOpen.label")}
+          checked={draft.backups.onOpen ?? false}
+          onCheckedChange={(checked) =>
+            updateDraft((previous) => ({
+              ...previous,
+              backups: {
+                ...previous.backups,
+                onOpen: checked === true,
+              },
+            }))
+          }
+        />
+        <span className="flex flex-col gap-1">
+          <span>{t("settings.backups.onOpen.label")}</span>
+          <span className="text-muted-foreground">
+            {t("settings.backups.onOpen.description")}
+          </span>
+        </span>
+      </label>
+
       <div className="flex flex-col gap-2 text-sm">
         <span>{t("settings.backups.maxVersions.label")}</span>
         <Select

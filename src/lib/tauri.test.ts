@@ -170,6 +170,7 @@ describe("tauri wrappers validation", () => {
       backups: {
         enabled: true,
         maxVersions: 10,
+        onOpen: false,
       },
     } as const;
 
@@ -234,6 +235,7 @@ describe("tauri wrappers validation", () => {
         backups: {
           enabled: true,
           maxVersions: 10,
+          onOpen: false,
         },
       })
     ).rejects.toThrow();
