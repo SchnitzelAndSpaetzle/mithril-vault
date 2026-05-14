@@ -61,6 +61,7 @@ function makePreferences(): AppPreferences {
     backups: {
       enabled: true,
       maxVersions: 10,
+      onOpen: false,
     },
   };
 }
