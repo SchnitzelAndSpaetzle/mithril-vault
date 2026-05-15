@@ -22,6 +22,6 @@ pub async fn get_audit_events(
     let _ = filter; // permissive default in this slice
     let events = audit.read(Path::new(&vault_path), &AuditFilter::default());
     let mut dtos: Vec<AuditEventDto> = events.into_iter().map(AuditEventDto::from).collect();
-    dtos.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    dtos.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
     Ok(dtos)
 }
