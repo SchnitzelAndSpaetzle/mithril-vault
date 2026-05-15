@@ -10,11 +10,13 @@
 //!   [`KdbxService::delete_backup`] — snapshot operations are scoped to an
 //!   open Vault, never to arbitrary on-disk paths.
 //! - With an open Vault matched, a pre-restore pre-image snapshot of the
-//!   current on-disk state is taken via `backups::snapshot` — fail-closed.
-//!   A failed pre-restore snapshot aborts the restore; the Vault bytes are
-//!   never touched. The user's auto-backup `enabled` toggle still gates this
-//!   snapshot: when backups are disabled, the pre-restore snapshot is a
-//!   silent no-op (matches save-side semantics).
+//!   current on-disk state is taken via `backups::snapshot_manual` —
+//!   fail-closed. A failed pre-restore snapshot aborts the restore; the
+//!   Vault bytes are never touched. `snapshot_manual` is used (rather than
+//!   `snapshot`) so the safety net (a) ignores `settings.enabled` —
+//!   matching the dialog's unconditional promise of a pre-restore backup —
+//!   and (b) does not run auto-rotation, which could otherwise delete the
+//!   user's chosen restore target before we copy from it.
 //! - The chosen backup is atomic-copied over the source Vault using the same
 //!   `atomic_write` primitive the save path uses (temp file + sync + rename).
 //! - On success the open-Vault entry is removed from the service so the
@@ -119,10 +121,35 @@ impl KdbxService {
         };
 
         // Fail-closed pre-restore pre-image snapshot of the current on-disk
-        // state. Honours `settings.enabled` exactly like the save-side hook:
-        // when backups are off there is nothing to capture, but the restore
-        // still proceeds (the user opted out of the safety net globally).
-        backups::snapshot(&stored_source, &settings)?;
+        // state. Uses `snapshot_manual` deliberately rather than `snapshot`,
+        // for two reasons that hold even when the user has auto-backups
+        // disabled or their rotation cap is tight:
+        //
+        // - Auto-rotation must not run here. `snapshot` runs `rotate` after
+        //   writing the new pre-image; with `max_versions` at cap that would
+        //   trim the *oldest* auto snapshot — which may be exactly the file
+        //   we're about to copy from. We'd then fail mid-restore with the
+        //   chosen restore target gone, leaving the user in a worse state
+        //   than when they started.
+        // - The dialog body promises an automatic pre-restore backup
+        //   unconditionally. `snapshot` honours `settings.enabled` and
+        //   silently no-ops when backups are off — breaking that promise
+        //   the one time the safety net matters most. `snapshot_manual`
+        //   ignores the toggle so the rollback point always exists.
+        //
+        // A missing source on disk is the only case we don't snapshot: the
+        // file we'd capture isn't there to capture (rare — external delete
+        // between unlock and now). The atomic copy below will re-create it
+        // from the chosen backup.
+        let source_exists = stored_source
+            .try_exists()
+            .map_err(|e| AppError::BackupFailed {
+                path: stored_source.to_string_lossy().into_owned(),
+                reason: e.to_string(),
+            })?;
+        if source_exists {
+            backups::snapshot_manual(&stored_source, &settings)?;
+        }
 
         // Atomic-copy the backup bytes over the source. Uses the same
         // primitive as save so a kill mid-restore leaves the original Vault
@@ -203,6 +230,133 @@ mod tests {
             custom_fields: None,
             protected_custom_fields: None,
         }
+    }
+
+    #[test]
+    fn restore_preserves_chosen_target_when_rotation_is_at_cap() {
+        // Regression for the rotation-eats-target race: with `max_versions`
+        // at cap (1), the previous implementation would call `snapshot()`
+        // for the pre-restore snapshot, which would run rotation and
+        // delete the user's chosen restore target before the copy step ran.
+        // The new implementation uses `snapshot_manual` (no rotation), so
+        // the target survives and the restore completes.
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("vault.kdbx");
+        let vault_str = vault.to_string_lossy().into_owned();
+        let backup_dir = dir.path().join("backups");
+
+        let service = KdbxService::new();
+        let mut settings = settings_for(&backup_dir);
+        settings.max_versions = 1; // tightest rotation cap
+        service.set_backup_settings(settings).expect("set settings");
+
+        let info = service
+            .create_database(&vault_str, Some("pw"), None, "Test", &fast_options())
+            .expect("create");
+        service
+            .create_entry(&vault_str, &info.root_group_id, entry("Entry A", "alice"))
+            .expect("create A");
+        service.save(&vault_str).expect("save 1");
+        service
+            .create_entry(&vault_str, &info.root_group_id, entry("Entry B", "bob"))
+            .expect("create B");
+        service.save(&vault_str).expect("save 2");
+
+        // After save 2 with max_versions=1, exactly one auto snapshot
+        // survives — the pre-image of save 2, i.e. the "Entry A only" state.
+        // That's what the user wants to restore to.
+        let listing = service.list_backups(&vault_str).expect("list backups");
+        let auto_targets: Vec<_> = listing
+            .iter()
+            .filter(|e| e.kind == backups::BackupKind::Auto)
+            .collect();
+        assert_eq!(auto_targets.len(), 1, "rotation should leave one auto");
+        let target_path = auto_targets[0].path.to_string_lossy().into_owned();
+
+        service
+            .restore_backup(&target_path)
+            .expect("restore must succeed without rotation eating the target");
+
+        service
+            .open(&vault_str, "pw")
+            .expect("reopen restored vault");
+        let entries = service
+            .list_entries(&vault_str, None)
+            .expect("list entries");
+        assert!(entries.iter().any(|e| e.title == "Entry A"));
+        assert!(!entries.iter().any(|e| e.title == "Entry B"));
+    }
+
+    #[test]
+    fn restore_creates_pre_restore_snapshot_even_when_backups_disabled() {
+        // Regression for the broken safety-net promise: the confirmation
+        // dialog tells the user "the current state will be backed up
+        // automatically before the restore" with no caveat about
+        // settings.enabled. Previous behaviour called `snapshot()`, which
+        // is a silent no-op when `enabled = false` — a destructive write
+        // with no rollback point. New behaviour uses `snapshot_manual`,
+        // which ignores the toggle.
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("vault.kdbx");
+        let vault_str = vault.to_string_lossy().into_owned();
+        let backup_dir = dir.path().join("backups");
+
+        let service = KdbxService::new();
+        service
+            .set_backup_settings(settings_for(&backup_dir))
+            .expect("set settings");
+
+        let info = service
+            .create_database(&vault_str, Some("pw"), None, "Test", &fast_options())
+            .expect("create");
+        service
+            .create_entry(&vault_str, &info.root_group_id, entry("Entry A", "alice"))
+            .expect("create A");
+        service.save(&vault_str).expect("save 1");
+        service
+            .create_entry(&vault_str, &info.root_group_id, entry("Entry B", "bob"))
+            .expect("create B");
+        service.save(&vault_str).expect("save 2");
+
+        let listing = service.list_backups(&vault_str).expect("list backups");
+        let target_path = listing
+            .iter()
+            .find(|e| e.kind == backups::BackupKind::Auto)
+            .expect("auto snapshot present")
+            .path
+            .to_string_lossy()
+            .into_owned();
+        let manual_count_before = listing
+            .iter()
+            .filter(|e| e.kind == backups::BackupKind::Manual)
+            .count();
+
+        // Disable backups *after* the autos exist so we have something to
+        // restore but no auto safety net would run on the pre-restore path.
+        let mut disabled = settings_for(&backup_dir);
+        disabled.enabled = false;
+        service
+            .set_backup_settings(disabled)
+            .expect("disable backups");
+
+        service
+            .restore_backup(&target_path)
+            .expect("restore must succeed even with backups disabled");
+
+        // To inspect the listing we need an open vault again. Reopen,
+        // then list — a manual pre-restore snapshot must have been created
+        // despite `enabled = false`.
+        service.open(&vault_str, "pw").expect("reopen");
+        let after = service.list_backups(&vault_str).expect("list after");
+        let manual_count_after = after
+            .iter()
+            .filter(|e| e.kind == backups::BackupKind::Manual)
+            .count();
+        assert_eq!(
+            manual_count_after,
+            manual_count_before + 1,
+            "exactly one new manual (pre-restore) snapshot must exist after restore"
+        );
     }
 
     #[test]
