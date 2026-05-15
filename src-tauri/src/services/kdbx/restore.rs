@@ -19,9 +19,13 @@
 //!   user's chosen restore target before we copy from it.
 //! - The chosen backup is atomic-copied over the source Vault using the same
 //!   `atomic_write` primitive the save path uses (temp file + sync + rename).
-//! - On success the open-Vault entry is removed from the service so the
-//!   in-memory state cannot drift from the new on-disk bytes. The command
-//!   layer emits `database-closed` and the frontend routes back to unlock.
+//! - On success the open-Vault entry is **locked in place** rather than
+//!   removed: the decrypted `Database` and stored password are dropped so
+//!   no stale in-memory state can drift from the new on-disk bytes, but
+//!   the entry's `path` and `keyfile_path` survive so the frontend's
+//!   re-unlock path (which calls `unlock_database`, expecting the entry to
+//!   still exist in the map) just works. The command layer emits
+//!   `database-closed` and the frontend routes to the unlock screen.
 //! - The restore path never calls `add_recent_database` — backup paths must
 //!   not enter the recent-Vaults list.
 
@@ -205,10 +209,18 @@ impl KdbxService {
             },
         )?;
 
-        // Invalidate the open-Vault entry so the now-stale in-memory state
-        // cannot drift from the new on-disk bytes. The frontend will receive
-        // `database-closed` from the command layer and route to unlock.
-        databases.remove(&map_key);
+        // Lock the open-Vault entry in place. Dropping `db` and `password`
+        // discards the now-stale decrypted state and clears the master-key
+        // material from memory, while keeping `path` and `keyfile_path` so
+        // the frontend's re-unlock flow (which routes to `/unlock` and calls
+        // `unlock_database`) finds the entry it expects in the map. Fully
+        // removing the entry would force a fresh `open_database` call, which
+        // the post-restore UI flow is not wired for.
+        if let Some(open_db) = databases.get_mut(&map_key) {
+            open_db.db = None;
+            open_db.password = None;
+            open_db.is_modified = false;
+        }
 
         Ok(source_str)
     }
@@ -305,8 +317,8 @@ mod tests {
             .expect("restore must succeed without rotation eating the target");
 
         service
-            .open(&vault_str, "pw")
-            .expect("reopen restored vault");
+            .unlock(&vault_str, Some("pw"))
+            .expect("re-unlock restored vault");
         let entries = service
             .list_entries(&vault_str, None)
             .expect("list entries");
@@ -370,10 +382,12 @@ mod tests {
             .restore_backup(&target_path)
             .expect("restore must succeed even with backups disabled");
 
-        // To inspect the listing we need an open vault again. Reopen,
-        // then list — a manual pre-restore snapshot must have been created
-        // despite `enabled = false`.
-        service.open(&vault_str, "pw").expect("reopen");
+        // The vault is locked-in-place after restore. Re-unlock so we can
+        // list backups; a manual pre-restore snapshot must have been
+        // created despite `enabled = false`.
+        service
+            .unlock(&vault_str, Some("pw"))
+            .expect("re-unlock after restore");
         let after = service.list_backups(&vault_str).expect("list after");
         let manual_count_after = after
             .iter()
@@ -688,19 +702,22 @@ mod tests {
 
         service.restore_backup(&target_path).expect("restore");
 
-        // The open-Vault map must no longer contain the source: the in-memory
-        // state is stale after the on-disk bytes were replaced.
-        assert!(
-            !service
-                .is_database_open(&vault_str)
-                .expect("is_database_open"),
-            "open-Vault map must be invalidated after restore"
+        // The open-Vault entry must be locked in place (not removed): the
+        // in-memory decrypted state is gone so it cannot drift from the new
+        // on-disk bytes, but the entry survives so the frontend's re-unlock
+        // path (`unlock_database`) finds what it expects in the map.
+        assert_eq!(
+            service
+                .is_database_locked(&vault_str)
+                .expect("locked state"),
+            Some(true),
+            "open-Vault entry must be locked-in-place after restore"
         );
 
-        // Reopen → only Entry A should be present.
+        // Re-unlock → only Entry A should be present.
         service
-            .open(&vault_str, "pw")
-            .expect("reopen restored vault");
+            .unlock(&vault_str, Some("pw"))
+            .expect("re-unlock restored vault");
         let entries = service
             .list_entries(&vault_str, None)
             .expect("list entries after restore");
