@@ -1,0 +1,289 @@
+// SPDX-License-Identifier: MIT
+
+//! Composing facade for the audit subsystem.
+//!
+//! Wires the five deep modules (`format`, `crypto`, `storage`, `key`,
+//! `vault_id`) plus the retention stub into the public surface used by the
+//! rest of the app:
+//!
+//! * [`AuditService::record`] — append an event. Infallible by contract:
+//!   internal errors are swallowed and flip a `degraded` flag so a broken
+//!   audit log cannot become a `DoS` vector against the user's own Vault flows.
+//! * [`AuditService::read`] — list events for a Vault path.
+
+use crate::services::audit::crypto::{decrypt, encrypt, KEY_LEN};
+use crate::services::audit::format::AuditEvent;
+use crate::services::audit::key::AuditKey;
+use crate::services::audit::retention::apply_retention;
+use crate::services::audit::storage::AuditLogFile;
+use crate::services::audit::vault_id::hash_vault_path;
+use chrono::Utc;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+/// Permissive filter applied by [`AuditService::read`]. Shape is in place so
+/// future issues can plug in `kinds` / time-range filtering without changing
+/// callers; today it returns everything.
+#[derive(Debug, Default, Clone)]
+pub struct AuditFilter {}
+
+pub struct AuditService {
+    base_dir: PathBuf,
+    key_source: Arc<dyn AuditKey>,
+    degraded: AtomicBool,
+    /// Per-Vault consecutive-failed-unlock counters, keyed by canonicalized
+    /// path. Lives in memory only — resets on process restart per the AC's
+    /// "per session" wording.
+    attempts: Mutex<HashMap<PathBuf, u32>>,
+}
+
+impl AuditService {
+    pub fn new(base_dir: PathBuf, key_source: Arc<dyn AuditKey>) -> Self {
+        Self {
+            base_dir,
+            key_source,
+            degraded: AtomicBool::new(false),
+            attempts: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Reports whether a previous `record` call failed internally. Surfaced
+    /// in Settings → Audit Log as a banner; the failed user action itself is
+    /// never affected.
+    pub fn is_degraded(&self) -> bool {
+        self.degraded.load(Ordering::SeqCst)
+    }
+
+    /// Appends `event` to the per-Vault audit log. Infallible by contract:
+    /// every failure path swallows the error and flips the `degraded` flag.
+    pub fn record(&self, vault_path: &Path, event: &AuditEvent) {
+        if let Err(()) = self.try_record(vault_path, event) {
+            self.degraded.store(true, Ordering::SeqCst);
+        }
+    }
+
+    fn try_record(&self, vault_path: &Path, event: &AuditEvent) -> Result<(), ()> {
+        let key = self.key_source.get_or_create().map_err(|_| ())?;
+        let plaintext = event.to_bytes();
+        let frame = encrypt(&key, &plaintext).map_err(|_| ())?;
+        let log_path = self.log_path_for(vault_path);
+        let log = AuditLogFile::new(log_path.clone());
+        log.append(&frame).map_err(|_| ())?;
+        apply_retention(&log_path);
+        Ok(())
+    }
+
+    /// Returns every recorded event for the Vault at `vault_path` that
+    /// matches `_filter`. Frames that fail to decrypt or parse are skipped so
+    /// one corrupt record cannot hide the rest.
+    pub fn read(&self, vault_path: &Path, _filter: &AuditFilter) -> Vec<AuditEvent> {
+        let Ok(key) = self.key_source.get_or_create() else {
+            self.degraded.store(true, Ordering::SeqCst);
+            return Vec::new();
+        };
+        let log = AuditLogFile::new(self.log_path_for(vault_path));
+        let Ok(frames) = log.read_all() else {
+            self.degraded.store(true, Ordering::SeqCst);
+            return Vec::new();
+        };
+        frames
+            .iter()
+            .filter_map(|frame| decrypt_and_parse(&key, frame))
+            .collect()
+    }
+
+    fn log_path_for(&self, vault_path: &Path) -> PathBuf {
+        let name = hash_vault_path(vault_path);
+        self.base_dir.join(format!("{name}.jsonl"))
+    }
+
+    /// Increments the per-Vault consecutive-failed-unlock counter and appends
+    /// one `vault.unlock_failed` event carrying the new count. Called from
+    /// the command layer whenever an open/unlock returns `InvalidPassword`.
+    pub fn record_vault_unlock_failed(&self, vault_path: &Path) {
+        let Ok(mut map) = self.attempts.lock() else {
+            self.degraded.store(true, Ordering::SeqCst);
+            return;
+        };
+        let entry = map.entry(attempts_key(vault_path)).or_insert(0);
+        *entry = entry.saturating_add(1);
+        let count = *entry;
+        drop(map);
+
+        let event = AuditEvent::VaultUnlockFailed {
+            timestamp: Utc::now(),
+            attempt_count: count,
+        };
+        self.record(vault_path, &event);
+    }
+
+    /// Resets the per-Vault failed-unlock counter — called on successful
+    /// open/unlock so the next failure starts the count back at 1.
+    pub fn reset_unlock_attempts(&self, vault_path: &Path) {
+        if let Ok(mut map) = self.attempts.lock() {
+            map.remove(&attempts_key(vault_path));
+        }
+    }
+}
+
+fn attempts_key(vault_path: &Path) -> PathBuf {
+    vault_path
+        .canonicalize()
+        .unwrap_or_else(|_| vault_path.to_path_buf())
+}
+
+fn decrypt_and_parse(key: &[u8; KEY_LEN], frame: &[u8]) -> Option<AuditEvent> {
+    let plaintext = decrypt(key, frame).ok()?;
+    AuditEvent::from_bytes(&plaintext).ok()
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::services::audit::key::InMemoryAuditKey;
+    use chrono::{TimeZone, Utc};
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    fn unlock_failed_event(count: u32) -> AuditEvent {
+        AuditEvent::VaultUnlockFailed {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 15, 12, 0, 0).unwrap(),
+            attempt_count: count,
+        }
+    }
+
+    fn fresh_service() -> (AuditService, tempfile::TempDir, PathBuf) {
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("vault.kdbx");
+        std::fs::write(&vault, b"x").expect("write vault");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+        (service, dir, vault)
+    }
+
+    #[test]
+    fn tracer_bullet_one_record_appears_in_read() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record(&vault, &unlock_failed_event(1));
+        let events = service.read(&vault, &AuditFilter::default());
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0], unlock_failed_event(1));
+        assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn multiple_records_returned_in_order() {
+        let (service, _dir, vault) = fresh_service();
+
+        for count in 1..=3 {
+            service.record(&vault, &unlock_failed_event(count));
+        }
+
+        let events = service.read(&vault, &AuditFilter::default());
+        assert_eq!(events.len(), 3);
+        for (i, evt) in events.iter().enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            let want = unlock_failed_event(u32::try_from(i + 1).unwrap());
+            assert_eq!(evt, &want);
+        }
+    }
+
+    #[test]
+    fn read_returns_empty_for_vault_with_no_events() {
+        let (service, _dir, vault) = fresh_service();
+        assert!(service.read(&vault, &AuditFilter::default()).is_empty());
+    }
+
+    #[test]
+    fn consecutive_failed_unlocks_increment_attempt_count() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_vault_unlock_failed(&vault);
+        service.record_vault_unlock_failed(&vault);
+        service.record_vault_unlock_failed(&vault);
+
+        let events = service.read(&vault, &AuditFilter::default());
+        let counts: Vec<u32> = events
+            .iter()
+            .map(|e| match e {
+                AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+            })
+            .collect();
+        assert_eq!(counts, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn reset_starts_counter_from_one_again() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_vault_unlock_failed(&vault);
+        service.record_vault_unlock_failed(&vault);
+        service.reset_unlock_attempts(&vault);
+        service.record_vault_unlock_failed(&vault);
+
+        let events = service.read(&vault, &AuditFilter::default());
+        let counts: Vec<u32> = events
+            .iter()
+            .map(|e| match e {
+                AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+            })
+            .collect();
+        assert_eq!(counts, vec![1, 2, 1]);
+    }
+
+    #[test]
+    fn counters_are_per_vault() {
+        let dir = tempdir().expect("tempdir");
+        let vault_a = dir.path().join("a.kdbx");
+        let vault_b = dir.path().join("b.kdbx");
+        std::fs::write(&vault_a, b"a").expect("write a");
+        std::fs::write(&vault_b, b"b").expect("write b");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+        service.record_vault_unlock_failed(&vault_a);
+        service.record_vault_unlock_failed(&vault_a);
+        service.record_vault_unlock_failed(&vault_b);
+
+        let a_events = service.read(&vault_a, &AuditFilter::default());
+        let b_events = service.read(&vault_b, &AuditFilter::default());
+        let a_counts: Vec<u32> = a_events
+            .iter()
+            .map(|e| match e {
+                AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+            })
+            .collect();
+        let b_counts: Vec<u32> = b_events
+            .iter()
+            .map(|e| match e {
+                AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+            })
+            .collect();
+        assert_eq!(a_counts, vec![1, 2]);
+        assert_eq!(b_counts, vec![1]);
+    }
+
+    #[test]
+    fn record_against_unwritable_dir_does_not_panic_and_flags_degraded() {
+        // Point the base_dir at a path that cannot be created (a regular
+        // file masquerading as a directory). `record` must swallow the
+        // error and flip `degraded`.
+        let dir = tempdir().expect("tempdir");
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, b"x").expect("write blocker file");
+
+        let base_dir = blocker.join("audit"); // can't mkdir under a regular file
+        let service = AuditService::new(base_dir, Arc::new(InMemoryAuditKey::new()));
+
+        let vault = dir.path().join("vault.kdbx");
+        std::fs::write(&vault, b"x").expect("write vault");
+
+        service.record(&vault, &unlock_failed_event(1));
+        assert!(service.is_degraded());
+    }
+}

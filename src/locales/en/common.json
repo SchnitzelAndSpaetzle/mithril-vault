@@ -18,6 +18,18 @@
   "clipboard": {
     "countdown": "Clipboard clears in {{seconds}}s"
   },
+  "audit": {
+    "title": "Audit log",
+    "description": "Security-relevant events recorded on this device for the currently open vault.",
+    "empty": "No audit events for this vault yet.",
+    "emptyNoVault": "Open a vault to see its audit log.",
+    "loadError": "Failed to load audit events: {{error}}",
+    "attemptCount_one": "Attempt {{count}}",
+    "attemptCount_other": "Attempt {{count}}",
+    "kind": {
+      "vaultUnlockFailed": "Failed unlock attempt"
+    }
+  },
   "settings": {
     "title": "Settings",
     "description": "Application preferences and database configuration.",

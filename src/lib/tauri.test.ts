@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  audit,
   backups,
   database,
   entries,
@@ -320,6 +321,39 @@ describe("tauri wrappers validation", () => {
     expect(invoke).toHaveBeenCalledWith("create_manual_backup", {
       databasePath: dbPath,
     });
+  });
+
+  it("audit.list parses get_audit_events into typed events", async () => {
+    const payload = [
+      {
+        kind: "vaultUnlockFailed",
+        timestamp: "2026-05-15T12:00:00.000Z",
+        attemptCount: 2,
+      },
+      {
+        kind: "vaultUnlockFailed",
+        timestamp: "2026-05-15T11:59:00.000Z",
+        attemptCount: 1,
+      },
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(payload);
+
+    await expect(audit.list("/tmp/vault.kdbx")).resolves.toEqual(payload);
+    expect(invoke).toHaveBeenCalledWith("get_audit_events", {
+      vaultPath: "/tmp/vault.kdbx",
+      filter: null,
+    });
+  });
+
+  it("audit.list rejects payloads with an unknown kind", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce([
+      {
+        kind: "vaultDeleted",
+        timestamp: "2026-05-15T12:00:00.000Z",
+        attemptCount: 1,
+      },
+    ]);
+    await expect(audit.list("/tmp/vault.kdbx")).rejects.toThrow();
   });
 
   it("invokes delete_backup with the supplied path", async () => {

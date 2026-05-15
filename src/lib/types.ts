@@ -313,6 +313,24 @@ export const BackupInfoSchema = z.object({
 });
 export type BackupInfo = z.infer<typeof BackupInfoSchema>;
 
+/// Audit log event — security-relevant action recorded on this device. Today
+/// only `vaultUnlockFailed` is emitted; the union shape is set up so future
+/// kinds can be added without changing call sites.
+export const AuditEventKindSchema = z.enum(["vaultUnlockFailed"]);
+export type AuditEventKind = z.infer<typeof AuditEventKindSchema>;
+
+export const AuditEventSchema = z.object({
+  kind: AuditEventKindSchema,
+  timestamp: z.string().min(1),
+  attemptCount: z.number().int().positive().nullable().optional(),
+});
+export type AuditEvent = z.infer<typeof AuditEventSchema>;
+
+export const AuditFilterSchema = z.object({
+  kinds: z.array(AuditEventKindSchema).optional(),
+});
+export type AuditFilter = z.infer<typeof AuditFilterSchema>;
+
 export const EntrySortFieldSchema = z.enum([
   "title",
   "username",

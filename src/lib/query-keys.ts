@@ -27,6 +27,11 @@ export const queryKeys = {
     all: ["backups"] as const,
     list: (dbId: string) => [...queryKeys.backups.all, dbId, "list"] as const,
   },
+  audit: {
+    all: ["audit"] as const,
+    list: (vaultPath: string) =>
+      [...queryKeys.audit.all, vaultPath, "list"] as const,
+  },
   groups: {
     all: ["groups"] as const,
     list: (dbId: string, parentId?: string | null) =>

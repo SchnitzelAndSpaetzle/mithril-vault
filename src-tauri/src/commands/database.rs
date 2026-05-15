@@ -4,12 +4,37 @@ use crate::dto::database::{
     CustomIconData, DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
 };
 use crate::dto::error::AppError;
+use crate::services::audit::AuditService;
 use crate::services::auto_lock::AutoLockService;
 use crate::services::kdbx::backups::{BackupError, BackupInfo, BackupListEntry};
 use crate::services::kdbx::KdbxService;
 use serde::Serialize;
+use std::path::Path;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime, State};
+
+/// Maps the open/unlock result through the audit subsystem: a successful
+/// open resets the per-Vault failed-unlock counter, while an
+/// `InvalidPassword` failure records exactly one `vault.unlock_failed`
+/// event carrying the running consecutive-failure count.
+///
+/// Returns the original result unchanged. Audit failures cannot bubble up:
+/// `AuditService::record_vault_unlock_failed` flips an internal `degraded`
+/// flag and otherwise stays silent so the user's unlock-failure UX is
+/// unaffected.
+fn record_open_outcome<T>(
+    audit: &AuditService,
+    path: &str,
+    result: Result<T, AppError>,
+) -> Result<T, AppError> {
+    let vault_path = Path::new(path);
+    match &result {
+        Ok(_) => audit.reset_unlock_attempts(vault_path),
+        Err(AppError::InvalidPassword) => audit.record_vault_unlock_failed(vault_path),
+        Err(_) => {}
+    }
+    result
+}
 
 /// Payload of the `backup-warning` event. The frontend renders this as a
 /// non-blocking toast and never as a modal — open-side backup failures must
@@ -67,8 +92,9 @@ pub async fn open_database<R: Runtime>(
     password: String,
     app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    let info = state.open(&path, &password)?;
+    let info = record_open_outcome(&audit, &path, state.open(&path, &password))?;
     emit_open_backup_hook(&app, &state, &path);
     Ok(info)
 }
@@ -140,8 +166,13 @@ pub async fn open_database_with_keyfile<R: Runtime>(
     keyfile_path: String,
     app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    let info = state.open_with_keyfile(&path, &password, &keyfile_path)?;
+    let info = record_open_outcome(
+        &audit,
+        &path,
+        state.open_with_keyfile(&path, &password, &keyfile_path),
+    )?;
     emit_open_backup_hook(&app, &state, &path);
     Ok(info)
 }
@@ -153,8 +184,13 @@ pub async fn open_database_with_keyfile_only<R: Runtime>(
     keyfile_path: String,
     app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    let info = state.open_with_keyfile_only(&path, &keyfile_path)?;
+    let info = record_open_outcome(
+        &audit,
+        &path,
+        state.open_with_keyfile_only(&path, &keyfile_path),
+    )?;
     emit_open_backup_hook(&app, &state, &path);
     Ok(info)
 }
@@ -175,6 +211,7 @@ pub async fn unlock_database<R: Runtime>(
     password: Option<String>,
     app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
     // Snapshot the locked state BEFORE calling unlock so we can tell apart
     // an actual locked → unlocked transition from the no-op case where the
@@ -183,7 +220,7 @@ pub async fn unlock_database<R: Runtime>(
     // wasted work in the happy path, and a duplicated `backup-warning`
     // event whenever the backup dir is broken.
     let was_locked = state.is_database_locked(&db_id)?.unwrap_or(true);
-    let info = state.unlock(&db_id, password.as_deref())?;
+    let info = record_open_outcome(&audit, &db_id, state.unlock(&db_id, password.as_deref()))?;
     if was_locked {
         emit_open_backup_hook(&app, &state, &db_id);
     }

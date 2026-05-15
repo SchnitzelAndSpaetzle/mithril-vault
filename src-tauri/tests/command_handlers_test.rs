@@ -144,6 +144,7 @@ fn database_commands_handle_missing_database() {
         "password".into(),
         app.handle().clone(),
         app.state(),
+        app.state(),
     ))
     .expect_err("expected invalid path");
     assert!(matches!(err, AppError::InvalidPath(_)));
@@ -162,6 +163,7 @@ fn database_commands_handle_missing_database() {
         "missing.kdbx".to_string(),
         Some("password".into()),
         app.handle().clone(),
+        app.state(),
         app.state(),
     ))
     .expect_err("expected database not found");
@@ -391,6 +393,7 @@ fn database_commands_cover_success_paths() {
         keyfile_path_str.clone(),
         app.handle().clone(),
         app.state(),
+        app.state(),
     ))
     .expect("open database with keyfile");
 
@@ -417,6 +420,7 @@ fn database_commands_cover_success_paths() {
         key_only_path_str.clone(),
         keyfile_path_str.clone(),
         app.handle().clone(),
+        app.state(),
         app.state(),
     ))
     .expect("open with keyfile only");

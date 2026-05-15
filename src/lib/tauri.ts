@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
   AppPreferences,
+  AuditEvent,
+  AuditFilter,
   BackupInfo,
   BackupListEntry,
   CreateEntryData,
@@ -25,6 +27,7 @@ import type {
 } from "./types";
 import {
   AppPreferencesSchema,
+  AuditEventSchema,
   BackupInfoSchema,
   BackupListEntrySchema,
   CreateEntryDataSchema,
@@ -643,6 +646,20 @@ export const backups = {
   async restore(backupPath: string): Promise<void> {
     PathOnlySchema.parse({ path: backupPath });
     return invoke("restore_backup", { backupPath });
+  },
+};
+
+export const audit = {
+  /// Lists the audit events recorded on this device for the given Vault,
+  /// newest-first. `filter` is accepted but currently ignored on the backend
+  /// — wire shape is in place so a UI filter can be added without a command
+  /// rename.
+  async list(vaultPath: string, filter?: AuditFilter): Promise<AuditEvent[]> {
+    const result = await invoke("get_audit_events", {
+      vaultPath,
+      filter: filter ?? null,
+    });
+    return z.array(AuditEventSchema).parse(result);
   },
 };
 
