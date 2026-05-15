@@ -18,8 +18,8 @@ use crate::services::audit::crypto::KEY_LEN;
 use rand::rand_core::TryRng;
 use rand::rngs::SysRng;
 use std::fs;
-use std::io::Write;
-use std::path::PathBuf;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use thiserror::Error;
 use zeroize::Zeroizing;
@@ -111,12 +111,22 @@ impl AuditKey for FileBackedAuditKey {
             return Ok(k);
         }
 
-        if let Ok(bytes) = fs::read(&self.path) {
-            if let Ok(arr) = <[u8; KEY_LEN]>::try_from(bytes.as_slice()) {
+        // Read path: only `NotFound` means "create new". Any other error
+        // (`PermissionDenied`, transient I/O, …) propagates instead of
+        // silently rotating the key and orphaning the existing audit log.
+        // A malformed file (wrong length) is also a hard error — silently
+        // overwriting it would lose history just as decisively as rotation.
+        match read_key_file(&self.path) {
+            Ok(Some(arr)) => {
                 *guard = Some(arr);
                 return Ok(arr);
             }
-            // Length mismatch — treat as missing and overwrite.
+            Ok(None) => {} // file genuinely missing — fall through to create
+            Err(e) => return Err(KeyError::Backend(e.to_string())),
+        }
+
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).map_err(|e| KeyError::Backend(e.to_string()))?;
         }
 
         let mut buf = Zeroizing::new([0u8; KEY_LEN]);
@@ -124,27 +134,66 @@ impl AuditKey for FileBackedAuditKey {
             .try_fill_bytes(&mut buf[..])
             .map_err(|e| KeyError::Backend(e.to_string()))?;
 
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|e| KeyError::Backend(e.to_string()))?;
+        // Atomic create-and-restrict-mode in one syscall: `create_new`
+        // closes the TOCTOU window where a concurrent process could see a
+        // half-written or default-permissioned file, and on Unix the
+        // restrictive mode is applied at file creation (subject to umask
+        // intersection, which can only further restrict the mode).
+        let mut open_opts = fs::OpenOptions::new();
+        open_opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            open_opts.mode(0o600);
         }
-        let mut f = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&self.path)
-            .map_err(|e| KeyError::Backend(e.to_string()))?;
+
+        let mut f = match open_opts.open(&self.path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                // Lost a race with a concurrent creator. Read what they
+                // wrote and adopt their key — never overwrite, never
+                // rotate.
+                return match read_key_file(&self.path) {
+                    Ok(Some(arr)) => {
+                        *guard = Some(arr);
+                        Ok(arr)
+                    }
+                    Ok(None) => Err(KeyError::Backend(
+                        "audit key file appeared then vanished during creation race".into(),
+                    )),
+                    Err(e) => Err(KeyError::Backend(e.to_string())),
+                };
+            }
+            Err(e) => return Err(KeyError::Backend(e.to_string())),
+        };
         f.write_all(&buf[..])
             .map_err(|e| KeyError::Backend(e.to_string()))?;
         f.sync_all().map_err(|e| KeyError::Backend(e.to_string()))?;
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&self.path, fs::Permissions::from_mode(0o600));
-        }
-
         *guard = Some(*buf);
         Ok(*buf)
+    }
+}
+
+/// Reads the audit key from `path`. Returns `Ok(None)` only when the file
+/// genuinely does not exist; any other I/O error propagates so the caller
+/// does not mistake a transient read failure for "first run, create new key"
+/// and rotate the user's audit history into oblivion.
+fn read_key_file(path: &Path) -> io::Result<Option<[u8; KEY_LEN]>> {
+    match fs::read(path) {
+        Ok(bytes) => match <[u8; KEY_LEN]>::try_from(bytes.as_slice()) {
+            Ok(arr) => Ok(Some(arr)),
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "audit key file at {} is {} bytes; expected {KEY_LEN}",
+                    path.display(),
+                    bytes.len()
+                ),
+            )),
+        },
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
     }
 }
 
@@ -193,5 +242,89 @@ mod tests {
         let source = FileBackedAuditKey::new(path.clone());
         let _ = source.get_or_create().expect("create");
         assert!(path.exists());
+    }
+
+    /// Read errors other than `NotFound` must NOT rotate the key. Stage a
+    /// directory at the key path so `fs::read` returns a non-`NotFound`
+    /// error; the call must fail rather than silently regenerating.
+    #[test]
+    fn non_not_found_read_error_propagates_instead_of_rotating() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("key.bin");
+        // Stage a directory where the file should be: `fs::read` returns
+        // `IsADirectory` / `Other`, never `NotFound`.
+        fs::create_dir(&path).expect("stage dir");
+
+        let source = FileBackedAuditKey::new(path);
+        assert!(matches!(source.get_or_create(), Err(KeyError::Backend(_))));
+    }
+
+    /// A wrong-length key file is a hard error, never a silent overwrite —
+    /// the user's existing audit log would otherwise become permanently
+    /// unreadable on the next process start.
+    #[test]
+    fn malformed_key_file_propagates_instead_of_rotating() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("key.bin");
+        fs::write(&path, b"not 32 bytes").expect("stage malformed key");
+
+        let source = FileBackedAuditKey::new(path);
+        assert!(matches!(source.get_or_create(), Err(KeyError::Backend(_))));
+    }
+
+    /// Concurrent creators must converge on the same key. Spawn several
+    /// threads, each with its own `FileBackedAuditKey` instance pointing
+    /// at the same path so the per-instance Mutex cannot serialise them,
+    /// then assert every returned key matches.
+    #[test]
+    fn concurrent_creators_converge_on_one_key() {
+        use std::sync::Barrier;
+        use std::thread;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("key.bin");
+
+        let thread_count = 8;
+        let barrier = std::sync::Arc::new(Barrier::new(thread_count));
+
+        let mut handles = Vec::with_capacity(thread_count);
+        for _ in 0..thread_count {
+            let path = path.clone();
+            let barrier = std::sync::Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                let source = FileBackedAuditKey::new(path);
+                // Release all threads at roughly the same instant so at
+                // least some of them hit the `create_new` race window.
+                barrier.wait();
+                source.get_or_create().expect("get_or_create")
+            }));
+        }
+
+        let keys: Vec<[u8; KEY_LEN]> = handles.into_iter().map(|h| h.join().expect("join")).collect();
+        let first = keys[0];
+        for k in &keys[1..] {
+            assert_eq!(*k, first, "concurrent creators diverged on the audit key");
+        }
+
+        // On-disk state must match the in-memory consensus.
+        let on_disk = fs::read(&path).expect("read");
+        assert_eq!(on_disk.as_slice(), first.as_slice());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn newly_created_key_file_is_owner_read_write_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("key.bin");
+        let source = FileBackedAuditKey::new(path.clone());
+        let _ = source.get_or_create().expect("create");
+
+        let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
+        // The umask can only further restrict bits we requested; 0o600 is
+        // already the most-restrictive practical setting, so equality holds
+        // on every realistic CI host.
+        assert_eq!(mode, 0o600, "audit key file should be 0o600, was {mode:o}");
     }
 }
