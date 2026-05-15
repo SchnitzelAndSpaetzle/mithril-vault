@@ -13,6 +13,14 @@ import type { BackupListEntry, BackupKind } from "@/lib/types";
 
 interface BackupsListSectionProps {
   dbId: string | null;
+  /**
+   * Mirrors `draft.backups.enabled` from the parent settings form. The
+   * "Create backup now" button gates on it: even though the manual-backup
+   * command itself ignores the toggle, the user has explicitly turned auto
+   * backups off — surfacing a clickable button here would feel inconsistent.
+   * Defaults to `true` for tests / callers that don't pass it.
+   */
+  backupsEnabled?: boolean;
 }
 
 function formatBytes(bytes: number): string {
@@ -103,10 +111,21 @@ function BackupRow({
 
 export function BackupsListSection({
   dbId,
+  backupsEnabled = true,
 }: Readonly<BackupsListSectionProps>) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [confirmingPath, setConfirmingPath] = useState<string | null>(null);
+
+  const createManualMutation = useMutation<unknown, Error, string>({
+    mutationFn: (path) => backups.createManual(path),
+    onSuccess: () => {
+      toast.success(t("settings.backups.list.createNow.success"));
+    },
+    onError: (error) => {
+      toast.error(String(error));
+    },
+  });
 
   const query = useQuery<BackupListEntry[], Error>({
     queryKey: queryKeys.backups.list(dbId ?? "none"),
@@ -141,12 +160,29 @@ export function BackupsListSection({
     },
   });
 
+  const canCreateManual =
+    Boolean(dbId) && backupsEnabled && !createManualMutation.isPending;
+
   return (
     <SettingsSection
       id="backups-list"
       title={t("settings.backups.list.title")}
       description={t("settings.backups.list.description")}
     >
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={!canCreateManual}
+          onClick={() => {
+            if (!dbId) return;
+            createManualMutation.mutate(dbId);
+          }}
+        >
+          {t("settings.backups.list.createNow.button")}
+        </Button>
+      </div>
       {dbId ? (
         <BackupsListBody
           entries={query.data ?? []}

@@ -21,7 +21,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
-use self::backups::BackupListEntry;
+use self::backups::{BackupInfo, BackupListEntry};
 use self::favicons::FaviconCooldown;
 
 pub struct KdbxService {
@@ -177,6 +177,34 @@ impl KdbxService {
 
         fs::remove_file(&canonical_target).map_err(|e| AppError::Io(e.to_string()))?;
         Ok(())
+    }
+
+    /// Creates a manual, rotation-exempt snapshot of an open Vault.
+    ///
+    /// Resolves `db_path` through the open-database map so an alias path
+    /// (e.g. a symlink resolving to the canonical file) snapshots against
+    /// the canonical stored location — matches how `snapshot_after_open`
+    /// and `list_backups` resolve paths, so all three agree on which file
+    /// is being acted on.
+    ///
+    /// Manual snapshots ignore `settings.enabled` deliberately: the Settings
+    /// UI disables the trigger button when the auto-backup toggle is off,
+    /// but if the command is reached anyway (e.g. via direct IPC) the
+    /// snapshot must still succeed — manual is a user-initiated override.
+    pub fn create_manual_backup(&self, db_path: &str) -> Result<BackupInfo, AppError> {
+        let normalized = Self::normalize_path(db_path);
+        let stored_path = {
+            let databases = self.lock_databases()?;
+            databases
+                .get(&normalized)
+                .map(|open_db| open_db.path.clone())
+                .ok_or_else(|| AppError::DatabaseNotFound(db_path.to_string()))?
+        };
+        let settings = self.current_backup_settings()?;
+        Ok(backups::snapshot_manual(
+            Path::new(&stored_path),
+            &settings,
+        )?)
     }
 
     /// Enumerates snapshots that belong to `db_path`, sorted newest-first.
