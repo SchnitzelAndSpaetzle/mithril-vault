@@ -56,3 +56,26 @@ A read-only snapshot of properties intrinsic to a specific Vault (KDF parameters
 
 ### Secure String / Secure Bytes
 Wrappers around `String` / `Vec<u8>` that zeroize on drop and redact in Debug/Display output. Used for every value the code wants to keep out of accidental logs and core dumps — passwords, keyfile contents, derived keys.
+
+## Audit
+
+End-user awareness of security-relevant events. Developer debugging is a separate concern and is **not** what this section covers.
+
+### Audit Log
+A per-Vault append-only stream of security-relevant events recorded on **this device**. Lives in the app's local data dir, one file per Vault, filename keyed by the SHA-256 hash of the canonicalized Vault path so the on-disk layout doesn't leak which Vaults exist. Encrypted at rest with a key from the OS keychain (via `secure_storage`). Survives Vault locks — failed-unlock attempts append to the same log.
+
+### Audit Event
+A single record in an Audit Log. Carries a UTC timestamp, an Audit Event Kind, and the minimal kind-specific fields needed to tell the story. Deliberately does **not** carry passwords, Vault paths, or Entry titles — titles are resolved at view time by joining `entry_id` against the matching unlocked Vault, so an Audit Log without its Vault is intentionally less informative.
+
+### Audit Event Kind
+The namespaced enum of recordable events:
+- `vault.opened` — successful unlock
+- `vault.locked` — re-lock, with `reason` (`manual | auto_lock | app_quit | screen_lock`)
+- `vault.unlock_failed` — wrong password/keyfile, with `attempt_count` (resets on success, per-session)
+- `entry.password_revealed` — eye-icon click on the password field
+- `entry.password_copied` — clipboard write of an Entry's password
+- `entry.protected_field_revealed` — reveal on a protected custom field
+- `preferences.security_changed` — change to an allowlisted security-relevant App Preference, with `setting_name` only (no old/new values)
+- `audit.cleared` — user emptied the Audit Log; the record itself survives the clear
+
+Entry selection, group navigation, search, theme/language changes, and other non-security-relevant interactions are explicitly **not** Audit Event Kinds.
