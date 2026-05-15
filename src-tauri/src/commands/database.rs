@@ -287,6 +287,49 @@ pub async fn delete_backup<R: Runtime>(
     Ok(())
 }
 
+/// Restores a backup snapshot over the Vault it belongs to.
+///
+/// The backup is matched to an open Vault by basename + canonical-path
+/// containment in that Vault's resolved backup directory (see
+/// `KdbxService::restore_backup`). A pre-restore pre-image snapshot of the
+/// current Vault state is taken first using the save-side fail-closed
+/// semantics — if that snapshot fails, the restore aborts with the Vault file
+/// unchanged.
+///
+/// On success the open-Vault entry is removed from the service so the stale
+/// in-memory state cannot drift from the new on-disk bytes, and a
+/// `database-closed` event is emitted so the frontend can route to the
+/// unlock screen.
+///
+/// The command never calls `add_recent_database`; backup paths must not
+/// enter the recent-Vaults list.
+#[tauri::command]
+pub async fn restore_backup<R: Runtime>(
+    backup_path: String,
+    app: AppHandle<R>,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    let source_path = state.restore_backup(&backup_path)?;
+    let _ = app.emit(
+        "database-closed",
+        DatabaseClosedPayload {
+            path: source_path,
+            reason: "restore",
+        },
+    );
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DatabaseClosedPayload {
+    path: String,
+    /// Discriminator that tells the frontend why the database was closed.
+    /// Today the only producer is `restore`; future producers (e.g. external
+    /// file removal) can add their own value without breaking listeners.
+    reason: &'static str,
+}
+
 /// Lists all currently open databases.
 #[tauri::command]
 pub async fn list_open_databases(

@@ -20,8 +20,8 @@ use commands::{
     list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
     open_database, open_database_with_keyfile, open_database_with_keyfile_only,
     remove_recent_database, rename_group, rename_tag, report_activity, reset_app_preferences,
-    save_database, set_entry_custom_icon, set_window_content_protected, store_session_key,
-    unlock_database, update_app_preferences, update_entry, update_group,
+    restore_backup, save_database, set_entry_custom_icon, set_window_content_protected,
+    store_session_key, unlock_database, update_app_preferences, update_entry, update_group,
 };
 use services::auto_lock::AutoLockService;
 use services::clipboard::ClipboardService;
@@ -61,6 +61,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             list_backups,
             delete_backup,
             create_manual_backup,
+            restore_backup,
             generate_keyfile,
             list_entries,
             get_entry,
