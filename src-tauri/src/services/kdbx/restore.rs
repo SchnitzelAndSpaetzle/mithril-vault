@@ -70,6 +70,21 @@ impl KdbxService {
 
         let settings = self.current_backup_settings()?;
 
+        // Hold the open-databases mutex for the **entire** restore: matching,
+        // pre-restore snapshot, atomic copy, and map invalidation all run
+        // under the same guard. Every other open-Vault mutation (save,
+        // create_entry, delete_entry, …) acquires this same mutex, so they
+        // queue behind us — eliminating the lock-release-then-reacquire race
+        // where a concurrent save could land its bytes between our pre-restore
+        // snapshot and our atomic copy and silently lose user data.
+        //
+        // The cost is that operations against *other* open vaults also
+        // serialise behind a restore, but the same is already true for save
+        // (which holds the map lock through its own atomic_write), so the
+        // restore path doesn't introduce a new contention pattern — it just
+        // extends an existing one for the duration of one file copy.
+        let mut databases = self.lock_databases()?;
+
         // Resolve to an open Vault by basename + backup-dir containment. The
         // backup-dir match is what closes the loop: an attacker who plants a
         // snapshot-shaped file for a *different* Vault inside our backup dir
@@ -89,10 +104,9 @@ impl KdbxService {
         //   working state, and after restore the in-memory DB is dropped
         //   from the map. The user must explicitly save or discard before
         //   restoring; we don't choose for them.
-        let stored_source: PathBuf = {
-            let databases = self.lock_databases()?;
-            let mut matched: Option<(PathBuf, bool, bool)> = None;
-            for open_db in databases.values() {
+        let (map_key, stored_source) = {
+            let mut found: Option<(String, PathBuf, bool, bool)> = None;
+            for (key, open_db) in databases.iter() {
                 let source = Path::new(&open_db.path);
                 let Some(open_basename) = source.file_name().and_then(|n| n.to_str()) else {
                     continue;
@@ -110,7 +124,8 @@ impl KdbxService {
                     continue;
                 };
                 if canonical_backup.starts_with(&canonical_dir) {
-                    matched = Some((
+                    found = Some((
+                        key.clone(),
                         source.to_path_buf(),
                         open_db.is_locked(),
                         open_db.is_modified,
@@ -118,7 +133,7 @@ impl KdbxService {
                     break;
                 }
             }
-            let (source, locked, modified) = matched.ok_or_else(|| {
+            let (key, source, locked, modified) = found.ok_or_else(|| {
                 AppError::InvalidInput(format!(
                     "backup path is not an authorized snapshot for any open vault: {backup_path}"
                 ))
@@ -133,7 +148,7 @@ impl KdbxService {
                     source.to_string_lossy().into_owned(),
                 ));
             }
-            source
+            (key, source)
         };
 
         // Fail-closed pre-restore pre-image snapshot of the current on-disk
@@ -193,11 +208,7 @@ impl KdbxService {
         // Invalidate the open-Vault entry so the now-stale in-memory state
         // cannot drift from the new on-disk bytes. The frontend will receive
         // `database-closed` from the command layer and route to unlock.
-        {
-            let normalized = Self::normalize_path(&source_str);
-            let mut databases = self.lock_databases()?;
-            databases.remove(&normalized);
-        }
+        databases.remove(&map_key);
 
         Ok(source_str)
     }

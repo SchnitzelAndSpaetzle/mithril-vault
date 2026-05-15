@@ -208,9 +208,11 @@ export function BackupsListSection({
       }
       await backups.restore(path);
     },
-    onSuccess: () => {
-      toast.success(t("settings.backups.list.restore.success"));
-    },
+    // Success toast intentionally lives in `useDatabaseClosed`, not here:
+    // the toast is tied to the visible auto-close + navigate side effect
+    // (the user actually leaving Settings → Backups for the unlock screen),
+    // so two owners would double-fire the same message. The backend always
+    // emits `database-closed` on a successful restore.
     onError: (error) => {
       if (error instanceof RestoreCancelled) return;
       toast.error(String(error));
