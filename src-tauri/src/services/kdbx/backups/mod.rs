@@ -11,6 +11,7 @@ pub(crate) mod rotation;
 use crate::commands::settings::BackupSettings;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -23,9 +24,38 @@ use thiserror::Error;
 pub const BACKUP_SUBDIR: &str = ".kdbx-backups";
 
 /// Outcome of a successful snapshot.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BackupInfo {
     pub path: PathBuf,
+}
+
+/// Snapshot classification, derived from the filename pattern.
+///
+/// `Auto` covers snapshots created by the save-side and open-side hooks.
+/// `Manual` is reserved for the future manual-backup slice (parent #61); the
+/// listing surfaces it now so the UI doesn't need to change shape later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BackupKind {
+    Auto,
+    Manual,
+}
+
+/// Listing row for the Settings → Backups table.
+///
+/// Built by walking the resolved backup directory for a single Vault and
+/// parsing each file's name. The timestamp is the one encoded in the
+/// filename (not the file mtime — mtime is preserved by snapshot writes and
+/// would order files arbitrarily after rotations).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupListEntry {
+    pub path: PathBuf,
+    /// ISO-8601 UTC timestamp parsed from the filename (e.g. `2026-05-12T14:30:45.123Z`).
+    pub timestamp: String,
+    pub size_bytes: u64,
+    pub kind: BackupKind,
 }
 
 /// Failure modes for snapshot creation.
@@ -187,6 +217,186 @@ pub fn snapshot_on_open(
     Ok(info)
 }
 
+/// Creates a manual (rotation-exempt) snapshot of the on-disk Vault.
+///
+/// Differs from [`snapshot`] in two ways:
+///
+/// - Does NOT honour `settings.enabled`. Manual is a deliberate user action
+///   that overrides the auto-backup toggle; the Settings UI hides the
+///   trigger button when the toggle is off, but if the command is reached
+///   anyway the snapshot still succeeds.
+/// - Uses the reserved `.backup.manual.` infix in the filename so the
+///   auto-snapshot rotation glob ignores it. A manually-taken snapshot is
+///   never evicted by subsequent auto saves.
+///
+/// Errors when the source path does not exist: unlike the auto path
+/// (where a missing source means "first save, nothing to back up yet"),
+/// invoking a manual snapshot against a non-existent file is a user-visible
+/// failure and must not silently succeed.
+pub fn snapshot_manual(
+    source: &Path,
+    settings: &BackupSettings,
+) -> Result<BackupInfo, BackupError> {
+    let exists = source.try_exists().map_err(|e| BackupError::BackupFailed {
+        path: source.to_path_buf(),
+        source: e,
+    })?;
+    if !exists {
+        return Err(BackupError::BackupFailed {
+            path: source.to_path_buf(),
+            source: io::Error::new(io::ErrorKind::NotFound, "source vault does not exist"),
+        });
+    }
+
+    let backup_dir = resolve_backup_dir(source, settings)?;
+    ensure_backup_dir(&backup_dir).map_err(|e| BackupError::BackupFailed {
+        path: backup_dir.clone(),
+        source: e,
+    })?;
+
+    let vault_filename =
+        source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| BackupError::BackupFailed {
+                path: source.to_path_buf(),
+                source: io::Error::new(io::ErrorKind::InvalidInput, "source has no filename"),
+            })?;
+
+    let existing = read_existing_basenames(&backup_dir);
+    let ts = next_free_manual_timestamp(vault_filename, Utc::now(), &existing);
+    let backup_name = filename::make_manual_backup_filename(vault_filename, ts);
+    let backup_path = backup_dir.join(&backup_name);
+    let backup_path_str = backup_path.to_string_lossy().into_owned();
+
+    let source_owned = source.to_path_buf();
+    atomic_write(
+        &backup_path_str,
+        &AtomicWriteOptions {
+            preserve_permissions: false,
+        },
+        |file| {
+            let mut src = fs::File::open(&source_owned).map_err(|e| {
+                crate::dto::error::AppError::Io(format!("Failed to open source for snapshot: {e}"))
+            })?;
+            io::copy(&mut src, file).map_err(|e| {
+                crate::dto::error::AppError::Io(format!("Failed to copy snapshot bytes: {e}"))
+            })?;
+            Ok(())
+        },
+    )
+    .map_err(|e| BackupError::BackupFailed {
+        path: backup_path.clone(),
+        source: io::Error::other(e.to_string()),
+    })?;
+
+    Ok(BackupInfo { path: backup_path })
+}
+
+/// Bumps the timestamp 1ms at a time until a manual-snapshot filename is
+/// free in `existing`. Mirrors the auto-snapshot collision avoidance so
+/// rapid back-to-back manuals (e.g. button mash) don't clobber each other.
+fn next_free_manual_timestamp(
+    vault_filename: &str,
+    start: chrono::DateTime<Utc>,
+    existing: &HashSet<String>,
+) -> chrono::DateTime<Utc> {
+    let mut ts = start;
+    loop {
+        let candidate = filename::make_manual_backup_filename(vault_filename, ts);
+        if !existing.contains(&candidate) {
+            return ts;
+        }
+        ts += chrono::Duration::milliseconds(1);
+    }
+}
+
+/// Enumerates every snapshot belonging to `source` inside the resolved
+/// backup directory. The listing covers both auto- and manual-snapshot
+/// naming patterns; foreign-Vault snapshots and unrelated files are
+/// skipped.
+///
+/// Returns `Ok(vec![])` when the backup directory does not yet exist (no
+/// snapshot has ever been taken for this Vault).
+pub fn list_for(
+    source: &Path,
+    settings: &BackupSettings,
+) -> Result<Vec<BackupListEntry>, BackupError> {
+    let backup_dir = resolve_backup_dir(source, settings)?;
+    // Apply the same symlink rejection the snapshot writer uses — a symlink
+    // at the backup dir would otherwise let `read_dir` enumerate an arbitrary
+    // target directory and surface those files as this Vault's backups in
+    // the Settings UI.
+    reject_symlinked_backup_dir(&backup_dir).map_err(|e| BackupError::BackupFailed {
+        path: backup_dir.clone(),
+        source: e,
+    })?;
+    let vault_filename =
+        source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| BackupError::BackupFailed {
+                path: source.to_path_buf(),
+                source: io::Error::new(io::ErrorKind::InvalidInput, "source has no filename"),
+            })?;
+
+    let read_dir = match fs::read_dir(&backup_dir) {
+        Ok(rd) => rd,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(BackupError::BackupFailed {
+                path: backup_dir,
+                source: e,
+            })
+        }
+    };
+
+    let mut out: Vec<BackupListEntry> = Vec::new();
+    for entry in read_dir.filter_map(Result::ok) {
+        if !entry.file_type().is_ok_and(|t| t.is_file()) {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        let Some((kind, ts)) = classify_snapshot_name(&name, vault_filename) else {
+            continue;
+        };
+        let size_bytes = entry.metadata().map_or(0, |m| m.len());
+        out.push(BackupListEntry {
+            path: entry.path(),
+            timestamp: ts.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            size_bytes,
+            kind,
+        });
+    }
+    out.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    Ok(out)
+}
+
+/// Parses a snapshot filename into `(kind, timestamp)` for one specific
+/// Vault. Returns `None` for foreign-Vault snapshots and non-snapshot files.
+///
+/// Manual snapshots use the reserved `.backup.manual.` infix; auto snapshots
+/// use plain `.backup.`. The manual check runs first because a manual name
+/// also matches the auto parser if we strip the `manual.` segment off.
+fn classify_snapshot_name(
+    name: &str,
+    vault_filename: &str,
+) -> Option<(BackupKind, chrono::DateTime<Utc>)> {
+    let manual_prefix = format!("{vault_filename}.backup.manual.");
+    if let Some(rest) = name.strip_prefix(&manual_prefix) {
+        let ts_str = rest.strip_suffix(".kdbx")?;
+        let parsed = chrono::NaiveDateTime::parse_from_str(ts_str, "%Y%m%dT%H%M%S%.3fZ").ok()?;
+        return Some((
+            BackupKind::Manual,
+            chrono::TimeZone::from_utc_datetime(&Utc, &parsed),
+        ));
+    }
+    let (parsed_vault, ts) = filename::parse_backup_filename(name)?;
+    (parsed_vault == vault_filename).then_some((BackupKind::Auto, ts))
+}
+
 /// Finds the most recent auto-snapshot for `vault_filename` inside `dir`,
 /// using the timestamp parsed out of the filename. Returns `None` when the
 /// directory does not exist or holds no snapshots for this Vault.
@@ -267,6 +477,16 @@ fn stamp_source_mtime(snapshot_path: &Path, source: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Public façade over [`resolve_backup_dir`] for callers outside this
+/// module — used by the `delete_backup` command to compute the safety
+/// boundary for a given open vault.
+pub fn resolved_backup_dir(
+    source: &Path,
+    settings: &BackupSettings,
+) -> Result<PathBuf, BackupError> {
+    resolve_backup_dir(source, settings)
+}
+
 /// Resolves the directory that snapshots should be written to. When
 /// `settings.directory` is set, snapshots are isolated per source vault
 /// inside it (`<override>/<basename>-<hash>/`) so two vaults sharing a
@@ -318,6 +538,15 @@ fn vault_isolation_segment(source: &Path) -> Result<String, BackupError> {
     Ok(format!("{basename}-{hash_hex}"))
 }
 
+/// Public façade over [`reject_symlinked_backup_dir`] for callers outside
+/// this module. Used by the delete-backup command to refuse path-safety
+/// resolution against a symlinked backup directory — without it, a planted
+/// symlink could shift the allowed delete boundary to the symlink target
+/// and let an attacker remove files outside the real backup directory.
+pub fn assert_backup_dir_not_symlinked(dir: &Path) -> io::Result<()> {
+    reject_symlinked_backup_dir(dir)
+}
+
 /// Rejects a symlink at the backup path so a stale or hostile link cannot
 /// redirect snapshot bytes outside the vault folder. `symlink_metadata` does
 /// not follow links. Shared between the save-side `snapshot` (via
@@ -361,4 +590,131 @@ fn read_existing_basenames(dir: &Path) -> HashSet<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::commands::settings::BackupSettings;
+
+    fn settings_for_dir(dir: &Path) -> BackupSettings {
+        BackupSettings {
+            enabled: true,
+            max_versions: 10,
+            directory: Some(dir.to_string_lossy().into_owned()),
+            on_open: false,
+        }
+    }
+
+    #[test]
+    fn snapshot_manual_writes_file_with_manual_marker() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let vault_path = tmp.path().join("vault.kdbx");
+        fs::write(&vault_path, b"vault-bytes").expect("write vault");
+        let backup_dir = tmp.path().join("backups");
+        let settings = settings_for_dir(&backup_dir);
+
+        let info = snapshot_manual(&vault_path, &settings).expect("manual snapshot");
+
+        let name = info
+            .path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("filename")
+            .to_owned();
+        assert!(
+            filename::parse_manual_backup_filename(&name).is_some(),
+            "filename must match manual pattern: {name}"
+        );
+        let parsed = filename::parse_manual_backup_filename(&name).expect("parses");
+        assert_eq!(parsed.0, "vault.kdbx");
+        assert!(info.path.exists(), "snapshot file must exist on disk");
+        let bytes = fs::read(&info.path).expect("read snapshot");
+        assert_eq!(bytes, b"vault-bytes");
+    }
+
+    #[test]
+    fn snapshot_manual_ignores_enabled_flag() {
+        // Manual is a deliberate user override: the auto-backup toggle does
+        // not gate it. UI hides the button when disabled; if the command is
+        // reached anyway it must still succeed.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let vault_path = tmp.path().join("vault.kdbx");
+        fs::write(&vault_path, b"v").expect("write");
+        let backup_dir = tmp.path().join("backups");
+        let mut settings = settings_for_dir(&backup_dir);
+        settings.enabled = false;
+
+        let info = snapshot_manual(&vault_path, &settings).expect("succeeds even when disabled");
+        assert!(info.path.exists());
+    }
+
+    #[test]
+    fn manual_snapshot_survives_auto_rotation_end_to_end() {
+        // Acceptance criterion: a single manual snapshot followed by 11 auto
+        // saves (cap = 10) leaves the manual snapshot untouched and exactly
+        // 10 auto snapshots in the rotation bucket.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let vault_path = tmp.path().join("vault.kdbx");
+        fs::write(&vault_path, b"v0").expect("write");
+        let backup_dir = tmp.path().join("backups");
+        let settings = BackupSettings {
+            enabled: true,
+            max_versions: 10,
+            directory: Some(backup_dir.to_string_lossy().into_owned()),
+            on_open: false,
+        };
+
+        // Take the manual snapshot first — it should outlive every auto.
+        let manual = snapshot_manual(&vault_path, &settings).expect("manual snapshot");
+        assert!(manual.path.exists());
+
+        // Simulate 11 auto saves: rewrite the source then snapshot. Each
+        // snapshot captures the prior on-disk state; rotation runs inside
+        // snapshot() after each successful write.
+        for i in 0..11 {
+            fs::write(&vault_path, format!("v{}", i + 1)).expect("write");
+            snapshot(&vault_path, &settings)
+                .expect("auto snapshot")
+                .expect("auto snapshot taken");
+        }
+
+        let listing = list_for(&vault_path, &settings).expect("list");
+        let autos: Vec<_> = listing
+            .iter()
+            .filter(|e| e.kind == BackupKind::Auto)
+            .collect();
+        let manuals: Vec<_> = listing
+            .iter()
+            .filter(|e| e.kind == BackupKind::Manual)
+            .collect();
+
+        assert_eq!(
+            autos.len(),
+            10,
+            "rotation must trim auto snapshots to max_versions"
+        );
+        assert_eq!(manuals.len(), 1, "manual snapshot must not be rotated");
+        assert_eq!(
+            manuals[0].path, manual.path,
+            "the surviving manual must be the one we took"
+        );
+        assert!(
+            manual.path.exists(),
+            "manual snapshot file must still be on disk"
+        );
+    }
+
+    #[test]
+    fn snapshot_manual_errors_when_source_missing() {
+        // Manual is deliberate. Silently returning Ok would let the UI show
+        // a "backup taken" toast when nothing actually happened.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let missing = tmp.path().join("missing.kdbx");
+        let settings = settings_for_dir(&tmp.path().join("backups"));
+
+        let result = snapshot_manual(&missing, &settings);
+        assert!(result.is_err(), "missing source must surface an error");
+    }
 }

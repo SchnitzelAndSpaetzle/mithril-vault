@@ -7,9 +7,10 @@ use mithril_vault_lib::commands::clipboard::{
     clear_clipboard, copy_password_to_clipboard, copy_protected_field_to_clipboard,
 };
 use mithril_vault_lib::commands::database::{
-    close_database, create_database, generate_keyfile, get_custom_icons, get_database_config,
-    get_database_info, inspect_database, list_open_databases, lock_database, open_database,
-    open_database_with_keyfile, open_database_with_keyfile_only, save_database, unlock_database,
+    close_database, create_database, create_manual_backup, generate_keyfile, get_custom_icons,
+    get_database_config, get_database_info, inspect_database, list_backups, list_open_databases,
+    lock_database, open_database, open_database_with_keyfile, open_database_with_keyfile_only,
+    save_database, unlock_database,
 };
 use mithril_vault_lib::commands::entries::{
     clear_entry_custom_icon, delete_tag, fetch_entry_favicon, list_entries, rename_tag,
@@ -27,6 +28,7 @@ use mithril_vault_lib::commands::secure_storage::{
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::dto::group::UpdateGroupData;
 use mithril_vault_lib::register_services;
+use mithril_vault_lib::services::kdbx::backups::BackupKind;
 use tauri::test::mock_app;
 use tauri::Manager;
 
@@ -232,9 +234,12 @@ fn additional_group_and_database_commands_fail_when_not_open() {
             .expect_err("expected database not found");
     assert!(matches!(close_err, AppError::DatabaseNotFound(_)));
 
-    let save_err =
-        tauri::async_runtime::block_on(save_database("nonexistent.kdbx".to_string(), app.state()))
-            .expect_err("expected database not found");
+    let save_err = tauri::async_runtime::block_on(save_database(
+        "nonexistent.kdbx".to_string(),
+        app.handle().clone(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
     assert!(matches!(save_err, AppError::DatabaseNotFound(_)));
 
     let config_err = tauri::async_runtime::block_on(get_database_config(
@@ -418,6 +423,82 @@ fn database_commands_cover_success_paths() {
 
     tauri::async_runtime::block_on(close_database(key_only_path_str.clone(), app.state()))
         .expect("final close");
+
+    cleanup_app_files(&app);
+}
+
+#[test]
+fn create_manual_backup_command_writes_manual_snapshot_visible_in_listing() {
+    // End-to-end: create a vault, save it, then invoke the manual-backup
+    // command. The returned snapshot path must classify as a manual entry
+    // in list_backups so the UI badge picks it up.
+    let app = setup_app();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let db_path = temp_dir.path().join("manual.kdbx");
+    let db_path_str = db_path.to_string_lossy().to_string();
+
+    tauri::async_runtime::block_on(create_database(
+        db_path_str.clone(),
+        "Manual Vault".to_string(),
+        Some("password".to_string()),
+        None,
+        None,
+        app.state(),
+    ))
+    .expect("create database");
+    // create_database writes the file but the manual path needs the file on
+    // disk; create_database itself persists, so the file exists.
+    assert!(
+        db_path.exists(),
+        "vault file must exist before manual backup"
+    );
+
+    let info = tauri::async_runtime::block_on(create_manual_backup(
+        db_path_str.clone(),
+        app.handle().clone(),
+        app.state(),
+    ))
+    .expect("create_manual_backup");
+
+    assert!(
+        info.path.exists(),
+        "manual snapshot file must exist on disk"
+    );
+    let filename = info
+        .path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .expect("filename")
+        .to_owned();
+    assert!(
+        filename.contains(".backup.manual."),
+        "filename must carry the manual marker: {filename}"
+    );
+
+    let listed = tauri::async_runtime::block_on(list_backups(db_path_str.clone(), app.state()))
+        .expect("list backups");
+    let manual_entry = listed
+        .iter()
+        .find(|e| e.path == info.path)
+        .expect("manual snapshot appears in listing");
+    assert_eq!(manual_entry.kind, BackupKind::Manual);
+
+    tauri::async_runtime::block_on(close_database(db_path_str.clone(), app.state()))
+        .expect("close database");
+    cleanup_app_files(&app);
+}
+
+#[test]
+fn create_manual_backup_command_fails_when_database_not_open() {
+    let app = setup_app();
+
+    let err = tauri::async_runtime::block_on(create_manual_backup(
+        "nonexistent.kdbx".to_string(),
+        app.handle().clone(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
+    assert!(matches!(err, AppError::DatabaseNotFound(_)));
 
     cleanup_app_files(&app);
 }

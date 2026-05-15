@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  backups,
   database,
   entries,
   groups,
@@ -269,5 +270,68 @@ describe("tauri wrappers validation", () => {
     expect(invoke).toHaveBeenCalledWith(
       "get_window_content_protection_supported"
     );
+  });
+
+  it("parses list_backups payload into a typed BackupListEntry[]", async () => {
+    const dbPath = "/tmp/vault.kdbx";
+    const payload = [
+      {
+        path: "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+        timestamp: "2026-05-12T14:30:45.123Z",
+        sizeBytes: 4096,
+        kind: "auto",
+      },
+      {
+        path: "/tmp/.kdbx-backups/vault.kdbx.backup.manual.20260101T000000.000Z.kdbx",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        sizeBytes: 8192,
+        kind: "manual",
+      },
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(payload);
+
+    await expect(backups.list(dbPath)).resolves.toEqual(payload);
+    expect(invoke).toHaveBeenCalledWith("list_backups", {
+      databasePath: dbPath,
+    });
+  });
+
+  it("rejects list_backups payloads with an unknown kind discriminator", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce([
+      {
+        path: "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+        timestamp: "2026-05-12T14:30:45.123Z",
+        sizeBytes: 4096,
+        kind: "bogus",
+      },
+    ]);
+
+    await expect(backups.list("/tmp/vault.kdbx")).rejects.toThrow();
+  });
+
+  it("invokes create_manual_backup and returns the typed BackupInfo", async () => {
+    const dbPath = "/tmp/vault.kdbx";
+    const payload = {
+      path: "/tmp/.kdbx-backups/vault.kdbx.backup.manual.20260515T120000.000Z.kdbx",
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(payload);
+
+    await expect(backups.createManual(dbPath)).resolves.toEqual(payload);
+    expect(invoke).toHaveBeenCalledWith("create_manual_backup", {
+      databasePath: dbPath,
+    });
+  });
+
+  it("invokes delete_backup with the supplied path", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await backups.delete(
+      "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx"
+    );
+
+    expect(invoke).toHaveBeenCalledWith("delete_backup", {
+      backupPath:
+        "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+    });
   });
 });

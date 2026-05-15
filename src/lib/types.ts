@@ -293,6 +293,26 @@ export type AppPreferences = z.infer<typeof AppPreferencesSchema>;
 
 export type GroupEntryCounts = Record<string, number>;
 
+/// Settings → Backups list row. Snapshot kind comes from filename pattern
+/// detection on the backend; auto vs manual is what drives the row badge.
+export const BackupKindSchema = z.enum(["auto", "manual"]);
+export type BackupKind = z.infer<typeof BackupKindSchema>;
+
+export const BackupListEntrySchema = z.object({
+  path: z.string().min(1),
+  timestamp: z.string().min(1),
+  sizeBytes: z.number().int().nonnegative(),
+  kind: BackupKindSchema,
+});
+export type BackupListEntry = z.infer<typeof BackupListEntrySchema>;
+
+/// Result of a manual backup snapshot — the path of the file just written.
+/// Used by the Settings → "Create backup now" toast.
+export const BackupInfoSchema = z.object({
+  path: z.string().min(1),
+});
+export type BackupInfo = z.infer<typeof BackupInfoSchema>;
+
 export const EntrySortFieldSchema = z.enum([
   "title",
   "username",

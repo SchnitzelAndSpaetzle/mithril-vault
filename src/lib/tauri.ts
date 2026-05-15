@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
   AppPreferences,
+  BackupInfo,
+  BackupListEntry,
   CreateEntryData,
   CustomFieldValue,
   CustomIconMap,
@@ -23,6 +25,8 @@ import type {
 } from "./types";
 import {
   AppPreferencesSchema,
+  BackupInfoSchema,
+  BackupListEntrySchema,
   CreateEntryDataSchema,
   CustomFieldValueSchema,
   CustomIconMapSchema,
@@ -610,6 +614,30 @@ export const settings = {
 
   async clearRecentDatabases(): Promise<void> {
     return invoke("clear_recent_databases");
+  },
+};
+
+/**
+ * Backup snapshot listing and deletion. Listing is scoped to one Vault on
+ * disk (by path); deletion is gated by the backend to paths inside an
+ * open vault's backup directory.
+ */
+export const backups = {
+  async list(databasePath: string): Promise<BackupListEntry[]> {
+    PathOnlySchema.parse({ path: databasePath });
+    const result = await invoke("list_backups", { databasePath });
+    return z.array(BackupListEntrySchema).parse(result);
+  },
+
+  async delete(backupPath: string): Promise<void> {
+    PathOnlySchema.parse({ path: backupPath });
+    return invoke("delete_backup", { backupPath });
+  },
+
+  async createManual(databasePath: string): Promise<BackupInfo> {
+    PathOnlySchema.parse({ path: databasePath });
+    const result = await invoke("create_manual_backup", { databasePath });
+    return BackupInfoSchema.parse(result);
   },
 };
 

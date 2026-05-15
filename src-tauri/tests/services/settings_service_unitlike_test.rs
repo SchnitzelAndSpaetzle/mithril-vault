@@ -390,3 +390,61 @@ fn update_rejects_when_only_backups_substruct_is_invalid() {
 
     cleanup_settings_file(&app);
 }
+
+#[test]
+fn add_recent_database_rejects_snapshot_filenames() {
+    // Acceptance criterion for #194: backup file paths must never appear in
+    // recent_databases. Without this guard, a user who 'Open Recent…'s a
+    // snapshot would unlock the backup and the next save would write to it,
+    // poisoning their backup history.
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+    let service = SettingsService::new(app.handle()).expect("create service");
+
+    let snapshot_path = "/some/dir/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
+    let err = service
+        .add_recent_database(snapshot_path, None)
+        .expect_err("must reject backup paths");
+    match err {
+        AppError::InvalidInput(_) => {}
+        other => panic!("expected InvalidInput for backup path, got {other:?}"),
+    }
+
+    let settings = service.get_settings().expect("get settings");
+    assert!(
+        settings.recent_databases.is_empty(),
+        "backup path must not have been persisted"
+    );
+
+    let manual_path = "/some/dir/.kdbx-backups/vault.kdbx.backup.manual.20260512T143045.123Z.kdbx";
+    service
+        .add_recent_database(manual_path, None)
+        .expect_err("must reject manual-snapshot paths too");
+
+    cleanup_settings_file(&app);
+}
+
+#[test]
+fn add_recent_database_accepts_vault_names_containing_backup_manual_substring() {
+    // Regression for Codex P2 on #212: the previous substring check rejected
+    // legitimate vault filenames that happen to carry `.backup.manual.` in the
+    // basename (e.g. `team.backup.manual.notes.kdbx`). Such a vault must still
+    // be addable to recent_databases — the guard only fires on the canonical
+    // snapshot pattern (`<basename>.backup[.manual].<YYYYMMDDTHHMMSS.mmmZ>.kdbx`).
+    let _lock = crate::settings_test_lock();
+    let app = setup_app();
+    cleanup_settings_file(&app);
+    let service = SettingsService::new(app.handle()).expect("create service");
+
+    let benign = "/some/dir/team.backup.manual.notes.kdbx";
+    service
+        .add_recent_database(benign, None)
+        .expect("benign vault filename must be accepted");
+
+    let settings = service.get_settings().expect("get settings");
+    assert_eq!(settings.recent_databases.len(), 1);
+    assert_eq!(settings.recent_databases[0].path, benign);
+
+    cleanup_settings_file(&app);
+}

@@ -11,10 +11,10 @@ pub mod window;
 
 pub use clipboard::*;
 pub use database::{
-    close_database, create_database, generate_keyfile, get_custom_icons, get_database_config,
-    get_database_info, inspect_database, list_open_databases, lock_database, open_database,
-    open_database_with_keyfile, open_database_with_keyfile_only, report_activity, save_database,
-    unlock_database,
+    close_database, create_database, create_manual_backup, delete_backup, generate_keyfile,
+    get_custom_icons, get_database_config, get_database_info, inspect_database, list_backups,
+    list_open_databases, lock_database, open_database, open_database_with_keyfile,
+    open_database_with_keyfile_only, report_activity, save_database, unlock_database,
 };
 pub use entries::*;
 pub use generator::*;
