@@ -148,6 +148,12 @@
         "createNow": {
           "button": "Create backup now",
           "success": "Manual backup created."
+        },
+        "restore": {
+          "button": "Restore",
+          "confirmTitle": "Restore this backup?",
+          "confirmBody": "You'll need the master password that was active at the time of this backup to unlock it. The current state will be backed up automatically before the restore.",
+          "success": "Backup restored. Unlock the vault to continue."
         }
       }
     },

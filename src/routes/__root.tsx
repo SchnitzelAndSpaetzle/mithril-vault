@@ -7,6 +7,7 @@ import { SecureModeIndicator } from "@/components/layout/secure-mode-indicator";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useAutoLock } from "@/hooks/use-auto-lock";
+import { useDatabaseClosed } from "@/hooks/use-database-closed";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 
 export const Route = createRootRoute({
@@ -15,6 +16,7 @@ export const Route = createRootRoute({
 
 function RootRouteComponent() {
   useAutoLock();
+  useDatabaseClosed();
   const hasMultipleTabs = useDatabaseTabs((state) => state.tabs.length > 1);
   const { tab, isUnlocking } = useActiveDatabase();
   const style = {

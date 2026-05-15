@@ -639,6 +639,11 @@ export const backups = {
     const result = await invoke("create_manual_backup", { databasePath });
     return BackupInfoSchema.parse(result);
   },
+
+  async restore(backupPath: string): Promise<void> {
+    PathOnlySchema.parse({ path: backupPath });
+    return invoke("restore_backup", { backupPath });
+  },
 };
 
 export const windowProtection = {

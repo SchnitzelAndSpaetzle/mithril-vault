@@ -17,6 +17,9 @@ pub enum AppError {
     #[error("Database is locked: {0}")]
     DatabaseLocked(String),
 
+    #[error("Database has unsaved changes: {0}")]
+    DatabaseModified(String),
+
     #[error("Invalid password")]
     InvalidPassword,
 

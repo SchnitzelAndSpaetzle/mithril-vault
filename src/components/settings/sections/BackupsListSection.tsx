@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { SettingsSection } from "@/components/settings/SettingsSection";
@@ -44,14 +45,18 @@ function BackupRow({
   onRequestDelete,
   onConfirmDelete,
   onCancelDelete,
+  onRestore,
   isDeleting,
+  isRestoring,
 }: Readonly<{
   entry: BackupListEntry;
   isConfirming: boolean;
   onRequestDelete: () => void;
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
+  onRestore: () => void;
   isDeleting: boolean;
+  isRestoring: boolean;
 }>) {
   const { t, i18n } = useTranslation();
   const kindKey: BackupKind = entry.kind;
@@ -95,18 +100,41 @@ function BackupRow({
             </Button>
           </>
         ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onRequestDelete}
-          >
-            {t("settings.backups.list.delete")}
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRestore}
+              disabled={isRestoring}
+            >
+              {t("settings.backups.list.restore.button")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRequestDelete}
+            >
+              {t("settings.backups.list.delete")}
+            </Button>
+          </>
         )}
       </div>
     </li>
   );
+}
+
+/**
+ * Internal sentinel so the dialog-cancelled path settles the mutation
+ * without flashing a toast. Plain `Error` would be picked up by the
+ * generic onError handler.
+ */
+class RestoreCancelled extends Error {
+  constructor() {
+    super("restore-cancelled");
+    this.name = "RestoreCancelled";
+  }
 }
 
 export function BackupsListSection({
@@ -160,6 +188,37 @@ export function BackupsListSection({
     },
   });
 
+  const restoreMutation = useMutation<void, Error, string>({
+    mutationFn: async (path) => {
+      // Master-password caveat: a backup encrypted with a different master
+      // password than the one currently in use will fail to unlock after
+      // restore. The dialog warns the user about this AND the automatic
+      // pre-restore snapshot so the action is never silently destructive.
+      const confirmed = await ask(
+        t("settings.backups.list.restore.confirmBody"),
+        {
+          title: t("settings.backups.list.restore.confirmTitle"),
+          kind: "warning",
+        }
+      );
+      if (!confirmed) {
+        // Surface the cancellation as a no-op so the mutation settles
+        // cleanly without flashing an error toast.
+        throw new RestoreCancelled();
+      }
+      await backups.restore(path);
+    },
+    // Success toast intentionally lives in `useDatabaseClosed`, not here:
+    // the toast is tied to the visible auto-close + navigate side effect
+    // (the user actually leaving Settings → Backups for the unlock screen),
+    // so two owners would double-fire the same message. The backend always
+    // emits `database-closed` on a successful restore.
+    onError: (error) => {
+      if (error instanceof RestoreCancelled) return;
+      toast.error(String(error));
+    },
+  });
+
   const canCreateManual =
     Boolean(dbId) && backupsEnabled && !createManualMutation.isPending;
 
@@ -192,7 +251,14 @@ export function BackupsListSection({
           onRequestDelete={(path) => setConfirmingPath(path)}
           onCancelDelete={() => setConfirmingPath(null)}
           onConfirmDelete={(path) => deleteMutation.mutate(path)}
+          onRestore={(path) => restoreMutation.mutate(path)}
           isDeleting={deleteMutation.isPending}
+          isRestoring={restoreMutation.isPending}
+          pendingRestorePath={
+            restoreMutation.isPending
+              ? (restoreMutation.variables ?? null)
+              : null
+          }
         />
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -211,7 +277,10 @@ function BackupsListBody({
   onRequestDelete,
   onCancelDelete,
   onConfirmDelete,
+  onRestore,
   isDeleting,
+  isRestoring,
+  pendingRestorePath,
 }: Readonly<{
   entries: BackupListEntry[];
   isLoading: boolean;
@@ -220,7 +289,10 @@ function BackupsListBody({
   onRequestDelete: (path: string) => void;
   onCancelDelete: () => void;
   onConfirmDelete: (path: string) => void;
+  onRestore: (path: string) => void;
   isDeleting: boolean;
+  isRestoring: boolean;
+  pendingRestorePath: string | null;
 }>) {
   const { t } = useTranslation();
 
@@ -253,7 +325,9 @@ function BackupsListBody({
           onRequestDelete={() => onRequestDelete(entry.path)}
           onConfirmDelete={() => onConfirmDelete(entry.path)}
           onCancelDelete={onCancelDelete}
+          onRestore={() => onRestore(entry.path)}
           isDeleting={isDeleting && confirmingPath === entry.path}
+          isRestoring={isRestoring && pendingRestorePath === entry.path}
         />
       ))}
     </ul>

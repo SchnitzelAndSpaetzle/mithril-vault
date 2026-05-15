@@ -9,6 +9,7 @@ pub mod header;
 pub mod key;
 pub mod keyfile;
 pub mod open;
+pub mod restore;
 pub mod save;
 pub mod vault;
 

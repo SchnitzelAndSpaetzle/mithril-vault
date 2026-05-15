@@ -14,7 +14,9 @@ import type { ReactNode } from "react";
 const listMock = vi.fn();
 const deleteMock = vi.fn();
 const createManualMock = vi.fn();
+const restoreMock = vi.fn();
 const listenMock = vi.fn();
+const askMock = vi.fn();
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
 const tauriEventListeners = new Map<
@@ -27,11 +29,16 @@ vi.mock("@/lib/tauri", () => ({
     list: (...args: unknown[]) => listMock(...args),
     delete: (...args: unknown[]) => deleteMock(...args),
     createManual: (...args: unknown[]) => createManualMock(...args),
+    restore: (...args: unknown[]) => restoreMock(...args),
   },
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (...args: unknown[]) => listenMock(...args),
+}));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  ask: (...args: unknown[]) => askMock(...args),
 }));
 
 vi.mock("sonner", () => ({
@@ -68,7 +75,9 @@ describe("BackupsListSection", () => {
     listMock.mockReset();
     deleteMock.mockReset();
     createManualMock.mockReset();
+    restoreMock.mockReset();
     listenMock.mockReset();
+    askMock.mockReset();
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
     tauriEventListeners.clear();
@@ -305,6 +314,74 @@ describe("BackupsListSection", () => {
       expect(toastErrorMock).toHaveBeenCalled();
     });
     expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("does not call restore when the confirmation dialog is dismissed", async () => {
+    const snapshotPath =
+      "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
+    listMock.mockResolvedValue([
+      {
+        path: snapshotPath,
+        timestamp: "2026-05-12T14:30:45.123Z",
+        sizeBytes: 4096,
+        kind: "auto",
+      },
+    ]);
+    askMock.mockResolvedValueOnce(false);
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <BackupsListSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    const restoreButton = await screen.findByRole("button", {
+      name: "settings.backups.list.restore.button",
+    });
+    fireEvent.click(restoreButton);
+
+    await waitFor(() => {
+      expect(askMock).toHaveBeenCalled();
+    });
+    // The dialog must surface both the master-password caveat and the
+    // automatic pre-restore backup so the user is not surprised either way.
+    const askCall = askMock.mock.calls[0];
+    const bodyArg = askCall?.[0];
+    expect(typeof bodyArg).toBe("string");
+    expect(bodyArg).toContain("settings.backups.list.restore.confirmBody");
+    expect(restoreMock).not.toHaveBeenCalled();
+  });
+
+  it("invokes backups.restore only after the user confirms the dialog", async () => {
+    const snapshotPath =
+      "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
+    listMock.mockResolvedValue([
+      {
+        path: snapshotPath,
+        timestamp: "2026-05-12T14:30:45.123Z",
+        sizeBytes: 4096,
+        kind: "auto",
+      },
+    ]);
+    askMock.mockResolvedValueOnce(true);
+    restoreMock.mockResolvedValueOnce(undefined);
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <BackupsListSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    const restoreButton = await screen.findByRole("button", {
+      name: "settings.backups.list.restore.button",
+    });
+    fireEvent.click(restoreButton);
+
+    await waitFor(() => {
+      expect(restoreMock).toHaveBeenCalledWith(snapshotPath);
+    });
   });
 
   it("refetches when a backup-deleted event fires", async () => {
