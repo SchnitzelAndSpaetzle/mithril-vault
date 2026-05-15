@@ -77,14 +77,21 @@ impl KdbxService {
         // canonical containment check below would fail for a foreign-Vault
         // snapshot.
         //
-        // The matched Vault must also be currently unlocked. Restore is a
-        // destructive write; allowing it against a locked-but-still-mapped
-        // Vault would let a walk-up attacker bypass auto-lock to roll the
-        // user's on-disk Vault back to an arbitrary prior state. Matches the
-        // locked-guard every other mutation path uses (save, create_entry…).
+        // The matched Vault must also be currently unlocked AND clean.
+        //
+        // - Locked guard: restore is a destructive write; allowing it against
+        //   a locked-but-still-mapped Vault would let a walk-up attacker
+        //   bypass auto-lock to roll the on-disk Vault back to an arbitrary
+        //   prior state. Matches the locked-guard every mutation uses.
+        // - Dirty guard: if the user has unsaved in-memory edits, restore
+        //   would silently discard them — the pre-restore snapshot only
+        //   captures the on-disk bytes (older than memory), not the dirty
+        //   working state, and after restore the in-memory DB is dropped
+        //   from the map. The user must explicitly save or discard before
+        //   restoring; we don't choose for them.
         let stored_source: PathBuf = {
             let databases = self.lock_databases()?;
-            let mut matched: Option<(PathBuf, bool)> = None;
+            let mut matched: Option<(PathBuf, bool, bool)> = None;
             for open_db in databases.values() {
                 let source = Path::new(&open_db.path);
                 let Some(open_basename) = source.file_name().and_then(|n| n.to_str()) else {
@@ -103,17 +110,26 @@ impl KdbxService {
                     continue;
                 };
                 if canonical_backup.starts_with(&canonical_dir) {
-                    matched = Some((source.to_path_buf(), open_db.is_locked()));
+                    matched = Some((
+                        source.to_path_buf(),
+                        open_db.is_locked(),
+                        open_db.is_modified,
+                    ));
                     break;
                 }
             }
-            let (source, locked) = matched.ok_or_else(|| {
+            let (source, locked, modified) = matched.ok_or_else(|| {
                 AppError::InvalidInput(format!(
                     "backup path is not an authorized snapshot for any open vault: {backup_path}"
                 ))
             })?;
             if locked {
                 return Err(AppError::DatabaseLocked(
+                    source.to_string_lossy().into_owned(),
+                ));
+            }
+            if modified {
+                return Err(AppError::DatabaseModified(
                     source.to_string_lossy().into_owned(),
                 ));
             }
@@ -356,6 +372,80 @@ mod tests {
             manual_count_after,
             manual_count_before + 1,
             "exactly one new manual (pre-restore) snapshot must exist after restore"
+        );
+    }
+
+    #[test]
+    fn restore_rejects_when_matched_vault_has_unsaved_changes() {
+        // Regression: without this guard, the in-memory dirty edits would
+        // be silently discarded — the pre-restore snapshot only captures
+        // on-disk bytes (older than memory), and the in-memory DB is
+        // dropped from the open-database map after restore. Force the
+        // user to save or discard explicitly first.
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("vault.kdbx");
+        let vault_str = vault.to_string_lossy().into_owned();
+        let backup_dir = dir.path().join("backups");
+
+        let service = KdbxService::new();
+        service
+            .set_backup_settings(settings_for(&backup_dir))
+            .expect("set backup settings");
+
+        let info = service
+            .create_database(&vault_str, Some("pw"), None, "Test", &fast_options())
+            .expect("create");
+        service
+            .create_entry(&vault_str, &info.root_group_id, entry("Entry A", "alice"))
+            .expect("create A");
+        service.save(&vault_str).expect("save 1");
+        // Second save establishes a backup we can target.
+        service
+            .create_entry(&vault_str, &info.root_group_id, entry("Entry B", "bob"))
+            .expect("create B");
+        service.save(&vault_str).expect("save 2");
+
+        let listing = service.list_backups(&vault_str).expect("list backups");
+        let target_path = listing
+            .first()
+            .expect("at least one backup")
+            .path
+            .to_string_lossy()
+            .into_owned();
+
+        // Dirty the in-memory vault without saving. is_modified flips true.
+        service
+            .create_entry(&vault_str, &info.root_group_id, entry("Unsaved", "carol"))
+            .expect("create unsaved entry");
+        let dirty_info = service.get_info(&vault_str).expect("info");
+        assert!(
+            dirty_info.is_modified,
+            "test precondition: vault must be modified"
+        );
+
+        let bytes_before = std::fs::read(&vault).expect("read before");
+
+        let err = service
+            .restore_backup(&target_path)
+            .expect_err("restore must be rejected for dirty vault");
+        assert!(
+            matches!(err, AppError::DatabaseModified(_)),
+            "expected DatabaseModified, got {err:?}"
+        );
+
+        let bytes_after = std::fs::read(&vault).expect("read after");
+        assert_eq!(
+            bytes_before, bytes_after,
+            "Vault bytes must be unchanged when restore is rejected"
+        );
+        assert!(
+            service.is_database_open(&vault_str).expect("is_open"),
+            "rejected restore must not invalidate the open-Vault map"
+        );
+        let still_dirty = service.get_info(&vault_str).expect("info after");
+        assert!(
+            still_dirty.is_modified,
+            "in-memory dirty state must survive the rejection"
         );
     }
 
