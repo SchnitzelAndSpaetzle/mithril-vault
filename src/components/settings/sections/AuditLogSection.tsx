@@ -22,8 +22,9 @@ function formatTimestamp(timestamp: string, locale: string): string {
 
 function AuditRow({ event }: Readonly<{ event: AuditEvent }>) {
   const { t, i18n } = useTranslation();
-  // Today only `vaultUnlockFailed` exists; rendering is keyed on `kind` so
-  // future kinds can plug in without rearranging the row layout.
+  // Row layout is uniform across kinds — kind-specific payload (attempt
+  // count for failed unlocks, reason for locked) hangs off the same
+  // muted-text slot so new kinds can plug in without a layout rewrite.
   return (
     <li
       data-kind={event.kind}
@@ -34,6 +35,7 @@ function AuditRow({ event }: Readonly<{ event: AuditEvent }>) {
         {typeof event.attemptCount === "number" ? (
           <span>{t("audit.attemptCount", { count: event.attemptCount })}</span>
         ) : null}
+        {event.reason ? <span>{t(`audit.reason.${event.reason}`)}</span> : null}
         <span>{formatTimestamp(event.timestamp, i18n.language)}</span>
       </div>
     </li>

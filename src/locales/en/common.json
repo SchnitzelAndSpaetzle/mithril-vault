@@ -28,7 +28,15 @@
     "attemptCount_one": "Attempt {{count}}",
     "attemptCount_other": "Attempt {{count}}",
     "kind": {
-      "vaultUnlockFailed": "Failed unlock attempt"
+      "vaultUnlockFailed": "Failed unlock attempt",
+      "vaultOpened": "Vault opened",
+      "vaultLocked": "Vault locked"
+    },
+    "reason": {
+      "manual": "Manual",
+      "autoLock": "Auto-lock",
+      "appQuit": "App quit",
+      "screenLock": "Screen lock"
     }
   },
   "settings": {

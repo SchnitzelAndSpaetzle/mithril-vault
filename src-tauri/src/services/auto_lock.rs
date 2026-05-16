@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+use crate::services::audit::format::Reason;
+use crate::services::audit::AuditService;
 use crate::services::kdbx::KdbxService;
 use crate::services::settings::SettingsService;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -72,6 +74,9 @@ pub fn start_auto_lock_task<R: Runtime>(app_handle: &tauri::AppHandle<R>) {
             if elapsed >= u64::from(timeout) {
                 if let Ok(locked_paths) = kdbx.lock_all() {
                     if !locked_paths.is_empty() {
+                        if let Some(audit) = handle.try_state::<Arc<AuditService>>() {
+                            audit.record_vault_locked_batch(&locked_paths, Reason::AutoLock);
+                        }
                         let _ = handle.emit("database-locked", &locked_paths);
                         // Reset activity to prevent repeated firing
                         auto_lock.report_activity();
