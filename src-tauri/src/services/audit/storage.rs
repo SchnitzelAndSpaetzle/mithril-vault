@@ -79,28 +79,45 @@ impl AuditLogFile {
         result.map_err(StorageError::from)
     }
 
-    /// Reads all frames in append order. Missing file returns an empty Vec.
-    /// Malformed lines are skipped so a single bad write does not poison reads
-    /// (the audit log must never become a `DoS` vector).
-    pub fn read_all(&self) -> Result<Vec<Vec<u8>>, StorageError> {
+    /// Reads all frames in append order. Missing file returns an empty
+    /// outcome. Lines that fail base64 decode are *counted* in
+    /// [`LogReadOutcome::malformed_lines`] rather than dropped silently:
+    /// the read continues past a bad line (the audit log must never become
+    /// a `DoS` vector), but the caller can now flip the session-wide
+    /// degraded indicator so the UI surfaces "some entries unreadable"
+    /// instead of pretending nothing was wrong.
+    pub fn read_all(&self) -> Result<LogReadOutcome, StorageError> {
         let file = match File::open(&self.path) {
             Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(LogReadOutcome::default());
+            }
             Err(e) => return Err(e.into()),
         };
         let reader = BufReader::new(file);
-        let mut frames = Vec::new();
+        let mut outcome = LogReadOutcome::default();
         for line in reader.lines() {
             let line = line?;
             if line.trim().is_empty() {
                 continue;
             }
-            if let Ok(frame) = decode_frame(&line) {
-                frames.push(frame);
+            match decode_frame(&line) {
+                Ok(frame) => outcome.frames.push(frame),
+                Err(_) => outcome.malformed_lines = outcome.malformed_lines.saturating_add(1),
             }
         }
-        Ok(frames)
+        Ok(outcome)
     }
+}
+
+/// Result of [`AuditLogFile::read_all`]. `frames` is in append order and
+/// excludes lines that could not be base64-decoded; `malformed_lines` is
+/// the count of those skipped lines so the caller can decide whether to
+/// flag the audit subsystem as degraded.
+#[derive(Debug, Default)]
+pub struct LogReadOutcome {
+    pub frames: Vec<Vec<u8>>,
+    pub malformed_lines: usize,
 }
 
 #[cfg(test)]
@@ -120,18 +137,48 @@ mod tests {
         log.append(b"second").expect("append second");
         log.append(b"third").expect("append third");
 
-        let frames = log.read_all().expect("read");
+        let outcome = log.read_all().expect("read");
         assert_eq!(
-            frames,
+            outcome.frames,
             vec![b"first".to_vec(), b"second".to_vec(), b"third".to_vec()]
         );
+        assert_eq!(outcome.malformed_lines, 0);
     }
 
     #[test]
     fn missing_file_reads_as_empty() {
         let dir = tempdir().expect("tempdir");
         let log = AuditLogFile::new(dir.path().join("missing.jsonl"));
-        assert!(log.read_all().expect("read").is_empty());
+        let outcome = log.read_all().expect("read");
+        assert!(outcome.frames.is_empty());
+        assert_eq!(outcome.malformed_lines, 0);
+    }
+
+    /// A line that is not valid base64 is skipped (so one bad line does
+    /// not poison the rest of the log) but is *counted* so the caller can
+    /// flag the subsystem as degraded.
+    #[test]
+    fn malformed_lines_are_skipped_but_counted() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("v.jsonl");
+        let log = AuditLogFile::new(path.clone());
+
+        log.append(b"first").expect("append first");
+
+        // Splice in a line that is not base64-decodable — `!!!` is not
+        // in the standard base64 alphabet.
+        let mut f = OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("reopen for raw append");
+        f.write_all(b"!!!not-base64!!!\n").expect("write junk");
+        drop(f);
+
+        log.append(b"third").expect("append third");
+
+        let outcome = log.read_all().expect("read");
+        assert_eq!(outcome.frames, vec![b"first".to_vec(), b"third".to_vec()]);
+        assert_eq!(outcome.malformed_lines, 1);
     }
 
     #[test]
@@ -160,12 +207,13 @@ mod tests {
         }
 
         let log = AuditLogFile::new(path);
-        let frames = log.read_all().expect("read");
-        assert_eq!(frames.len(), thread_count * writers_per_thread);
+        let outcome = log.read_all().expect("read");
+        assert_eq!(outcome.frames.len(), thread_count * writers_per_thread);
+        assert_eq!(outcome.malformed_lines, 0);
 
         // Every frame must decode back to a well-formed "t<n>-i<m>" string —
         // a torn write would produce garbage that fails the format check.
-        for frame in &frames {
+        for frame in &outcome.frames {
             let s = std::str::from_utf8(frame).expect("utf8");
             assert!(s.starts_with('t'));
             assert!(s.contains("-i"));

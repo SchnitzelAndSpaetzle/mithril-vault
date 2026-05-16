@@ -89,14 +89,17 @@ impl AuditService {
     }
 
     /// Returns every recorded event for the Vault at `vault_path` that
-    /// matches `_filter`. Frames that fail to decrypt or parse are skipped so
-    /// one corrupt record cannot hide the rest.
+    /// matches `_filter`. Frames that fail to decrypt or parse are skipped
+    /// so one corrupt record cannot hide the rest — but skipping is no
+    /// longer silent: any malformed-base64 lines from storage or any
+    /// frames that fail AEAD auth / JSON parse flip the session-wide
+    /// `degraded` flag so the UI banner appears.
     ///
-    /// Hard failures (key source unavailable, log file unreadable) bubble up
-    /// as [`AuditReadError`] and also flip the session-wide `degraded` flag.
-    /// This is intentional asymmetry with [`AuditService::record`]: read is
-    /// called from a Settings panel where a swallowed error would silently
-    /// look identical to "no events yet" and hide a real problem.
+    /// Hard failures (key source unavailable, log file unreadable) bubble
+    /// up as [`AuditReadError`] and also flip `degraded`. This is the
+    /// intentional asymmetry with [`AuditService::record`]: read is called
+    /// from a Settings panel where a swallowed error would silently look
+    /// identical to "no events yet" and hide a real problem.
     pub fn read(
         &self,
         vault_path: &Path,
@@ -107,14 +110,26 @@ impl AuditService {
             AuditReadError::Key(e.to_string())
         })?;
         let log = AuditLogFile::new(self.log_path_for(vault_path));
-        let frames = log.read_all().map_err(|e| {
+        let outcome = log.read_all().map_err(|e| {
             self.degraded.store(true, Ordering::SeqCst);
             AuditReadError::Storage(e.to_string())
         })?;
-        Ok(frames
-            .iter()
-            .filter_map(|frame| decrypt_and_parse(&key, frame))
-            .collect())
+
+        let mut events = Vec::with_capacity(outcome.frames.len());
+        let mut undecryptable_frames: usize = 0;
+        for frame in &outcome.frames {
+            if let Some(event) = decrypt_and_parse(&key, frame) {
+                events.push(event);
+            } else {
+                undecryptable_frames = undecryptable_frames.saturating_add(1);
+            }
+        }
+
+        if outcome.malformed_lines > 0 || undecryptable_frames > 0 {
+            self.degraded.store(true, Ordering::SeqCst);
+        }
+
+        Ok(events)
     }
 
     fn log_path_for(&self, vault_path: &Path) -> PathBuf {
@@ -223,6 +238,56 @@ mod tests {
             .read(&vault, &AuditFilter::default())
             .expect("read")
             .is_empty());
+    }
+
+    /// A frame that AEAD-auth-fails (tampered, or written under a stale
+    /// key) must NOT be silently dropped — drop is fine for `DoS` safety,
+    /// but the user has to be told via the degraded banner that the log
+    /// has gaps.
+    #[test]
+    fn undecryptable_frame_in_log_flips_degraded_without_hiding_good_frames() {
+        let (service, _dir, vault) = fresh_service();
+
+        // Record one valid event.
+        service.record(&vault, &unlock_failed_event(1));
+        assert!(!service.is_degraded());
+
+        // Append a frame that won't decrypt — base64 of plain ASCII so
+        // storage decodes it cleanly but the AEAD check fails.
+        let log_path = service.log_path_for(&vault);
+        let log = AuditLogFile::new(log_path);
+        log.append(b"bogus-non-aead-bytes").expect("append junk");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1, "the good event must still surface");
+        assert!(
+            service.is_degraded(),
+            "an undecryptable frame must flip degraded"
+        );
+    }
+
+    /// A non-base64 line in the log file flips degraded for the same
+    /// reason: storage continues (`DoS` safety) but the caller is told.
+    #[test]
+    fn malformed_base64_line_in_log_flips_degraded() {
+        use std::io::Write;
+
+        let (service, _dir, vault) = fresh_service();
+
+        service.record(&vault, &unlock_failed_event(1));
+
+        // Splice a raw non-base64 line into the log file.
+        let log_path = service.log_path_for(&vault);
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&log_path)
+            .expect("open log for splice");
+        f.write_all(b"!!!not-base64!!!\n").expect("splice");
+        drop(f);
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        assert!(service.is_degraded());
     }
 
     /// A non-NotFound storage error must NOT be reported back as "no events
