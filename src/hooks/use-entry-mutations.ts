@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { queryKeys } from "@/lib/query-keys";
-import { database, entries } from "@/lib/tauri";
+import { entries } from "@/lib/tauri";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import type { CreateEntryData, Entry, UpdateEntryData } from "@/lib/types";
 
 interface CreateEntryParams {
@@ -33,6 +35,7 @@ interface DeleteEntryParams {
  */
 export function useEntryMutations(dbId: string | null) {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   const invalidateAfterEntryMutation = () => {
     if (dbId) {
@@ -48,37 +51,38 @@ export function useEntryMutations(dbId: string | null) {
   };
 
   const createEntry = useMutation<Entry, Error, CreateEntryParams>({
-    mutationFn: ({ dbId, groupId, data }) =>
-      entries.create(dbId, groupId, data),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterEntryMutation();
+    mutationFn: async ({ dbId, groupId, data }) => {
+      const entry = await entries.create(dbId, groupId, data);
+      await saveWithErrorToast(dbId, t);
+      return entry;
     },
+    onSuccess: () => invalidateAfterEntryMutation(),
   });
 
   const updateEntry = useMutation<Entry, Error, UpdateEntryParams>({
-    mutationFn: ({ dbId, id, data }) => entries.update(dbId, id, data),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterEntryMutation();
+    mutationFn: async ({ dbId, id, data }) => {
+      const entry = await entries.update(dbId, id, data);
+      await saveWithErrorToast(dbId, t);
+      return entry;
     },
+    onSuccess: () => invalidateAfterEntryMutation(),
   });
 
   const moveEntry = useMutation<Entry, Error, MoveEntryParams>({
-    mutationFn: ({ dbId, id, targetGroupId }) =>
-      entries.move(dbId, id, targetGroupId),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterEntryMutation();
+    mutationFn: async ({ dbId, id, targetGroupId }) => {
+      const entry = await entries.move(dbId, id, targetGroupId);
+      await saveWithErrorToast(dbId, t);
+      return entry;
     },
+    onSuccess: () => invalidateAfterEntryMutation(),
   });
 
   const deleteEntry = useMutation<void, Error, DeleteEntryParams>({
-    mutationFn: ({ dbId, id }) => entries.delete(dbId, id),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterEntryMutation();
+    mutationFn: async ({ dbId, id }) => {
+      await entries.delete(dbId, id);
+      await saveWithErrorToast(dbId, t);
     },
+    onSuccess: () => invalidateAfterEntryMutation(),
   });
 
   return {

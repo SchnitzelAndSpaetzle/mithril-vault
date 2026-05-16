@@ -11,6 +11,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 
 const TIMESTAMP_FMT: &str = "%Y%m%dT%H%M%S%.3fZ";
 const BACKUP_INFIX: &str = ".backup.";
+const MANUAL_INFIX: &str = ".backup.manual.";
 const BACKUP_SUFFIX: &str = ".kdbx";
 
 /// Builds the snapshot filename for a Vault and an auto-snapshot timestamp.
@@ -29,6 +30,36 @@ pub fn parse_backup_filename(filename: &str) -> Option<(String, DateTime<Utc>)> 
     let dot = stem.rfind(BACKUP_INFIX)?;
     let (vault_filename, rest) = stem.split_at(dot);
     let ts_str = &rest[BACKUP_INFIX.len()..];
+    let parsed = NaiveDateTime::parse_from_str(ts_str, TIMESTAMP_FMT).ok()?;
+    let ts = Utc.from_utc_datetime(&parsed);
+    Some((vault_filename.to_string(), ts))
+}
+
+/// Builds the manual-snapshot filename for a Vault and a timestamp.
+///
+/// Manual snapshots use the reserved `.backup.manual.` infix so the rotation
+/// glob (auto only) excludes them: a manually-taken snapshot is never evicted
+/// by subsequent auto saves.
+pub fn make_manual_backup_filename(vault_filename: &str, ts: DateTime<Utc>) -> String {
+    format!(
+        "{vault_filename}{MANUAL_INFIX}{}{BACKUP_SUFFIX}",
+        ts.format(TIMESTAMP_FMT)
+    )
+}
+
+/// Parses a manual-snapshot filename back into the source Vault filename and
+/// its timestamp. Returns `None` if the name does not match the manual-snapshot
+/// pattern (`<vault>.backup.manual.<YYYYMMDDTHHMMSS.mmmZ>.kdbx`).
+///
+/// Mirrors `parse_backup_filename` but anchored on the `.backup.manual.` infix
+/// so a vault basename that happens to contain `.backup.manual.` literally
+/// (e.g. `team.backup.manual.notes.kdbx`) is NOT mistakenly classified as a
+/// snapshot.
+pub fn parse_manual_backup_filename(filename: &str) -> Option<(String, DateTime<Utc>)> {
+    let stem = filename.strip_suffix(BACKUP_SUFFIX)?;
+    let infix_pos = stem.rfind(MANUAL_INFIX)?;
+    let (vault_filename, rest) = stem.split_at(infix_pos);
+    let ts_str = &rest[MANUAL_INFIX.len()..];
     let parsed = NaiveDateTime::parse_from_str(ts_str, TIMESTAMP_FMT).ok()?;
     let ts = Utc.from_utc_datetime(&parsed);
     Some((vault_filename.to_string(), ts))
@@ -60,6 +91,26 @@ mod tests {
 
     fn ts(ms: i64) -> DateTime<Utc> {
         Utc.timestamp_millis_opt(ms).single().expect("valid ts")
+    }
+
+    #[test]
+    fn make_manual_filename_matches_expected_pattern() {
+        let t = Utc
+            .with_ymd_and_hms(2026, 5, 12, 14, 30, 45)
+            .single()
+            .expect("valid")
+            + chrono::Duration::milliseconds(123);
+        let name = make_manual_backup_filename("vault.kdbx", t);
+        assert_eq!(name, "vault.kdbx.backup.manual.20260512T143045.123Z.kdbx");
+    }
+
+    #[test]
+    fn manual_parse_roundtrip() {
+        let original = ts(1_715_000_000_789);
+        let name = make_manual_backup_filename("vault.kdbx", original);
+        let (vault, parsed) = parse_manual_backup_filename(&name).expect("parses");
+        assert_eq!(vault, "vault.kdbx");
+        assert_eq!(parsed, original);
     }
 
     #[test]

@@ -114,8 +114,47 @@
         "label": "Enable backups",
         "description": "Before saving, copy the previous vault bytes into a .kdbx-backups/ folder next to the file."
       },
+      "maxVersions": {
+        "label": "Keep N backups",
+        "description": "Older snapshots beyond this count are deleted after each successful save."
+      },
+      "directory": {
+        "label": "Backup directory",
+        "placeholder": "Default: .kdbx-backups next to database.",
+        "browse": "Browse"
+      },
+      "onOpen": {
+        "label": "Back up on open",
+        "description": "Also take a snapshot whenever a vault successfully unlocks. Identical-content opens are silently skipped."
+      },
       "error": {
         "failed": "Backup failed for {{path}}: {{reason}}. The vault was not saved."
+      },
+      "warning": {
+        "openSide": "Open-side backup failed for {{path}}: {{reason}}. The vault is still unlocked."
+      },
+      "list": {
+        "title": "Existing backups",
+        "description": "Snapshots taken before each save (and optionally on open). Scoped to the currently open vault.",
+        "emptyNoVault": "Open a vault to see and manage its backups.",
+        "emptyNoBackups": "No backups yet for this vault.",
+        "loadError": "Failed to load backups: {{error}}",
+        "delete": "Delete",
+        "deleteConfirm": "Confirm delete",
+        "kind": {
+          "auto": "Auto",
+          "manual": "Manual"
+        },
+        "createNow": {
+          "button": "Create backup now",
+          "success": "Manual backup created."
+        },
+        "restore": {
+          "button": "Restore",
+          "confirmTitle": "Restore this backup?",
+          "confirmBody": "You'll need the master password that was active at the time of this backup to unlock it. The current state will be backed up automatically before the restore.",
+          "success": "Backup restored. Unlock the vault to continue."
+        }
       }
     },
     "shortcuts": {
@@ -514,6 +553,11 @@
   "errors": {
     "failedToLoadSettings": "Failed to load settings: {{error}}",
     "settingsUnavailable": "Settings are unavailable."
+  },
+  "database": {
+    "save": {
+      "failed": "Failed to save database: {{error}}. Your last change is in memory but not on disk."
+    }
   },
   "shortcuts": {
     "title": "Keyboard Shortcuts",

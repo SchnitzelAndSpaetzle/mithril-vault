@@ -1,6 +1,6 @@
 use crate::domain::secure::SecureString;
 use crate::dto::error::AppError;
-use crate::services::kdbx::backups;
+use crate::services::kdbx::backups::{self, BackupInfo};
 use crate::services::kdbx::key::build_database_key;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use std::path::Path;
@@ -9,7 +9,12 @@ use super::KdbxService;
 
 impl KdbxService {
     /// Saves a specific open database.
-    pub fn save(&self, db_id: &str) -> Result<(), AppError> {
+    ///
+    /// Returns the snapshot info when a pre-image backup was taken, or
+    /// `None` when the source did not yet exist (first save) or backups
+    /// are disabled. The command layer uses this to decide whether to
+    /// emit a `backup-created` event.
+    pub fn save(&self, db_id: &str) -> Result<Option<BackupInfo>, AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
@@ -36,7 +41,7 @@ impl KdbxService {
         // does not yet exist (first save of a brand-new vault or first save
         // after save_as to a fresh path) — those proceed without a backup.
         let backup_settings = self.current_backup_settings()?;
-        backups::snapshot(Path::new(&path), &backup_settings)?;
+        let snapshot_info = backups::snapshot(Path::new(&path), &backup_settings)?;
 
         atomic_write(
             &path,
@@ -54,7 +59,7 @@ impl KdbxService {
         )?;
 
         open_db.is_modified = false;
-        Ok(())
+        Ok(snapshot_info)
     }
 
     /// Saves a specific database to a new path.

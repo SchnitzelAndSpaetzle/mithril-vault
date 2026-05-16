@@ -268,8 +268,18 @@ export type AdvancedSettings = z.infer<typeof AdvancedSettingsSchema>;
 
 export const BackupSettingsSchema = z.object({
   enabled: z.boolean(),
+  maxVersions: z.number().int().min(1).max(500),
+  // Optional absolute-path override for snapshot storage. Serde on the
+  // backend emits `null` when unset (the field exists but is None) and
+  // omits it when the directory key is missing entirely; accept both.
+  directory: z.string().nullable().optional(),
+  // Opt-in open-side snapshot (#193). Defaults to false so existing installs
+  // do not start taking extra snapshots until the user enables it.
+  onOpen: z.boolean().default(false),
 });
 export type BackupSettings = z.infer<typeof BackupSettingsSchema>;
+export const BACKUP_MAX_VERSIONS_PRESETS = [5, 10, 25, 50, 100] as const;
+export const DEFAULT_BACKUP_MAX_VERSIONS = 10;
 
 export const AppPreferencesSchema = z.object({
   general: GeneralSettingsSchema,
@@ -282,6 +292,26 @@ export const AppPreferencesSchema = z.object({
 export type AppPreferences = z.infer<typeof AppPreferencesSchema>;
 
 export type GroupEntryCounts = Record<string, number>;
+
+/// Settings → Backups list row. Snapshot kind comes from filename pattern
+/// detection on the backend; auto vs manual is what drives the row badge.
+export const BackupKindSchema = z.enum(["auto", "manual"]);
+export type BackupKind = z.infer<typeof BackupKindSchema>;
+
+export const BackupListEntrySchema = z.object({
+  path: z.string().min(1),
+  timestamp: z.string().min(1),
+  sizeBytes: z.number().int().nonnegative(),
+  kind: BackupKindSchema,
+});
+export type BackupListEntry = z.infer<typeof BackupListEntrySchema>;
+
+/// Result of a manual backup snapshot — the path of the file just written.
+/// Used by the Settings → "Create backup now" toast.
+export const BackupInfoSchema = z.object({
+  path: z.string().min(1),
+});
+export type BackupInfo = z.infer<typeof BackupInfoSchema>;
 
 export const EntrySortFieldSchema = z.enum([
   "title",

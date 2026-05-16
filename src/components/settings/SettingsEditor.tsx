@@ -26,6 +26,7 @@ import {
 import { isColorPresetId } from "@/lib/theme-presets";
 import { AdvancedSettingsSection } from "@/components/settings/sections/AdvancedSettingsSection";
 import { AppearanceSettingsSection } from "@/components/settings/sections/AppearanceSettingsSection";
+import { BackupsListSection } from "@/components/settings/sections/BackupsListSection";
 import { BackupsSettingsSection } from "@/components/settings/sections/BackupsSettingsSection";
 import { BrowserIntegrationSettingsSection } from "@/components/settings/sections/BrowserIntegrationSettingsSection";
 import { DatabaseSettingsSection } from "@/components/settings/sections/DatabaseSettingsSection";
@@ -279,6 +280,7 @@ export function SettingsEditor({
       <PasswordGeneratorSettingsSection />
       <AdvancedSettingsSection draft={draft} updateDraft={updateDraft} />
       <BackupsSettingsSection draft={draft} updateDraft={updateDraft} />
+      <BackupsListSection dbId={dbId} backupsEnabled={draft.backups.enabled} />
       <DatabaseSettingsSection
         dbId={dbId}
         databaseConfig={databaseConfig}

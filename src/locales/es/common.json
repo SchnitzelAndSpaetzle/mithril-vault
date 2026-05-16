@@ -114,8 +114,24 @@
         "label": "Enable backups",
         "description": "Before saving, copy the previous vault bytes into a .kdbx-backups/ folder next to the file."
       },
+      "maxVersions": {
+        "label": "Keep N backups",
+        "description": "Older snapshots beyond this count are deleted after each successful save."
+      },
       "error": {
         "failed": "Backup failed for {{path}}: {{reason}}. The vault was not saved."
+      },
+      "directory": {
+        "label": "Backup directory",
+        "placeholder": "Default: .kdbx-backups next to database.",
+        "browse": "Browse"
+      },
+      "warning": {
+        "openSide": "Open-side backup failed for {{path}}: {{reason}}. The vault is still unlocked."
+      },
+      "onOpen": {
+        "label": "Back up on open",
+        "description": "Also take a snapshot whenever a vault successfully unlocks. Identical-content opens are silently skipped."
       }
     },
     "shortcuts": {
@@ -512,6 +528,11 @@
   "errors": {
     "failedToLoadSettings": "Error al cargar la configuración: {{error}}",
     "settingsUnavailable": "La configuración no está disponible."
+  },
+  "database": {
+    "save": {
+      "failed": "Error al guardar la base de datos: {{error}}. Tu último cambio está en memoria pero no en disco."
+    }
   },
   "shortcuts": {
     "title": "Atajos de teclado",

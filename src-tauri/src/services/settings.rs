@@ -35,14 +35,22 @@ impl SettingsService {
     fn load_or_default(path: &PathBuf) -> Result<AppSettings, AppError> {
         if path.exists() {
             let content = std::fs::read_to_string(path)?;
-            if let Ok(settings) = serde_json::from_str(&content) {
-                Ok(settings)
-            } else {
-                let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
-                let backup_name = format!("{SETTINGS_FILE}.bad-{timestamp}");
-                let backup_path = path.with_file_name(backup_name);
-                let _ = std::fs::rename(path, backup_path);
-                Ok(AppSettings::default())
+            let parsed: Result<AppSettings, _> = serde_json::from_str(&content);
+            // Treat out-of-range values the same as a malformed file: back up
+            // the bad copy and use defaults. Otherwise a hand-edited file
+            // could push `max_versions = 0` straight to rotation and erase
+            // every snapshot on the next save.
+            match parsed {
+                Ok(settings) if Self::validate_preferences(&settings.preferences).is_ok() => {
+                    Ok(settings)
+                }
+                _ => {
+                    let timestamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
+                    let backup_name = format!("{SETTINGS_FILE}.bad-{timestamp}");
+                    let backup_path = path.with_file_name(backup_name);
+                    let _ = std::fs::rename(path, backup_path);
+                    Ok(AppSettings::default())
+                }
             }
         } else {
             Ok(AppSettings::default())
@@ -71,8 +79,10 @@ impl SettingsService {
     }
 
     pub fn update_app_preferences(&self, new_preferences: &AppPreferences) -> Result<(), AppError> {
+        Self::validate_preferences(new_preferences)?;
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
         settings.preferences = new_preferences.clone();
+        settings.preferences.backups.normalize_directory();
         // data_location is derived at read time; don't trust the value the
         // frontend echoed back. Persist as empty so the on-disk file doesn't
         // carry a stale path if the user moves their app data later.
@@ -103,6 +113,16 @@ impl SettingsService {
         path: &str,
         keyfile_path: Option<&str>,
     ) -> Result<(), AppError> {
+        // Reject snapshot paths so `Open Recent…` never lists a backup. A
+        // user who unlocked a snapshot directly would have their next save
+        // overwrite the backup itself — corrupting the very pre-image the
+        // backup module exists to preserve.
+        if Self::is_snapshot_path(path) {
+            return Err(AppError::InvalidInput(format!(
+                "refusing to add backup snapshot path to recent databases: {path}"
+            )));
+        }
+
         let mut settings = self.settings.lock().map_err(|_| AppError::Lock)?;
 
         // Remove existing entry with same path
@@ -145,10 +165,112 @@ impl SettingsService {
         self.save(&settings)
     }
 
+    /// Detects whether a path's filename matches the auto- or manual-
+    /// snapshot pattern owned by the backup module. Used to keep snapshot
+    /// files out of `recent_databases` — opening one as a regular vault
+    /// would clobber the backup on the next save.
+    ///
+    /// Both arms parse the canonical timestamped pattern via the backup
+    /// module's filename parsers so a legitimate vault whose basename
+    /// happens to contain `.backup.manual.` (e.g. `team.backup.manual.notes.kdbx`)
+    /// is NOT incorrectly rejected. Substring matching here would lose
+    /// `Open Recent…` history for valid files.
+    fn is_snapshot_path(path: &str) -> bool {
+        use crate::services::kdbx::backups::filename::{
+            parse_backup_filename, parse_manual_backup_filename,
+        };
+        let Some(filename) = std::path::Path::new(path)
+            .file_name()
+            .and_then(|n| n.to_str())
+        else {
+            return false;
+        };
+        parse_backup_filename(filename).is_some()
+            || parse_manual_backup_filename(filename).is_some()
+    }
+
+    /// Rejects out-of-range values on the App Preferences boundary so a
+    /// malformed IPC payload (or a future settings.json with corrupt values)
+    /// cannot push the backup module into invariant violations.
+    fn validate_preferences(prefs: &AppPreferences) -> Result<(), AppError> {
+        const MAX_VERSIONS_RANGE: std::ops::RangeInclusive<u32> = 1..=500;
+        let v = prefs.backups.max_versions;
+        if !MAX_VERSIONS_RANGE.contains(&v) {
+            return Err(AppError::InvalidInput(format!(
+                "backups.maxVersions must be in 1..=500, got {v}"
+            )));
+        }
+        if let Some(dir) = prefs.backups.directory.as_deref() {
+            if !dir.is_empty() && !std::path::Path::new(dir).is_absolute() {
+                return Err(AppError::InvalidInput(format!(
+                    "backups.directory must be an absolute path, got {dir:?}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
     fn data_location_display(&self) -> String {
         self.settings_path
             .parent()
             .map(|path| path.to_string_lossy().into_owned())
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic)]
+mod validate_preferences_tests {
+    use super::SettingsService;
+    use crate::commands::settings::{AppPreferences, BackupSettings};
+    use crate::dto::error::AppError;
+
+    fn prefs_with_directory(dir: Option<&str>) -> AppPreferences {
+        AppPreferences {
+            backups: BackupSettings {
+                enabled: true,
+                max_versions: 10,
+                directory: dir.map(String::from),
+                on_open: false,
+            },
+            ..AppPreferences::default()
+        }
+    }
+
+    #[test]
+    fn relative_directory_path_is_rejected() {
+        // A relative override would be resolved against whatever CWD the
+        // process happens to have at save time — wildly unpredictable for a
+        // safety-net feature. Reject it at the boundary so the backup
+        // module's resolver can trust the path it sees.
+        let prefs = prefs_with_directory(Some("relative/path"));
+        match SettingsService::validate_preferences(&prefs) {
+            Err(AppError::InvalidInput(msg)) => {
+                assert!(
+                    msg.contains("absolute"),
+                    "error should mention 'absolute', got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn absolute_directory_path_is_accepted() {
+        // Use a platform-appropriate absolute path so the test runs on every
+        // supported target. The validator does not touch the filesystem.
+        let abs = if cfg!(windows) {
+            "C:/backups"
+        } else {
+            "/mnt/backups"
+        };
+        let prefs = prefs_with_directory(Some(abs));
+        SettingsService::validate_preferences(&prefs).expect("absolute path should validate");
+    }
+
+    #[test]
+    fn no_directory_override_is_accepted() {
+        let prefs = prefs_with_directory(None);
+        SettingsService::validate_preferences(&prefs).expect("None should validate");
     }
 }

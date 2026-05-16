@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { queryKeys } from "@/lib/query-keys";
-import { database, groups } from "@/lib/tauri";
+import { groups } from "@/lib/tauri";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import type { Group } from "@/lib/types";
 
 interface CreateGroupParams {
@@ -39,6 +41,7 @@ interface MoveGroupParams {
  */
 export function useGroupMutations(dbId: string | null) {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   const invalidateAfterGroupMutation = () => {
     if (dbId) {
@@ -60,45 +63,47 @@ export function useGroupMutations(dbId: string | null) {
   };
 
   const createGroup = useMutation<Group, Error, CreateGroupParams>({
-    mutationFn: ({ dbId, parentId, name }) =>
-      groups.create(dbId, parentId, name),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterGroupMutation();
+    mutationFn: async ({ dbId, parentId, name }) => {
+      const group = await groups.create(dbId, parentId, name);
+      await saveWithErrorToast(dbId, t);
+      return group;
     },
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   const updateGroup = useMutation<Group, Error, UpdateGroupParams>({
-    mutationFn: ({ dbId, id, data }) => groups.update(dbId, id, data),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterGroupMutation();
+    mutationFn: async ({ dbId, id, data }) => {
+      const group = await groups.update(dbId, id, data);
+      await saveWithErrorToast(dbId, t);
+      return group;
     },
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   const renameGroup = useMutation<Group, Error, RenameGroupParams>({
-    mutationFn: ({ dbId, id, name }) => groups.rename(dbId, id, name),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterGroupMutation();
+    mutationFn: async ({ dbId, id, name }) => {
+      const group = await groups.rename(dbId, id, name);
+      await saveWithErrorToast(dbId, t);
+      return group;
     },
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   const deleteGroup = useMutation<void, Error, DeleteGroupParams>({
-    mutationFn: ({ dbId, id }) => groups.delete(dbId, id, true),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterGroupMutation();
+    mutationFn: async ({ dbId, id }) => {
+      await groups.delete(dbId, id, true);
+      await saveWithErrorToast(dbId, t);
     },
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   const moveGroup = useMutation<Group, Error, MoveGroupParams>({
-    mutationFn: ({ dbId, id, targetParentId }) =>
-      groups.move(dbId, id, targetParentId),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterGroupMutation();
+    mutationFn: async ({ dbId, id, targetParentId }) => {
+      const group = await groups.move(dbId, id, targetParentId);
+      await saveWithErrorToast(dbId, t);
+      return group;
     },
+    onSuccess: () => invalidateAfterGroupMutation(),
   });
 
   return {

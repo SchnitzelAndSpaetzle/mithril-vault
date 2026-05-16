@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { queryKeys } from "@/lib/query-keys";
-import { database, tags } from "@/lib/tauri";
+import { tags } from "@/lib/tauri";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 
 interface RenameTagParams {
   dbId: string;
@@ -20,6 +22,7 @@ interface DeleteTagParams {
  */
 export function useTagMutations(dbId: string | null) {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   const invalidateAfterTagMutation = () => {
     if (dbId) {
@@ -32,20 +35,21 @@ export function useTagMutations(dbId: string | null) {
   };
 
   const renameTag = useMutation<number, Error, RenameTagParams>({
-    mutationFn: ({ dbId, oldName, newName }) =>
-      tags.rename(dbId, oldName, newName),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterTagMutation();
+    mutationFn: async ({ dbId, oldName, newName }) => {
+      const count = await tags.rename(dbId, oldName, newName);
+      await saveWithErrorToast(dbId, t);
+      return count;
     },
+    onSuccess: () => invalidateAfterTagMutation(),
   });
 
   const deleteTag = useMutation<number, Error, DeleteTagParams>({
-    mutationFn: ({ dbId, tagName }) => tags.delete(dbId, tagName),
-    onSuccess: (_data, variables) => {
-      void database.save(variables.dbId);
-      invalidateAfterTagMutation();
+    mutationFn: async ({ dbId, tagName }) => {
+      const count = await tags.delete(dbId, tagName);
+      await saveWithErrorToast(dbId, t);
+      return count;
     },
+    onSuccess: () => invalidateAfterTagMutation(),
   });
 
   return { renameTag, deleteTag };

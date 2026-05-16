@@ -287,3 +287,17 @@ Key structure is dot-nested by section: `settings.general.title`, `entries.form.
 
 MIT License. Dependencies must have compatible licenses. CI blocks incompatible licenses.
 See CONTRIBUTING.md for allowed/denied license list.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues at `SchnitzelAndSpaetzle/mithril-vault`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical names: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. Three of these (`needs-triage`, `needs-info`, `ready-for-human`) still need to be created on GitHub before first use of the `triage` skill. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

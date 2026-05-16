@@ -144,11 +144,153 @@ pub struct AdvancedSettings {
 #[serde(default)]
 pub struct BackupSettings {
     pub enabled: bool,
+    #[serde(default = "default_max_versions")]
+    pub max_versions: u32,
+    /// Optional absolute path override for snapshot storage. When `None`, the
+    /// per-Vault sibling subdir (`.kdbx-backups/`) is used. Validated at the
+    /// settings boundary as "must be absolute"; no eager filesystem check so
+    /// a temporarily-unmounted external volume does not produce a false
+    /// rejection.
+    #[serde(default)]
+    pub directory: Option<String>,
+    /// When true, also take a snapshot every time a Vault successfully
+    /// unlocks. Opt-in (per #193) and silently skipped when the most recent
+    /// existing snapshot's size+mtime already match the source.
+    #[serde(default)]
+    pub on_open: bool,
+}
+
+pub(crate) const DEFAULT_MAX_VERSIONS: u32 = 10;
+
+fn default_max_versions() -> u32 {
+    DEFAULT_MAX_VERSIONS
 }
 
 impl Default for BackupSettings {
     fn default() -> Self {
-        Self { enabled: true }
+        Self {
+            enabled: true,
+            max_versions: DEFAULT_MAX_VERSIONS,
+            directory: None,
+            on_open: false,
+        }
+    }
+}
+
+impl BackupSettings {
+    /// Normalizes `Some("")` to `None`. Callers that resolve the snapshot
+    /// directory can then assume `Some(_)` always carries a non-empty path.
+    pub(crate) fn normalize_directory(&mut self) {
+        if matches!(self.directory.as_deref(), Some("")) {
+            self.directory = None;
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod backup_settings_tests {
+    use super::BackupSettings;
+
+    #[test]
+    fn default_max_versions_is_ten() {
+        let s = BackupSettings::default();
+        assert_eq!(s.max_versions, 10);
+    }
+
+    #[test]
+    fn absent_max_versions_deserializes_to_ten_not_zero() {
+        // Existing settings.json files written before this slice have no
+        // maxVersions field. Without a field-level serde default they would
+        // deserialize as 0, which would break rotation. Cover both `{}`
+        // (whole struct missing) and `{"enabled": ..}` (field missing).
+        let from_empty: BackupSettings = serde_json::from_str("{}").expect("parse {}");
+        assert_eq!(from_empty.max_versions, 10);
+
+        let from_partial: BackupSettings =
+            serde_json::from_str(r#"{"enabled": true}"#).expect("parse partial");
+        assert_eq!(from_partial.max_versions, 10);
+    }
+
+    #[test]
+    fn explicit_max_versions_round_trips() {
+        let parsed: BackupSettings =
+            serde_json::from_str(r#"{"enabled": true, "maxVersions": 25}"#)
+                .expect("parse explicit");
+        assert_eq!(parsed.max_versions, 25);
+    }
+
+    #[test]
+    fn absent_directory_deserializes_to_none() {
+        // Settings files written before this slice have no `directory` field;
+        // they must load as `None` so existing installs fall through to the
+        // default sibling subdir.
+        let from_empty: BackupSettings = serde_json::from_str("{}").expect("parse {}");
+        assert!(from_empty.directory.is_none());
+
+        let from_partial: BackupSettings =
+            serde_json::from_str(r#"{"enabled": true, "maxVersions": 10}"#).expect("parse partial");
+        assert!(from_partial.directory.is_none());
+    }
+
+    #[test]
+    fn normalize_directory_treats_empty_string_as_none() {
+        // The UI clears the override by emptying the field, which arrives as
+        // `Some("")` over IPC. Normalize on the boundary so resolver code can
+        // treat presence-of-Some as "user wants a custom path" without
+        // re-checking emptiness on every snapshot.
+        let mut s = BackupSettings {
+            enabled: true,
+            max_versions: 10,
+            directory: Some(String::new()),
+            on_open: false,
+        };
+        s.normalize_directory();
+        assert!(s.directory.is_none());
+    }
+
+    #[test]
+    fn normalize_directory_preserves_nonempty_paths() {
+        let mut s = BackupSettings {
+            enabled: true,
+            max_versions: 10,
+            directory: Some("/mnt/backups".into()),
+            on_open: false,
+        };
+        s.normalize_directory();
+        assert_eq!(s.directory.as_deref(), Some("/mnt/backups"));
+    }
+
+    #[test]
+    fn explicit_directory_round_trips() {
+        let json = r#"{"enabled": true, "maxVersions": 10, "directory": "/mnt/backups"}"#;
+        let parsed: BackupSettings = serde_json::from_str(json).expect("parse explicit");
+        assert_eq!(parsed.directory.as_deref(), Some("/mnt/backups"));
+
+        let serialized = serde_json::to_string(&parsed).expect("serialize");
+        assert!(
+            serialized.contains(r#""directory":"/mnt/backups""#),
+            "serialized json should carry the camelCase directory field: {serialized}"
+        );
+    }
+
+    #[test]
+    fn on_open_defaults_to_false_and_round_trips() {
+        // Opt-in behavior per #193: existing installs must not start taking
+        // open-side snapshots until the user flips the toggle.
+        let from_empty: BackupSettings = serde_json::from_str("{}").expect("parse {}");
+        assert!(!from_empty.on_open);
+
+        let explicit: BackupSettings =
+            serde_json::from_str(r#"{"enabled": true, "maxVersions": 10, "onOpen": true}"#)
+                .expect("parse explicit");
+        assert!(explicit.on_open);
+
+        let serialized = serde_json::to_string(&explicit).expect("serialize");
+        assert!(
+            serialized.contains(r#""onOpen":true"#),
+            "serialized json should carry camelCase onOpen field: {serialized}"
+        );
     }
 }
 

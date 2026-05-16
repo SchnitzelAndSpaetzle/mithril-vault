@@ -1,9 +1,50 @@
 // SPDX-License-Identifier: MIT
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
 import { SettingsView } from "@/views/SettingsView";
 import type { AppPreferences } from "@/lib/types";
+
+// SettingsView's BackupsListSection uses react-query; wrap every render in a
+// fresh provider so the unmocked hook doesn't blow up. The wrapped rerender
+// also preserves the provider — RTL's default rerender replaces children at
+// the root, which would otherwise drop the QueryClientProvider.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false },
+    },
+  });
+  const result = rtlRender(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+  );
+  return {
+    ...result,
+    rerender: (next: ReactElement) =>
+      result.rerender(
+        <QueryClientProvider client={queryClient}>{next}</QueryClientProvider>
+      ),
+  };
+}
+
+vi.mock("@/lib/tauri", () => ({
+  backups: {
+    list: vi.fn().mockResolvedValue([]),
+    delete: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => undefined),
+}));
 
 const mockUseAppPreferences = vi.fn();
 const mockUseTheme = vi.fn();
@@ -79,6 +120,8 @@ function makePreferences(): AppPreferences {
     },
     backups: {
       enabled: true,
+      maxVersions: 10,
+      onOpen: false,
     },
   };
 }
