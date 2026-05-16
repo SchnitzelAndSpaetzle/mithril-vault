@@ -24,6 +24,29 @@ pub enum AuditEvent {
         timestamp: DateTime<Utc>,
         attempt_count: u32,
     },
+    #[serde(rename = "vault.opened")]
+    VaultOpened { timestamp: DateTime<Utc> },
+    #[serde(rename = "vault.locked")]
+    VaultLocked {
+        timestamp: DateTime<Utc>,
+        reason: Reason,
+    },
+}
+
+/// Why a Vault transitioned from unlocked to locked. Serialised as
+/// `snake_case` to match the rest of the on-disk audit wire format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Reason {
+    /// Explicit lock from the UI.
+    Manual,
+    /// Auto-lock inactivity timer fired.
+    AutoLock,
+    /// App is quitting while the Vault was unlocked.
+    AppQuit,
+    /// OS screen-lock hook fired (kept on the wire even though no
+    /// emitter is wired yet — see issue #217).
+    ScreenLock,
 }
 
 impl AuditEvent {
@@ -55,6 +78,63 @@ mod tests {
         let parsed = AuditEvent::from_bytes(&bytes).expect("parse");
 
         assert_eq!(parsed, event);
+    }
+
+    #[test]
+    fn vault_opened_round_trips() {
+        let event = AuditEvent::VaultOpened {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 15, 12, 0, 0).unwrap(),
+        };
+
+        let bytes = event.to_bytes();
+        let parsed = AuditEvent::from_bytes(&bytes).expect("parse");
+
+        assert_eq!(parsed, event);
+
+        // Wire shape: kind stays dot-namespaced (snake_case rename rule
+        // keeps the literal we set on the variant).
+        let json = std::str::from_utf8(&bytes).expect("utf8");
+        assert!(
+            json.contains("\"kind\":\"vault.opened\""),
+            "kind must serialize as `vault.opened`, got: {json}",
+        );
+    }
+
+    #[test]
+    fn vault_locked_round_trips_each_reason() {
+        for reason in [
+            Reason::Manual,
+            Reason::AutoLock,
+            Reason::AppQuit,
+            Reason::ScreenLock,
+        ] {
+            let event = AuditEvent::VaultLocked {
+                timestamp: Utc.with_ymd_and_hms(2026, 5, 15, 12, 0, 0).unwrap(),
+                reason,
+            };
+            let bytes = event.to_bytes();
+            let parsed = AuditEvent::from_bytes(&bytes).expect("parse");
+            assert_eq!(parsed, event);
+        }
+    }
+
+    #[test]
+    fn vault_locked_serialises_reason_as_snake_case() {
+        // The wire format keeps the AuditEvent enum in snake_case; Reason
+        // is rendered consistently with that so log files stay greppable.
+        let event = AuditEvent::VaultLocked {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 15, 12, 0, 0).unwrap(),
+            reason: Reason::AutoLock,
+        };
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(
+            json.contains("\"kind\":\"vault.locked\""),
+            "kind must be `vault.locked`, got: {json}"
+        );
+        assert!(
+            json.contains("\"reason\":\"auto_lock\""),
+            "reason must be snake_case `auto_lock`, got: {json}"
+        );
     }
 
     #[test]

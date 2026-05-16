@@ -4,6 +4,7 @@ use crate::dto::database::{
     CustomIconData, DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
 };
 use crate::dto::error::AppError;
+use crate::services::audit::format::Reason;
 use crate::services::audit::AuditService;
 use crate::services::auto_lock::AutoLockService;
 use crate::services::kdbx::backups::{BackupError, BackupInfo, BackupListEntry};
@@ -13,25 +14,52 @@ use std::path::Path;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime, State};
 
-/// Maps the open/unlock result through the audit subsystem: a successful
-/// open resets the per-Vault failed-unlock counter, while an
-/// `InvalidPassword` failure records exactly one `vault.unlock_failed`
-/// event carrying the running consecutive-failure count.
+/// Maps the open/unlock result through the audit subsystem.
+///
+/// On a successful locked→unlocked transition (`was_locked == true`),
+/// records exactly one `vault.opened` event and resets the per-Vault
+/// failed-unlock counter. A successful no-op unlock (already unlocked)
+/// records nothing — the user did not actually open anything.
+///
+/// On `InvalidPassword`, records one `vault.unlock_failed` event carrying
+/// the running consecutive-failure count.
 ///
 /// Returns the original result unchanged. Audit failures cannot bubble up:
-/// `AuditService::record_vault_unlock_failed` flips an internal `degraded`
-/// flag and otherwise stays silent so the user's unlock-failure UX is
-/// unaffected.
+/// the audit service flips an internal `degraded` flag and otherwise stays
+/// silent so the user's unlock UX is unaffected.
 fn record_open_outcome<T>(
     audit: &AuditService,
     path: &str,
+    was_locked: bool,
     result: Result<T, AppError>,
 ) -> Result<T, AppError> {
     let vault_path = Path::new(path);
     match &result {
-        Ok(_) => audit.reset_unlock_attempts(vault_path),
+        Ok(_) if was_locked => audit.record_vault_opened(vault_path),
         Err(AppError::InvalidPassword) => audit.record_vault_unlock_failed(vault_path),
-        Err(_) => {}
+        Ok(_) | Err(_) => {}
+    }
+    result
+}
+
+/// Maps the lock result through the audit subsystem.
+///
+/// Records exactly one `vault.locked` event with the given reason iff the
+/// lock represents a real unlocked→locked transition. A no-op lock (the
+/// Vault was already locked) records nothing so audit history is not
+/// padded with phantom events on redundant lock calls.
+///
+/// Returns the original result unchanged. Audit failures are swallowed
+/// internally — see [`record_open_outcome`].
+fn record_lock_outcome<T>(
+    audit: &AuditService,
+    path: &str,
+    was_unlocked: bool,
+    reason: Reason,
+    result: Result<T, AppError>,
+) -> Result<T, AppError> {
+    if result.is_ok() && was_unlocked {
+        audit.record_vault_locked(Path::new(path), reason);
     }
     result
 }
@@ -94,7 +122,7 @@ pub async fn open_database<R: Runtime>(
     state: State<'_, Arc<KdbxService>>,
     audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    let info = record_open_outcome(&audit, &path, state.open(&path, &password))?;
+    let info = record_open_outcome(&audit, &path, true, state.open(&path, &password))?;
     emit_open_backup_hook(&app, &state, &path);
     Ok(info)
 }
@@ -171,6 +199,7 @@ pub async fn open_database_with_keyfile<R: Runtime>(
     let info = record_open_outcome(
         &audit,
         &path,
+        true,
         state.open_with_keyfile(&path, &password, &keyfile_path),
     )?;
     emit_open_backup_hook(&app, &state, &path);
@@ -189,6 +218,7 @@ pub async fn open_database_with_keyfile_only<R: Runtime>(
     let info = record_open_outcome(
         &audit,
         &path,
+        true,
         state.open_with_keyfile_only(&path, &keyfile_path),
     )?;
     emit_open_backup_hook(&app, &state, &path);
@@ -196,12 +226,24 @@ pub async fn open_database_with_keyfile_only<R: Runtime>(
 }
 
 /// Locks the database session by dropping decrypted data from memory.
+///
+/// On a real unlocked→locked transition, records one `vault.locked`
+/// event with `reason: manual`. A no-op lock (already locked) records
+/// nothing.
 #[tauri::command]
 pub async fn lock_database(
     db_id: String,
     state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    state.lock(&db_id)
+    let was_unlocked = !state.is_database_locked(&db_id)?.unwrap_or(true);
+    record_lock_outcome(
+        &audit,
+        &db_id,
+        was_unlocked,
+        Reason::Manual,
+        state.lock(&db_id),
+    )
 }
 
 /// Unlocks the database session by re-opening from disk with optional password.
@@ -220,7 +262,12 @@ pub async fn unlock_database<R: Runtime>(
     // wasted work in the happy path, and a duplicated `backup-warning`
     // event whenever the backup dir is broken.
     let was_locked = state.is_database_locked(&db_id)?.unwrap_or(true);
-    let info = record_open_outcome(&audit, &db_id, state.unlock(&db_id, password.as_deref()))?;
+    let info = record_open_outcome(
+        &audit,
+        &db_id,
+        was_locked,
+        state.unlock(&db_id, password.as_deref()),
+    )?;
     if was_locked {
         emit_open_backup_hook(&app, &state, &db_id);
     }
@@ -392,4 +439,133 @@ pub async fn generate_keyfile(output_path: String) -> Result<(), AppError> {
 pub async fn report_activity(state: State<'_, Arc<AutoLockService>>) -> Result<(), AppError> {
     state.report_activity();
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+mod audit_helper_tests {
+    use super::*;
+    use crate::services::audit::format::AuditEvent;
+    use crate::services::audit::key::InMemoryAuditKey;
+    use crate::services::audit::AuditFilter;
+    use tempfile::tempdir;
+
+    fn fresh_service() -> (AuditService, tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("vault.kdbx");
+        std::fs::write(&vault, b"x").expect("write vault");
+        let svc = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+        (svc, dir, vault)
+    }
+
+    #[test]
+    fn record_open_outcome_emits_vault_opened_when_was_locked_and_ok() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> = record_open_outcome(&audit, path, true, Ok(()));
+        assert!(r.is_ok());
+
+        let events = audit.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], AuditEvent::VaultOpened { .. }));
+    }
+
+    #[test]
+    fn record_open_outcome_skips_emit_on_no_op_unlock() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> = record_open_outcome(&audit, path, false, Ok(()));
+        assert!(r.is_ok());
+
+        assert!(audit
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
+
+    #[test]
+    fn record_open_outcome_emits_unlock_failed_regardless_of_was_locked() {
+        // A failed unlock is always meaningful — record it whether or not
+        // the pre-check observed the DB as locked (the failure itself says
+        // the user tried to unlock it).
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> =
+            record_open_outcome(&audit, path, true, Err(AppError::InvalidPassword));
+        assert!(matches!(r, Err(AppError::InvalidPassword)));
+
+        let events = audit.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], AuditEvent::VaultUnlockFailed { .. }));
+    }
+
+    #[test]
+    fn record_open_outcome_other_error_records_nothing() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> =
+            record_open_outcome(&audit, path, true, Err(AppError::DatabaseNotOpen));
+        assert!(matches!(r, Err(AppError::DatabaseNotOpen)));
+
+        assert!(audit
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
+
+    #[test]
+    fn record_lock_outcome_emits_manual_lock_on_real_transition() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> =
+            record_lock_outcome(&audit, path, true, Reason::Manual, Ok(()));
+        assert!(r.is_ok());
+
+        let events = audit.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::VaultLocked { reason, .. } => assert_eq!(*reason, Reason::Manual),
+            other => panic!("expected VaultLocked, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn record_lock_outcome_skips_emit_on_already_locked_no_op() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> =
+            record_lock_outcome(&audit, path, false, Reason::Manual, Ok(()));
+        assert!(r.is_ok());
+
+        assert!(audit
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
+
+    #[test]
+    fn record_lock_outcome_skips_emit_on_error() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> = record_lock_outcome(
+            &audit,
+            path,
+            true,
+            Reason::Manual,
+            Err(AppError::DatabaseNotOpen),
+        );
+        assert!(matches!(r, Err(AppError::DatabaseNotOpen)));
+
+        assert!(audit
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
 }
