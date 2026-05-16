@@ -16,9 +16,7 @@ vi.mock("@/lib/tauri", () => ({
 
 import { AuditLogSection } from "@/components/settings/sections/AuditLogSection";
 
-function createWrapper(
-  setup?: (queryClient: QueryClient) => void
-): (props: { children: ReactNode }) => JSX.Element {
+function createWrapper(setup?: (queryClient: QueryClient) => void) {
   const queryClient = new QueryClient({
     defaultOptions: {
       // gcTime: Infinity keeps observer-less, seeded queries (e.g. entries
