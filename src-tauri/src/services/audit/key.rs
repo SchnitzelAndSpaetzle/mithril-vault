@@ -22,6 +22,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use thiserror::Error;
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Error)]
@@ -125,20 +126,29 @@ impl AuditKey for FileBackedAuditKey {
             Err(e) => return Err(KeyError::Backend(e.to_string())),
         }
 
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|e| KeyError::Backend(e.to_string()))?;
-        }
+        let parent = self
+            .path
+            .parent()
+            .ok_or_else(|| KeyError::Backend("audit key path has no parent directory".into()))?;
+        fs::create_dir_all(parent).map_err(|e| KeyError::Backend(e.to_string()))?;
 
         let mut buf = Zeroizing::new([0u8; KEY_LEN]);
         SysRng
             .try_fill_bytes(&mut buf[..])
             .map_err(|e| KeyError::Backend(e.to_string()))?;
 
-        // Atomic create-and-restrict-mode in one syscall: `create_new`
-        // closes the TOCTOU window where a concurrent process could see a
-        // half-written or default-permissioned file, and on Unix the
-        // restrictive mode is applied at file creation (subject to umask
-        // intersection, which can only further restrict the mode).
+        // Atomic publish: write the key into a uniquely-named temp file
+        // in the destination directory, fsync it, then hard-link it to
+        // the real path. `hard_link` is metadata-only and fails with
+        // `AlreadyExists` if the destination exists, so it functions as
+        // an atomic noclobber claim — and because the source bytes are
+        // fully written and fsync'd before the link, any concurrent
+        // reader that sees the destination sees complete content (no
+        // 0-byte race window). The temp file is created `create_new`
+        // with mode 0o600 on Unix so the restrictive permission is
+        // applied at file creation, not via a separate chmod.
+        let tmp_path = parent.join(format!(".audit-key.tmp.{}", Uuid::new_v4()));
+
         let mut open_opts = fs::OpenOptions::new();
         open_opts.write(true).create_new(true);
         #[cfg(unix)]
@@ -147,13 +157,37 @@ impl AuditKey for FileBackedAuditKey {
             open_opts.mode(0o600);
         }
 
-        let mut f = match open_opts.open(&self.path) {
-            Ok(f) => f,
+        let write_result = (|| -> Result<(), KeyError> {
+            let mut f = open_opts
+                .open(&tmp_path)
+                .map_err(|e| KeyError::Backend(e.to_string()))?;
+            f.write_all(&buf[..])
+                .map_err(|e| KeyError::Backend(e.to_string()))?;
+            f.sync_all().map_err(|e| KeyError::Backend(e.to_string()))?;
+            Ok(())
+        })();
+        if let Err(e) = write_result {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e);
+        }
+
+        let link_result = fs::hard_link(&tmp_path, &self.path);
+        // The temp inode is unlinked either way: on a win, the dest is
+        // now a separate name pointing at the same inode and the temp
+        // name is no longer needed; on a loss, the temp file is just
+        // litter.
+        let _ = fs::remove_file(&tmp_path);
+
+        match link_result {
+            Ok(()) => {
+                *guard = Some(*buf);
+                Ok(*buf)
+            }
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
                 // Lost a race with a concurrent creator. Read what they
                 // wrote and adopt their key — never overwrite, never
                 // rotate.
-                return match read_key_file(&self.path) {
+                match read_key_file(&self.path) {
                     Ok(Some(arr)) => {
                         *guard = Some(arr);
                         Ok(arr)
@@ -162,16 +196,10 @@ impl AuditKey for FileBackedAuditKey {
                         "audit key file appeared then vanished during creation race".into(),
                     )),
                     Err(e) => Err(KeyError::Backend(e.to_string())),
-                };
+                }
             }
-            Err(e) => return Err(KeyError::Backend(e.to_string())),
-        };
-        f.write_all(&buf[..])
-            .map_err(|e| KeyError::Backend(e.to_string()))?;
-        f.sync_all().map_err(|e| KeyError::Backend(e.to_string()))?;
-
-        *guard = Some(*buf);
-        Ok(*buf)
+            Err(e) => Err(KeyError::Backend(e.to_string())),
+        }
     }
 }
 
@@ -300,7 +328,10 @@ mod tests {
             }));
         }
 
-        let keys: Vec<[u8; KEY_LEN]> = handles.into_iter().map(|h| h.join().expect("join")).collect();
+        let keys: Vec<[u8; KEY_LEN]> = handles
+            .into_iter()
+            .map(|h| h.join().expect("join"))
+            .collect();
         let first = keys[0];
         for k in &keys[1..] {
             assert_eq!(*k, first, "concurrent creators diverged on the audit key");
