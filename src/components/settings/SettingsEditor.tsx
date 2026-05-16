@@ -42,6 +42,7 @@ interface SettingsEditorProps {
   onResetPreferences: () => Promise<AppPreferences>;
   isBusy: boolean;
   dbId: string | null;
+  isLocked: boolean;
   databaseConfig: DatabaseConfig | null;
   isDatabaseConfigLoading: boolean;
   databaseConfigError: Error | null;
@@ -170,6 +171,7 @@ export function SettingsEditor({
   onResetPreferences,
   isBusy,
   dbId,
+  isLocked,
   databaseConfig,
   isDatabaseConfigLoading,
   databaseConfigError,
@@ -282,7 +284,7 @@ export function SettingsEditor({
       <AdvancedSettingsSection draft={draft} updateDraft={updateDraft} />
       <BackupsSettingsSection draft={draft} updateDraft={updateDraft} />
       <BackupsListSection dbId={dbId} backupsEnabled={draft.backups.enabled} />
-      <AuditLogSection dbId={dbId} />
+      <AuditLogSection dbId={dbId} isLocked={isLocked} />
       <DatabaseSettingsSection
         dbId={dbId}
         databaseConfig={databaseConfig}

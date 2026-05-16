@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 
 import { useTranslation } from "react-i18next";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { queryKeys } from "@/lib/query-keys";
-import { audit } from "@/lib/tauri";
+import { audit, entries as entriesIpc } from "@/lib/tauri";
 import type { AuditEvent, AuditEventsResponse, Entry } from "@/lib/types";
 
 interface AuditLogSectionProps {
   dbId: string | null;
+  isLocked?: boolean;
 }
 
 function formatTimestamp(timestamp: string, locale: string): string {
@@ -20,26 +21,25 @@ function formatTimestamp(timestamp: string, locale: string): string {
   });
 }
 
-// Walks every cached entries-list query for `dbId` and returns the matching
-// entry's title, or `null` when the Vault is locked / not currently open in
-// this session. The renderer falls back to a UUID prefix in that case so the
-// on-disk log never carries entry titles outside the Vault.
+// Subscribes to the entries-list query for `dbId` so the resolver
+// recomputes whenever entries load or change. While the Vault is locked
+// the query stays disabled (PRD US #16: locked vaults must mask entry
+// rows to a UUID prefix so the on-disk log never carries titles outside
+// the unlocked Vault), and the resolver short-circuits to null.
 function useResolveEntryTitle(
-  dbId: string | null
+  dbId: string | null,
+  isLocked: boolean
 ): (entryId: string) => string | null {
-  const queryClient = useQueryClient();
+  const query = useQuery<Entry[], Error>({
+    queryKey: queryKeys.entries.list(dbId ?? "none", null),
+    queryFn: () => (dbId ? entriesIpc.list(dbId) : Promise.resolve([])),
+    enabled: Boolean(dbId) && !isLocked,
+    staleTime: 30_000,
+  });
+  const entriesList = query.data;
   return (entryId: string) => {
-    if (!dbId) return null;
-    const queries = queryClient
-      .getQueryCache()
-      .findAll({ queryKey: [...queryKeys.entries.all, dbId, "list"] });
-    for (const q of queries) {
-      const entries = q.state.data;
-      if (!Array.isArray(entries)) continue;
-      const hit = (entries as Entry[]).find((e) => e.id === entryId);
-      if (hit) return hit.title;
-    }
-    return null;
+    if (isLocked || !entriesList) return null;
+    return entriesList.find((e) => e.id === entryId)?.title ?? null;
   };
 }
 
@@ -58,7 +58,6 @@ function AuditRow({
   const entryId = event.entryId ?? null;
   const title = entryId ? resolveTitle(entryId) : null;
   const entryLabel = entryId ? (title ?? entryId.slice(0, 8)) : null;
-
   return (
     <li
       data-kind={event.kind}
@@ -80,9 +79,12 @@ function AuditRow({
 
 const EMPTY_RESPONSE: AuditEventsResponse = { events: [], degraded: false };
 
-export function AuditLogSection({ dbId }: Readonly<AuditLogSectionProps>) {
+export function AuditLogSection({
+  dbId,
+  isLocked = false,
+}: Readonly<AuditLogSectionProps>) {
   const { t } = useTranslation();
-  const resolveTitle = useResolveEntryTitle(dbId);
+  const resolveTitle = useResolveEntryTitle(dbId, isLocked);
 
   const query = useQuery<AuditEventsResponse, Error>({
     queryKey: queryKeys.audit.list(dbId ?? "none"),

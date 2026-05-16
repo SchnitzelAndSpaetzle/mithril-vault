@@ -7,10 +7,14 @@ import type { ReactNode } from "react";
 import { queryKeys } from "@/lib/query-keys";
 
 const listMock = vi.fn();
+const entriesListMock = vi.fn().mockResolvedValue([]);
 
 vi.mock("@/lib/tauri", () => ({
   audit: {
     list: (...args: unknown[]) => listMock(...args),
+  },
+  entries: {
+    list: (...args: unknown[]) => entriesListMock(...args),
   },
 }));
 
@@ -38,6 +42,8 @@ function createWrapper(setup?: (queryClient: QueryClient) => void) {
 describe("AuditLogSection", () => {
   beforeEach(() => {
     listMock.mockReset();
+    entriesListMock.mockReset();
+    entriesListMock.mockResolvedValue([]);
   });
 
   it("renders a no-vault empty state and does not query when no vault is open", () => {
@@ -322,6 +328,72 @@ describe("AuditLogSection", () => {
     expect(row.getAttribute("data-kind")).toBe("entryProtectedFieldRevealed");
     expect(row.textContent).toContain("Recovery codes");
     expect(row.textContent).toContain("audit.kind.entryProtectedFieldRevealed");
+  });
+
+  it("masks entry titles to UUID prefix when the open vault is currently locked, even if the entries cache is warm", async () => {
+    listMock.mockResolvedValueOnce({
+      events: [
+        {
+          kind: "entryPasswordRevealed",
+          timestamp: "2026-05-16T10:00:00.000Z",
+          entryId: "8f1c2e3a-4b5d-6e7f-8091-a2b3c4d5e6f7",
+        },
+      ],
+      degraded: false,
+    });
+
+    const dbId = "/tmp/vault.kdbx";
+    // Cache is warm — entries were loaded earlier this session — but the
+    // vault is now locked. PRD US #16: locked vaults must render entry
+    // rows as UUID prefixes so the on-disk log never carries titles
+    // outside the unlocked Vault.
+    const Wrapper = createWrapper((qc) => {
+      qc.setQueryData(queryKeys.entries.list(dbId, null), [
+        { id: "8f1c2e3a-4b5d-6e7f-8091-a2b3c4d5e6f7", title: "GitHub" },
+      ]);
+    });
+    render(
+      <Wrapper>
+        <AuditLogSection dbId={dbId} isLocked />
+      </Wrapper>
+    );
+
+    const row = await screen.findByRole("listitem");
+    expect(row.textContent).not.toContain("GitHub");
+    expect(row.textContent).toContain("8f1c2e3a");
+  });
+
+  it("hydrates entry titles reactively once entries.list resolves after the audit panel mounts", async () => {
+    listMock.mockResolvedValueOnce({
+      events: [
+        {
+          kind: "entryPasswordRevealed",
+          timestamp: "2026-05-16T10:00:00.000Z",
+          entryId: "uuid-late",
+        },
+      ],
+      degraded: false,
+    });
+    // entries.list resolves to data carrying the matching title, but we
+    // do NOT pre-seed the cache — the section must subscribe to the
+    // entries query, not snapshot it at render time, so the row updates
+    // from UUID prefix to title once the IPC settles.
+    entriesListMock.mockResolvedValue([{ id: "uuid-late", title: "Late" }]);
+
+    const dbId = "/tmp/vault.kdbx";
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId={dbId} />
+      </Wrapper>
+    );
+
+    // Eventually the row carries the title — pure render-time peek would
+    // never reach this state because the cache is empty at mount.
+    await waitFor(() => {
+      const row = screen.getByRole("listitem");
+      expect(row.textContent).toContain("Late");
+    });
   });
 
   it("renders the loadError state when the backend fails", async () => {
