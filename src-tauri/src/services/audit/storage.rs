@@ -86,6 +86,14 @@ impl AuditLogFile {
     /// a `DoS` vector), but the caller can now flip the session-wide
     /// degraded indicator so the UI surfaces "some entries unreadable"
     /// instead of pretending nothing was wrong.
+    ///
+    /// Takes a shared advisory lock for the duration of the scan so the
+    /// reader participates in the same locking protocol as
+    /// [`AuditLogFile::append`]. Advisory locks only hold if every
+    /// participant cooperates — a lock-free reader would observe partial
+    /// state during in-progress writes (and, crucially, during the
+    /// exclusive-lock-held rewrites that retention/compaction will
+    /// perform in a follow-up).
     pub fn read_all(&self) -> Result<LogReadOutcome, StorageError> {
         let file = match File::open(&self.path) {
             Ok(f) => f,
@@ -94,19 +102,28 @@ impl AuditLogFile {
             }
             Err(e) => return Err(e.into()),
         };
-        let reader = BufReader::new(file);
-        let mut outcome = LogReadOutcome::default();
-        for line in reader.lines() {
-            let line = line?;
-            if line.trim().is_empty() {
-                continue;
+        FileExt::lock_shared(&file)?;
+
+        let result = (|| -> Result<LogReadOutcome, StorageError> {
+            let reader = BufReader::new(&file);
+            let mut outcome = LogReadOutcome::default();
+            for line in reader.lines() {
+                let line = line?;
+                if line.trim().is_empty() {
+                    continue;
+                }
+                match decode_frame(&line) {
+                    Ok(frame) => outcome.frames.push(frame),
+                    Err(_) => {
+                        outcome.malformed_lines = outcome.malformed_lines.saturating_add(1);
+                    }
+                }
             }
-            match decode_frame(&line) {
-                Ok(frame) => outcome.frames.push(frame),
-                Err(_) => outcome.malformed_lines = outcome.malformed_lines.saturating_add(1),
-            }
-        }
-        Ok(outcome)
+            Ok(outcome)
+        })();
+
+        let _ = FileExt::unlock(&file);
+        result
     }
 }
 
@@ -179,6 +196,57 @@ mod tests {
         let outcome = log.read_all().expect("read");
         assert_eq!(outcome.frames, vec![b"first".to_vec(), b"third".to_vec()]);
         assert_eq!(outcome.malformed_lines, 1);
+    }
+
+    /// `read_all` must participate in the advisory locking protocol —
+    /// otherwise a concurrent writer (or future retention rewriter) can
+    /// hold its exclusive lock and the lock-free reader will sail past it
+    /// and read partial state. Verify by holding an exclusive lock on a
+    /// separate handle and asserting the reader is gated on its release.
+    #[test]
+    fn read_all_blocks_while_exclusive_lock_is_held() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("v.jsonl");
+        let log = AuditLogFile::new(path.clone());
+        log.append(b"first").expect("append");
+
+        // Hold an exclusive lock from this thread via a separate handle.
+        // The reader thread should NOT be able to complete its read
+        // until the lock is released.
+        let blocker = OpenOptions::new()
+            .read(true)
+            .open(&path)
+            .expect("open for lock");
+        FileExt::lock_exclusive(&blocker).expect("lock exclusive");
+
+        let (tx, rx) = mpsc::channel();
+        let reader_path = path.clone();
+        let reader = std::thread::spawn(move || {
+            let log = AuditLogFile::new(reader_path);
+            let outcome = log.read_all().expect("read");
+            tx.send(outcome).expect("send");
+        });
+
+        // While the exclusive lock is held, the reader must not deliver
+        // a result. recv_timeout of a generous interval should hit the
+        // deadline, not the message.
+        let early = rx.recv_timeout(Duration::from_millis(200));
+        assert!(
+            early.is_err(),
+            "reader returned while exclusive lock was held: {early:?}"
+        );
+
+        // Release the lock; the reader must now make progress quickly.
+        FileExt::unlock(&blocker).expect("unlock");
+        let outcome = rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("reader did not finish after lock release");
+        assert_eq!(outcome.frames, vec![b"first".to_vec()]);
+        assert_eq!(outcome.malformed_lines, 0);
+        reader.join().expect("reader join");
     }
 
     #[test]
