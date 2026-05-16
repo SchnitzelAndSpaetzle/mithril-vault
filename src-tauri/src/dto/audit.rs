@@ -5,7 +5,7 @@
 //! Event kinds are serialised camelCase (`vaultUnlockFailed`) so the frontend
 //! never has to do string-keyed dispatch on dot-namespaced values.
 
-use crate::services::audit::format::AuditEvent;
+use crate::services::audit::format::{AuditEvent, Reason};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -13,9 +13,34 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum AuditEventKindDto {
     VaultUnlockFailed,
+    VaultOpened,
+    VaultLocked,
     EntryPasswordRevealed,
     EntryPasswordCopied,
     EntryProtectedFieldRevealed,
+}
+
+/// Why a Vault transitioned from unlocked to locked, mirrored from
+/// `services::audit::format::Reason` and rendered in camelCase over IPC
+/// (everything else on the wire is camelCase).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReasonDto {
+    Manual,
+    AutoLock,
+    AppQuit,
+    ScreenLock,
+}
+
+impl From<Reason> for ReasonDto {
+    fn from(reason: Reason) -> Self {
+        match reason {
+            Reason::Manual => Self::Manual,
+            Reason::AutoLock => Self::AutoLock,
+            Reason::AppQuit => Self::AppQuit,
+            Reason::ScreenLock => Self::ScreenLock,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +50,8 @@ pub struct AuditEventDto {
     pub timestamp: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attempt_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<ReasonDto>,
     /// KDBX UUID for entry-level kinds. Titles are deliberately resolved
     /// at render time from the open Vault's React Query cache so the
     /// on-disk log can never carry entry titles outside the Vault.
@@ -64,6 +91,21 @@ impl From<AuditEvent> for AuditEventDto {
                 kind: AuditEventKindDto::VaultUnlockFailed,
                 timestamp,
                 attempt_count: Some(attempt_count),
+                reason: None,
+                entry_id: None,
+            },
+            AuditEvent::VaultOpened { timestamp } => Self {
+                kind: AuditEventKindDto::VaultOpened,
+                timestamp,
+                attempt_count: None,
+                reason: None,
+                entry_id: None,
+            },
+            AuditEvent::VaultLocked { timestamp, reason } => Self {
+                kind: AuditEventKindDto::VaultLocked,
+                timestamp,
+                attempt_count: None,
+                reason: Some(reason.into()),
                 entry_id: None,
             },
             AuditEvent::EntryPasswordRevealed {
@@ -73,6 +115,7 @@ impl From<AuditEvent> for AuditEventDto {
                 kind: AuditEventKindDto::EntryPasswordRevealed,
                 timestamp,
                 attempt_count: None,
+                reason: None,
                 entry_id: Some(entry_id),
             },
             AuditEvent::EntryPasswordCopied {
@@ -82,6 +125,7 @@ impl From<AuditEvent> for AuditEventDto {
                 kind: AuditEventKindDto::EntryPasswordCopied,
                 timestamp,
                 attempt_count: None,
+                reason: None,
                 entry_id: Some(entry_id),
             },
             AuditEvent::EntryProtectedFieldRevealed {
@@ -91,6 +135,7 @@ impl From<AuditEvent> for AuditEventDto {
                 kind: AuditEventKindDto::EntryProtectedFieldRevealed,
                 timestamp,
                 attempt_count: None,
+                reason: None,
                 entry_id: Some(entry_id),
             },
         }
@@ -109,6 +154,7 @@ mod tests {
             kind: AuditEventKindDto::VaultUnlockFailed,
             timestamp: Utc.with_ymd_and_hms(2026, 5, 15, 12, 0, 0).unwrap(),
             attempt_count: Some(2),
+            reason: None,
             entry_id: None,
         };
         let json = serde_json::to_string(&dto).expect("ser");
@@ -131,6 +177,52 @@ mod tests {
         assert!(matches!(dto.kind, AuditEventKindDto::VaultUnlockFailed));
         assert_eq!(dto.timestamp, ts);
         assert_eq!(dto.attempt_count, Some(4));
+    }
+
+    #[test]
+    fn vault_opened_event_converts_to_dto_with_camel_case_kind() {
+        let ts = Utc.with_ymd_and_hms(2026, 5, 15, 12, 0, 0).unwrap();
+        let dto: AuditEventDto = AuditEvent::VaultOpened { timestamp: ts }.into();
+
+        assert!(matches!(dto.kind, AuditEventKindDto::VaultOpened));
+        assert_eq!(dto.timestamp, ts);
+        assert!(dto.attempt_count.is_none());
+        assert!(dto.reason.is_none());
+
+        let json = serde_json::to_string(&dto).expect("ser");
+        assert!(
+            json.contains("\"vaultOpened\""),
+            "kind must serialize as camelCase, got: {json}"
+        );
+    }
+
+    #[test]
+    fn vault_locked_event_converts_to_dto_with_camel_case_reason() {
+        use crate::services::audit::format::Reason;
+        let ts = Utc.with_ymd_and_hms(2026, 5, 15, 12, 0, 0).unwrap();
+
+        for (reason, expected_wire) in [
+            (Reason::Manual, "manual"),
+            (Reason::AutoLock, "autoLock"),
+            (Reason::AppQuit, "appQuit"),
+            (Reason::ScreenLock, "screenLock"),
+        ] {
+            let dto: AuditEventDto = AuditEvent::VaultLocked {
+                timestamp: ts,
+                reason,
+            }
+            .into();
+            assert!(matches!(dto.kind, AuditEventKindDto::VaultLocked));
+            let json = serde_json::to_string(&dto).expect("ser");
+            assert!(
+                json.contains("\"vaultLocked\""),
+                "kind must serialize as camelCase, got: {json}"
+            );
+            assert!(
+                json.contains(&format!("\"reason\":\"{expected_wire}\"")),
+                "reason must serialize as camelCase `{expected_wire}`, got: {json}"
+            );
+        }
     }
 
     #[test]

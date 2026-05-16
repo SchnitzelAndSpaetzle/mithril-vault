@@ -145,6 +145,61 @@ describe("AuditLogSection", () => {
     expect((await screen.findAllByRole("listitem")).length).toBe(1);
   });
 
+  it("renders vault.opened and vault.locked rows with localized labels and reason", async () => {
+    listMock.mockResolvedValueOnce({
+      events: [
+        {
+          kind: "vaultLocked",
+          timestamp: "2026-05-15T12:05:00.000Z",
+          reason: "manual",
+        },
+        {
+          kind: "vaultLocked",
+          timestamp: "2026-05-15T12:04:00.000Z",
+          reason: "autoLock",
+        },
+        {
+          kind: "vaultLocked",
+          timestamp: "2026-05-15T12:03:00.000Z",
+          reason: "appQuit",
+        },
+        {
+          kind: "vaultLocked",
+          timestamp: "2026-05-15T12:02:00.000Z",
+          reason: "screenLock",
+        },
+        {
+          kind: "vaultOpened",
+          timestamp: "2026-05-15T12:00:00.000Z",
+        },
+      ],
+      degraded: false,
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    const rows = await screen.findAllByRole("listitem");
+    expect(rows.length).toBe(5);
+
+    // Each kind label is rendered via i18n; the mocked t() echoes keys.
+    expect(screen.getAllByText("audit.kind.vaultOpened").length).toBe(1);
+    expect(screen.getAllByText("audit.kind.vaultLocked").length).toBe(4);
+
+    // Reason labels appear only on locked rows — one per reason variant.
+    expect(screen.getByText("audit.reason.manual")).toBeInTheDocument();
+    expect(screen.getByText("audit.reason.autoLock")).toBeInTheDocument();
+    expect(screen.getByText("audit.reason.appQuit")).toBeInTheDocument();
+    expect(screen.getByText("audit.reason.screenLock")).toBeInTheDocument();
+
+    // No attempt-count chip on these kinds.
+    expect(screen.queryByText("audit.attemptCount")).toBeNull();
+  });
+
   it("resolves entry_id to the entry's title from the open vault's React Query cache for entry.password_revealed", async () => {
     listMock.mockResolvedValueOnce({
       events: [

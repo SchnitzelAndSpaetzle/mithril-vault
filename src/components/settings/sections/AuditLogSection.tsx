@@ -51,6 +51,10 @@ function AuditRow({
   resolveTitle: (entryId: string) => string | null;
 }>) {
   const { t, i18n } = useTranslation();
+  // Row layout is uniform across kinds — kind-specific payload (attempt
+  // count for failed unlocks, reason for locked, entry title for entry-
+  // level kinds) hangs off the same muted-text slot so new kinds can
+  // plug in without a layout rewrite.
   const entryId = event.entryId ?? null;
   const title = entryId ? resolveTitle(entryId) : null;
   const entryLabel = entryId ? (title ?? entryId.slice(0, 8)) : null;
@@ -67,6 +71,7 @@ function AuditRow({
         {typeof event.attemptCount === "number" ? (
           <span>{t("audit.attemptCount", { count: event.attemptCount })}</span>
         ) : null}
+        {event.reason ? <span>{t(`audit.reason.${event.reason}`)}</span> : null}
         <span>{formatTimestamp(event.timestamp, i18n.language)}</span>
       </div>
     </li>

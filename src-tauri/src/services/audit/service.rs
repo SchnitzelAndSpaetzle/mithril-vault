@@ -12,7 +12,7 @@
 //! * [`AuditService::read`] — list events for a Vault path.
 
 use crate::services::audit::crypto::{decrypt, encrypt, KEY_LEN};
-use crate::services::audit::format::AuditEvent;
+use crate::services::audit::format::{AuditEvent, Reason};
 use crate::services::audit::key::AuditKey;
 use crate::services::audit::retention::apply_retention;
 use crate::services::audit::storage::AuditLogFile;
@@ -157,6 +157,38 @@ impl AuditService {
         self.record(vault_path, &event);
     }
 
+    /// Records a `vault.locked` event with the given reason. Called from
+    /// the command layer / auto-lock service / app-quit handler whenever a
+    /// Vault transitions from unlocked to locked.
+    pub fn record_vault_locked(&self, vault_path: &Path, reason: Reason) {
+        let event = AuditEvent::VaultLocked {
+            timestamp: Utc::now(),
+            reason,
+        };
+        self.record(vault_path, &event);
+    }
+
+    /// Convenience wrapper that records one `vault.locked` event per path
+    /// in `vault_paths` with the same reason. Used by the auto-lock task
+    /// and the app-quit handler, which both batch-lock multiple Vaults
+    /// from a single trigger.
+    pub fn record_vault_locked_batch<P: AsRef<Path>>(&self, vault_paths: &[P], reason: Reason) {
+        for p in vault_paths {
+            self.record_vault_locked(p.as_ref(), reason);
+        }
+    }
+
+    /// Records a `vault.opened` event and resets the per-Vault
+    /// failed-unlock counter so the next failure starts the count back at 1.
+    /// Called from the command layer on every locked→unlocked transition.
+    pub fn record_vault_opened(&self, vault_path: &Path) {
+        self.reset_unlock_attempts(vault_path);
+        let event = AuditEvent::VaultOpened {
+            timestamp: Utc::now(),
+        };
+        self.record(vault_path, &event);
+    }
+
     /// Appends one `entry.password_revealed` event for the given KDBX
     /// entry UUID against the open Vault's log. Called from the command
     /// layer immediately after a successful `get_entry_password`. Like
@@ -219,6 +251,15 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use std::sync::Arc;
     use tempfile::tempdir;
+
+    /// Extracts `attempt_count` from a `VaultUnlockFailed` event; panics on
+    /// any other variant so a leaking variant in a test is loud, not silent.
+    fn unlock_failed_count(event: &AuditEvent) -> u32 {
+        match event {
+            AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+            other => panic!("expected VaultUnlockFailed, got {other:?}"),
+        }
+    }
 
     fn unlock_failed_event(count: u32) -> AuditEvent {
         AuditEvent::VaultUnlockFailed {
@@ -360,13 +401,7 @@ mod tests {
         service.record_vault_unlock_failed(&vault);
 
         let events = service.read(&vault, &AuditFilter::default()).expect("read");
-        let counts: Vec<u32> = events
-            .iter()
-            .map(|e| match e {
-                AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
-                other => unreachable!("unexpected event in unlock-failed test: {other:?}"),
-            })
-            .collect();
+        let counts: Vec<u32> = events.iter().map(unlock_failed_count).collect();
         assert_eq!(counts, vec![1, 2, 3]);
     }
 
@@ -380,13 +415,7 @@ mod tests {
         service.record_vault_unlock_failed(&vault);
 
         let events = service.read(&vault, &AuditFilter::default()).expect("read");
-        let counts: Vec<u32> = events
-            .iter()
-            .map(|e| match e {
-                AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
-                other => unreachable!("unexpected event in unlock-failed test: {other:?}"),
-            })
-            .collect();
+        let counts: Vec<u32> = events.iter().map(unlock_failed_count).collect();
         assert_eq!(counts, vec![1, 2, 1]);
     }
 
@@ -461,22 +490,127 @@ mod tests {
         let b_events = service
             .read(&vault_b, &AuditFilter::default())
             .expect("read b");
-        let a_counts: Vec<u32> = a_events
-            .iter()
-            .map(|e| match e {
-                AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
-                other => unreachable!("unexpected event in unlock-failed test: {other:?}"),
-            })
-            .collect();
-        let b_counts: Vec<u32> = b_events
-            .iter()
-            .map(|e| match e {
-                AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
-                other => unreachable!("unexpected event in unlock-failed test: {other:?}"),
-            })
-            .collect();
+        let a_counts: Vec<u32> = a_events.iter().map(unlock_failed_count).collect();
+        let b_counts: Vec<u32> = b_events.iter().map(unlock_failed_count).collect();
         assert_eq!(a_counts, vec![1, 2]);
         assert_eq!(b_counts, vec![1]);
+    }
+
+    /// Acceptance-criteria integration test for issue #217: a single
+    /// unlock+lock cycle must leave one `vault.opened` and one
+    /// `vault.locked` record in chronological order, with the lock reason
+    /// preserved.
+    #[test]
+    fn unlock_then_lock_cycle_produces_opened_then_locked_records() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_vault_opened(&vault);
+        service.record_vault_locked(&vault, Reason::Manual);
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 2, "one opened + one locked");
+
+        assert!(
+            matches!(events[0], AuditEvent::VaultOpened { .. }),
+            "first record must be vault.opened, got {:?}",
+            events[0]
+        );
+        match &events[1] {
+            AuditEvent::VaultLocked { reason, .. } => assert_eq!(*reason, Reason::Manual),
+            other => panic!("expected VaultLocked, got {other:?}"),
+        }
+        assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn record_vault_locked_batch_writes_one_event_per_path() {
+        let dir = tempdir().expect("tempdir");
+        let vault_a = dir.path().join("a.kdbx");
+        let vault_b = dir.path().join("b.kdbx");
+        std::fs::write(&vault_a, b"a").expect("write a");
+        std::fs::write(&vault_b, b"b").expect("write b");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+        service.record_vault_locked_batch(&[&vault_a, &vault_b], Reason::AppQuit);
+
+        for vault in [&vault_a, &vault_b] {
+            let events = service.read(vault, &AuditFilter::default()).expect("read");
+            assert_eq!(events.len(), 1);
+            match &events[0] {
+                AuditEvent::VaultLocked { reason, .. } => assert_eq!(*reason, Reason::AppQuit),
+                other => panic!("expected VaultLocked, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn record_vault_locked_batch_no_op_on_empty_slice() {
+        let dir = tempdir().expect("tempdir");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+        let empty: &[&Path] = &[];
+        service.record_vault_locked_batch(empty, Reason::AppQuit);
+        assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn record_vault_locked_appends_event_with_each_reason() {
+        use crate::services::audit::format::Reason;
+        let (service, _dir, vault) = fresh_service();
+
+        for reason in [
+            Reason::Manual,
+            Reason::AutoLock,
+            Reason::AppQuit,
+            Reason::ScreenLock,
+        ] {
+            service.record_vault_locked(&vault, reason);
+        }
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        let reasons: Vec<Reason> = events
+            .iter()
+            .map(|e| match e {
+                AuditEvent::VaultLocked { reason, .. } => *reason,
+                other => panic!("expected VaultLocked, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            reasons,
+            vec![
+                Reason::Manual,
+                Reason::AutoLock,
+                Reason::AppQuit,
+                Reason::ScreenLock
+            ]
+        );
+    }
+
+    #[test]
+    fn record_vault_opened_appends_event_and_resets_attempt_counter() {
+        let (service, _dir, vault) = fresh_service();
+
+        // Build up some failed attempts first, then mark the open.
+        service.record_vault_unlock_failed(&vault);
+        service.record_vault_unlock_failed(&vault);
+        service.record_vault_opened(&vault);
+
+        // A subsequent failed unlock must start counting again from 1 — i.e.
+        // record_vault_opened resets the in-memory attempts counter just
+        // like the existing reset_unlock_attempts did.
+        service.record_vault_unlock_failed(&vault);
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        // Expect: failed(1), failed(2), opened, failed(1)
+        assert_eq!(events.len(), 4);
+        assert!(matches!(events[2], AuditEvent::VaultOpened { .. }));
+        match &events[3] {
+            AuditEvent::VaultUnlockFailed { attempt_count, .. } => {
+                assert_eq!(*attempt_count, 1, "counter must reset on vault.opened");
+            }
+            other => panic!("expected VaultUnlockFailed, got {other:?}"),
+        }
     }
 
     #[test]

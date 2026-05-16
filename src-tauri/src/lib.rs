@@ -23,6 +23,7 @@ use commands::{
     restore_backup, save_database, set_entry_custom_icon, set_window_content_protected,
     store_session_key, unlock_database, update_app_preferences, update_entry, update_group,
 };
+use services::audit::format::Reason;
 use services::audit::key::FileBackedAuditKey;
 use services::audit::AuditService;
 use services::auto_lock::AutoLockService;
@@ -170,11 +171,15 @@ pub fn run() {
             if let Some(clipboard) = app.try_state::<Arc<ClipboardService>>() {
                 let _ = clipboard.clear();
             }
+            record_app_quit_audit_events(app);
         }
         tauri::RunEvent::Resumed => {
             if let Some(kdbx) = app.try_state::<Arc<KdbxService>>() {
                 if let Ok(locked_paths) = kdbx.lock_all() {
                     if !locked_paths.is_empty() {
+                        if let Some(audit) = app.try_state::<Arc<AuditService>>() {
+                            audit.record_vault_locked_batch(&locked_paths, Reason::ScreenLock);
+                        }
                         let _ = app.emit("database-locked", &locked_paths);
                     }
                 }
@@ -182,4 +187,26 @@ pub fn run() {
         }
         _ => {}
     });
+}
+
+/// Records one `vault.locked { reason: app_quit }` per Vault that is open
+/// and unlocked at quit time. Best-effort: audit emit failures are
+/// swallowed internally by `AuditService`, missing state simply means no
+/// records are produced (we're exiting anyway).
+fn record_app_quit_audit_events<R: Runtime>(app: &AppHandle<R>) {
+    let Some(audit) = app.try_state::<Arc<AuditService>>() else {
+        return;
+    };
+    let Some(kdbx) = app.try_state::<Arc<KdbxService>>() else {
+        return;
+    };
+    let Ok(open) = kdbx.list_open_databases() else {
+        return;
+    };
+    let unlocked_paths: Vec<String> = open
+        .into_iter()
+        .filter(|db| !db.is_locked)
+        .map(|db| db.path)
+        .collect();
+    audit.record_vault_locked_batch(&unlocked_paths, Reason::AppQuit);
 }
