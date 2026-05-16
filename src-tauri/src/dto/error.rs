@@ -112,6 +112,9 @@ pub enum AppError {
 
     #[error("Backup failed for {path}: {reason}")]
     BackupFailed { path: String, reason: String },
+
+    #[error("Audit log read failed: {0}")]
+    AuditRead(String),
 }
 
 impl Serialize for AppError {
