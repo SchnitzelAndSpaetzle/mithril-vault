@@ -47,7 +47,7 @@ describe("AuditLogSection", () => {
   });
 
   it("renders the empty state when the open vault has no events", async () => {
-    listMock.mockResolvedValueOnce([]);
+    listMock.mockResolvedValueOnce({ events: [], degraded: false });
 
     const Wrapper = createWrapper();
     render(
@@ -60,21 +60,26 @@ describe("AuditLogSection", () => {
       expect(listMock).toHaveBeenCalledWith("/tmp/vault.kdbx");
     });
     expect(await screen.findByText("audit.empty")).toBeInTheDocument();
+    // The degraded banner must NOT appear when degraded is false.
+    expect(screen.queryByText("audit.degradedWarning")).toBeNull();
   });
 
   it("renders one row per vault.unlock_failed event with kind and attempt count", async () => {
-    listMock.mockResolvedValueOnce([
-      {
-        kind: "vaultUnlockFailed",
-        timestamp: "2026-05-15T12:00:00.000Z",
-        attemptCount: 2,
-      },
-      {
-        kind: "vaultUnlockFailed",
-        timestamp: "2026-05-15T11:59:00.000Z",
-        attemptCount: 1,
-      },
-    ]);
+    listMock.mockResolvedValueOnce({
+      events: [
+        {
+          kind: "vaultUnlockFailed",
+          timestamp: "2026-05-15T12:00:00.000Z",
+          attemptCount: 2,
+        },
+        {
+          kind: "vaultUnlockFailed",
+          timestamp: "2026-05-15T11:59:00.000Z",
+          attemptCount: 1,
+        },
+      ],
+      degraded: false,
+    });
 
     const Wrapper = createWrapper();
     render(
@@ -93,6 +98,47 @@ describe("AuditLogSection", () => {
     expect(labels.length).toBe(2);
   });
 
+  it("renders the degraded banner above the empty state when degraded is true", async () => {
+    listMock.mockResolvedValueOnce({ events: [], degraded: true });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    expect(
+      await screen.findByText("audit.degradedWarning")
+    ).toBeInTheDocument();
+    expect(screen.getByText("audit.empty")).toBeInTheDocument();
+  });
+
+  it("renders the degraded banner alongside events when degraded is true", async () => {
+    listMock.mockResolvedValueOnce({
+      events: [
+        {
+          kind: "vaultUnlockFailed",
+          timestamp: "2026-05-15T12:00:00.000Z",
+          attemptCount: 1,
+        },
+      ],
+      degraded: true,
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    expect(
+      await screen.findByText("audit.degradedWarning")
+    ).toBeInTheDocument();
+    expect((await screen.findAllByRole("listitem")).length).toBe(1);
+  });
+
   it("renders the loadError state when the backend fails", async () => {
     listMock.mockRejectedValueOnce(new Error("boom"));
 
@@ -104,5 +150,7 @@ describe("AuditLogSection", () => {
     );
 
     expect(await screen.findByText("audit.loadError")).toBeInTheDocument();
+    // No empty-state copy when the load itself failed — distinct UX state.
+    expect(screen.queryByText("audit.empty")).toBeNull();
   });
 });

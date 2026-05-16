@@ -323,19 +323,22 @@ describe("tauri wrappers validation", () => {
     });
   });
 
-  it("audit.list parses get_audit_events into typed events", async () => {
-    const payload = [
-      {
-        kind: "vaultUnlockFailed",
-        timestamp: "2026-05-15T12:00:00.000Z",
-        attemptCount: 2,
-      },
-      {
-        kind: "vaultUnlockFailed",
-        timestamp: "2026-05-15T11:59:00.000Z",
-        attemptCount: 1,
-      },
-    ];
+  it("audit.list parses get_audit_events into a typed response", async () => {
+    const payload = {
+      events: [
+        {
+          kind: "vaultUnlockFailed",
+          timestamp: "2026-05-15T12:00:00.000Z",
+          attemptCount: 2,
+        },
+        {
+          kind: "vaultUnlockFailed",
+          timestamp: "2026-05-15T11:59:00.000Z",
+          attemptCount: 1,
+        },
+      ],
+      degraded: false,
+    };
     vi.mocked(invoke).mockResolvedValueOnce(payload);
 
     await expect(audit.list("/tmp/vault.kdbx")).resolves.toEqual(payload);
@@ -345,14 +348,34 @@ describe("tauri wrappers validation", () => {
     });
   });
 
+  it("audit.list surfaces a degraded flag from the backend", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      events: [],
+      degraded: true,
+    });
+
+    await expect(audit.list("/tmp/vault.kdbx")).resolves.toEqual({
+      events: [],
+      degraded: true,
+    });
+  });
+
   it("audit.list rejects payloads with an unknown kind", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce([
-      {
-        kind: "vaultDeleted",
-        timestamp: "2026-05-15T12:00:00.000Z",
-        attemptCount: 1,
-      },
-    ]);
+    vi.mocked(invoke).mockResolvedValueOnce({
+      events: [
+        {
+          kind: "vaultDeleted",
+          timestamp: "2026-05-15T12:00:00.000Z",
+          attemptCount: 1,
+        },
+      ],
+      degraded: false,
+    });
+    await expect(audit.list("/tmp/vault.kdbx")).rejects.toThrow();
+  });
+
+  it("audit.list rejects payloads missing the degraded flag", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({ events: [] });
     await expect(audit.list("/tmp/vault.kdbx")).rejects.toThrow();
   });
 

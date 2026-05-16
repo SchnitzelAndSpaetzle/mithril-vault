@@ -331,6 +331,17 @@ export const AuditFilterSchema = z.object({
 });
 export type AuditFilter = z.infer<typeof AuditFilterSchema>;
 
+/// Response from the `get_audit_events` IPC. `degraded` is the
+/// session-wide flag set by the backend whenever an audit record or read
+/// has failed internally. The UI uses it to surface a "some history may
+/// be missing" banner so a soft failure is never visually identical to
+/// "no events yet".
+export const AuditEventsResponseSchema = z.object({
+  events: z.array(AuditEventSchema),
+  degraded: z.boolean(),
+});
+export type AuditEventsResponse = z.infer<typeof AuditEventsResponseSchema>;
+
 export const EntrySortFieldSchema = z.enum([
   "title",
   "username",

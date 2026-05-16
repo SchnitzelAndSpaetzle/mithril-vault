@@ -24,6 +24,7 @@
     "empty": "No audit events for this vault yet.",
     "emptyNoVault": "Open a vault to see its audit log.",
     "loadError": "Failed to load audit events: {{error}}",
+    "degradedWarning": "The audit subsystem has reported one or more internal failures this session. Some events may be missing.",
     "attemptCount_one": "Attempt {{count}}",
     "attemptCount_other": "Attempt {{count}}",
     "kind": {

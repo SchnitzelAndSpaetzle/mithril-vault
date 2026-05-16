@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { queryKeys } from "@/lib/query-keys";
 import { audit } from "@/lib/tauri";
-import type { AuditEvent } from "@/lib/types";
+import type { AuditEvent, AuditEventsResponse } from "@/lib/types";
 
 interface AuditLogSectionProps {
   dbId: string | null;
@@ -40,14 +40,18 @@ function AuditRow({ event }: Readonly<{ event: AuditEvent }>) {
   );
 }
 
+const EMPTY_RESPONSE: AuditEventsResponse = { events: [], degraded: false };
+
 export function AuditLogSection({ dbId }: Readonly<AuditLogSectionProps>) {
   const { t } = useTranslation();
 
-  const query = useQuery<AuditEvent[], Error>({
+  const query = useQuery<AuditEventsResponse, Error>({
     queryKey: queryKeys.audit.list(dbId ?? "none"),
-    queryFn: () => (dbId ? audit.list(dbId) : Promise.resolve([])),
+    queryFn: () => (dbId ? audit.list(dbId) : Promise.resolve(EMPTY_RESPONSE)),
     enabled: Boolean(dbId),
   });
+
+  const data = query.data ?? EMPTY_RESPONSE;
 
   return (
     <SettingsSection
@@ -65,14 +69,26 @@ export function AuditLogSection({ dbId }: Readonly<AuditLogSectionProps>) {
         <p className="text-sm text-destructive">
           {t("audit.loadError", { error: String(query.error) })}
         </p>
-      ) : (query.data ?? []).length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("audit.empty")}</p>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {(query.data ?? []).map((event, index) => (
-            <AuditRow key={`${event.timestamp}-${index}`} event={event} />
-          ))}
-        </ul>
+        <>
+          {data.degraded ? (
+            <p
+              role="status"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200"
+            >
+              {t("audit.degradedWarning")}
+            </p>
+          ) : null}
+          {data.events.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("audit.empty")}</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {data.events.map((event, index) => (
+                <AuditRow key={`${event.timestamp}-${index}`} event={event} />
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </SettingsSection>
   );

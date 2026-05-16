@@ -22,6 +22,19 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use thiserror::Error;
+
+/// Errors surfaced from [`AuditService::read`]. Distinct from the
+/// internally-swallowed errors of [`AuditService::record`]: read is called
+/// from the Settings → Audit Log panel, where "failed to load" is a real
+/// state the UI must render differently from "no events yet".
+#[derive(Debug, Error)]
+pub enum AuditReadError {
+    #[error("audit key unavailable: {0}")]
+    Key(String),
+    #[error("audit log read failed: {0}")]
+    Storage(String),
+}
 
 /// Permissive filter applied by [`AuditService::read`]. Shape is in place so
 /// future issues can plug in `kinds` / time-range filtering without changing
@@ -78,20 +91,30 @@ impl AuditService {
     /// Returns every recorded event for the Vault at `vault_path` that
     /// matches `_filter`. Frames that fail to decrypt or parse are skipped so
     /// one corrupt record cannot hide the rest.
-    pub fn read(&self, vault_path: &Path, _filter: &AuditFilter) -> Vec<AuditEvent> {
-        let Ok(key) = self.key_source.get_or_create() else {
+    ///
+    /// Hard failures (key source unavailable, log file unreadable) bubble up
+    /// as [`AuditReadError`] and also flip the session-wide `degraded` flag.
+    /// This is intentional asymmetry with [`AuditService::record`]: read is
+    /// called from a Settings panel where a swallowed error would silently
+    /// look identical to "no events yet" and hide a real problem.
+    pub fn read(
+        &self,
+        vault_path: &Path,
+        _filter: &AuditFilter,
+    ) -> Result<Vec<AuditEvent>, AuditReadError> {
+        let key = self.key_source.get_or_create().map_err(|e| {
             self.degraded.store(true, Ordering::SeqCst);
-            return Vec::new();
-        };
+            AuditReadError::Key(e.to_string())
+        })?;
         let log = AuditLogFile::new(self.log_path_for(vault_path));
-        let Ok(frames) = log.read_all() else {
+        let frames = log.read_all().map_err(|e| {
             self.degraded.store(true, Ordering::SeqCst);
-            return Vec::new();
-        };
-        frames
+            AuditReadError::Storage(e.to_string())
+        })?;
+        Ok(frames
             .iter()
             .filter_map(|frame| decrypt_and_parse(&key, frame))
-            .collect()
+            .collect())
     }
 
     fn log_path_for(&self, vault_path: &Path) -> PathBuf {
@@ -169,7 +192,7 @@ mod tests {
         let (service, _dir, vault) = fresh_service();
 
         service.record(&vault, &unlock_failed_event(1));
-        let events = service.read(&vault, &AuditFilter::default());
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
 
         assert_eq!(events.len(), 1);
         assert_eq!(events[0], unlock_failed_event(1));
@@ -184,7 +207,7 @@ mod tests {
             service.record(&vault, &unlock_failed_event(count));
         }
 
-        let events = service.read(&vault, &AuditFilter::default());
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
         assert_eq!(events.len(), 3);
         for (i, evt) in events.iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
@@ -196,7 +219,37 @@ mod tests {
     #[test]
     fn read_returns_empty_for_vault_with_no_events() {
         let (service, _dir, vault) = fresh_service();
-        assert!(service.read(&vault, &AuditFilter::default()).is_empty());
+        assert!(service
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
+
+    /// A non-NotFound storage error must NOT be reported back as "no events
+    /// yet" — that would mean a real subsystem failure looks identical to
+    /// the empty state in the Settings panel. Stage a directory at the
+    /// per-Vault log path so `fs::read` fails with `IsADirectory` /
+    /// non-NotFound; `read` must return an error AND flip `degraded`.
+    #[test]
+    fn hard_read_failure_surfaces_as_error_and_flags_degraded() {
+        use crate::services::audit::vault_id::hash_vault_path;
+
+        let dir = tempdir().expect("tempdir");
+        let base_dir = dir.path().join("audit");
+        std::fs::create_dir_all(&base_dir).expect("base dir");
+        let vault = dir.path().join("vault.kdbx");
+        std::fs::write(&vault, b"x").expect("write vault");
+
+        // Pre-compute the expected log file path and stage a directory
+        // there so the storage read trips a non-NotFound error.
+        let log_path = base_dir.join(format!("{}.jsonl", hash_vault_path(&vault)));
+        std::fs::create_dir(&log_path).expect("stage dir at log path");
+
+        let service = AuditService::new(base_dir, Arc::new(InMemoryAuditKey::new()));
+
+        let result = service.read(&vault, &AuditFilter::default());
+        assert!(matches!(result, Err(AuditReadError::Storage(_))));
+        assert!(service.is_degraded());
     }
 
     #[test]
@@ -207,7 +260,7 @@ mod tests {
         service.record_vault_unlock_failed(&vault);
         service.record_vault_unlock_failed(&vault);
 
-        let events = service.read(&vault, &AuditFilter::default());
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
         let counts: Vec<u32> = events
             .iter()
             .map(|e| match e {
@@ -226,7 +279,7 @@ mod tests {
         service.reset_unlock_attempts(&vault);
         service.record_vault_unlock_failed(&vault);
 
-        let events = service.read(&vault, &AuditFilter::default());
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
         let counts: Vec<u32> = events
             .iter()
             .map(|e| match e {
@@ -250,8 +303,12 @@ mod tests {
         service.record_vault_unlock_failed(&vault_a);
         service.record_vault_unlock_failed(&vault_b);
 
-        let a_events = service.read(&vault_a, &AuditFilter::default());
-        let b_events = service.read(&vault_b, &AuditFilter::default());
+        let a_events = service
+            .read(&vault_a, &AuditFilter::default())
+            .expect("read a");
+        let b_events = service
+            .read(&vault_b, &AuditFilter::default())
+            .expect("read b");
         let a_counts: Vec<u32> = a_events
             .iter()
             .map(|e| match e {

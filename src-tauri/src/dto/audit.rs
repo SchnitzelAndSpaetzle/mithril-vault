@@ -32,6 +32,19 @@ pub struct AuditFilterDto {
     pub kinds: Option<Vec<AuditEventKindDto>>,
 }
 
+/// IPC response from `get_audit_events`. Carries the list of events plus a
+/// session-wide `degraded` flag set by the backend whenever an audit
+/// `record` or `read` has failed internally. The frontend uses `degraded`
+/// to render a banner — without it, a soft failure would be visually
+/// indistinguishable from "no events yet" and a real audit-subsystem
+/// problem would never reach the user.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditEventsResponseDto {
+    pub events: Vec<AuditEventDto>,
+    pub degraded: bool,
+}
+
 impl From<AuditEvent> for AuditEventDto {
     fn from(event: AuditEvent) -> Self {
         match event {
