@@ -174,6 +174,10 @@ describe("tauri wrappers validation", () => {
         maxVersions: 10,
         onOpen: false,
       },
+      audit: {
+        enabled: true,
+        retentionDays: 90,
+      },
     } as const;
 
     vi.mocked(invoke)
@@ -238,6 +242,10 @@ describe("tauri wrappers validation", () => {
           enabled: true,
           maxVersions: 10,
           onOpen: false,
+        },
+        audit: {
+          enabled: true,
+          retentionDays: 90,
         },
       })
     ).rejects.toThrow();

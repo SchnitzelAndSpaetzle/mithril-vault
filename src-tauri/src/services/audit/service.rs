@@ -46,6 +46,12 @@ pub struct AuditService {
     base_dir: PathBuf,
     key_source: Arc<dyn AuditKey>,
     degraded: AtomicBool,
+    /// Master gate. When false, [`AuditService::record`] short-circuits
+    /// before any key fetch or file I/O; the existing log file is left
+    /// untouched so the user can re-enable later without losing history.
+    /// Pushed in from `update_app_preferences` and at startup; defaults
+    /// to true so a fresh `AuditService` records out of the box.
+    enabled: AtomicBool,
     /// Per-Vault consecutive-failed-unlock counters, keyed by canonicalized
     /// path. Lives in memory only — resets on process restart per the AC's
     /// "per session" wording.
@@ -58,8 +64,24 @@ impl AuditService {
             base_dir,
             key_source,
             degraded: AtomicBool::new(false),
+            enabled: AtomicBool::new(true),
             attempts: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Flips the master logging gate. Off => [`AuditService::record`]
+    /// short-circuits without touching the key source or storage. On =>
+    /// subsequent records append to the existing per-Vault file. Never
+    /// modifies the on-disk log — disabling preserves history.
+    pub fn set_enabled(&self, enabled: bool) {
+        self.enabled.store(enabled, Ordering::SeqCst);
+    }
+
+    /// Reports the current state of the master logging gate. Used by the
+    /// Settings panel to render the toggle and by tests to assert the
+    /// short-circuit behavior.
+    pub fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::SeqCst)
     }
 
     /// Reports whether a previous `record` call failed internally. Surfaced
@@ -71,7 +93,13 @@ impl AuditService {
 
     /// Appends `event` to the per-Vault audit log. Infallible by contract:
     /// every failure path swallows the error and flips the `degraded` flag.
+    /// When the master gate is off this is a complete no-op — no key fetch,
+    /// no file I/O — so a disabled audit log adds zero overhead to the
+    /// vault flows it instruments.
     pub fn record(&self, vault_path: &Path, event: &AuditEvent) {
+        if !self.is_enabled() {
+            return;
+        }
         if let Err(()) = self.try_record(vault_path, event) {
             self.degraded.store(true, Ordering::SeqCst);
         }
@@ -611,6 +639,71 @@ mod tests {
             }
             other => panic!("expected VaultUnlockFailed, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn record_short_circuits_when_disabled_no_file_no_events() {
+        // AC: `AuditService::record` consults the current `enabled` flag
+        // and short-circuits when disabled; no file write, no key fetch.
+        let (service, _dir, vault) = fresh_service();
+
+        service.set_enabled(false);
+        service.record(&vault, &unlock_failed_event(1));
+
+        // No log file should have been created on disk.
+        let log_path = service.log_path_for(&vault);
+        assert!(
+            !log_path.exists(),
+            "no audit file should exist when logging is disabled, found: {log_path:?}"
+        );
+        // And read() must report empty (file genuinely missing, not just
+        // hidden by the gate — read() does not consult the enabled flag).
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert!(events.is_empty());
+        assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn re_enabling_resumes_appending_to_same_file() {
+        // AC: Re-enabling logging resumes appending to the same file.
+        let (service, _dir, vault) = fresh_service();
+
+        // Record one event while enabled (default).
+        service.record(&vault, &unlock_failed_event(1));
+
+        // Disable, attempt to record — must not write.
+        service.set_enabled(false);
+        service.record(&vault, &unlock_failed_event(2));
+
+        // Re-enable and record again — must append to the existing file.
+        service.set_enabled(true);
+        service.record(&vault, &unlock_failed_event(3));
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        let counts: Vec<u32> = events.iter().map(unlock_failed_count).collect();
+        assert_eq!(counts, vec![1, 3]);
+    }
+
+    #[test]
+    fn disable_preserves_existing_log_file_unchanged() {
+        // AC: Disabling logging preserves the existing log file unchanged.
+        // Capture the file bytes before disabling and again after; they
+        // must be byte-identical (set_enabled must not touch storage).
+        let (service, _dir, vault) = fresh_service();
+        service.record(&vault, &unlock_failed_event(1));
+        let log_path = service.log_path_for(&vault);
+        let before = std::fs::read(&log_path).expect("read log before disable");
+
+        service.set_enabled(false);
+        let after = std::fs::read(&log_path).expect("read log after disable");
+        assert_eq!(
+            before, after,
+            "set_enabled(false) must not modify the log file"
+        );
+
+        // The previously-recorded event must still come back through read().
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
     }
 
     #[test]

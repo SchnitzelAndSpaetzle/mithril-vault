@@ -63,6 +63,10 @@ function makePreferences(): AppPreferences {
       maxVersions: 10,
       onOpen: false,
     },
+    audit: {
+      enabled: true,
+      retentionDays: 90,
+    },
   };
 }
 
