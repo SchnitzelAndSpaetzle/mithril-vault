@@ -26,6 +26,7 @@ import {
 import { isColorPresetId } from "@/lib/theme-presets";
 import { AdvancedSettingsSection } from "@/components/settings/sections/AdvancedSettingsSection";
 import { AppearanceSettingsSection } from "@/components/settings/sections/AppearanceSettingsSection";
+import { AuditLogSection } from "@/components/settings/sections/AuditLogSection";
 import { BackupsListSection } from "@/components/settings/sections/BackupsListSection";
 import { BackupsSettingsSection } from "@/components/settings/sections/BackupsSettingsSection";
 import { BrowserIntegrationSettingsSection } from "@/components/settings/sections/BrowserIntegrationSettingsSection";
@@ -281,6 +282,7 @@ export function SettingsEditor({
       <AdvancedSettingsSection draft={draft} updateDraft={updateDraft} />
       <BackupsSettingsSection draft={draft} updateDraft={updateDraft} />
       <BackupsListSection dbId={dbId} backupsEnabled={draft.backups.enabled} />
+      <AuditLogSection dbId={dbId} />
       <DatabaseSettingsSection
         dbId={dbId}
         databaseConfig={databaseConfig}

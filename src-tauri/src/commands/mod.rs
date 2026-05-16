@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+pub mod audit;
 pub mod clipboard;
 pub mod database;
 pub mod entries;
@@ -9,6 +10,7 @@ pub mod secure_storage;
 pub mod settings;
 pub mod window;
 
+pub use audit::*;
 pub use clipboard::*;
 pub use database::{
     close_database, create_database, create_manual_backup, delete_backup, generate_keyfile,

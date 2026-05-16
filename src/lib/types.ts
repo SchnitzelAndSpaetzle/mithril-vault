@@ -313,6 +313,35 @@ export const BackupInfoSchema = z.object({
 });
 export type BackupInfo = z.infer<typeof BackupInfoSchema>;
 
+/// Audit log event — security-relevant action recorded on this device. Today
+/// only `vaultUnlockFailed` is emitted; the union shape is set up so future
+/// kinds can be added without changing call sites.
+export const AuditEventKindSchema = z.enum(["vaultUnlockFailed"]);
+export type AuditEventKind = z.infer<typeof AuditEventKindSchema>;
+
+export const AuditEventSchema = z.object({
+  kind: AuditEventKindSchema,
+  timestamp: z.string().min(1),
+  attemptCount: z.number().int().positive().nullable().optional(),
+});
+export type AuditEvent = z.infer<typeof AuditEventSchema>;
+
+export const AuditFilterSchema = z.object({
+  kinds: z.array(AuditEventKindSchema).optional(),
+});
+export type AuditFilter = z.infer<typeof AuditFilterSchema>;
+
+/// Response from the `get_audit_events` IPC. `degraded` is the
+/// session-wide flag set by the backend whenever an audit record or read
+/// has failed internally. The UI uses it to surface a "some history may
+/// be missing" banner so a soft failure is never visually identical to
+/// "no events yet".
+export const AuditEventsResponseSchema = z.object({
+  events: z.array(AuditEventSchema),
+  degraded: z.boolean(),
+});
+export type AuditEventsResponse = z.infer<typeof AuditEventsResponseSchema>;
+
 export const EntrySortFieldSchema = z.enum([
   "title",
   "username",

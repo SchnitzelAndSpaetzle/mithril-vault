@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  audit,
   backups,
   database,
   entries,
@@ -320,6 +321,62 @@ describe("tauri wrappers validation", () => {
     expect(invoke).toHaveBeenCalledWith("create_manual_backup", {
       databasePath: dbPath,
     });
+  });
+
+  it("audit.list parses get_audit_events into a typed response", async () => {
+    const payload = {
+      events: [
+        {
+          kind: "vaultUnlockFailed",
+          timestamp: "2026-05-15T12:00:00.000Z",
+          attemptCount: 2,
+        },
+        {
+          kind: "vaultUnlockFailed",
+          timestamp: "2026-05-15T11:59:00.000Z",
+          attemptCount: 1,
+        },
+      ],
+      degraded: false,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(payload);
+
+    await expect(audit.list("/tmp/vault.kdbx")).resolves.toEqual(payload);
+    expect(invoke).toHaveBeenCalledWith("get_audit_events", {
+      vaultPath: "/tmp/vault.kdbx",
+      filter: null,
+    });
+  });
+
+  it("audit.list surfaces a degraded flag from the backend", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      events: [],
+      degraded: true,
+    });
+
+    await expect(audit.list("/tmp/vault.kdbx")).resolves.toEqual({
+      events: [],
+      degraded: true,
+    });
+  });
+
+  it("audit.list rejects payloads with an unknown kind", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      events: [
+        {
+          kind: "vaultDeleted",
+          timestamp: "2026-05-15T12:00:00.000Z",
+          attemptCount: 1,
+        },
+      ],
+      degraded: false,
+    });
+    await expect(audit.list("/tmp/vault.kdbx")).rejects.toThrow();
+  });
+
+  it("audit.list rejects payloads missing the degraded flag", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({ events: [] });
+    await expect(audit.list("/tmp/vault.kdbx")).rejects.toThrow();
   });
 
   it("invokes delete_backup with the supplied path", async () => {

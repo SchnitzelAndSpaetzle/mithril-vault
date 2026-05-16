@@ -13,9 +13,9 @@ use commands::{
     copy_protected_field_to_clipboard, copy_text_to_clipboard, create_database, create_entry,
     create_group, create_manual_backup, delete_backup, delete_entry, delete_group, delete_tag,
     fetch_entry_favicon, generate_keyfile, generate_passphrase, generate_password,
-    get_app_preferences, get_custom_icons, get_database_config, get_database_info, get_entry,
-    get_entry_password, get_entry_protected_custom_field, get_group, get_group_entry_counts,
-    get_keyfile_for_database, get_recent_databases, get_recycle_bin_id,
+    get_app_preferences, get_audit_events, get_custom_icons, get_database_config,
+    get_database_info, get_entry, get_entry_password, get_entry_protected_custom_field, get_group,
+    get_group_entry_counts, get_keyfile_for_database, get_recent_databases, get_recycle_bin_id,
     get_window_content_protection_supported, has_session_key, inspect_database, list_backups,
     list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
     open_database, open_database_with_keyfile, open_database_with_keyfile_only,
@@ -23,6 +23,8 @@ use commands::{
     restore_backup, save_database, set_entry_custom_icon, set_window_content_protected,
     store_session_key, unlock_database, update_app_preferences, update_entry, update_group,
 };
+use services::audit::key::FileBackedAuditKey;
+use services::audit::AuditService;
 use services::auto_lock::AutoLockService;
 use services::clipboard::ClipboardService;
 use services::kdbx::KdbxService;
@@ -87,6 +89,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             get_recycle_bin_id,
             generate_password,
             generate_passphrase,
+            get_audit_events,
             get_app_preferences,
             update_app_preferences,
             reset_app_preferences,
@@ -142,6 +145,15 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
 
     let auto_lock_service = AutoLockService::new();
     app.manage(Arc::new(auto_lock_service));
+
+    let data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| AppError::SecureStorage(e.to_string()))?;
+    let audit_root = data_dir.join("audit");
+    let key_source = Arc::new(FileBackedAuditKey::new(audit_root.join("key.bin")));
+    let audit_service = AuditService::new(audit_root, key_source);
+    app.manage(Arc::new(audit_service));
 
     Ok(())
 }
