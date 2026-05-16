@@ -24,6 +24,21 @@ pub enum AuditEvent {
         timestamp: DateTime<Utc>,
         attempt_count: u32,
     },
+    #[serde(rename = "entry.password_revealed")]
+    EntryPasswordRevealed {
+        timestamp: DateTime<Utc>,
+        entry_id: String,
+    },
+    #[serde(rename = "entry.password_copied")]
+    EntryPasswordCopied {
+        timestamp: DateTime<Utc>,
+        entry_id: String,
+    },
+    #[serde(rename = "entry.protected_field_revealed")]
+    EntryProtectedFieldRevealed {
+        timestamp: DateTime<Utc>,
+        entry_id: String,
+    },
 }
 
 impl AuditEvent {
@@ -64,5 +79,72 @@ mod tests {
             AuditEvent::from_bytes(bogus),
             Err(FormatError::Malformed(_))
         ));
+    }
+
+    #[test]
+    fn entry_password_revealed_round_trips_with_entry_id() {
+        let event = AuditEvent::EntryPasswordRevealed {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 16, 10, 0, 0).unwrap(),
+            entry_id: "8f1c2e3a-4b5d-6e7f-8091-a2b3c4d5e6f7".to_string(),
+        };
+        let parsed = AuditEvent::from_bytes(&event.to_bytes()).expect("parse");
+        assert_eq!(parsed, event);
+    }
+
+    /// The on-disk JSON tag for entry-level kinds is the `entry.*`
+    /// dot-namespaced string used in the PRD and ADR — not the camelCase
+    /// DTO label. Pinning the literal here keeps already-written log
+    /// files readable across refactors of the Rust enum.
+    #[test]
+    fn entry_password_revealed_serializes_with_dotted_kind() {
+        let event = AuditEvent::EntryPasswordRevealed {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 16, 10, 0, 0).unwrap(),
+            entry_id: "abc".to_string(),
+        };
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(
+            json.contains("\"kind\":\"entry.password_revealed\""),
+            "unexpected serialization: {json}"
+        );
+        assert!(json.contains("\"entry_id\":\"abc\""));
+    }
+
+    /// Entry-level kinds must carry `entry_id`; non-entry kinds must not.
+    /// This pins the per-variant shape so a future refactor can't flatten
+    /// the union into a free-form bag-of-optional-fields.
+    #[test]
+    fn entry_password_copied_round_trips_with_entry_id_and_dotted_kind() {
+        let event = AuditEvent::EntryPasswordCopied {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 16, 10, 0, 0).unwrap(),
+            entry_id: "uuid-2".to_string(),
+        };
+        let parsed = AuditEvent::from_bytes(&event.to_bytes()).expect("parse");
+        assert_eq!(parsed, event);
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(json.contains("\"kind\":\"entry.password_copied\""));
+        assert!(json.contains("\"entry_id\":\"uuid-2\""));
+    }
+
+    #[test]
+    fn entry_protected_field_revealed_round_trips_with_entry_id_and_dotted_kind() {
+        let event = AuditEvent::EntryProtectedFieldRevealed {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 16, 10, 0, 0).unwrap(),
+            entry_id: "uuid-3".to_string(),
+        };
+        let parsed = AuditEvent::from_bytes(&event.to_bytes()).expect("parse");
+        assert_eq!(parsed, event);
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(json.contains("\"kind\":\"entry.protected_field_revealed\""));
+        assert!(json.contains("\"entry_id\":\"uuid-3\""));
+    }
+
+    #[test]
+    fn vault_unlock_failed_payload_has_no_entry_id() {
+        let event = AuditEvent::VaultUnlockFailed {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 16, 10, 0, 0).unwrap(),
+            attempt_count: 1,
+        };
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(!json.contains("entry_id"), "unexpected entry_id: {json}");
     }
 }

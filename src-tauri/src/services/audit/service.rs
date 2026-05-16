@@ -157,6 +157,40 @@ impl AuditService {
         self.record(vault_path, &event);
     }
 
+    /// Appends one `entry.password_revealed` event for the given KDBX
+    /// entry UUID against the open Vault's log. Called from the command
+    /// layer immediately after a successful `get_entry_password`. Like
+    /// every other `record_*` helper, this is infallible by contract.
+    pub fn record_entry_password_revealed(&self, vault_path: &Path, entry_id: &str) {
+        let event = AuditEvent::EntryPasswordRevealed {
+            timestamp: Utc::now(),
+            entry_id: entry_id.to_string(),
+        };
+        self.record(vault_path, &event);
+    }
+
+    /// Appends one `entry.password_copied` event after a successful
+    /// clipboard write of an entry password. Infallible by contract.
+    pub fn record_entry_password_copied(&self, vault_path: &Path, entry_id: &str) {
+        let event = AuditEvent::EntryPasswordCopied {
+            timestamp: Utc::now(),
+            entry_id: entry_id.to_string(),
+        };
+        self.record(vault_path, &event);
+    }
+
+    /// Appends one `entry.protected_field_revealed` event after a
+    /// successful `get_entry_protected_custom_field`. Infallible by
+    /// contract — protected custom fields (e.g. recovery codes) get the
+    /// same audit treatment as password reveals per AC #7 of the PRD.
+    pub fn record_entry_protected_field_revealed(&self, vault_path: &Path, entry_id: &str) {
+        let event = AuditEvent::EntryProtectedFieldRevealed {
+            timestamp: Utc::now(),
+            entry_id: entry_id.to_string(),
+        };
+        self.record(vault_path, &event);
+    }
+
     /// Resets the per-Vault failed-unlock counter — called on successful
     /// open/unlock so the next failure starts the count back at 1.
     pub fn reset_unlock_attempts(&self, vault_path: &Path) {
@@ -178,7 +212,7 @@ fn decrypt_and_parse(key: &[u8; KEY_LEN], frame: &[u8]) -> Option<AuditEvent> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
     use crate::services::audit::key::InMemoryAuditKey;
@@ -330,6 +364,7 @@ mod tests {
             .iter()
             .map(|e| match e {
                 AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+                other => unreachable!("unexpected event in unlock-failed test: {other:?}"),
             })
             .collect();
         assert_eq!(counts, vec![1, 2, 3]);
@@ -349,9 +384,61 @@ mod tests {
             .iter()
             .map(|e| match e {
                 AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+                other => unreachable!("unexpected event in unlock-failed test: {other:?}"),
             })
             .collect();
         assert_eq!(counts, vec![1, 2, 1]);
+    }
+
+    #[test]
+    fn record_entry_protected_field_revealed_appends_exactly_one_event() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_entry_protected_field_revealed(&vault, "pf-uuid");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::EntryProtectedFieldRevealed { entry_id, .. } => {
+                assert_eq!(entry_id, "pf-uuid");
+            }
+            other => panic!("expected EntryProtectedFieldRevealed, got {other:?}"),
+        }
+        assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn record_entry_password_copied_appends_exactly_one_event() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_entry_password_copied(&vault, "copied-uuid");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::EntryPasswordCopied { entry_id, .. } => {
+                assert_eq!(entry_id, "copied-uuid");
+            }
+            other => panic!("expected EntryPasswordCopied, got {other:?}"),
+        }
+        assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn record_entry_password_revealed_appends_exactly_one_event() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_entry_password_revealed(&vault, "uuid-1");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::EntryPasswordRevealed { entry_id, .. } => {
+                assert_eq!(entry_id, "uuid-1");
+            }
+            other => panic!("expected EntryPasswordRevealed, got {other:?}"),
+        }
+        assert!(!service.is_degraded());
     }
 
     #[test]
@@ -378,12 +465,14 @@ mod tests {
             .iter()
             .map(|e| match e {
                 AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+                other => unreachable!("unexpected event in unlock-failed test: {other:?}"),
             })
             .collect();
         let b_counts: Vec<u32> = b_events
             .iter()
             .map(|e| match e {
                 AuditEvent::VaultUnlockFailed { attempt_count, .. } => *attempt_count,
+                other => unreachable!("unexpected event in unlock-failed test: {other:?}"),
             })
             .collect();
         assert_eq!(a_counts, vec![1, 2]);

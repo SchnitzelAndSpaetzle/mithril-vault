@@ -28,7 +28,10 @@
     "attemptCount_one": "Attempt {{count}}",
     "attemptCount_other": "Attempt {{count}}",
     "kind": {
-      "vaultUnlockFailed": "Failed unlock attempt"
+      "vaultUnlockFailed": "Failed unlock attempt",
+      "entryPasswordRevealed": "Password revealed",
+      "entryPasswordCopied": "Password copied",
+      "entryProtectedFieldRevealed": "Protected field revealed"
     }
   },
   "settings": {

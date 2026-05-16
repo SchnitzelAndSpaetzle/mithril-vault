@@ -1,13 +1,35 @@
 // SPDX-License-Identifier: MIT
 
 use crate::dto::error::AppError;
+use crate::services::audit::AuditService;
 use crate::services::clipboard::ClipboardService;
 use crate::services::kdbx::KdbxService;
+use std::path::Path;
 use std::sync::Arc;
 use tauri::State;
 
+/// Maps a clipboard password-copy outcome through the audit subsystem:
+/// a successful copy records exactly one `entry.password_copied` event;
+/// any error leaves the log untouched so the audit reflects what
+/// actually landed on the user's clipboard.
+///
+/// Free function (mirroring `commands::entries::audit_entry_password_revealed_on_success`)
+/// so integration tests can drive it without a Tauri runtime.
+pub fn audit_entry_password_copied_on_success<T>(
+    audit: &AuditService,
+    vault_path: &str,
+    entry_id: &str,
+    result: Result<T, AppError>,
+) -> Result<T, AppError> {
+    if result.is_ok() {
+        audit.record_entry_password_copied(Path::new(vault_path), entry_id);
+    }
+    result
+}
+
 /// Copies an entry's password to the clipboard with optional auto-clear.
-/// The `db_id` is the path to the database file.
+/// A successful copy also appends one `entry.password_copied` event to
+/// the open Vault's audit log.
 #[tauri::command]
 pub async fn copy_password_to_clipboard(
     db_id: String,
@@ -15,9 +37,15 @@ pub async fn copy_password_to_clipboard(
     timeout_secs: Option<u32>,
     kdbx: State<'_, Arc<KdbxService>>,
     clipboard: State<'_, Arc<ClipboardService>>,
+    audit: State<'_, Arc<AuditService>>,
 ) -> Result<(), AppError> {
     let password = kdbx.get_entry_password(&db_id, &entry_id)?;
-    clipboard.copy(&password, timeout_secs)
+    audit_entry_password_copied_on_success(
+        audit.inner(),
+        &db_id,
+        &entry_id,
+        clipboard.copy(&password, timeout_secs),
+    )
 }
 
 #[tauri::command]

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { queryKeys } from "@/lib/query-keys";
 import { audit } from "@/lib/tauri";
-import type { AuditEvent, AuditEventsResponse } from "@/lib/types";
+import type { AuditEvent, AuditEventsResponse, Entry } from "@/lib/types";
 
 interface AuditLogSectionProps {
   dbId: string | null;
@@ -20,17 +20,50 @@ function formatTimestamp(timestamp: string, locale: string): string {
   });
 }
 
-function AuditRow({ event }: Readonly<{ event: AuditEvent }>) {
+// Walks every cached entries-list query for `dbId` and returns the matching
+// entry's title, or `null` when the Vault is locked / not currently open in
+// this session. The renderer falls back to a UUID prefix in that case so the
+// on-disk log never carries entry titles outside the Vault.
+function useResolveEntryTitle(
+  dbId: string | null
+): (entryId: string) => string | null {
+  const queryClient = useQueryClient();
+  return (entryId: string) => {
+    if (!dbId) return null;
+    const queries = queryClient
+      .getQueryCache()
+      .findAll({ queryKey: [...queryKeys.entries.all, dbId, "list"] });
+    for (const q of queries) {
+      const entries = q.state.data;
+      if (!Array.isArray(entries)) continue;
+      const hit = (entries as Entry[]).find((e) => e.id === entryId);
+      if (hit) return hit.title;
+    }
+    return null;
+  };
+}
+
+function AuditRow({
+  event,
+  resolveTitle,
+}: Readonly<{
+  event: AuditEvent;
+  resolveTitle: (entryId: string) => string | null;
+}>) {
   const { t, i18n } = useTranslation();
-  // Today only `vaultUnlockFailed` exists; rendering is keyed on `kind` so
-  // future kinds can plug in without rearranging the row layout.
+  const entryId = event.entryId ?? null;
+  const title = entryId ? resolveTitle(entryId) : null;
+  const entryLabel = entryId ? (title ?? entryId.slice(0, 8)) : null;
+
   return (
     <li
       data-kind={event.kind}
+      data-entry-id={entryId ?? undefined}
       className="flex flex-col gap-1 rounded-md border bg-card/50 p-3 text-sm md:flex-row md:items-center md:justify-between"
     >
       <span className="font-medium">{t(`audit.kind.${event.kind}`)}</span>
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        {entryLabel ? <span>{entryLabel}</span> : null}
         {typeof event.attemptCount === "number" ? (
           <span>{t("audit.attemptCount", { count: event.attemptCount })}</span>
         ) : null}
@@ -44,6 +77,7 @@ const EMPTY_RESPONSE: AuditEventsResponse = { events: [], degraded: false };
 
 export function AuditLogSection({ dbId }: Readonly<AuditLogSectionProps>) {
   const { t } = useTranslation();
+  const resolveTitle = useResolveEntryTitle(dbId);
 
   const query = useQuery<AuditEventsResponse, Error>({
     queryKey: queryKeys.audit.list(dbId ?? "none"),
@@ -84,7 +118,11 @@ export function AuditLogSection({ dbId }: Readonly<AuditLogSectionProps>) {
           ) : (
             <ul className="flex flex-col gap-2">
               {data.events.map((event, index) => (
-                <AuditRow key={`${event.timestamp}-${index}`} event={event} />
+                <AuditRow
+                  key={`${event.timestamp}-${index}`}
+                  event={event}
+                  resolveTitle={resolveTitle}
+                />
               ))}
             </ul>
           )}
