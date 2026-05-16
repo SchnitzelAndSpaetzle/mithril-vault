@@ -15,6 +15,9 @@ pub enum AuditEventKindDto {
     VaultUnlockFailed,
     VaultOpened,
     VaultLocked,
+    EntryPasswordRevealed,
+    EntryPasswordCopied,
+    EntryProtectedFieldRevealed,
 }
 
 /// Why a Vault transitioned from unlocked to locked, mirrored from
@@ -45,8 +48,15 @@ impl From<Reason> for ReasonDto {
 pub struct AuditEventDto {
     pub kind: AuditEventKindDto,
     pub timestamp: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attempt_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<ReasonDto>,
+    /// KDBX UUID for entry-level kinds. Titles are deliberately resolved
+    /// at render time from the open Vault's React Query cache so the
+    /// on-disk log can never carry entry titles outside the Vault.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -82,18 +92,51 @@ impl From<AuditEvent> for AuditEventDto {
                 timestamp,
                 attempt_count: Some(attempt_count),
                 reason: None,
+                entry_id: None,
             },
             AuditEvent::VaultOpened { timestamp } => Self {
                 kind: AuditEventKindDto::VaultOpened,
                 timestamp,
                 attempt_count: None,
                 reason: None,
+                entry_id: None,
             },
             AuditEvent::VaultLocked { timestamp, reason } => Self {
                 kind: AuditEventKindDto::VaultLocked,
                 timestamp,
                 attempt_count: None,
                 reason: Some(reason.into()),
+                entry_id: None,
+            },
+            AuditEvent::EntryPasswordRevealed {
+                timestamp,
+                entry_id,
+            } => Self {
+                kind: AuditEventKindDto::EntryPasswordRevealed,
+                timestamp,
+                attempt_count: None,
+                reason: None,
+                entry_id: Some(entry_id),
+            },
+            AuditEvent::EntryPasswordCopied {
+                timestamp,
+                entry_id,
+            } => Self {
+                kind: AuditEventKindDto::EntryPasswordCopied,
+                timestamp,
+                attempt_count: None,
+                reason: None,
+                entry_id: Some(entry_id),
+            },
+            AuditEvent::EntryProtectedFieldRevealed {
+                timestamp,
+                entry_id,
+            } => Self {
+                kind: AuditEventKindDto::EntryProtectedFieldRevealed,
+                timestamp,
+                attempt_count: None,
+                reason: None,
+                entry_id: Some(entry_id),
             },
         }
     }
@@ -112,10 +155,15 @@ mod tests {
             timestamp: Utc.with_ymd_and_hms(2026, 5, 15, 12, 0, 0).unwrap(),
             attempt_count: Some(2),
             reason: None,
+            entry_id: None,
         };
         let json = serde_json::to_string(&dto).expect("ser");
         assert!(json.contains("\"vaultUnlockFailed\""));
         assert!(json.contains("\"attemptCount\":2"));
+        assert!(
+            !json.contains("\"entryId\""),
+            "entryId must be omitted when None"
+        );
     }
 
     #[test]
@@ -175,6 +223,29 @@ mod tests {
                 "reason must serialize as camelCase `{expected_wire}`, got: {json}"
             );
         }
+    }
+
+    #[test]
+    fn entry_password_revealed_event_converts_to_dto_with_camel_case_kind_and_entry_id() {
+        let ts = Utc.with_ymd_and_hms(2026, 5, 16, 10, 0, 0).unwrap();
+        let dto: AuditEventDto = AuditEvent::EntryPasswordRevealed {
+            timestamp: ts,
+            entry_id: "uuid-abc".to_string(),
+        }
+        .into();
+
+        assert!(matches!(dto.kind, AuditEventKindDto::EntryPasswordRevealed));
+        assert_eq!(dto.timestamp, ts);
+        assert_eq!(dto.entry_id.as_deref(), Some("uuid-abc"));
+        assert!(dto.attempt_count.is_none());
+
+        let json = serde_json::to_string(&dto).expect("ser");
+        assert!(json.contains("\"entryPasswordRevealed\""));
+        assert!(json.contains("\"entryId\":\"uuid-abc\""));
+        assert!(
+            !json.contains("attemptCount"),
+            "attemptCount must be omitted for entry kinds: {json}"
+        );
     }
 
     #[test]

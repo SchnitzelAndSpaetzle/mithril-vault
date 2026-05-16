@@ -4,11 +4,12 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { queryKeys } from "@/lib/query-keys";
-import { audit } from "@/lib/tauri";
-import type { AuditEvent, AuditEventsResponse } from "@/lib/types";
+import { audit, entries as entriesIpc } from "@/lib/tauri";
+import type { AuditEvent, AuditEventsResponse, Entry } from "@/lib/types";
 
 interface AuditLogSectionProps {
   dbId: string | null;
+  isLocked?: boolean;
 }
 
 function formatTimestamp(timestamp: string, locale: string): string {
@@ -20,18 +21,52 @@ function formatTimestamp(timestamp: string, locale: string): string {
   });
 }
 
-function AuditRow({ event }: Readonly<{ event: AuditEvent }>) {
+// Subscribes to the entries-list query for `dbId` so the resolver
+// recomputes whenever entries load or change. While the Vault is locked
+// the query stays disabled (PRD US #16: locked vaults must mask entry
+// rows to a UUID prefix so the on-disk log never carries titles outside
+// the unlocked Vault), and the resolver short-circuits to null.
+function useResolveEntryTitle(
+  dbId: string | null,
+  isLocked: boolean
+): (entryId: string) => string | null {
+  const query = useQuery<Entry[], Error>({
+    queryKey: queryKeys.entries.list(dbId ?? "none", null),
+    queryFn: () => (dbId ? entriesIpc.list(dbId) : Promise.resolve([])),
+    enabled: Boolean(dbId) && !isLocked,
+    staleTime: 30_000,
+  });
+  const entriesList = query.data;
+  return (entryId: string) => {
+    if (isLocked || !entriesList) return null;
+    return entriesList.find((e) => e.id === entryId)?.title ?? null;
+  };
+}
+
+function AuditRow({
+  event,
+  resolveTitle,
+}: Readonly<{
+  event: AuditEvent;
+  resolveTitle: (entryId: string) => string | null;
+}>) {
   const { t, i18n } = useTranslation();
   // Row layout is uniform across kinds — kind-specific payload (attempt
-  // count for failed unlocks, reason for locked) hangs off the same
-  // muted-text slot so new kinds can plug in without a layout rewrite.
+  // count for failed unlocks, reason for locked, entry title for entry-
+  // level kinds) hangs off the same muted-text slot so new kinds can
+  // plug in without a layout rewrite.
+  const entryId = event.entryId ?? null;
+  const title = entryId ? resolveTitle(entryId) : null;
+  const entryLabel = entryId ? (title ?? entryId.slice(0, 8)) : null;
   return (
     <li
       data-kind={event.kind}
+      data-entry-id={entryId ?? undefined}
       className="flex flex-col gap-1 rounded-md border bg-card/50 p-3 text-sm md:flex-row md:items-center md:justify-between"
     >
       <span className="font-medium">{t(`audit.kind.${event.kind}`)}</span>
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        {entryLabel ? <span>{entryLabel}</span> : null}
         {typeof event.attemptCount === "number" ? (
           <span>{t("audit.attemptCount", { count: event.attemptCount })}</span>
         ) : null}
@@ -44,8 +79,12 @@ function AuditRow({ event }: Readonly<{ event: AuditEvent }>) {
 
 const EMPTY_RESPONSE: AuditEventsResponse = { events: [], degraded: false };
 
-export function AuditLogSection({ dbId }: Readonly<AuditLogSectionProps>) {
+export function AuditLogSection({
+  dbId,
+  isLocked = false,
+}: Readonly<AuditLogSectionProps>) {
   const { t } = useTranslation();
+  const resolveTitle = useResolveEntryTitle(dbId, isLocked);
 
   const query = useQuery<AuditEventsResponse, Error>({
     queryKey: queryKeys.audit.list(dbId ?? "none"),
@@ -86,7 +125,11 @@ export function AuditLogSection({ dbId }: Readonly<AuditLogSectionProps>) {
           ) : (
             <ul className="flex flex-col gap-2">
               {data.events.map((event, index) => (
-                <AuditRow key={`${event.timestamp}-${index}`} event={event} />
+                <AuditRow
+                  key={`${event.timestamp}-${index}`}
+                  event={event}
+                  resolveTitle={resolveTitle}
+                />
               ))}
             </ul>
           )}

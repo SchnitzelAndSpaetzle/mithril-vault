@@ -17,7 +17,7 @@ export function SettingsView() {
     resetPreferences,
     isResetting,
   } = useAppPreferences();
-  const { dbId } = useActiveDatabase();
+  const { dbId, isLocked } = useActiveDatabase();
   const {
     data: databaseConfig,
     isLoading: isDatabaseConfigLoading,
@@ -62,6 +62,7 @@ export function SettingsView() {
       onResetPreferences={resetPreferences}
       isBusy={isUpdating || isResetting}
       dbId={dbId}
+      isLocked={isLocked}
       databaseConfig={databaseConfig ?? null}
       isDatabaseConfigLoading={isDatabaseConfigLoading}
       databaseConfigError={databaseConfigError ?? null}

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 //! Smoke tests for command handlers
 
-#![allow(clippy::expect_used)]
+#![allow(clippy::expect_used, clippy::panic)]
 
 use mithril_vault_lib::commands::clipboard::{
+    audit_entry_password_copied_on_success, audit_entry_protected_field_copied_on_success,
     clear_clipboard, copy_password_to_clipboard, copy_protected_field_to_clipboard,
 };
 use mithril_vault_lib::commands::database::{
@@ -28,6 +29,9 @@ use mithril_vault_lib::commands::secure_storage::{
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::dto::group::UpdateGroupData;
 use mithril_vault_lib::register_services;
+use mithril_vault_lib::services::audit::format::AuditEvent;
+use mithril_vault_lib::services::audit::key::InMemoryAuditKey;
+use mithril_vault_lib::services::audit::{AuditFilter, AuditService};
 use mithril_vault_lib::services::kdbx::backups::BackupKind;
 use tauri::test::mock_app;
 use tauri::Manager;
@@ -97,6 +101,7 @@ fn clipboard_copy_command_fails_when_database_is_not_open() {
         Some(30),
         app.state(),
         app.state(),
+        app.state(),
     ))
     .expect_err("expected database not found");
     assert!(matches!(err, AppError::DatabaseNotFound(_)));
@@ -126,6 +131,7 @@ fn copy_protected_field_command_fails_when_database_is_not_open() {
         "entry-id".to_string(),
         "secret-field".to_string(),
         Some(30),
+        app.state(),
         app.state(),
         app.state(),
     ))
@@ -508,4 +514,88 @@ fn create_manual_backup_command_fails_when_database_not_open() {
     assert!(matches!(err, AppError::DatabaseNotFound(_)));
 
     cleanup_app_files(&app);
+}
+
+/// Recording site: a successful clipboard copy of an entry's password
+/// must produce exactly one `entry.password_copied` audit event with
+/// that entry's UUID. A failure (e.g. headless clipboard error) must
+/// produce zero events — the audit must reflect what actually landed on
+/// the user's clipboard, not what was merely attempted.
+#[test]
+fn audit_entry_password_copied_on_success_records_exactly_one_event() {
+    use std::path::Path;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    let dir = tempdir().expect("tempdir");
+    let vault = dir.path().join("vault.kdbx");
+    std::fs::write(&vault, b"x").expect("write vault");
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+    let vault_str = vault.to_string_lossy().to_string();
+    audit_entry_password_copied_on_success(&audit, &vault_str, "uuid-copy", Ok::<(), AppError>(()))
+        .expect("ok");
+    audit_entry_password_copied_on_success::<()>(
+        &audit,
+        &vault_str,
+        "uuid-copy",
+        Err(AppError::Io("simulated clipboard failure".into())),
+    )
+    .expect_err("propagates error");
+
+    let events = audit
+        .read(Path::new(&vault_str), &AuditFilter::default())
+        .expect("read");
+    assert_eq!(events.len(), 1, "only the successful copy is recorded");
+    match &events[0] {
+        AuditEvent::EntryPasswordCopied { entry_id, .. } => {
+            assert_eq!(entry_id, "uuid-copy");
+        }
+        other => panic!("unexpected event kind: {other:?}"),
+    }
+}
+
+/// Recording site #4: a successful clipboard copy of a *protected
+/// custom field* (e.g. recovery code) must also produce exactly one
+/// `entry.protected_field_revealed` event. Functionally a reveal —
+/// the secret leaves the Vault to a clipboard the OS shares with
+/// other apps. PRD US #7 treats protected-field access the same as
+/// password reveals; the audit log must not have a blind spot here.
+#[test]
+fn audit_entry_protected_field_copied_on_success_records_exactly_one_event() {
+    use std::path::Path;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    let dir = tempdir().expect("tempdir");
+    let vault = dir.path().join("vault.kdbx");
+    std::fs::write(&vault, b"x").expect("write vault");
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+    let vault_str = vault.to_string_lossy().to_string();
+    audit_entry_protected_field_copied_on_success(
+        &audit,
+        &vault_str,
+        "uuid-pf-copy",
+        Ok::<(), AppError>(()),
+    )
+    .expect("ok");
+    audit_entry_protected_field_copied_on_success::<()>(
+        &audit,
+        &vault_str,
+        "uuid-pf-copy",
+        Err(AppError::Io("simulated clipboard failure".into())),
+    )
+    .expect_err("propagates error");
+
+    let events = audit
+        .read(Path::new(&vault_str), &AuditFilter::default())
+        .expect("read");
+    assert_eq!(events.len(), 1, "only the successful copy is recorded");
+    match &events[0] {
+        AuditEvent::EntryProtectedFieldRevealed { entry_id, .. } => {
+            assert_eq!(entry_id, "uuid-pf-copy");
+        }
+        other => panic!("unexpected event kind: {other:?}"),
+    }
 }

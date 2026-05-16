@@ -315,12 +315,15 @@ export type BackupInfo = z.infer<typeof BackupInfoSchema>;
 
 /// Audit log event — security-relevant action recorded on this device.
 /// Each kind plugs into the same row shape so the panel does not need
-/// per-kind layouts; optional fields (`attemptCount`, `reason`) carry
-/// the kind-specific payload.
+/// per-kind layouts; optional fields (`attemptCount`, `reason`, `entryId`)
+/// carry the kind-specific payload.
 export const AuditEventKindSchema = z.enum([
   "vaultUnlockFailed",
   "vaultOpened",
   "vaultLocked",
+  "entryPasswordRevealed",
+  "entryPasswordCopied",
+  "entryProtectedFieldRevealed",
 ]);
 export type AuditEventKind = z.infer<typeof AuditEventKindSchema>;
 
@@ -339,6 +342,7 @@ export const AuditEventSchema = z.object({
   timestamp: z.string().min(1),
   attemptCount: z.number().int().positive().nullable().optional(),
   reason: AuditReasonSchema.nullable().optional(),
+  entryId: z.string().min(1).nullable().optional(),
 });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 
