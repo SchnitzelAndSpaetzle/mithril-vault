@@ -157,6 +157,92 @@ impl AuditLogFile {
         result.map_err(StorageError::from)
     }
 
+    /// Atomically rewrites the log to contain the frames produced by
+    /// `rewriter`. The rewriter receives every existing decoded frame in
+    /// append order and returns the subset (or transformation) to keep;
+    /// the closure shape lets the caller apply a global policy like the
+    /// audit retention size cap that no per-frame predicate can express.
+    ///
+    /// Atomicity: the new content is written to a sibling temp file under
+    /// the exclusive sidecar lock and atomically renamed over the
+    /// original. A crash mid-write leaves the original log intact —
+    /// callers never observe a partial file. Locking is the same sidecar
+    /// scheme as [`AuditLogFile::append`] / [`AuditLogFile::replace_with_single`]
+    /// so a concurrent appender or reader that arrives mid-compaction
+    /// blocks on the stable lock target rather than the about-to-be-
+    /// unlinked log inode.
+    ///
+    /// If the rewriter returns an empty vec, the destination file is
+    /// truncated to zero bytes — a fresh-cleared state. Missing input
+    /// file is treated as an empty input.
+    pub fn compact<F>(&self, rewriter: F) -> Result<CompactStats, StorageError>
+    where
+        F: FnOnce(Vec<Vec<u8>>) -> Vec<Vec<u8>>,
+    {
+        let _guard = self
+            .write_lock
+            .lock()
+            .map_err(|_| StorageError::Io("audit compact mutex poisoned".into()))?;
+
+        let lock = self.open_sidecar_lock()?;
+        FileExt::lock_exclusive(&lock)?;
+
+        let result = (|| -> std::io::Result<CompactStats> {
+            // Read existing frames under the exclusive lock so no
+            // concurrent appender can interleave a frame that the
+            // rewriter won't get to see.
+            let existing = match File::open(&self.path) {
+                Ok(f) => {
+                    let reader = BufReader::new(&f);
+                    let mut frames: Vec<Vec<u8>> = Vec::new();
+                    for line in reader.lines() {
+                        let line = line?;
+                        if line.trim().is_empty() {
+                            continue;
+                        }
+                        if let Ok(frame) = decode_frame(&line) {
+                            frames.push(frame);
+                        }
+                        // Malformed lines are dropped silently here:
+                        // they were already unrecoverable, and the
+                        // service-level read path is what surfaces the
+                        // degraded indicator to the user.
+                    }
+                    frames
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+                Err(e) => return Err(e),
+            };
+            let input_count = existing.len();
+
+            let kept = rewriter(existing);
+            let kept_count = kept.len();
+
+            let tmp_path = tmp_path_for(&self.path);
+            let mut tmp = OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&tmp_path)?;
+            for frame in &kept {
+                let line = encode_frame(frame);
+                tmp.write_all(line.as_bytes())?;
+                tmp.write_all(b"\n")?;
+            }
+            tmp.sync_data()?;
+            drop(tmp);
+            std::fs::rename(&tmp_path, &self.path)?;
+
+            Ok(CompactStats {
+                kept: kept_count,
+                dropped: input_count.saturating_sub(kept_count),
+            })
+        })();
+
+        let _ = FileExt::unlock(&lock);
+        result.map_err(StorageError::from)
+    }
+
     /// Reads all frames in append order. Missing file returns an empty
     /// outcome. Lines that fail base64 decode are *counted* in
     /// [`LogReadOutcome::malformed_lines`] rather than dropped silently:
@@ -221,6 +307,16 @@ fn tmp_path_for(path: &Path) -> PathBuf {
 pub struct LogReadOutcome {
     pub frames: Vec<Vec<u8>>,
     pub malformed_lines: usize,
+}
+
+/// Summary of a compaction pass. Exposes the count of kept and dropped
+/// frames so the service layer can verify that the rewriter actually
+/// shrunk the log (and tests can assert idempotency by checking that a
+/// second run drops zero).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CompactStats {
+    pub kept: usize,
+    pub dropped: usize,
 }
 
 #[cfg(test)]
@@ -475,6 +571,109 @@ mod tests {
             frames.contains(&b"late-append".to_vec()),
             "late append was lost to orphaned inode: {frames:?}"
         );
+    }
+
+    /// `compact` is the storage operation that backs retention rewrites:
+    /// it reads every frame under the exclusive sidecar lock, hands them
+    /// to a rewriter closure, and atomically replaces the log file with
+    /// whatever the rewriter returns. The identity case (rewriter returns
+    /// the input verbatim) must round-trip the on-disk content frame-for-
+    /// frame — proof that the read→write path doesn't lose, reorder, or
+    /// re-encode frames behind the rewriter's back.
+    #[test]
+    fn compact_with_identity_rewriter_preserves_frames_in_order() {
+        let dir = tempdir().expect("tempdir");
+        let log = AuditLogFile::new(dir.path().join("v.jsonl"));
+
+        log.append(b"first").expect("append first");
+        log.append(b"second").expect("append second");
+        log.append(b"third").expect("append third");
+
+        let stats = log.compact(|frames| frames).expect("compact identity");
+        assert_eq!(stats.kept, 3);
+        assert_eq!(stats.dropped, 0);
+
+        let outcome = log.read_all().expect("read");
+        assert_eq!(
+            outcome.frames,
+            vec![b"first".to_vec(), b"second".to_vec(), b"third".to_vec()]
+        );
+        assert_eq!(outcome.malformed_lines, 0);
+    }
+
+    /// An empty rewriter result truncates the log to zero bytes. This
+    /// is the "everything aged out" extreme — the file must still exist
+    /// (so a future append goes through normally) but `read_all` should
+    /// report an empty frame list.
+    #[test]
+    fn compact_with_empty_rewriter_truncates_log() {
+        let dir = tempdir().expect("tempdir");
+        let log = AuditLogFile::new(dir.path().join("v.jsonl"));
+
+        log.append(b"first").expect("append first");
+        log.append(b"second").expect("append second");
+
+        let stats = log.compact(|_| Vec::new()).expect("compact empty");
+        assert_eq!(stats.kept, 0);
+        assert_eq!(stats.dropped, 2);
+
+        let outcome = log.read_all().expect("read");
+        assert!(outcome.frames.is_empty());
+        assert_eq!(outcome.malformed_lines, 0);
+
+        // Following append must succeed against the truncated file.
+        log.append(b"after").expect("append after");
+        let outcome = log.read_all().expect("read");
+        assert_eq!(outcome.frames, vec![b"after".to_vec()]);
+    }
+
+    /// The rewriter is the policy seat — it can keep an arbitrary subset
+    /// in arbitrary order. This test pins the contract: storage applies
+    /// whatever the rewriter returns verbatim, with no implicit ordering
+    /// fixups, so retention can hand back exactly the survivors.
+    #[test]
+    fn compact_with_filter_rewriter_keeps_selected_frames() {
+        let dir = tempdir().expect("tempdir");
+        let log = AuditLogFile::new(dir.path().join("v.jsonl"));
+
+        log.append(b"alpha").expect("append alpha");
+        log.append(b"beta").expect("append beta");
+        log.append(b"gamma").expect("append gamma");
+        log.append(b"delta").expect("append delta");
+
+        let stats = log
+            .compact(|frames| {
+                frames
+                    .into_iter()
+                    .filter(|f| f == b"beta" || f == b"delta")
+                    .collect()
+            })
+            .expect("compact filter");
+        assert_eq!(stats.kept, 2);
+        assert_eq!(stats.dropped, 2);
+
+        let outcome = log.read_all().expect("read");
+        assert_eq!(outcome.frames, vec![b"beta".to_vec(), b"delta".to_vec()]);
+    }
+
+    /// Compacting an empty / missing log is a no-op — the rewriter
+    /// sees an empty input, returns an empty output, and the file
+    /// (if it existed) ends up empty. No panic, no error.
+    #[test]
+    fn compact_on_missing_file_is_a_no_op() {
+        let dir = tempdir().expect("tempdir");
+        let log = AuditLogFile::new(dir.path().join("nope.jsonl"));
+
+        let stats = log
+            .compact(|frames| {
+                assert!(frames.is_empty());
+                frames
+            })
+            .expect("compact missing");
+        assert_eq!(stats, CompactStats::default());
+
+        let outcome = log.read_all().expect("read");
+        assert!(outcome.frames.is_empty());
     }
 
     #[test]

@@ -406,6 +406,7 @@ pub async fn update_app_preferences(
     settings_service.update_app_preferences(&new_preferences)?;
     kdbx_service.set_backup_settings(new_preferences.backups)?;
     audit_service.set_enabled(new_preferences.audit.enabled);
+    audit_service.set_retention_days(new_preferences.audit.retention_days);
     Ok(())
 }
 
@@ -418,6 +419,7 @@ pub async fn reset_app_preferences(
     let prefs = settings_service.reset_app_preferences()?;
     kdbx_service.set_backup_settings(prefs.backups.clone())?;
     audit_service.set_enabled(prefs.audit.enabled);
+    audit_service.set_retention_days(prefs.audit.retention_days);
     Ok(prefs)
 }
 
