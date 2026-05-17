@@ -419,6 +419,37 @@ pub(crate) fn fan_out_security_changes(
     }
 }
 
+/// Diffs `old` vs `new` preferences, records each allowlisted leaf
+/// against every open Vault, and only THEN applies the new audit gate.
+/// The ordering is load-bearing: if `set_enabled(new.audit.enabled)`
+/// ran first, a true→false flip would short-circuit inside
+/// `AuditService::record` and silently swallow the disable action (and
+/// any other allowlisted flip submitted in the same call).
+///
+/// Asymmetric corner: a false→true flip records under the still-off
+/// gate, so the enable event itself is not captured. Subsequent
+/// changes are captured because the gate is on by the time the next
+/// call returns — acceptable for an opt-in transition.
+pub(crate) fn apply_preference_security_audit(
+    audit_service: &AuditService,
+    open_vault_paths: &[String],
+    old: &AppPreferences,
+    new: &AppPreferences,
+) {
+    let changed_leaves = diff_security_changes(old, new);
+    if !changed_leaves.is_empty() {
+        fan_out_security_changes(audit_service, open_vault_paths, &changed_leaves);
+    }
+    audit_service.set_enabled(new.audit.enabled);
+}
+
+fn open_vault_paths(kdbx_service: &KdbxService) -> Vec<String> {
+    kdbx_service
+        .list_open_databases()
+        .map(|dbs| dbs.into_iter().map(|d| d.path).collect())
+        .unwrap_or_default()
+}
+
 #[tauri::command]
 pub async fn update_app_preferences(
     new_preferences: AppPreferences,
@@ -429,16 +460,14 @@ pub async fn update_app_preferences(
     let old_preferences = settings_service.get_app_preferences()?;
     settings_service.update_app_preferences(&new_preferences)?;
     kdbx_service.set_backup_settings(new_preferences.backups.clone())?;
-    audit_service.set_enabled(new_preferences.audit.enabled);
 
-    let changed_leaves = diff_security_changes(&old_preferences, &new_preferences);
-    if !changed_leaves.is_empty() {
-        let open_paths: Vec<String> = kdbx_service
-            .list_open_databases()
-            .map(|dbs| dbs.into_iter().map(|d| d.path).collect())
-            .unwrap_or_default();
-        fan_out_security_changes(&audit_service, &open_paths, &changed_leaves);
-    }
+    let open_paths = open_vault_paths(&kdbx_service);
+    apply_preference_security_audit(
+        &audit_service,
+        &open_paths,
+        &old_preferences,
+        &new_preferences,
+    );
     Ok(())
 }
 
@@ -448,9 +477,16 @@ pub async fn reset_app_preferences(
     kdbx_service: State<'_, Arc<KdbxService>>,
     audit_service: State<'_, Arc<AuditService>>,
 ) -> Result<AppPreferences, AppError> {
+    // Snapshot the pre-reset preferences so the diff/fan-out can emit
+    // a `preferences.security_changed` event for every allowlisted
+    // leaf that the reset is about to overwrite — otherwise resetting
+    // from non-default values would silently change those settings.
+    let old_preferences = settings_service.get_app_preferences()?;
     let prefs = settings_service.reset_app_preferences()?;
     kdbx_service.set_backup_settings(prefs.backups.clone())?;
-    audit_service.set_enabled(prefs.audit.enabled);
+
+    let open_paths = open_vault_paths(&kdbx_service);
+    apply_preference_security_audit(&audit_service, &open_paths, &old_preferences, &prefs);
     Ok(prefs)
 }
 
@@ -500,7 +536,8 @@ pub async fn clear_recent_databases(
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 mod fan_out_security_changes_tests {
-    use super::fan_out_security_changes;
+    use super::{apply_preference_security_audit, fan_out_security_changes, AppPreferences};
+    use crate::commands::settings::AuditSettings;
     use crate::services::audit::format::AuditEvent;
     use crate::services::audit::key::InMemoryAuditKey;
     use crate::services::audit::{AuditFilter, AuditService};
@@ -560,6 +597,139 @@ mod fan_out_security_changes_tests {
         // No vault file should have been created under the audit dir.
         // tempdir() left it nonexistent, so any creation here would be loud.
         assert!(!dir.path().join("audit").exists());
+    }
+
+    /// Regression for the P1 review finding on #221: disabling audit
+    /// logging in the same submit as another allowlisted flip must NOT
+    /// suppress its own `audit.enabled` record. If we flipped the gate
+    /// off before fanning out, every event in this submit (including
+    /// the disable action itself) would short-circuit inside
+    /// `AuditService::record` and the disable would happen silently.
+    #[test]
+    fn disabling_audit_in_one_submit_still_records_audit_enabled_event() {
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("v.kdbx");
+        std::fs::write(&vault, b"v").expect("write vault");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+        // Old prefs: audit enabled (the realistic starting state).
+        let old = AppPreferences::default();
+        // New prefs: audit disabled + screen-capture toggle flipped.
+        let new = AppPreferences {
+            audit: AuditSettings {
+                enabled: false,
+                ..old.audit.clone()
+            },
+            security: crate::commands::settings::SecuritySettings {
+                prevent_screen_capture: !old.security.prevent_screen_capture,
+                ..old.security.clone()
+            },
+            ..old.clone()
+        };
+
+        let opens = vec![vault.to_string_lossy().into_owned()];
+        apply_preference_security_audit(&service, &opens, &old, &new);
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        let names: Vec<&str> = events
+            .iter()
+            .map(|e| match e {
+                AuditEvent::PreferencesSecurityChanged { setting_name, .. } => {
+                    setting_name.as_str()
+                }
+                other => panic!("unexpected variant: {other:?}"),
+            })
+            .collect();
+        assert!(
+            names.contains(&"audit.enabled"),
+            "audit.enabled disable must be recorded, got: {names:?}"
+        );
+        assert!(
+            names.contains(&"security.preventScreenCapture"),
+            "co-submitted flip must also be recorded, got: {names:?}"
+        );
+        // Final gate state matches the new preferences.
+        assert!(!service.is_enabled());
+    }
+
+    /// Enabling audit from a previously-disabled state lands in the
+    /// asymmetric corner that the P1 fix intentionally accepts: the
+    /// enable event itself is lost (recorded under the old, disabled
+    /// gate), but subsequent flips record. We pin that the gate ends
+    /// up on so the next change reaches the log.
+    #[test]
+    fn enabling_audit_from_disabled_leaves_gate_on_for_future_records() {
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("v.kdbx");
+        std::fs::write(&vault, b"v").expect("write vault");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+        service.set_enabled(false);
+
+        let old = AppPreferences {
+            audit: AuditSettings {
+                enabled: false,
+                ..AppPreferences::default().audit
+            },
+            ..AppPreferences::default()
+        };
+        let new = AppPreferences::default(); // audit.enabled = true
+
+        let opens = vec![vault.to_string_lossy().into_owned()];
+        apply_preference_security_audit(&service, &opens, &old, &new);
+
+        assert!(service.is_enabled(), "gate must end up matching new state");
+    }
+
+    /// Regression for the P2 review finding on #221: resetting from
+    /// non-default values for any allowlisted leaf must emit one
+    /// `preferences.security_changed` record per changed leaf, just
+    /// like an in-place update would.
+    #[test]
+    fn reset_from_non_default_values_emits_security_change_records() {
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("v.kdbx");
+        std::fs::write(&vault, b"v").expect("write vault");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+        let defaults = AppPreferences::default();
+        // Pre-reset preferences: flip several allowlisted leaves away
+        // from defaults so the reset has something to record.
+        let old = AppPreferences {
+            security: crate::commands::settings::SecuritySettings {
+                prevent_screen_capture: !defaults.security.prevent_screen_capture,
+                auto_download_favicons: !defaults.security.auto_download_favicons,
+                ..defaults.security.clone()
+            },
+            audit: AuditSettings {
+                enabled: !defaults.audit.enabled,
+                retention_days: defaults.audit.retention_days.saturating_add(7),
+            },
+            ..defaults.clone()
+        };
+
+        let opens = vec![vault.to_string_lossy().into_owned()];
+        apply_preference_security_audit(&service, &opens, &old, &defaults);
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        let names: std::collections::HashSet<&str> = events
+            .iter()
+            .map(|e| match e {
+                AuditEvent::PreferencesSecurityChanged { setting_name, .. } => {
+                    setting_name.as_str()
+                }
+                other => panic!("unexpected variant: {other:?}"),
+            })
+            .collect();
+        for want in [
+            "security.preventScreenCapture",
+            "security.autoDownloadFavicons",
+            "audit.enabled",
+            "audit.retentionDays",
+        ] {
+            assert!(names.contains(want), "missing {want} in {names:?}");
+        }
     }
 
     /// Empty leaf set with N open vaults is also a no-op — happens on
