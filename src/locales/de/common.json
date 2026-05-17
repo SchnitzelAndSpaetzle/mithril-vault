@@ -18,6 +18,35 @@
   "clipboard": {
     "countdown": "Zwischenablage wird in {{seconds}}s gelöscht"
   },
+  "audit": {
+    "title": "Audit-Protokoll",
+    "description": "Sicherheitsrelevante Ereignisse, die auf diesem Gerät für den aktuell geöffneten Tresor aufgezeichnet wurden.",
+    "empty": "Noch keine Audit-Ereignisse für diesen Tresor.",
+    "emptyNoVault": "Öffnen Sie einen Tresor, um sein Audit-Protokoll zu sehen.",
+    "loadError": "Audit-Ereignisse konnten nicht geladen werden: {{error}}",
+    "degradedWarning": "Das Audit-Subsystem hat in dieser Sitzung einen oder mehrere interne Fehler gemeldet. Einige Ereignisse fehlen möglicherweise.",
+    "attemptCount_one": "Versuch {{count}}",
+    "attemptCount_other": "Versuch {{count}}",
+    "kind": {
+      "vaultUnlockFailed": "Fehlgeschlagener Entsperrversuch",
+      "vaultOpened": "Tresor geöffnet",
+      "vaultLocked": "Tresor gesperrt",
+      "entryPasswordRevealed": "Passwort angezeigt",
+      "entryPasswordCopied": "Passwort kopiert",
+      "entryProtectedFieldRevealed": "Geschütztes Feld angezeigt",
+      "auditCleared": "Audit-Protokoll geleert"
+    },
+    "reason": {
+      "manual": "Manuell",
+      "autoLock": "Auto-Sperre",
+      "appQuit": "App beendet",
+      "screenLock": "Bildschirmsperre"
+    },
+    "clearButton": "Audit-Protokoll leeren",
+    "clearConfirmTitle": "Audit-Protokoll leeren?",
+    "clearConfirm": "Dies löscht alle für den geöffneten Tresor auf diesem Gerät aufgezeichneten Audit-Ereignisse. Ein einzelner \"Audit-Protokoll geleert\"-Eintrag bleibt erhalten, damit die Löschung sichtbar ist.",
+    "clearError": "Audit-Protokoll konnte nicht geleert werden: {{error}}"
+  },
   "settings": {
     "title": "Einstellungen",
     "description": "Anwendungseinstellungen und Datenbankkonfiguration.",

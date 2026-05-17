@@ -18,6 +18,35 @@
   "clipboard": {
     "countdown": "Privremena memorija se briše za {{seconds}}s"
   },
+  "audit": {
+    "title": "Dnevnik nadzora",
+    "description": "Bezbednosno značajni događaji zabeleženi na ovom uređaju za trenutno otvoreni sef.",
+    "empty": "Još uvek nema događaja nadzora za ovaj sef.",
+    "emptyNoVault": "Otvorite sef da biste videli njegov dnevnik nadzora.",
+    "loadError": "Učitavanje događaja nadzora nije uspelo: {{error}}",
+    "degradedWarning": "Podsistem nadzora prijavio je jednu ili više internih grešaka u ovoj sesiji. Neki događaji možda nedostaju.",
+    "attemptCount_one": "Pokušaj {{count}}",
+    "attemptCount_other": "Pokušaj {{count}}",
+    "kind": {
+      "vaultUnlockFailed": "Neuspeo pokušaj otključavanja",
+      "vaultOpened": "Sef otvoren",
+      "vaultLocked": "Sef zaključan",
+      "entryPasswordRevealed": "Lozinka prikazana",
+      "entryPasswordCopied": "Lozinka kopirana",
+      "entryProtectedFieldRevealed": "Zaštićeno polje prikazano",
+      "auditCleared": "Dnevnik nadzora obrisan"
+    },
+    "reason": {
+      "manual": "Ručno",
+      "autoLock": "Automatsko zaključavanje",
+      "appQuit": "Zatvaranje aplikacije",
+      "screenLock": "Zaključavanje ekrana"
+    },
+    "clearButton": "Obriši dnevnik nadzora",
+    "clearConfirmTitle": "Obrisati dnevnik nadzora?",
+    "clearConfirm": "Ovo briše sve događaje nadzora zabeležene na ovom uređaju za otvoreni sef. Ostaje samo jedan unos „Dnevnik nadzora obrisan\" kako bi brisanje bilo vidljivo.",
+    "clearError": "Brisanje dnevnika nadzora nije uspelo: {{error}}"
+  },
   "settings": {
     "title": "Podešavanja",
     "description": "Podešavanja aplikacije i konfiguracija baze podataka.",

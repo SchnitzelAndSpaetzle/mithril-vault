@@ -18,6 +18,35 @@
   "clipboard": {
     "countdown": "El portapapeles se limpia en {{seconds}}s"
   },
+  "audit": {
+    "title": "Registro de auditoría",
+    "description": "Eventos relevantes para la seguridad registrados en este dispositivo para la bóveda actualmente abierta.",
+    "empty": "Aún no hay eventos de auditoría para esta bóveda.",
+    "emptyNoVault": "Abra una bóveda para ver su registro de auditoría.",
+    "loadError": "Error al cargar los eventos de auditoría: {{error}}",
+    "degradedWarning": "El subsistema de auditoría ha informado de uno o más fallos internos esta sesión. Puede que falten algunos eventos.",
+    "attemptCount_one": "Intento {{count}}",
+    "attemptCount_other": "Intento {{count}}",
+    "kind": {
+      "vaultUnlockFailed": "Intento de desbloqueo fallido",
+      "vaultOpened": "Bóveda abierta",
+      "vaultLocked": "Bóveda bloqueada",
+      "entryPasswordRevealed": "Contraseña revelada",
+      "entryPasswordCopied": "Contraseña copiada",
+      "entryProtectedFieldRevealed": "Campo protegido revelado",
+      "auditCleared": "Registro de auditoría borrado"
+    },
+    "reason": {
+      "manual": "Manual",
+      "autoLock": "Auto-bloqueo",
+      "appQuit": "App cerrada",
+      "screenLock": "Bloqueo de pantalla"
+    },
+    "clearButton": "Borrar registro de auditoría",
+    "clearConfirmTitle": "¿Borrar registro de auditoría?",
+    "clearConfirm": "Esto elimina todos los eventos de auditoría registrados en este dispositivo para la bóveda abierta. Quedará una sola entrada \"Registro de auditoría borrado\" para que el borrado sea visible.",
+    "clearError": "Error al borrar el registro de auditoría: {{error}}"
+  },
   "settings": {
     "title": "Configuración",
     "description": "Preferencias de la aplicación y configuración de la base de datos.",

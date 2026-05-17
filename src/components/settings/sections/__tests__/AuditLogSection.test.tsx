@@ -513,7 +513,7 @@ describe("AuditLogSection", () => {
     await waitFor(() => {
       const rows = screen.getAllByRole("listitem");
       expect(rows.length).toBe(1);
-      expect(rows[0].getAttribute("data-kind")).toBe("auditCleared");
+      expect(rows[0]?.getAttribute("data-kind")).toBe("auditCleared");
     });
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
@@ -549,7 +549,7 @@ describe("AuditLogSection", () => {
     });
     // Pre-clear event still visible — the original log was preserved.
     const rows = screen.getAllByRole("listitem");
-    expect(rows[0].getAttribute("data-kind")).toBe("vaultUnlockFailed");
+    expect(rows[0]?.getAttribute("data-kind")).toBe("vaultUnlockFailed");
   });
 
   it("renders an auditCleared row with the localized kind label", async () => {
