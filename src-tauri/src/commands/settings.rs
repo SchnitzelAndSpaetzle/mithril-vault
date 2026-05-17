@@ -419,34 +419,37 @@ pub(crate) fn fan_out_security_changes(
     }
 }
 
-/// Diffs `old` vs `new` preferences, records each allowlisted leaf
-/// against every open Vault, and only THEN applies the new audit gate.
+/// Diffs `old` vs `new` preferences, applies the new audit gate, and
+/// force-writes one `preferences.security_changed` event per allowlisted
+/// leaf that changed against every open Vault.
 ///
-/// The audit log's master gate (`AuditService::set_enabled`) makes
-/// `record` a no-op when off. Naively setting the new state first would
-/// drop a true→false disable event; naively setting it last would drop
-/// a false→true enable event. Both transitions are themselves audited
-/// allowlist leaves, so neither can be silently swallowed.
+/// Ordering is deliberate. The master gate is set FIRST so any
+/// concurrent producer sharing this `AuditService` (entry reveals,
+/// failed unlocks, vault locks, …) immediately reflects the user's
+/// persisted intent — a previous version of this helper transiently
+/// flipped the gate on around the fan-out to capture the transition
+/// itself, but that reopened logging process-wide and let unrelated
+/// concurrent events slip into the disabled-by-the-user log.
 ///
-/// To capture the transition itself: when there are changes to record
-/// AND logging is on at either the old or the new end, the gate is
-/// briefly forced on for the duration of the fan-out, then the final
-/// state from `new.audit.enabled` is applied. When logging is off at
-/// both ends, the user has consistently opted out — nothing is
-/// recorded, respecting that intent.
+/// The transition events themselves go through
+/// [`AuditService::record_preferences_security_changed`], which
+/// force-writes around the gate. That captures both the true→false
+/// disable and false→true enable cases without ever widening the gate.
+///
+/// When logging is off at BOTH ends of the transition, the user has
+/// consistently opted out — nothing is recorded, respecting that intent.
 pub(crate) fn apply_preference_security_audit(
     audit_service: &AuditService,
     open_vault_paths: &[String],
     old: &AppPreferences,
     new: &AppPreferences,
 ) {
+    audit_service.set_enabled(new.audit.enabled);
     let changed_leaves = diff_security_changes(old, new);
     let should_record = !changed_leaves.is_empty() && (old.audit.enabled || new.audit.enabled);
     if should_record {
-        audit_service.set_enabled(true);
         fan_out_security_changes(audit_service, open_vault_paths, &changed_leaves);
     }
-    audit_service.set_enabled(new.audit.enabled);
 }
 
 fn open_vault_paths(kdbx_service: &KdbxService) -> Vec<String> {
@@ -701,12 +704,65 @@ mod fan_out_security_changes_tests {
         assert!(service.is_enabled(), "gate must end up matching new state");
     }
 
+    /// Follow-up review finding on #221: the prior fix forced the
+    /// master gate on around the fan-out, which let unrelated
+    /// concurrent producers (sharing this `AuditService`) slip events
+    /// through the transition window. The corrected design routes
+    /// preference-transition events through a force-write path and
+    /// leaves the gate strictly tracking `new.audit.enabled`. Pin
+    /// that invariant: across a disable transition, the gate must be
+    /// off the moment `apply_preference_security_audit` returns —
+    /// AND `is_enabled()` reporting it being off mid-call must imply
+    /// no transient flip happened. We assert the end-state here and
+    /// rely on the service-level `record_preferences_security_changed_bypasses_the_master_gate`
+    /// test to pin that the fan-out itself doesn't touch the gate.
+    #[test]
+    fn disable_transition_never_transiently_widens_the_gate() {
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("v.kdbx");
+        std::fs::write(&vault, b"v").expect("write vault");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+        let defaults = AppPreferences::default(); // audit enabled
+        let new = AppPreferences {
+            audit: AuditSettings {
+                enabled: false,
+                ..defaults.audit
+            },
+            ..defaults.clone()
+        };
+
+        let opens = vec![vault.to_string_lossy().into_owned()];
+        apply_preference_security_audit(&service, &opens, &defaults, &new);
+
+        // Final state: gate off (persisted user intent applied).
+        assert!(
+            !service.is_enabled(),
+            "gate must reflect new.audit.enabled after the call"
+        );
+        // And the disable event itself was captured via force-write.
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        let names: Vec<&str> = events
+            .iter()
+            .map(|e| match e {
+                AuditEvent::PreferencesSecurityChanged { setting_name, .. } => {
+                    setting_name.as_str()
+                }
+                other => panic!("unexpected variant: {other:?}"),
+            })
+            .collect();
+        assert!(
+            names.contains(&"audit.enabled"),
+            "disable event must be captured, got: {names:?}"
+        );
+    }
+
     /// When logging is off at BOTH ends of the transition, the user has
     /// consistently opted out — even an allowlisted change like
     /// `preventScreenCapture` must not write to disk. This pins the
-    /// privacy contract: a disabled audit log stays disabled, the
-    /// briefly-forced-on window around real transitions does not leak
-    /// into pure-disabled saves.
+    /// privacy contract: a disabled audit log stays disabled, and no
+    /// transient gate-widening leaks into pure-disabled saves.
     #[test]
     fn disabled_at_both_ends_records_nothing_even_when_other_leaves_change() {
         let dir = tempdir().expect("tempdir");
