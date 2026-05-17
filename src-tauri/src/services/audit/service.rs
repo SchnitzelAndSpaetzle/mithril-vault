@@ -540,7 +540,14 @@ impl AuditService {
                 AuditCompactError::Storage(e.to_string())
             })?;
 
-        if undecryptable > 0 {
+        // Flip degraded for any signal that the input log was not
+        // fully readable: AEAD-undecryptable frames the closure
+        // counted, and base64-malformed lines the storage layer
+        // surfaced via `CompactStats::malformed_lines`. Without this,
+        // a lazy compaction running before the user opens the audit
+        // panel would silently delete corrupt lines and the banner
+        // would never appear.
+        if undecryptable > 0 || stats.malformed_lines > 0 {
             self.degraded.store(true, Ordering::SeqCst);
         }
 
@@ -1300,6 +1307,35 @@ mod tests {
             }
             other => panic!("expected VaultUnlockFailed, got {other:?}"),
         }
+    }
+
+    /// Regression: a lazy compaction running before the user opens the
+    /// audit panel must not silently delete a malformed base64 line
+    /// without flipping `degraded`. Otherwise the corrupt log would be
+    /// rewritten clean and the user would never know.
+    #[test]
+    fn compact_flips_degraded_when_input_log_has_malformed_lines() {
+        use std::io::Write;
+        let (service, _dir, vault) = fresh_service();
+        service.set_lazy_trigger_enabled_for_test(false);
+        service.record(&vault, &unlock_failed_event(1));
+
+        // Splice a non-base64 line directly into the log file so the
+        // compact-time reader sees it.
+        let log_path = service.log_path_for(&vault);
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&log_path)
+            .expect("open log for splice");
+        f.write_all(b"!!!not-base64!!!\n").expect("splice");
+        drop(f);
+        assert!(!service.is_degraded(), "precondition: not yet degraded");
+
+        service.compact(&vault).expect("compact");
+        assert!(
+            service.is_degraded(),
+            "compact must flip degraded when input had malformed lines"
+        );
     }
 
     /// Regression: after a process restart, the per-Vault oldest-timestamp

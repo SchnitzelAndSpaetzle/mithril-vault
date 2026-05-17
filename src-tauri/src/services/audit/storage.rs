@@ -190,7 +190,10 @@ impl AuditLogFile {
         let result = (|| -> std::io::Result<CompactStats> {
             // Read existing frames under the exclusive lock so no
             // concurrent appender can interleave a frame that the
-            // rewriter won't get to see.
+            // rewriter won't get to see. Count malformed lines as we
+            // go: silently dropping them would let a corrupt log be
+            // rewritten without flipping the degraded banner.
+            let mut malformed_lines: usize = 0;
             let existing = match File::open(&self.path) {
                 Ok(f) => {
                     let reader = BufReader::new(&f);
@@ -200,13 +203,12 @@ impl AuditLogFile {
                         if line.trim().is_empty() {
                             continue;
                         }
-                        if let Ok(frame) = decode_frame(&line) {
-                            frames.push(frame);
+                        match decode_frame(&line) {
+                            Ok(frame) => frames.push(frame),
+                            Err(_) => {
+                                malformed_lines = malformed_lines.saturating_add(1);
+                            }
                         }
-                        // Malformed lines are dropped silently here:
-                        // they were already unrecoverable, and the
-                        // service-level read path is what surfaces the
-                        // degraded indicator to the user.
                     }
                     frames
                 }
@@ -236,6 +238,7 @@ impl AuditLogFile {
             Ok(CompactStats {
                 kept: kept_count,
                 dropped: input_count.saturating_sub(kept_count),
+                malformed_lines,
             })
         })();
 
@@ -309,14 +312,21 @@ pub struct LogReadOutcome {
     pub malformed_lines: usize,
 }
 
-/// Summary of a compaction pass. Exposes the count of kept and dropped
-/// frames so the service layer can verify that the rewriter actually
-/// shrunk the log (and tests can assert idempotency by checking that a
-/// second run drops zero).
+/// Summary of a compaction pass. Exposes kept, dropped, and the count
+/// of base64-malformed lines the read pass skipped over.
+///
+/// `malformed_lines` is surfaced (not silently swallowed) because lazy
+/// compaction runs in the background from `record` — without this
+/// signal a corrupt line would be permanently deleted from disk on the
+/// next compaction without the user-facing `degraded` banner ever
+/// flipping. The service layer reads this field after every compact
+/// call and flips `degraded` when non-zero, matching the behavior of
+/// [`LogReadOutcome::malformed_lines`] on the read path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CompactStats {
     pub kept: usize,
     pub dropped: usize,
+    pub malformed_lines: usize,
 }
 
 #[cfg(test)]
@@ -654,6 +664,43 @@ mod tests {
 
         let outcome = log.read_all().expect("read");
         assert_eq!(outcome.frames, vec![b"beta".to_vec(), b"delta".to_vec()]);
+    }
+
+    /// `compact` must count base64-malformed lines and surface them
+    /// through [`CompactStats::malformed_lines`] — otherwise a lazy
+    /// compaction running before the user opens the audit panel would
+    /// silently delete unreadable lines and the degraded banner would
+    /// never appear. Splice in a non-base64 line and assert the count.
+    #[test]
+    fn compact_counts_malformed_lines_so_caller_can_flag_degraded() {
+        use std::io::Write;
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("v.jsonl");
+        let log = AuditLogFile::new(path.clone());
+
+        log.append(b"first").expect("append first");
+
+        // Splice a raw non-base64 line — `!!!` isn't in the standard
+        // base64 alphabet.
+        let mut f = OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("reopen for raw append");
+        f.write_all(b"!!!not-base64!!!\n").expect("write junk");
+        drop(f);
+
+        log.append(b"third").expect("append third");
+
+        let stats = log.compact(|frames| frames).expect("compact identity");
+        assert_eq!(stats.kept, 2);
+        assert_eq!(stats.dropped, 0);
+        assert_eq!(
+            stats.malformed_lines, 1,
+            "compact must surface the malformed line count"
+        );
+
+        let outcome = log.read_all().expect("read");
+        assert_eq!(outcome.frames, vec![b"first".to_vec(), b"third".to_vec()]);
     }
 
     /// Compacting an empty / missing log is a no-op — the rewriter

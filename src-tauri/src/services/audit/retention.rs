@@ -59,16 +59,22 @@ pub fn partition_by_retention(
         }
     }
 
-    // Apply the size cap: while the kept set occupies more than `max_bytes`
-    // AND there's more than one event to drop from, push the oldest kept
-    // event into drop. The "more than one" guard is what implements the
-    // single-event-bigger-than-cap rule — we never produce an empty kept
-    // set just because one frame is oversized.
+    // Apply the size cap with a single front-trim pass instead of a
+    // `Vec::remove(0)` loop: figure out how many oldest entries must
+    // go to land at-or-under the cap (capped at `len - 1` so the
+    // single-oversized-event floor is preserved), then `drain` that
+    // prefix in one O(n) shift. The previous loop was O(n²) when the
+    // cap forced many evictions — measurable when lazy compaction
+    // runs against a 10 MiB log full of tiny frames.
     let mut total: usize = keep.iter().map(|f| f.encoded_len).sum();
-    while total > max_bytes && keep.len() > 1 {
-        let oldest = keep.remove(0);
-        total = total.saturating_sub(oldest.encoded_len);
-        drop.push(oldest);
+    let mut to_drop: usize = 0;
+    let max_drop = keep.len().saturating_sub(1);
+    while total > max_bytes && to_drop < max_drop {
+        total = total.saturating_sub(keep[to_drop].encoded_len);
+        to_drop += 1;
+    }
+    if to_drop > 0 {
+        drop.extend(keep.drain(0..to_drop));
     }
 
     (keep, drop)
