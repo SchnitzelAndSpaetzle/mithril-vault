@@ -469,6 +469,7 @@ pub async fn update_app_preferences(
     let old_preferences = settings_service.get_app_preferences()?;
     settings_service.update_app_preferences(&new_preferences)?;
     kdbx_service.set_backup_settings(new_preferences.backups.clone())?;
+    audit_service.set_retention_days(new_preferences.audit.retention_days);
 
     let open_paths = open_vault_paths(&kdbx_service);
     apply_preference_security_audit(
@@ -493,6 +494,7 @@ pub async fn reset_app_preferences(
     let old_preferences = settings_service.get_app_preferences()?;
     let prefs = settings_service.reset_app_preferences()?;
     kdbx_service.set_backup_settings(prefs.backups.clone())?;
+    audit_service.set_retention_days(prefs.audit.retention_days);
 
     let open_paths = open_vault_paths(&kdbx_service);
     apply_preference_security_audit(&audit_service, &open_paths, &old_preferences, &prefs);

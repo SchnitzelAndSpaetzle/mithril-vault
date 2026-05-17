@@ -11,18 +11,29 @@
 //!   audit log cannot become a `DoS` vector against the user's own Vault flows.
 //! * [`AuditService::read`] — list events for a Vault path.
 
-use crate::services::audit::crypto::{decrypt, encrypt, KEY_LEN};
+use crate::services::audit::crypto::{decrypt, encode_frame, encrypt, KEY_LEN};
 use crate::services::audit::format::{AuditEvent, Reason};
 use crate::services::audit::key::AuditKey;
-use crate::services::audit::retention::apply_retention;
-use crate::services::audit::storage::AuditLogFile;
+use crate::services::audit::retention::{partition_by_retention, SizedEvent};
+use crate::services::audit::storage::{AuditLogFile, CompactStats};
 use crate::services::audit::vault_id::hash_vault_path;
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
+
+/// Hard ceiling on the on-disk audit log size, in bytes. Defense-in-depth
+/// against the age policy running away — even at the maximum allowed
+/// `retentionDays`, a single Vault's log cannot grow past this.
+pub(crate) const MAX_LOG_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Default `retentionDays` used when nothing has pushed a value in yet —
+/// matches the public default in [`crate::commands::settings::AuditSettings`].
+/// Duplicated here (rather than imported) so the audit service stays free
+/// of a dependency on the commands layer.
+const DEFAULT_RETENTION_DAYS: u32 = 90;
 
 /// Errors surfaced from [`AuditService::read`]. Distinct from the
 /// internally-swallowed errors of [`AuditService::record`]: read is called
@@ -48,6 +59,19 @@ pub enum AuditClearError {
     Storage(String),
 }
 
+/// Errors surfaced from [`AuditService::compact`]. Compaction is a
+/// best-effort retention operation that the audit subsystem runs lazily
+/// from `record`; it is also directly callable for tests. Failures are
+/// distinct from the infallible `record` path because a test or settings-
+/// triggered compaction wants the failure to be observable.
+#[derive(Debug, Error)]
+pub enum AuditCompactError {
+    #[error("audit key unavailable: {0}")]
+    Key(String),
+    #[error("audit compact failed: {0}")]
+    Storage(String),
+}
+
 /// Permissive filter applied by [`AuditService::read`]. Shape is in place so
 /// future issues can plug in `kinds` / time-range filtering without changing
 /// callers; today it returns everything.
@@ -64,10 +88,32 @@ pub struct AuditService {
     /// Pushed in from `update_app_preferences` and at startup; defaults
     /// to true so a fresh `AuditService` records out of the box.
     enabled: AtomicBool,
+    /// Configured age cap pushed in from `AuditSettings.retentionDays`.
+    /// Validated to `1..=365` at the settings boundary, so any value
+    /// stored here is already in range; we still saturate at `u32` here
+    /// for cheap atomic reads from the `record` hot path.
+    retention_days: AtomicU32,
+    /// On-disk size ceiling beyond which the lazy trigger fires
+    /// compaction. Defaults to [`MAX_LOG_BYTES`]; overridable via
+    /// [`AuditService::set_size_cap_for_test`] so tests can exercise
+    /// the trigger without writing 10 MiB of fake data.
+    size_cap: AtomicU64,
+    /// Whether the lazy compaction trigger in `record` fires at all.
+    /// `true` in production; tests that want to inspect the explicit
+    /// `compact` pass in isolation flip this to `false` so setup
+    /// `record` calls don't pre-compact behind the assertion.
+    lazy_trigger_enabled: AtomicBool,
     /// Per-Vault consecutive-failed-unlock counters, keyed by canonicalized
     /// path. Lives in memory only — resets on process restart per the AC's
     /// "per session" wording.
     attempts: Mutex<HashMap<PathBuf, u32>>,
+    /// Per-Vault cached oldest event timestamp, populated lazily on the
+    /// first `record` for a Vault after process start (and after each
+    /// successful compaction). The lazy-trigger check reads from this
+    /// cache so `record` doesn't have to re-decode the whole log on
+    /// every append — only the first append for a Vault, and again
+    /// after a compaction shrinks the log.
+    oldest: Mutex<HashMap<PathBuf, DateTime<Utc>>>,
 }
 
 impl AuditService {
@@ -77,8 +123,43 @@ impl AuditService {
             key_source,
             degraded: AtomicBool::new(false),
             enabled: AtomicBool::new(true),
+            retention_days: AtomicU32::new(DEFAULT_RETENTION_DAYS),
+            size_cap: AtomicU64::new(MAX_LOG_BYTES),
+            lazy_trigger_enabled: AtomicBool::new(true),
             attempts: Mutex::new(HashMap::new()),
+            oldest: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Test-only hook: override the on-disk size cap so the lazy trigger
+    /// can be exercised with a tiny synthetic ceiling instead of the
+    /// production 10 MiB. Production paths leave this at
+    /// [`MAX_LOG_BYTES`].
+    pub fn set_size_cap_for_test(&self, n: u64) {
+        self.size_cap.store(n, Ordering::SeqCst);
+    }
+
+    /// Test-only hook: suspend the lazy compaction trigger in `record`
+    /// so setup-phase appends don't silently pre-compact the log before
+    /// an assertion runs. Production paths leave the trigger enabled.
+    pub fn set_lazy_trigger_enabled_for_test(&self, enabled: bool) {
+        self.lazy_trigger_enabled.store(enabled, Ordering::SeqCst);
+    }
+
+    fn size_cap(&self) -> u64 {
+        self.size_cap.load(Ordering::SeqCst)
+    }
+
+    /// Pushes the configured `retentionDays` in from settings. Called from
+    /// `update_app_preferences` / `reset_app_preferences` / startup, the
+    /// same plumbing that drives [`AuditService::set_enabled`]. Stored as
+    /// an atomic so `record` can read it on the hot path without a lock.
+    pub fn set_retention_days(&self, days: u32) {
+        self.retention_days.store(days, Ordering::SeqCst);
+    }
+
+    fn retention_days(&self) -> u32 {
+        self.retention_days.load(Ordering::SeqCst)
     }
 
     /// Flips the master logging gate. Off => [`AuditService::record`]
@@ -124,8 +205,72 @@ impl AuditService {
         let log_path = self.log_path_for(vault_path);
         let log = AuditLogFile::new(log_path.clone());
         log.append(&frame).map_err(|_| ())?;
-        apply_retention(&log_path);
+
+        // Seed the per-Vault oldest-timestamp cache from disk on first
+        // use this session. Without this, after a process restart the
+        // cache only ever knows about events recorded *this* session
+        // (all `Utc::now()`) so the age trigger would silently never
+        // fire against frames left over on disk — age retention would
+        // stop working until the size cap eventually happened to trip.
+        // The seed runs *after* the append so the freshly-written frame
+        // is included in the disk scan and the cache reflects the new
+        // post-append state in one pass.
+        self.ensure_oldest_loaded(vault_path, &key);
+
+        // Update the cached oldest-timestamp for this vault: the
+        // just-appended event is the smallest known timestamp if the
+        // cache was empty, or stays unchanged if an older event was
+        // already recorded earlier in this session. Failures swallowed —
+        // a poisoned mutex must not cause an audit record to silently
+        // re-error after the storage append already succeeded.
+        let event_ts = match event {
+            AuditEvent::VaultUnlockFailed { timestamp, .. }
+            | AuditEvent::VaultOpened { timestamp }
+            | AuditEvent::VaultLocked { timestamp, .. }
+            | AuditEvent::EntryPasswordRevealed { timestamp, .. }
+            | AuditEvent::EntryPasswordCopied { timestamp, .. }
+            | AuditEvent::EntryProtectedFieldRevealed { timestamp, .. }
+            | AuditEvent::PreferencesSecurityChanged { timestamp, .. }
+            | AuditEvent::AuditCleared { timestamp } => *timestamp,
+        };
+        if let Ok(mut map) = self.oldest.lock() {
+            let key = attempts_key(vault_path);
+            map.entry(key)
+                .and_modify(|t| {
+                    if event_ts < *t {
+                        *t = event_ts;
+                    }
+                })
+                .or_insert(event_ts);
+        }
+
+        // Lazy compaction trigger: synchronous because `record` itself is
+        // already best-effort and called *after* the triggering user
+        // action has returned, so latency here cannot regress the
+        // user-facing flow. Errors swallowed: compaction is a
+        // housekeeping nicety, not a correctness requirement.
+        self.maybe_trigger_compaction(vault_path);
         Ok(())
+    }
+
+    fn maybe_trigger_compaction(&self, vault_path: &Path) {
+        if !self.lazy_trigger_enabled.load(Ordering::SeqCst) {
+            return;
+        }
+        let path = self.log_path_for(vault_path);
+        let size = std::fs::metadata(&path).map_or(0, |m| m.len());
+        let now = Utc::now();
+        let cutoff = now - Duration::days(i64::from(self.retention_days()));
+        let oldest = self
+            .oldest
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&attempts_key(vault_path)).copied());
+        let size_trigger = size > self.size_cap();
+        let age_trigger = oldest.is_some_and(|ts| ts < cutoff);
+        if size_trigger || age_trigger {
+            let _ = self.compact(vault_path);
+        }
     }
 
     /// Returns every recorded event for the Vault at `vault_path` that
@@ -324,6 +469,144 @@ impl AuditService {
             map.remove(&attempts_key(vault_path));
         }
     }
+
+    /// Forces a retention compaction pass on the per-Vault log: reads
+    /// every encrypted frame under the exclusive storage lock, decrypts
+    /// to [`AuditEvent`]s, partitions by the configured `retentionDays`
+    /// and the [`MAX_LOG_BYTES`] hard cap via
+    /// [`partition_by_retention`], re-encrypts the keepers with fresh
+    /// XChaCha20-Poly1305 nonces, and atomically replaces the file.
+    ///
+    /// Public so the lazy trigger in `record` and tests can invoke it
+    /// directly. Returns the kept / dropped counts so callers can verify
+    /// idempotency (a second run on an already-in-window log drops 0).
+    ///
+    /// Skipped (returns `CompactStats::default()`) when the master gate
+    /// is off — disabled audit logging shouldn't trigger background
+    /// rewrites against an existing log. Frames that fail to decrypt
+    /// (auth failure, wrong key) flip `degraded` and are *dropped* from
+    /// the rewrite: keeping unreadable frames around forever would let
+    /// a corrupt log bloat the file with bytes the user can never see.
+    pub fn compact(&self, vault_path: &Path) -> Result<CompactStats, AuditCompactError> {
+        if !self.is_enabled() {
+            return Ok(CompactStats::default());
+        }
+        let key = self
+            .key_source
+            .get_or_create()
+            .map_err(|e| AuditCompactError::Key(e.to_string()))?;
+
+        let now = Utc::now();
+        let max_age = Duration::days(i64::from(self.retention_days()));
+        let max_bytes = usize::try_from(self.size_cap()).unwrap_or(usize::MAX);
+
+        let log = AuditLogFile::new(self.log_path_for(vault_path));
+        let mut undecryptable: usize = 0;
+        let degraded_flag = &self.degraded;
+
+        let stats = log
+            .compact(|frames| {
+                let mut sized: Vec<SizedEvent> = Vec::with_capacity(frames.len());
+                for frame in frames {
+                    match decrypt_and_parse(&key, &frame) {
+                        Some(event) => {
+                            // Approximate encoded size: base64 of the
+                            // frame, plus newline. This is the same
+                            // shape the writer will produce, so the
+                            // size-cap accounting is exact.
+                            let encoded_len = encode_frame(&frame).len() + 1;
+                            sized.push(SizedEvent { event, encoded_len });
+                        }
+                        None => {
+                            undecryptable = undecryptable.saturating_add(1);
+                        }
+                    }
+                }
+
+                let (keep, _drop) = partition_by_retention(sized, now, max_age, max_bytes);
+
+                // Re-encrypt keepers with fresh nonces. If any individual
+                // re-encryption fails (vanishingly unlikely with a valid
+                // key) we drop that frame rather than abort — the
+                // retention pass should always converge, and dropping a
+                // single frame is preferable to refusing to compact a
+                // bloated log at all.
+                keep.into_iter()
+                    .filter_map(|s| encrypt(&key, &s.event.to_bytes()).ok())
+                    .collect()
+            })
+            .map_err(|e| {
+                degraded_flag.store(true, Ordering::SeqCst);
+                AuditCompactError::Storage(e.to_string())
+            })?;
+
+        // Flip degraded for any signal that the input log was not
+        // fully readable: AEAD-undecryptable frames the closure
+        // counted, and base64-malformed lines the storage layer
+        // surfaced via `CompactStats::malformed_lines`. Without this,
+        // a lazy compaction running before the user opens the audit
+        // panel would silently delete corrupt lines and the banner
+        // would never appear.
+        if undecryptable > 0 || stats.malformed_lines > 0 {
+            self.degraded.store(true, Ordering::SeqCst);
+        }
+
+        // Refresh the cached oldest timestamp so the next lazy-trigger
+        // check uses post-compaction state. Re-read the file rather than
+        // tracking it through the closure: the file is now smaller and
+        // the re-read is cheap.
+        self.refresh_oldest(vault_path, &key);
+
+        Ok(stats)
+    }
+
+    /// Populates the per-Vault oldest-timestamp cache from disk if it
+    /// is empty for this Vault. Idempotent and best-effort: a hit on a
+    /// previously-loaded cache returns immediately; a miss falls
+    /// through to [`AuditService::refresh_oldest`]. Called from
+    /// `try_record` so the first append per process per Vault picks up
+    /// any old frames that survived a previous session.
+    fn ensure_oldest_loaded(&self, vault_path: &Path, key: &[u8; KEY_LEN]) {
+        let cache_key = attempts_key(vault_path);
+        if let Ok(map) = self.oldest.lock() {
+            if map.contains_key(&cache_key) {
+                return;
+            }
+        } else {
+            return;
+        }
+        self.refresh_oldest(vault_path, key);
+    }
+
+    /// Recomputes and caches the oldest timestamp on disk for
+    /// `vault_path`. Best-effort: failures (key unavailable, file
+    /// unreadable, no decryptable frames) clear the cache entry rather
+    /// than poisoning it with stale data.
+    fn refresh_oldest(&self, vault_path: &Path, key: &[u8; KEY_LEN]) {
+        let log = AuditLogFile::new(self.log_path_for(vault_path));
+        let Ok(outcome) = log.read_all() else {
+            if let Ok(mut map) = self.oldest.lock() {
+                map.remove(&attempts_key(vault_path));
+            }
+            return;
+        };
+        let oldest_ts = outcome
+            .frames
+            .iter()
+            .filter_map(|f| decrypt_and_parse(key, f))
+            .map(|e| event_timestamp(&e))
+            .min();
+        if let Ok(mut map) = self.oldest.lock() {
+            match oldest_ts {
+                Some(ts) => {
+                    map.insert(attempts_key(vault_path), ts);
+                }
+                None => {
+                    map.remove(&attempts_key(vault_path));
+                }
+            }
+        }
+    }
 }
 
 fn attempts_key(vault_path: &Path) -> PathBuf {
@@ -335,6 +618,19 @@ fn attempts_key(vault_path: &Path) -> PathBuf {
 fn decrypt_and_parse(key: &[u8; KEY_LEN], frame: &[u8]) -> Option<AuditEvent> {
     let plaintext = decrypt(key, frame).ok()?;
     AuditEvent::from_bytes(&plaintext).ok()
+}
+
+fn event_timestamp(event: &AuditEvent) -> DateTime<Utc> {
+    match event {
+        AuditEvent::VaultUnlockFailed { timestamp, .. }
+        | AuditEvent::VaultOpened { timestamp }
+        | AuditEvent::VaultLocked { timestamp, .. }
+        | AuditEvent::EntryPasswordRevealed { timestamp, .. }
+        | AuditEvent::EntryPasswordCopied { timestamp, .. }
+        | AuditEvent::EntryProtectedFieldRevealed { timestamp, .. }
+        | AuditEvent::PreferencesSecurityChanged { timestamp, .. }
+        | AuditEvent::AuditCleared { timestamp } => *timestamp,
+    }
 }
 
 #[cfg(test)]
@@ -882,6 +1178,271 @@ mod tests {
 
         let result = service.clear(&vault);
         assert!(result.is_err(), "clear under unwritable dir must error");
+    }
+
+    /// Acceptance-criteria integration test for issue #222: appending
+    /// many events spanning *more than* the configured `retentionDays`
+    /// and then forcing a compaction must leave only the in-window
+    /// events on disk, in original append order, decryptable end-to-end.
+    /// This is the end-to-end proof that the pure partition function,
+    /// the storage rewrite, and the service-level glue actually compose.
+    #[test]
+    fn compact_drops_events_older_than_retention_and_keeps_the_rest_in_order() {
+        use chrono::Duration;
+        let (service, _dir, vault) = fresh_service();
+        service.set_retention_days(30);
+        // Suspend the lazy trigger so setup `record` calls don't
+        // silently pre-compact behind the explicit compact assertion.
+        service.set_lazy_trigger_enabled_for_test(false);
+
+        let now = Utc::now();
+        // 100 events: half outside the 30-day window, half inside.
+        // Append timestamps in chronological order so the in-window
+        // remainder must come back from `read` in the same order.
+        for i in 0..50 {
+            let evt = AuditEvent::VaultUnlockFailed {
+                timestamp: now - Duration::days(60) + Duration::seconds(i),
+                attempt_count: u32::try_from(i + 1).unwrap(),
+            };
+            service.record(&vault, &evt);
+        }
+        for i in 0..50 {
+            let evt = AuditEvent::VaultUnlockFailed {
+                timestamp: now - Duration::days(5) + Duration::seconds(i),
+                attempt_count: u32::try_from(i + 1).unwrap(),
+            };
+            service.record(&vault, &evt);
+        }
+
+        let stats = service.compact(&vault).expect("compact");
+        assert_eq!(stats.kept, 50);
+        assert_eq!(stats.dropped, 50);
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 50);
+        // Every surviving event must be inside the 30-day window and in
+        // append order — the partition pass preserves chronological
+        // order so the audit panel reads as a continuous stream.
+        let cutoff = now - Duration::days(30);
+        for (i, evt) in events.iter().enumerate() {
+            match evt {
+                AuditEvent::VaultUnlockFailed {
+                    timestamp,
+                    attempt_count,
+                } => {
+                    assert!(*timestamp >= cutoff, "kept event {i} is past the cutoff");
+                    assert_eq!(*attempt_count, u32::try_from(i + 1).unwrap());
+                }
+                other => panic!("unexpected variant in kept log: {other:?}"),
+            }
+        }
+    }
+
+    /// Idempotency: a second compact run touches nothing because the
+    /// first pass already left only in-window events behind.
+    #[test]
+    fn compact_is_idempotent_against_an_already_compact_log() {
+        use chrono::Duration;
+        let (service, _dir, vault) = fresh_service();
+        service.set_retention_days(30);
+        service.set_lazy_trigger_enabled_for_test(false);
+
+        let now = Utc::now();
+        for i in 0..5 {
+            let evt = AuditEvent::VaultUnlockFailed {
+                timestamp: now - Duration::days(60) + Duration::seconds(i),
+                attempt_count: u32::try_from(i + 1).unwrap(),
+            };
+            service.record(&vault, &evt);
+        }
+        for i in 0..5 {
+            let evt = AuditEvent::VaultUnlockFailed {
+                timestamp: now - Duration::hours(1) + Duration::seconds(i),
+                attempt_count: u32::try_from(i + 1).unwrap(),
+            };
+            service.record(&vault, &evt);
+        }
+
+        let first = service.compact(&vault).expect("first compact");
+        assert_eq!(first.dropped, 5);
+
+        let second = service.compact(&vault).expect("second compact");
+        assert_eq!(second.dropped, 0, "second compact must drop nothing");
+        assert_eq!(second.kept, 5);
+    }
+
+    /// Lazy trigger #1: when the oldest event already on disk is older
+    /// than `retentionDays`, the very next `record` call automatically
+    /// runs a compaction pass — the user never has to manually trim and
+    /// the audit panel never accumulates ancient events. Verified by
+    /// configuring a 1-day retention, backdating one event, then
+    /// recording a fresh one and reading back the post-trigger state.
+    #[test]
+    fn record_triggers_compaction_when_cached_oldest_is_past_retention() {
+        use chrono::Duration;
+        let (service, _dir, vault) = fresh_service();
+        service.set_retention_days(1);
+
+        let now = Utc::now();
+        let stale = AuditEvent::VaultUnlockFailed {
+            timestamp: now - Duration::days(3),
+            attempt_count: 1,
+        };
+        let fresh = AuditEvent::VaultUnlockFailed {
+            timestamp: now,
+            attempt_count: 2,
+        };
+
+        service.record(&vault, &stale);
+        // After the stale append the cached-oldest is 3 days ago. The
+        // next record's lazy-trigger check should fire and rewrite the
+        // log without the stale entry.
+        service.record(&vault, &fresh);
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1, "compaction must drop the stale entry");
+        match &events[0] {
+            AuditEvent::VaultUnlockFailed { attempt_count, .. } => {
+                assert_eq!(*attempt_count, 2);
+            }
+            other => panic!("expected VaultUnlockFailed, got {other:?}"),
+        }
+    }
+
+    /// Regression: a lazy compaction running before the user opens the
+    /// audit panel must not silently delete a malformed base64 line
+    /// without flipping `degraded`. Otherwise the corrupt log would be
+    /// rewritten clean and the user would never know.
+    #[test]
+    fn compact_flips_degraded_when_input_log_has_malformed_lines() {
+        use std::io::Write;
+        let (service, _dir, vault) = fresh_service();
+        service.set_lazy_trigger_enabled_for_test(false);
+        service.record(&vault, &unlock_failed_event(1));
+
+        // Splice a non-base64 line directly into the log file so the
+        // compact-time reader sees it.
+        let log_path = service.log_path_for(&vault);
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&log_path)
+            .expect("open log for splice");
+        f.write_all(b"!!!not-base64!!!\n").expect("splice");
+        drop(f);
+        assert!(!service.is_degraded(), "precondition: not yet degraded");
+
+        service.compact(&vault).expect("compact");
+        assert!(
+            service.is_degraded(),
+            "compact must flip degraded when input had malformed lines"
+        );
+    }
+
+    /// Regression: after a process restart, the per-Vault oldest-timestamp
+    /// cache starts empty. A fresh append's `Utc::now()` would otherwise
+    /// be the only known timestamp and the age trigger would *never*
+    /// fire against the stale frames already on disk — age retention
+    /// would silently stop working until the size cap eventually
+    /// happened to trip. Seed the cache from disk on first use so the
+    /// first append for a Vault this session correctly notices that
+    /// the existing log has aged out.
+    #[test]
+    fn restart_with_stale_on_disk_log_triggers_compaction_on_first_record() {
+        use crate::services::audit::key::InMemoryAuditKey;
+        use chrono::Duration;
+        use tempfile::tempdir;
+
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("vault.kdbx");
+        std::fs::write(&vault, b"x").expect("write vault");
+        // Both services share one key source so the second one can
+        // decrypt frames the first one wrote — this is the in-test
+        // equivalent of a `FileBackedAuditKey` surviving a process
+        // restart.
+        let key: Arc<dyn crate::services::audit::key::AuditKey> = Arc::new(InMemoryAuditKey::new());
+
+        // Session 1: write a stale event into disk under a generous
+        // retention, then drop the service to simulate process exit.
+        {
+            let service = AuditService::new(dir.path().join("audit"), Arc::clone(&key));
+            service.set_retention_days(365);
+            service.set_lazy_trigger_enabled_for_test(false);
+            let stale = AuditEvent::VaultUnlockFailed {
+                timestamp: Utc::now() - Duration::days(60),
+                attempt_count: 1,
+            };
+            service.record(&vault, &stale);
+        }
+
+        // Session 2: brand-new service against the same audit dir.
+        // Configure a 1-day retention; the lazy trigger is enabled by
+        // default. The first record this session should seed the
+        // oldest-cache from disk, see the 60-day-old frame, and run
+        // compaction so the stale entry is gone.
+        let service = AuditService::new(dir.path().join("audit"), Arc::clone(&key));
+        service.set_retention_days(1);
+        service.record(
+            &vault,
+            &AuditEvent::VaultUnlockFailed {
+                timestamp: Utc::now(),
+                attempt_count: 2,
+            },
+        );
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(
+            events.len(),
+            1,
+            "stale on-disk event must be aged out on first record after restart"
+        );
+        match &events[0] {
+            AuditEvent::VaultUnlockFailed { attempt_count, .. } => {
+                assert_eq!(*attempt_count, 2);
+            }
+            other => panic!("expected VaultUnlockFailed, got {other:?}"),
+        }
+    }
+
+    /// Lazy trigger #2: when the on-disk file crosses the size cap, the
+    /// next `record` automatically compacts. Tested with a synthetic
+    /// small cap so we don't have to actually write 10 MiB.
+    #[test]
+    fn record_triggers_compaction_when_file_exceeds_size_cap() {
+        let (service, _dir, vault) = fresh_service();
+        // Cap small enough that two appends will push it past — each
+        // base64 frame is roughly 90+ bytes. The third record's trigger
+        // check must rewrite the file.
+        service.set_size_cap_for_test(100);
+
+        let now = Utc::now();
+        for i in 1..=3u32 {
+            service.record(
+                &vault,
+                &AuditEvent::VaultUnlockFailed {
+                    timestamp: now,
+                    attempt_count: i,
+                },
+            );
+        }
+
+        // After the size-cap trigger, the kept set must satisfy the cap
+        // OR be the single surviving event (per the floor rule).
+        let log_path = service.log_path_for(&vault);
+        let size = std::fs::metadata(&log_path).map_or(0, |m| m.len());
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert!(
+            size <= 100 || events.len() == 1,
+            "post-trigger size {size} must respect cap or be the single-event floor (events={})",
+            events.len()
+        );
+        // And the LATEST event must be among the survivors — the size
+        // cap drops oldest-first, never the just-appended event.
+        match events.last().expect("at least one event") {
+            AuditEvent::VaultUnlockFailed { attempt_count, .. } => {
+                assert_eq!(*attempt_count, 3);
+            }
+            other => panic!("expected VaultUnlockFailed, got {other:?}"),
+        }
     }
 
     #[test]
