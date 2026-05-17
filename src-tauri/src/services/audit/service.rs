@@ -1240,8 +1240,7 @@ mod tests {
         // decrypt frames the first one wrote — this is the in-test
         // equivalent of a `FileBackedAuditKey` surviving a process
         // restart.
-        let key: Arc<dyn crate::services::audit::key::AuditKey> =
-            Arc::new(InMemoryAuditKey::new());
+        let key: Arc<dyn crate::services::audit::key::AuditKey> = Arc::new(InMemoryAuditKey::new());
 
         // Session 1: write a stale event into disk under a generous
         // retention, then drop the service to simulate process exit.
