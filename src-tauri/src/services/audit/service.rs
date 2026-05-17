@@ -251,6 +251,20 @@ impl AuditService {
         self.record(vault_path, &event);
     }
 
+    /// Appends one `preferences.security_changed` event naming the App
+    /// Preference leaf that flipped. Called by the settings command once
+    /// per changed allowlisted leaf, fanned out across every currently-
+    /// open Vault — the audit log is per-Vault, so a global preference
+    /// change has to land in each open Vault's log to be visible from
+    /// the Audit Log panel. Infallible by contract.
+    pub fn record_preferences_security_changed(&self, vault_path: &Path, setting_name: &str) {
+        let event = AuditEvent::PreferencesSecurityChanged {
+            timestamp: Utc::now(),
+            setting_name: setting_name.to_string(),
+        };
+        self.record(vault_path, &event);
+    }
+
     /// Resets the per-Vault failed-unlock counter — called on successful
     /// open/unlock so the next failure starts the count back at 1.
     pub fn reset_unlock_attempts(&self, vault_path: &Path) {
@@ -494,6 +508,23 @@ mod tests {
                 assert_eq!(entry_id, "uuid-1");
             }
             other => panic!("expected EntryPasswordRevealed, got {other:?}"),
+        }
+        assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn record_preferences_security_changed_appends_exactly_one_event() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_preferences_security_changed(&vault, "security.preventScreenCapture");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::PreferencesSecurityChanged { setting_name, .. } => {
+                assert_eq!(setting_name, "security.preventScreenCapture");
+            }
+            other => panic!("expected PreferencesSecurityChanged, got {other:?}"),
         }
         assert!(!service.is_degraded());
     }

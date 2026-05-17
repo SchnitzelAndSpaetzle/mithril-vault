@@ -336,6 +336,7 @@ export const AuditEventKindSchema = z.enum([
   "entryPasswordRevealed",
   "entryPasswordCopied",
   "entryProtectedFieldRevealed",
+  "preferencesSecurityChanged",
 ]);
 export type AuditEventKind = z.infer<typeof AuditEventKindSchema>;
 
@@ -349,12 +350,35 @@ export const AuditReasonSchema = z.enum([
 ]);
 export type AuditReason = z.infer<typeof AuditReasonSchema>;
 
+/// Allowlisted App Preference leaves whose flips surface as
+/// `preferencesSecurityChanged` events. Pinning this as a union (not a
+/// free string) ties the wire identifier to the i18n key registry, so a
+/// new allowlist entry on the backend fails the frontend type-check
+/// until its label is added under `audit.settingName.*`.
+export const SecuritySettingChangeNameSchema = z.enum([
+  "security.clipboardClearTimeout",
+  "security.preventScreenCapture",
+  "security.autoDownloadFavicons",
+  "security.allowThirdPartyFaviconFallbacks",
+  "security.autoLockTimeout",
+  "audit.enabled",
+  "audit.retentionDays",
+]);
+export type SecuritySettingChangeName = z.infer<
+  typeof SecuritySettingChangeNameSchema
+>;
+
 export const AuditEventSchema = z.object({
   kind: AuditEventKindSchema,
   timestamp: z.string().min(1),
   attemptCount: z.number().int().positive().nullable().optional(),
   reason: AuditReasonSchema.nullable().optional(),
   entryId: z.string().min(1).nullable().optional(),
+  /// Dot-pathed App Preference leaf for `preferencesSecurityChanged`
+  /// events (e.g. `security.preventScreenCapture`). Old/new values are
+  /// deliberately absent from the wire — the on-disk log records THAT a
+  /// flip happened, not what it flipped to.
+  settingName: SecuritySettingChangeNameSchema.nullable().optional(),
 });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 

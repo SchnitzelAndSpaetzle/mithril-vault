@@ -3,8 +3,9 @@
 use crate::dto::error::AppError;
 use crate::services::audit::AuditService;
 use crate::services::kdbx::KdbxService;
-use crate::services::settings::SettingsService;
+use crate::services::settings::{diff_security_changes, SettingsService};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::Arc;
 use tauri::State;
 
@@ -396,6 +397,28 @@ pub async fn get_app_preferences(
     settings_service.get_app_preferences()
 }
 
+/// Fans changed allowlisted leaves out across every currently-open Vault,
+/// emitting one `preferences.security_changed` audit record per
+/// (vault, leaf) pair. Extracted from `update_app_preferences` so the
+/// fan-out logic can be unit-tested without a Tauri runtime.
+///
+/// The audit log is per-Vault (one file per canonicalized vault path),
+/// while preferences are global — a flip therefore has to land in each
+/// open Vault's log to surface in the Audit Log panel. When no Vault is
+/// open the call is a no-op: the preference flip still persists, but
+/// there is no per-Vault log to write to.
+pub(crate) fn fan_out_security_changes(
+    audit_service: &AuditService,
+    open_vault_paths: &[String],
+    changed_leaves: &[&'static str],
+) {
+    for path in open_vault_paths {
+        for leaf in changed_leaves {
+            audit_service.record_preferences_security_changed(Path::new(path), leaf);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn update_app_preferences(
     new_preferences: AppPreferences,
@@ -403,9 +426,19 @@ pub async fn update_app_preferences(
     kdbx_service: State<'_, Arc<KdbxService>>,
     audit_service: State<'_, Arc<AuditService>>,
 ) -> Result<(), AppError> {
+    let old_preferences = settings_service.get_app_preferences()?;
     settings_service.update_app_preferences(&new_preferences)?;
-    kdbx_service.set_backup_settings(new_preferences.backups)?;
+    kdbx_service.set_backup_settings(new_preferences.backups.clone())?;
     audit_service.set_enabled(new_preferences.audit.enabled);
+
+    let changed_leaves = diff_security_changes(&old_preferences, &new_preferences);
+    if !changed_leaves.is_empty() {
+        let open_paths: Vec<String> = kdbx_service
+            .list_open_databases()
+            .map(|dbs| dbs.into_iter().map(|d| d.path).collect())
+            .unwrap_or_default();
+        fan_out_security_changes(&audit_service, &open_paths, &changed_leaves);
+    }
     Ok(())
 }
 
@@ -462,4 +495,85 @@ pub async fn clear_recent_databases(
     settings_service: State<'_, Arc<SettingsService>>,
 ) -> Result<(), AppError> {
     settings_service.clear_recent_databases()
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+mod fan_out_security_changes_tests {
+    use super::fan_out_security_changes;
+    use crate::services::audit::format::AuditEvent;
+    use crate::services::audit::key::InMemoryAuditKey;
+    use crate::services::audit::{AuditFilter, AuditService};
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    /// AC: each (open vault × changed leaf) pair produces exactly one
+    /// `preferences.security_changed` record. Two opens × two leaves
+    /// must land four records (two per file), and each leaf must reach
+    /// each vault — proves the fan-out is the cartesian product, not a
+    /// per-call-once shortcut.
+    #[test]
+    fn each_vault_gets_one_event_per_leaf() {
+        let dir = tempdir().expect("tempdir");
+        let vault_a = dir.path().join("a.kdbx");
+        let vault_b = dir.path().join("b.kdbx");
+        std::fs::write(&vault_a, b"a").expect("write a");
+        std::fs::write(&vault_b, b"b").expect("write b");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+        let opens = vec![
+            vault_a.to_string_lossy().into_owned(),
+            vault_b.to_string_lossy().into_owned(),
+        ];
+        let leaves = ["security.preventScreenCapture", "audit.retentionDays"];
+        fan_out_security_changes(&service, &opens, &leaves);
+
+        for vault in [&vault_a, &vault_b] {
+            let events = service.read(vault, &AuditFilter::default()).expect("read");
+            assert_eq!(events.len(), 2, "two leaves => two events per vault");
+            let names: Vec<&str> = events
+                .iter()
+                .map(|e| match e {
+                    AuditEvent::PreferencesSecurityChanged { setting_name, .. } => {
+                        setting_name.as_str()
+                    }
+                    other => panic!("unexpected variant: {other:?}"),
+                })
+                .collect();
+            assert!(names.contains(&"security.preventScreenCapture"));
+            assert!(names.contains(&"audit.retentionDays"));
+        }
+    }
+
+    /// When no Vault is open, the preference flip still persists but
+    /// nothing reaches the audit log. Pin the no-op explicitly so a
+    /// future change can't quietly start writing to a global file (the
+    /// ADR rejects a global single-stream log on privacy grounds).
+    #[test]
+    fn empty_open_vault_list_is_a_no_op() {
+        let dir = tempdir().expect("tempdir");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+        fan_out_security_changes(&service, &[], &["security.preventScreenCapture"]);
+        assert!(!service.is_degraded());
+        // No vault file should have been created under the audit dir.
+        // tempdir() left it nonexistent, so any creation here would be loud.
+        assert!(!dir.path().join("audit").exists());
+    }
+
+    /// Empty leaf set with N open vaults is also a no-op — happens on
+    /// every preference save where nothing audited changed (e.g. font
+    /// size edit). Must not touch the per-Vault log files.
+    #[test]
+    fn empty_leaf_list_is_a_no_op() {
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("v.kdbx");
+        std::fs::write(&vault, b"v").expect("write");
+        let service =
+            AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+        fan_out_security_changes(&service, &[vault.to_string_lossy().into_owned()], &[]);
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert!(events.is_empty());
+    }
 }

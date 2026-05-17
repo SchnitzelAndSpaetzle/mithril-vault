@@ -33,13 +33,27 @@
       "vaultLocked": "Vault locked",
       "entryPasswordRevealed": "Password revealed",
       "entryPasswordCopied": "Password copied",
-      "entryProtectedFieldRevealed": "Protected field revealed"
+      "entryProtectedFieldRevealed": "Protected field revealed",
+      "preferencesSecurityChanged": "Security preference changed"
     },
     "reason": {
       "manual": "Manual",
       "autoLock": "Auto-lock",
       "appQuit": "App quit",
       "screenLock": "Screen lock"
+    },
+    "settingName": {
+      "security": {
+        "clipboardClearTimeout": "Clipboard clear timeout",
+        "preventScreenCapture": "Prevent screen capture",
+        "autoDownloadFavicons": "Auto-download favicons",
+        "allowThirdPartyFaviconFallbacks": "Allow third-party favicon fallbacks",
+        "autoLockTimeout": "Auto-lock timeout"
+      },
+      "audit": {
+        "enabled": "Audit logging enabled",
+        "retentionDays": "Audit retention (days)"
+      }
     }
   },
   "settings": {

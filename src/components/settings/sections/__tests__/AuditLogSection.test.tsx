@@ -396,6 +396,35 @@ describe("AuditLogSection", () => {
     });
   });
 
+  it("renders a preferences.security_changed row with the localized setting-name label", async () => {
+    listMock.mockResolvedValueOnce({
+      events: [
+        {
+          kind: "preferencesSecurityChanged",
+          timestamp: "2026-05-17T10:00:00.000Z",
+          settingName: "security.preventScreenCapture",
+        },
+      ],
+      degraded: false,
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    const row = await screen.findByRole("listitem");
+    expect(row.getAttribute("data-kind")).toBe("preferencesSecurityChanged");
+    expect(row.textContent).toContain("audit.kind.preferencesSecurityChanged");
+    // i18n mock echoes keys; the row must render the per-setting label key
+    // so each allowlisted leaf gets a human-readable name in production.
+    expect(row.textContent).toContain(
+      "audit.settingName.security.preventScreenCapture"
+    );
+  });
+
   it("renders the loadError state when the backend fails", async () => {
     listMock.mockRejectedValueOnce(new Error("boom"));
 
