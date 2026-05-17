@@ -8,8 +8,8 @@ pub mod utils;
 
 use crate::dto::error::AppError;
 use commands::{
-    add_recent_database, clear_clipboard, clear_entry_custom_icon, clear_recent_databases,
-    clear_session_key, close_database, copy_password_to_clipboard,
+    add_recent_database, clear_audit_log, clear_clipboard, clear_entry_custom_icon,
+    clear_recent_databases, clear_session_key, close_database, copy_password_to_clipboard,
     copy_protected_field_to_clipboard, copy_text_to_clipboard, create_database, create_entry,
     create_group, create_manual_backup, delete_backup, delete_entry, delete_group, delete_tag,
     fetch_entry_favicon, generate_keyfile, generate_passphrase, generate_password,
@@ -91,6 +91,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             generate_password,
             generate_passphrase,
             get_audit_events,
+            clear_audit_log,
             get_app_preferences,
             update_app_preferences,
             reset_app_preferences,

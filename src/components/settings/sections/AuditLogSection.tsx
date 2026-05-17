@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { queryKeys } from "@/lib/query-keys";
 import { audit, entries as entriesIpc } from "@/lib/tauri";
@@ -85,6 +88,7 @@ export function AuditLogSection({
 }: Readonly<AuditLogSectionProps>) {
   const { t } = useTranslation();
   const resolveTitle = useResolveEntryTitle(dbId, isLocked);
+  const queryClient = useQueryClient();
 
   const query = useQuery<AuditEventsResponse, Error>({
     queryKey: queryKeys.audit.list(dbId ?? "none"),
@@ -92,7 +96,29 @@ export function AuditLogSection({
     enabled: Boolean(dbId),
   });
 
+  const clearMutation = useMutation<void, Error, string>({
+    mutationFn: (vaultPath) => audit.clear(vaultPath),
+    onSuccess: (_data, vaultPath) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.audit.list(vaultPath),
+      });
+    },
+    onError: (error) => {
+      toast.error(t("audit.clearError", { error: String(error) }));
+    },
+  });
+
   const data = query.data ?? EMPTY_RESPONSE;
+
+  async function handleClear() {
+    if (!dbId) return;
+    const confirmed = await ask(t("audit.clearConfirm"), {
+      title: t("audit.clearConfirmTitle"),
+      kind: "warning",
+    });
+    if (!confirmed) return;
+    clearMutation.mutate(dbId);
+  }
 
   return (
     <SettingsSection
@@ -100,6 +126,21 @@ export function AuditLogSection({
       title={t("audit.title")}
       description={t("audit.description")}
     >
+      {dbId ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              void handleClear();
+            }}
+            disabled={clearMutation.isPending}
+          >
+            {t("audit.clearButton")}
+          </Button>
+        </div>
+      ) : null}
       {!dbId ? (
         <p className="text-sm text-muted-foreground">
           {t("audit.emptyNoVault")}

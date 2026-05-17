@@ -18,6 +18,35 @@
   "clipboard": {
     "countdown": "Le presse-papiers s'efface dans {{seconds}}s"
   },
+  "audit": {
+    "title": "Journal d'audit",
+    "description": "Événements liés à la sécurité enregistrés sur cet appareil pour le coffre actuellement ouvert.",
+    "empty": "Aucun événement d'audit pour ce coffre.",
+    "emptyNoVault": "Ouvrez un coffre pour voir son journal d'audit.",
+    "loadError": "Échec du chargement des événements d'audit : {{error}}",
+    "degradedWarning": "Le sous-système d'audit a signalé une ou plusieurs erreurs internes durant cette session. Certains événements peuvent manquer.",
+    "attemptCount_one": "Tentative {{count}}",
+    "attemptCount_other": "Tentative {{count}}",
+    "kind": {
+      "vaultUnlockFailed": "Tentative de déverrouillage échouée",
+      "vaultOpened": "Coffre ouvert",
+      "vaultLocked": "Coffre verrouillé",
+      "entryPasswordRevealed": "Mot de passe affiché",
+      "entryPasswordCopied": "Mot de passe copié",
+      "entryProtectedFieldRevealed": "Champ protégé affiché",
+      "auditCleared": "Journal d'audit effacé"
+    },
+    "reason": {
+      "manual": "Manuel",
+      "autoLock": "Verrouillage automatique",
+      "appQuit": "Quitter l'application",
+      "screenLock": "Verrouillage d'écran"
+    },
+    "clearButton": "Effacer le journal d'audit",
+    "clearConfirmTitle": "Effacer le journal d'audit ?",
+    "clearConfirm": "Cela supprime tous les événements d'audit enregistrés sur cet appareil pour le coffre ouvert. Une seule entrée « Journal d'audit effacé » sera conservée pour que l'effacement reste visible.",
+    "clearError": "Échec de l'effacement du journal d'audit : {{error}}"
+  },
   "settings": {
     "title": "Paramètres",
     "description": "Préférences de l'application et configuration de la base de données.",
