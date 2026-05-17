@@ -46,6 +46,11 @@ pub enum AuditEvent {
         timestamp: DateTime<Utc>,
         entry_id: String,
     },
+    #[serde(rename = "preferences.security_changed")]
+    PreferencesSecurityChanged {
+        timestamp: DateTime<Utc>,
+        setting_name: String,
+    },
     #[serde(rename = "audit.cleared")]
     AuditCleared { timestamp: DateTime<Utc> },
 }
@@ -245,6 +250,47 @@ mod tests {
         assert!(
             !json.contains("attempt_count"),
             "audit.cleared must not carry attempt_count: {json}",
+        );
+    }
+
+    #[test]
+    fn preferences_security_changed_round_trips_with_setting_name() {
+        let event = AuditEvent::PreferencesSecurityChanged {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 17, 9, 30, 0).unwrap(),
+            setting_name: "security.preventScreenCapture".to_string(),
+        };
+        let parsed = AuditEvent::from_bytes(&event.to_bytes()).expect("parse");
+        assert_eq!(parsed, event);
+
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(
+            json.contains("\"kind\":\"preferences.security_changed\""),
+            "kind must serialize dot-namespaced, got: {json}"
+        );
+        assert!(
+            json.contains("\"setting_name\":\"security.preventScreenCapture\""),
+            "setting_name must serialize verbatim, got: {json}"
+        );
+    }
+
+    /// The PRD is explicit: we record THAT a flip happened, not what it
+    /// flipped TO. Pin the wire contract — adding an old/new field later
+    /// has privacy consequences and must be a conscious decision, not a
+    /// stray refactor.
+    #[test]
+    fn preferences_security_changed_wire_omits_old_and_new_values() {
+        let event = AuditEvent::PreferencesSecurityChanged {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 17, 9, 30, 0).unwrap(),
+            setting_name: "security.preventScreenCapture".to_string(),
+        };
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(
+            !json.contains("old_value") && !json.contains("oldValue"),
+            "old value must never appear on the wire, got: {json}"
+        );
+        assert!(
+            !json.contains("new_value") && !json.contains("newValue"),
+            "new value must never appear on the wire, got: {json}"
         );
     }
 

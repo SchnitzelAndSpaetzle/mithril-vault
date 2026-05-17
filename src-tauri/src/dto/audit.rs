@@ -18,6 +18,7 @@ pub enum AuditEventKindDto {
     EntryPasswordRevealed,
     EntryPasswordCopied,
     EntryProtectedFieldRevealed,
+    PreferencesSecurityChanged,
     AuditCleared,
 }
 
@@ -58,6 +59,12 @@ pub struct AuditEventDto {
     /// on-disk log can never carry entry titles outside the Vault.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry_id: Option<String>,
+    /// Dot-pathed App Preference leaf (e.g. `security.preventScreenCapture`)
+    /// for `preferences.security_changed`. Old/new values are deliberately
+    /// not carried — the on-disk audit log records that a flip happened,
+    /// not what it flipped to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setting_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -94,6 +101,7 @@ impl From<AuditEvent> for AuditEventDto {
                 attempt_count: Some(attempt_count),
                 reason: None,
                 entry_id: None,
+                setting_name: None,
             },
             AuditEvent::VaultOpened { timestamp } => Self {
                 kind: AuditEventKindDto::VaultOpened,
@@ -101,6 +109,7 @@ impl From<AuditEvent> for AuditEventDto {
                 attempt_count: None,
                 reason: None,
                 entry_id: None,
+                setting_name: None,
             },
             AuditEvent::VaultLocked { timestamp, reason } => Self {
                 kind: AuditEventKindDto::VaultLocked,
@@ -108,6 +117,18 @@ impl From<AuditEvent> for AuditEventDto {
                 attempt_count: None,
                 reason: Some(reason.into()),
                 entry_id: None,
+                setting_name: None,
+            },
+            AuditEvent::PreferencesSecurityChanged {
+                timestamp,
+                setting_name,
+            } => Self {
+                kind: AuditEventKindDto::PreferencesSecurityChanged,
+                timestamp,
+                attempt_count: None,
+                reason: None,
+                entry_id: None,
+                setting_name: Some(setting_name),
             },
             AuditEvent::EntryPasswordRevealed {
                 timestamp,
@@ -118,6 +139,7 @@ impl From<AuditEvent> for AuditEventDto {
                 attempt_count: None,
                 reason: None,
                 entry_id: Some(entry_id),
+                setting_name: None,
             },
             AuditEvent::EntryPasswordCopied {
                 timestamp,
@@ -128,6 +150,7 @@ impl From<AuditEvent> for AuditEventDto {
                 attempt_count: None,
                 reason: None,
                 entry_id: Some(entry_id),
+                setting_name: None,
             },
             AuditEvent::EntryProtectedFieldRevealed {
                 timestamp,
@@ -138,6 +161,7 @@ impl From<AuditEvent> for AuditEventDto {
                 attempt_count: None,
                 reason: None,
                 entry_id: Some(entry_id),
+                setting_name: None,
             },
             AuditEvent::AuditCleared { timestamp } => Self {
                 kind: AuditEventKindDto::AuditCleared,
@@ -145,6 +169,7 @@ impl From<AuditEvent> for AuditEventDto {
                 attempt_count: None,
                 reason: None,
                 entry_id: None,
+                setting_name: None,
             },
         }
     }
@@ -164,6 +189,7 @@ mod tests {
             attempt_count: Some(2),
             reason: None,
             entry_id: None,
+            setting_name: None,
         };
         let json = serde_json::to_string(&dto).expect("ser");
         assert!(json.contains("\"vaultUnlockFailed\""));
@@ -276,6 +302,43 @@ mod tests {
         assert!(
             json.contains("\"auditCleared\""),
             "kind must serialize as camelCase, got: {json}",
+        );
+    }
+
+    #[test]
+    fn preferences_security_changed_event_converts_to_dto_with_camel_case_kind_and_setting_name() {
+        let ts = Utc.with_ymd_and_hms(2026, 5, 17, 10, 0, 0).unwrap();
+        let dto: AuditEventDto = AuditEvent::PreferencesSecurityChanged {
+            timestamp: ts,
+            setting_name: "security.preventScreenCapture".to_string(),
+        }
+        .into();
+
+        assert!(matches!(
+            dto.kind,
+            AuditEventKindDto::PreferencesSecurityChanged
+        ));
+        assert_eq!(dto.timestamp, ts);
+        assert_eq!(
+            dto.setting_name.as_deref(),
+            Some("security.preventScreenCapture")
+        );
+        assert!(dto.entry_id.is_none());
+        assert!(dto.attempt_count.is_none());
+        assert!(dto.reason.is_none());
+
+        let json = serde_json::to_string(&dto).expect("ser");
+        assert!(
+            json.contains("\"preferencesSecurityChanged\""),
+            "kind must serialize as camelCase, got: {json}"
+        );
+        assert!(
+            json.contains("\"settingName\":\"security.preventScreenCapture\""),
+            "settingName must be camelCase on the wire, got: {json}"
+        );
+        assert!(
+            !json.contains("oldValue") && !json.contains("newValue"),
+            "no old/new values must reach the wire, got: {json}"
         );
     }
 

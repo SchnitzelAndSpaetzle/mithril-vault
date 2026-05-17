@@ -407,6 +407,34 @@ impl AuditService {
         self.record(vault_path, &event);
     }
 
+    /// Appends one `preferences.security_changed` event naming the App
+    /// Preference leaf that flipped. Called by the settings command once
+    /// per changed allowlisted leaf, fanned out across every currently-
+    /// open Vault — the audit log is per-Vault, so a global preference
+    /// change has to land in each open Vault's log to be visible from
+    /// the Audit Log panel. Infallible by contract.
+    ///
+    /// Forced-write: bypasses the master `is_enabled()` gate because
+    /// this method's event IS the user's transition between gated and
+    /// ungated states. Going through [`AuditService::record`] would
+    /// lose the disable event the moment the new "off" state is
+    /// persisted; flipping the gate on process-wide for the duration
+    /// of the fan-out would let unrelated concurrent events (entry
+    /// reveals, failed unlocks, …) from other Tauri commands slip
+    /// through the same `AuditService`. The caller
+    /// (`commands::settings::apply_preference_security_audit`)
+    /// already gates whether to call us at all by looking at logging
+    /// state on both ends of the transition.
+    pub fn record_preferences_security_changed(&self, vault_path: &Path, setting_name: &str) {
+        let event = AuditEvent::PreferencesSecurityChanged {
+            timestamp: Utc::now(),
+            setting_name: setting_name.to_string(),
+        };
+        if self.try_record(vault_path, &event).is_err() {
+            self.degraded.store(true, Ordering::SeqCst);
+        }
+    }
+
     /// Wipes the per-Vault audit log and leaves behind exactly one
     /// `audit.cleared` event so the wipe is never silent. The storage
     /// layer performs the rewrite atomically (temp file + rename under
@@ -821,6 +849,59 @@ mod tests {
             other => panic!("expected EntryPasswordRevealed, got {other:?}"),
         }
         assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn record_preferences_security_changed_appends_exactly_one_event() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_preferences_security_changed(&vault, "security.preventScreenCapture");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::PreferencesSecurityChanged { setting_name, .. } => {
+                assert_eq!(setting_name, "security.preventScreenCapture");
+            }
+            other => panic!("expected PreferencesSecurityChanged, got {other:?}"),
+        }
+        assert!(!service.is_degraded());
+    }
+
+    /// Follow-up review finding on #221: the preference-transition
+    /// event is itself the user's flip between gated and ungated
+    /// states. Routing it through the standard `record` gate would
+    /// lose the disable event (gate just flipped off); forcing the
+    /// gate on process-wide would leak unrelated concurrent events
+    /// from other Tauri commands. Force-write is the narrow fix.
+    /// The caller (`commands::settings::apply_preference_security_audit`)
+    /// gates "should we call this at all" using both ends of the
+    /// transition, so a user who has audit off at both ends still
+    /// records nothing.
+    #[test]
+    fn record_preferences_security_changed_bypasses_the_master_gate() {
+        let (service, _dir, vault) = fresh_service();
+        service.set_enabled(false);
+
+        service.record_preferences_security_changed(&vault, "audit.enabled");
+
+        // Bypass means the event landed in the log even with the gate off.
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::PreferencesSecurityChanged { setting_name, .. } => {
+                assert_eq!(setting_name, "audit.enabled");
+            }
+            other => panic!("expected PreferencesSecurityChanged, got {other:?}"),
+        }
+        // And — critically — the method must NOT have flipped the gate
+        // back on as a side effect. Any unrelated concurrent producer
+        // calling `record` right after this returns must still see the
+        // user's persisted "off" state.
+        assert!(
+            !service.is_enabled(),
+            "force-write must not flip the master gate"
+        );
     }
 
     #[test]
