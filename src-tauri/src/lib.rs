@@ -138,10 +138,14 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
 
     let settings_service = SettingsService::new(app)?;
     // Push the persisted backup config into the KDBX service so the save
-    // hook honours it from first save onward.
-    if let Ok(prefs) = settings_service.get_app_preferences() {
-        let _ = kdbx_arc.set_backup_settings(prefs.backups);
-    }
+    // hook honours it from first save onward. Capture the audit gate too
+    // so we can apply it to AuditService below.
+    let initial_audit_enabled = settings_service
+        .get_app_preferences()
+        .map_or(true, |prefs| {
+            let _ = kdbx_arc.set_backup_settings(prefs.backups);
+            prefs.audit.enabled
+        });
     app.manage(Arc::new(settings_service));
 
     let auto_lock_service = AutoLockService::new();
@@ -154,6 +158,7 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
     let audit_root = data_dir.join("audit");
     let key_source = Arc::new(FileBackedAuditKey::new(audit_root.join("key.bin")));
     let audit_service = AuditService::new(audit_root, key_source);
+    audit_service.set_enabled(initial_audit_enabled);
     app.manage(Arc::new(audit_service));
 
     Ok(())

@@ -281,6 +281,17 @@ export type BackupSettings = z.infer<typeof BackupSettingsSchema>;
 export const BACKUP_MAX_VERSIONS_PRESETS = [5, 10, 25, 50, 100] as const;
 export const DEFAULT_BACKUP_MAX_VERSIONS = 10;
 
+/// Audit-log preferences. `enabled` is the master gate (off => the backend
+/// `AuditService::record` becomes a no-op, existing log file untouched).
+/// `retentionDays` is bounded `1..=365` on the backend boundary; the UI
+/// must mirror the same range so an invalid value never leaves the form.
+export const AppPreferencesAuditSchema = z.object({
+  enabled: z.boolean(),
+  retentionDays: z.number().int().min(1).max(365),
+});
+export type AuditPreferences = z.infer<typeof AppPreferencesAuditSchema>;
+export const DEFAULT_AUDIT_RETENTION_DAYS = 90;
+
 export const AppPreferencesSchema = z.object({
   general: GeneralSettingsSchema,
   security: SecuritySettingsSchema,
@@ -288,6 +299,7 @@ export const AppPreferencesSchema = z.object({
   browserIntegration: BrowserIntegrationSettingsSchema,
   advanced: AdvancedSettingsSchema,
   backups: BackupSettingsSchema,
+  audit: AppPreferencesAuditSchema,
 });
 export type AppPreferences = z.infer<typeof AppPreferencesSchema>;
 

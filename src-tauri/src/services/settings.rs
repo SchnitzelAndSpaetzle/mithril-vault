@@ -194,6 +194,7 @@ impl SettingsService {
     /// cannot push the backup module into invariant violations.
     fn validate_preferences(prefs: &AppPreferences) -> Result<(), AppError> {
         const MAX_VERSIONS_RANGE: std::ops::RangeInclusive<u32> = 1..=500;
+        const AUDIT_RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=365;
         let v = prefs.backups.max_versions;
         if !MAX_VERSIONS_RANGE.contains(&v) {
             return Err(AppError::InvalidInput(format!(
@@ -206,6 +207,12 @@ impl SettingsService {
                     "backups.directory must be an absolute path, got {dir:?}"
                 )));
             }
+        }
+        let r = prefs.audit.retention_days;
+        if !AUDIT_RETENTION_RANGE.contains(&r) {
+            return Err(AppError::InvalidInput(format!(
+                "audit.retentionDays must be in 1..=365, got {r}"
+            )));
         }
         Ok(())
     }
@@ -222,7 +229,7 @@ impl SettingsService {
 #[allow(clippy::expect_used, clippy::panic)]
 mod validate_preferences_tests {
     use super::SettingsService;
-    use crate::commands::settings::{AppPreferences, BackupSettings};
+    use crate::commands::settings::{AppPreferences, AuditSettings, BackupSettings};
     use crate::dto::error::AppError;
 
     fn prefs_with_directory(dir: Option<&str>) -> AppPreferences {
@@ -232,6 +239,16 @@ mod validate_preferences_tests {
                 max_versions: 10,
                 directory: dir.map(String::from),
                 on_open: false,
+            },
+            ..AppPreferences::default()
+        }
+    }
+
+    fn prefs_with_audit_retention(days: u32) -> AppPreferences {
+        AppPreferences {
+            audit: AuditSettings {
+                enabled: true,
+                retention_days: days,
             },
             ..AppPreferences::default()
         }
@@ -272,5 +289,46 @@ mod validate_preferences_tests {
     fn no_directory_override_is_accepted() {
         let prefs = prefs_with_directory(None);
         SettingsService::validate_preferences(&prefs).expect("None should validate");
+    }
+
+    #[test]
+    fn audit_retention_zero_is_rejected() {
+        // Zero would mean "drop every event the moment it is written" once
+        // the retention policy lands in #6 — silently neutralizing the
+        // audit log. Reject at the boundary so a hand-edited settings.json
+        // cannot push the retention task into that state.
+        let prefs = prefs_with_audit_retention(0);
+        match SettingsService::validate_preferences(&prefs) {
+            Err(AppError::InvalidInput(msg)) => {
+                assert!(
+                    msg.contains("audit.retentionDays") && msg.contains("1..=365"),
+                    "error should name the field and range, got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn audit_retention_above_max_is_rejected() {
+        let prefs = prefs_with_audit_retention(366);
+        match SettingsService::validate_preferences(&prefs) {
+            Err(AppError::InvalidInput(msg)) => {
+                assert!(
+                    msg.contains("audit.retentionDays"),
+                    "error should mention 'audit.retentionDays', got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn audit_retention_boundary_values_are_accepted() {
+        for days in [1_u32, 90, 365] {
+            let prefs = prefs_with_audit_retention(days);
+            SettingsService::validate_preferences(&prefs)
+                .unwrap_or_else(|_| panic!("retention_days={days} should validate"));
+        }
     }
 }

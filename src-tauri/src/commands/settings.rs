@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::dto::error::AppError;
+use crate::services::audit::AuditService;
 use crate::services::kdbx::KdbxService;
 use crate::services::settings::SettingsService;
 use serde::{Deserialize, Serialize};
@@ -294,6 +295,76 @@ mod backup_settings_tests {
     }
 }
 
+/// Audit log preferences. `enabled` controls whether `AuditService::record`
+/// writes events; flipping it off does not delete the existing log file.
+/// `retention_days` bounds how long records are kept once the retention
+/// policy lands (#6); validated at the settings boundary to `1..=365`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct AuditSettings {
+    pub enabled: bool,
+    #[serde(default = "default_audit_retention_days")]
+    pub retention_days: u32,
+}
+
+pub(crate) const DEFAULT_AUDIT_RETENTION_DAYS: u32 = 90;
+
+fn default_audit_retention_days() -> u32 {
+    DEFAULT_AUDIT_RETENTION_DAYS
+}
+
+impl Default for AuditSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            retention_days: DEFAULT_AUDIT_RETENTION_DAYS,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod audit_settings_tests {
+    use super::AuditSettings;
+
+    #[test]
+    fn defaults_are_enabled_and_ninety_day_retention() {
+        // PRD AC: `enabled` defaults to true (opt-out, not opt-in) and
+        // retention defaults to 90 days. Hard-coding the assertion locks
+        // the documented user contract — changing it would be a behavior
+        // change that has to be considered, not a silent edit.
+        let s = AuditSettings::default();
+        assert!(s.enabled);
+        assert_eq!(s.retention_days, 90);
+    }
+
+    #[test]
+    fn absent_audit_section_deserializes_to_defaults() {
+        // Users with a settings.json written before this slice have no
+        // audit section. serde defaults must fill it in (AC: no migration
+        // required) so audit recording starts immediately, with the
+        // documented retention.
+        let from_empty: AuditSettings = serde_json::from_str("{}").expect("parse {}");
+        assert!(from_empty.enabled);
+        assert_eq!(from_empty.retention_days, 90);
+    }
+
+    #[test]
+    fn explicit_values_round_trip() {
+        let json = r#"{"enabled": false, "retentionDays": 30}"#;
+        let parsed: AuditSettings = serde_json::from_str(json).expect("parse explicit");
+        assert!(!parsed.enabled);
+        assert_eq!(parsed.retention_days, 30);
+
+        let serialized = serde_json::to_string(&parsed).expect("serialize");
+        assert!(
+            serialized.contains(r#""retentionDays":30"#),
+            "serialized json should carry the camelCase retentionDays field: {serialized}"
+        );
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
@@ -304,6 +375,7 @@ pub struct AppPreferences {
     pub browser_integration: BrowserIntegrationSettings,
     pub advanced: AdvancedSettings,
     pub backups: BackupSettings,
+    pub audit: AuditSettings,
 }
 
 /// Persisted shape written to `settings.json`. Combines the editable
@@ -329,9 +401,11 @@ pub async fn update_app_preferences(
     new_preferences: AppPreferences,
     settings_service: State<'_, Arc<SettingsService>>,
     kdbx_service: State<'_, Arc<KdbxService>>,
+    audit_service: State<'_, Arc<AuditService>>,
 ) -> Result<(), AppError> {
     settings_service.update_app_preferences(&new_preferences)?;
     kdbx_service.set_backup_settings(new_preferences.backups)?;
+    audit_service.set_enabled(new_preferences.audit.enabled);
     Ok(())
 }
 
@@ -339,9 +413,11 @@ pub async fn update_app_preferences(
 pub async fn reset_app_preferences(
     settings_service: State<'_, Arc<SettingsService>>,
     kdbx_service: State<'_, Arc<KdbxService>>,
+    audit_service: State<'_, Arc<AuditService>>,
 ) -> Result<AppPreferences, AppError> {
     let prefs = settings_service.reset_app_preferences()?;
     kdbx_service.set_backup_settings(prefs.backups.clone())?;
+    audit_service.set_enabled(prefs.audit.enabled);
     Ok(prefs)
 }
 
