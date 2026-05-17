@@ -246,7 +246,7 @@ impl AuditService {
             return;
         }
         let path = self.log_path_for(vault_path);
-        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let size = std::fs::metadata(&path).map_or(0, |m| m.len());
         let now = Utc::now();
         let cutoff = now - Duration::days(i64::from(self.retention_days()));
         let oldest = self
@@ -1215,7 +1215,7 @@ mod tests {
         // After the size-cap trigger, the kept set must satisfy the cap
         // OR be the single surviving event (per the floor rule).
         let log_path = service.log_path_for(&vault);
-        let size = std::fs::metadata(&log_path).map(|m| m.len()).unwrap_or(0);
+        let size = std::fs::metadata(&log_path).map_or(0, |m| m.len());
         let events = service.read(&vault, &AuditFilter::default()).expect("read");
         assert!(
             size <= 100 || events.len() == 1,
