@@ -142,11 +142,10 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
     // so we can apply it to AuditService below.
     let initial_audit_enabled = settings_service
         .get_app_preferences()
-        .map(|prefs| {
+        .map_or(true, |prefs| {
             let _ = kdbx_arc.set_backup_settings(prefs.backups);
             prefs.audit.enabled
-        })
-        .unwrap_or(true);
+        });
     app.manage(Arc::new(settings_service));
 
     let auto_lock_service = AutoLockService::new();
