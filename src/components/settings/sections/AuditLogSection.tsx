@@ -62,13 +62,24 @@ function useResolveEntryTitle(
 
 const ALL_KINDS: readonly AuditEventKind[] = AuditEventKindSchema.options;
 
+interface AuditRowProps {
+  event: AuditEvent;
+  resolveTitle: (entryId: string) => string | null;
+  /// Inline style for absolute positioning when the row is rendered as
+  /// part of a virtualizer; omitted in the static-list path so flat
+  /// rendering doesn't need any positioning information.
+  style?: React.CSSProperties;
+  /// Forwarded to the rendered `<li>` so the virtualizer can place it
+  /// alongside its other data attributes (`data-index`) when needed.
+  liRef?: React.Ref<HTMLLIElement>;
+}
+
 function AuditRow({
   event,
   resolveTitle,
-}: Readonly<{
-  event: AuditEvent;
-  resolveTitle: (entryId: string) => string | null;
-}>) {
+  style,
+  liRef,
+}: Readonly<AuditRowProps>) {
   const { t, i18n } = useTranslation();
   const entryId = event.entryId ?? null;
   const title = entryId ? resolveTitle(entryId) : null;
@@ -76,6 +87,8 @@ function AuditRow({
   const settingName = event.settingName ?? null;
   return (
     <li
+      ref={liRef}
+      style={style}
       data-kind={event.kind}
       data-entry-id={entryId ?? undefined}
       data-setting-name={settingName ?? undefined}
@@ -288,15 +301,21 @@ function VirtualizedRows({
         {virtualizer.getVirtualItems().map((virtualItem) => {
           const event = events[virtualItem.index];
           if (!event) return null;
+          // The virtualizer-positioned element IS the list item — wrapping
+          // it in a `<div>` would yield `<ul><div><li>` and break list
+          // semantics for assistive tech.
           return (
-            <div
+            <AuditRow
               key={`${event.timestamp}-${virtualItem.index}`}
-              data-index={virtualItem.index}
-              className="absolute left-0 right-0"
-              style={{ transform: `translateY(${virtualItem.start}px)` }}
-            >
-              <AuditRow event={event} resolveTitle={resolveTitle} />
-            </div>
+              event={event}
+              resolveTitle={resolveTitle}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            />
           );
         })}
       </ul>

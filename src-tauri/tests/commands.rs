@@ -44,6 +44,9 @@ fn open_test_database() -> Option<(KdbxService, TempDir, String)> {
     Some((service, temp_dir, db_path_str))
 }
 
+#[path = "commands/audit_test.rs"]
+mod audit_test;
+
 #[path = "commands/database_test.rs"]
 mod database_test;
 

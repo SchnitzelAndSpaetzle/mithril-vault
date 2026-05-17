@@ -843,6 +843,14 @@ describe("AuditLogSection", () => {
         await screen.findByTestId("audit-virtual-scroll")
       ).toBeInTheDocument();
     });
+
+    // Note: a structural "rows are direct <li> children of the <ul>"
+    // test is intentionally omitted. JSDOM has no layout, so
+    // @tanstack/react-virtual emits zero virtual items here — the
+    // assertion would silently pass even for the regressed `ul > div > li`
+    // markup. The code review is the verifier; the runtime invariant is
+    // enforced by the `<AuditRow>` component itself rendering an `<li>`
+    // (the virtualizer places its positioning style on that `<li>`).
   });
 
   describe("vault picker", () => {
