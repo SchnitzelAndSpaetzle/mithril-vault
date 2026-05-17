@@ -36,6 +36,18 @@ pub enum AuditReadError {
     Storage(String),
 }
 
+/// Errors surfaced from [`AuditService::clear`]. Like [`AuditReadError`]
+/// and unlike the infallible [`AuditService::record`], clear is a user-
+/// initiated action and a failure must be visible — the UI toasts it so
+/// the user knows the wipe did not actually happen.
+#[derive(Debug, Error)]
+pub enum AuditClearError {
+    #[error("audit key unavailable: {0}")]
+    Key(String),
+    #[error("audit clear failed: {0}")]
+    Storage(String),
+}
+
 /// Permissive filter applied by [`AuditService::read`]. Shape is in place so
 /// future issues can plug in `kinds` / time-range filtering without changing
 /// callers; today it returns everything.
@@ -263,6 +275,32 @@ impl AuditService {
             setting_name: setting_name.to_string(),
         };
         self.record(vault_path, &event);
+    }
+
+    /// Wipes the per-Vault audit log and leaves behind exactly one
+    /// `audit.cleared` event so the wipe is never silent. The storage
+    /// layer performs the rewrite atomically (temp file + rename under
+    /// an exclusive advisory lock) so a failure mid-write leaves the
+    /// original file untouched rather than producing a partial log.
+    ///
+    /// Unlike [`AuditService::record`], `clear` is user-initiated and
+    /// surfaces hard errors so the caller can render a failure state
+    /// rather than silently flipping the `degraded` flag.
+    pub fn clear(&self, vault_path: &Path) -> Result<(), AuditClearError> {
+        let key = self
+            .key_source
+            .get_or_create()
+            .map_err(|e| AuditClearError::Key(e.to_string()))?;
+        let event = AuditEvent::AuditCleared {
+            timestamp: Utc::now(),
+        };
+        let plaintext = event.to_bytes();
+        let frame =
+            encrypt(&key, &plaintext).map_err(|e| AuditClearError::Storage(e.to_string()))?;
+        let log = AuditLogFile::new(self.log_path_for(vault_path));
+        log.replace_with_single(&frame)
+            .map_err(|e| AuditClearError::Storage(e.to_string()))?;
+        Ok(())
     }
 
     /// Resets the per-Vault failed-unlock counter — called on successful
@@ -735,6 +773,65 @@ mod tests {
         // The previously-recorded event must still come back through read().
         let events = service.read(&vault, &AuditFilter::default()).expect("read");
         assert_eq!(events.len(), 1);
+    }
+
+    /// Acceptance-criteria integration test for issue #220: populate a
+    /// log with several events, `clear` it, then assert `read` returns
+    /// exactly one `audit.cleared` event with no surviving history.
+    #[test]
+    fn clear_replaces_history_with_single_audit_cleared_event() {
+        let (service, _dir, vault) = fresh_service();
+
+        // Populate with a mix of kinds so we know clear doesn't just
+        // affect one variant.
+        service.record_vault_unlock_failed(&vault);
+        service.record_vault_opened(&vault);
+        service.record_vault_locked(&vault, Reason::Manual);
+        service.record_entry_password_revealed(&vault, "uuid-x");
+
+        service.clear(&vault).expect("clear");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1, "exactly one surviving event after clear");
+        assert!(
+            matches!(events[0], AuditEvent::AuditCleared { .. }),
+            "surviving event must be AuditCleared, got {:?}",
+            events[0]
+        );
+    }
+
+    /// Clearing an audit log that has never been written to still emits
+    /// the surviving event — otherwise a "clear" on a fresh Vault would
+    /// silently leave an empty file and the audit panel would look
+    /// identical to "never logged anything", hiding the user action.
+    #[test]
+    fn clear_on_empty_vault_writes_audit_cleared_event() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.clear(&vault).expect("clear");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], AuditEvent::AuditCleared { .. }));
+    }
+
+    /// `clear` is user-initiated from the Settings panel — its failure
+    /// mode is a hard error, not the infallible swallow that `record`
+    /// uses. A bad `base_dir` must surface as `Err(_)` so the UI can toast
+    /// the failure instead of silently leaving the original log in place.
+    #[test]
+    fn clear_against_unwritable_dir_returns_error() {
+        let dir = tempdir().expect("tempdir");
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, b"x").expect("write blocker file");
+
+        let base_dir = blocker.join("audit");
+        let service = AuditService::new(base_dir, Arc::new(InMemoryAuditKey::new()));
+        let vault = dir.path().join("vault.kdbx");
+        std::fs::write(&vault, b"x").expect("write vault");
+
+        let result = service.clear(&vault);
+        assert!(result.is_err(), "clear under unwritable dir must error");
     }
 
     #[test]

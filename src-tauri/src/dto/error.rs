@@ -115,6 +115,9 @@ pub enum AppError {
 
     #[error("Audit log read failed: {0}")]
     AuditRead(String),
+
+    #[error("Audit log clear failed: {0}")]
+    AuditClear(String),
 }
 
 impl Serialize for AppError {

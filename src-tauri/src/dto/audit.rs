@@ -19,6 +19,7 @@ pub enum AuditEventKindDto {
     EntryPasswordCopied,
     EntryProtectedFieldRevealed,
     PreferencesSecurityChanged,
+    AuditCleared,
 }
 
 /// Why a Vault transitioned from unlocked to locked, mirrored from
@@ -162,6 +163,14 @@ impl From<AuditEvent> for AuditEventDto {
                 entry_id: Some(entry_id),
                 setting_name: None,
             },
+            AuditEvent::AuditCleared { timestamp } => Self {
+                kind: AuditEventKindDto::AuditCleared,
+                timestamp,
+                attempt_count: None,
+                reason: None,
+                entry_id: None,
+                setting_name: None,
+            },
         }
     }
 }
@@ -270,6 +279,29 @@ mod tests {
         assert!(
             !json.contains("attemptCount"),
             "attemptCount must be omitted for entry kinds: {json}"
+        );
+    }
+
+    /// The clear-log surviving event reaches the UI as a camelCase
+    /// `auditCleared` kind with no payload beyond the timestamp. The DTO
+    /// translation has to mirror the wire-format rename done in
+    /// `services::audit::format` so the row renderer can dispatch on a
+    /// clean camelCase variant.
+    #[test]
+    fn audit_cleared_event_converts_to_dto_with_camel_case_kind() {
+        let ts = Utc.with_ymd_and_hms(2026, 5, 17, 12, 0, 0).unwrap();
+        let dto: AuditEventDto = AuditEvent::AuditCleared { timestamp: ts }.into();
+
+        assert!(matches!(dto.kind, AuditEventKindDto::AuditCleared));
+        assert_eq!(dto.timestamp, ts);
+        assert!(dto.attempt_count.is_none());
+        assert!(dto.reason.is_none());
+        assert!(dto.entry_id.is_none());
+
+        let json = serde_json::to_string(&dto).expect("ser");
+        assert!(
+            json.contains("\"auditCleared\""),
+            "kind must serialize as camelCase, got: {json}",
         );
     }
 

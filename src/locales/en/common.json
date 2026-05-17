@@ -34,7 +34,8 @@
       "entryPasswordRevealed": "Password revealed",
       "entryPasswordCopied": "Password copied",
       "entryProtectedFieldRevealed": "Protected field revealed",
-      "preferencesSecurityChanged": "Security preference changed"
+      "preferencesSecurityChanged": "Security preference changed",
+      "auditCleared": "Audit log cleared"
     },
     "reason": {
       "manual": "Manual",
@@ -54,7 +55,11 @@
         "enabled": "Audit logging enabled",
         "retentionDays": "Audit retention (days)"
       }
-    }
+    },
+    "clearButton": "Clear audit log",
+    "clearConfirmTitle": "Clear audit log?",
+    "clearConfirm": "This deletes every audit event recorded on this device for the open vault. A single \"Audit log cleared\" entry will remain so the wipe is visible.",
+    "clearError": "Failed to clear audit log: {{error}}"
   },
   "settings": {
     "title": "Settings",

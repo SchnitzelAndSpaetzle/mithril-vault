@@ -337,6 +337,7 @@ export const AuditEventKindSchema = z.enum([
   "entryPasswordCopied",
   "entryProtectedFieldRevealed",
   "preferencesSecurityChanged",
+  "auditCleared",
 ]);
 export type AuditEventKind = z.infer<typeof AuditEventKindSchema>;
 

@@ -2,19 +2,35 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { queryKeys } from "@/lib/query-keys";
 
 const listMock = vi.fn();
+const clearMock = vi.fn();
 const entriesListMock = vi.fn().mockResolvedValue([]);
+const askMock = vi.fn();
+const toastSuccessMock = vi.fn();
+const toastErrorMock = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
   audit: {
     list: (...args: unknown[]) => listMock(...args),
+    clear: (...args: unknown[]) => clearMock(...args),
   },
   entries: {
     list: (...args: unknown[]) => entriesListMock(...args),
+  },
+}));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  ask: (...args: unknown[]) => askMock(...args),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: (...args: unknown[]) => toastSuccessMock(...args),
+    error: (...args: unknown[]) => toastErrorMock(...args),
   },
 }));
 
@@ -42,8 +58,12 @@ function createWrapper(setup?: (queryClient: QueryClient) => void) {
 describe("AuditLogSection", () => {
   beforeEach(() => {
     listMock.mockReset();
+    clearMock.mockReset();
     entriesListMock.mockReset();
     entriesListMock.mockResolvedValue([]);
+    askMock.mockReset();
+    toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
   });
 
   it("renders a no-vault empty state and does not query when no vault is open", () => {
@@ -394,6 +414,165 @@ describe("AuditLogSection", () => {
       const row = screen.getByRole("listitem");
       expect(row.textContent).toContain("Late");
     });
+  });
+
+  it("hides the Clear Audit Log button when no vault is open", () => {
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId={null} />
+      </Wrapper>
+    );
+
+    expect(screen.queryByText("audit.clearButton")).toBeNull();
+  });
+
+  it("renders the Clear Audit Log button when a vault is open", async () => {
+    listMock.mockResolvedValueOnce({ events: [], degraded: false });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "audit.clearButton" })
+    ).toBeInTheDocument();
+  });
+
+  it("does not call clear when the confirmation dialog is dismissed", async () => {
+    listMock.mockResolvedValueOnce({ events: [], degraded: false });
+    askMock.mockResolvedValueOnce(false);
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    const btn = await screen.findByRole("button", {
+      name: "audit.clearButton",
+    });
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(askMock).toHaveBeenCalledTimes(1);
+    });
+    expect(clearMock).not.toHaveBeenCalled();
+  });
+
+  it("invokes audit.clear and refetches when the user confirms", async () => {
+    // First load: pre-clear log with one event. Second load (after
+    // invalidation): the surviving auditCleared event.
+    listMock
+      .mockResolvedValueOnce({
+        events: [
+          {
+            kind: "vaultUnlockFailed",
+            timestamp: "2026-05-16T11:00:00.000Z",
+            attemptCount: 1,
+          },
+        ],
+        degraded: false,
+      })
+      .mockResolvedValueOnce({
+        events: [
+          {
+            kind: "auditCleared",
+            timestamp: "2026-05-17T12:00:00.000Z",
+          },
+        ],
+        degraded: false,
+      });
+    askMock.mockResolvedValueOnce(true);
+    clearMock.mockResolvedValueOnce(undefined);
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    // Wait for the initial load to settle.
+    await screen.findAllByRole("listitem");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "audit.clearButton" })
+    );
+
+    await waitFor(() => {
+      expect(clearMock).toHaveBeenCalledWith("/tmp/vault.kdbx");
+    });
+
+    // The panel re-fetches and ends up showing exactly the auditCleared
+    // surviving event.
+    await waitFor(() => {
+      const rows = screen.getAllByRole("listitem");
+      expect(rows.length).toBe(1);
+      expect(rows[0]?.getAttribute("data-kind")).toBe("auditCleared");
+    });
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("toasts an error and leaves the panel intact when audit.clear rejects", async () => {
+    listMock.mockResolvedValue({
+      events: [
+        {
+          kind: "vaultUnlockFailed",
+          timestamp: "2026-05-16T11:00:00.000Z",
+          attemptCount: 1,
+        },
+      ],
+      degraded: false,
+    });
+    askMock.mockResolvedValueOnce(true);
+    clearMock.mockRejectedValueOnce(new Error("disk full"));
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    await screen.findAllByRole("listitem");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "audit.clearButton" })
+    );
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalled();
+    });
+    // Pre-clear event still visible — the original log was preserved.
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]?.getAttribute("data-kind")).toBe("vaultUnlockFailed");
+  });
+
+  it("renders an auditCleared row with the localized kind label", async () => {
+    listMock.mockResolvedValueOnce({
+      events: [
+        {
+          kind: "auditCleared",
+          timestamp: "2026-05-17T12:00:00.000Z",
+        },
+      ],
+      degraded: false,
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AuditLogSection dbId="/tmp/vault.kdbx" />
+      </Wrapper>
+    );
+
+    const row = await screen.findByRole("listitem");
+    expect(row.getAttribute("data-kind")).toBe("auditCleared");
+    expect(row.textContent).toContain("audit.kind.auditCleared");
   });
 
   it("renders a preferences.security_changed row with the localized setting-name label", async () => {
