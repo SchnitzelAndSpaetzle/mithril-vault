@@ -399,6 +399,17 @@ export const AuditEventsResponseSchema = z.object({
 });
 export type AuditEventsResponse = z.infer<typeof AuditEventsResponseSchema>;
 
+/// Snapshot of the audit subsystem's runtime state for the Settings panel
+/// header. `enabled` mirrors the master gate (`audit.enabled` preference);
+/// `degraded` is the session-wide flag set by the backend whenever any
+/// audit record/read has failed internally. The header indicator only
+/// clears on app restart because `degraded` lives in process memory.
+export const AuditStatusSchema = z.object({
+  enabled: z.boolean(),
+  degraded: z.boolean(),
+});
+export type AuditStatus = z.infer<typeof AuditStatusSchema>;
+
 export const EntrySortFieldSchema = z.enum([
   "title",
   "username",

@@ -387,6 +387,36 @@ describe("tauri wrappers validation", () => {
     await expect(audit.list("/tmp/vault.kdbx")).rejects.toThrow();
   });
 
+  it("audit.getStatus parses get_audit_status into a typed status", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      enabled: true,
+      degraded: false,
+    });
+
+    await expect(audit.getStatus()).resolves.toEqual({
+      enabled: true,
+      degraded: false,
+    });
+    expect(invoke).toHaveBeenCalledWith("get_audit_status");
+  });
+
+  it("audit.getStatus surfaces a degraded flag from the backend", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      enabled: false,
+      degraded: true,
+    });
+
+    await expect(audit.getStatus()).resolves.toEqual({
+      enabled: false,
+      degraded: true,
+    });
+  });
+
+  it("audit.getStatus rejects payloads missing fields", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({ enabled: true });
+    await expect(audit.getStatus()).rejects.toThrow();
+  });
+
   it("invokes delete_backup with the supplied path", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(undefined);
 

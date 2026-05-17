@@ -59,7 +59,16 @@
     "clearButton": "Clear audit log",
     "clearConfirmTitle": "Clear audit log?",
     "clearConfirm": "This deletes every audit event recorded on this device for the open vault. A single \"Audit log cleared\" entry will remain so the wipe is visible.",
-    "clearError": "Failed to clear audit log: {{error}}"
+    "clearError": "Failed to clear audit log: {{error}}",
+    "picker": {
+      "label": "Vault"
+    },
+    "filter": {
+      "kinds": "Event kinds",
+      "from": "From",
+      "to": "To",
+      "invalidRange": "The \"from\" date must be on or before the \"to\" date."
+    }
   },
   "settings": {
     "title": "Settings",

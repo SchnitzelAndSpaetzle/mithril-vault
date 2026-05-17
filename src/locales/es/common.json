@@ -45,7 +45,16 @@
     "clearButton": "Borrar registro de auditoría",
     "clearConfirmTitle": "¿Borrar registro de auditoría?",
     "clearConfirm": "Esto elimina todos los eventos de auditoría registrados en este dispositivo para la bóveda abierta. Quedará una sola entrada \"Registro de auditoría borrado\" para que el borrado sea visible.",
-    "clearError": "Error al borrar el registro de auditoría: {{error}}"
+    "clearError": "Error al borrar el registro de auditoría: {{error}}",
+    "picker": {
+      "label": "Bóveda"
+    },
+    "filter": {
+      "kinds": "Tipos de evento",
+      "from": "Desde",
+      "to": "Hasta",
+      "invalidRange": "La fecha \"Desde\" debe ser anterior o igual a la fecha \"Hasta\"."
+    }
   },
   "settings": {
     "title": "Configuración",
