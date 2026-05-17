@@ -206,6 +206,17 @@ impl AuditService {
         let log = AuditLogFile::new(log_path.clone());
         log.append(&frame).map_err(|_| ())?;
 
+        // Seed the per-Vault oldest-timestamp cache from disk on first
+        // use this session. Without this, after a process restart the
+        // cache only ever knows about events recorded *this* session
+        // (all `Utc::now()`) so the age trigger would silently never
+        // fire against frames left over on disk — age retention would
+        // stop working until the size cap eventually happened to trip.
+        // The seed runs *after* the append so the freshly-written frame
+        // is included in the disk scan and the cache reflects the new
+        // post-append state in one pass.
+        self.ensure_oldest_loaded(vault_path, &key);
+
         // Update the cached oldest-timestamp for this vault: the
         // just-appended event is the smallest known timestamp if the
         // cache was empty, or stays unchanged if an older event was
@@ -511,6 +522,24 @@ impl AuditService {
         self.refresh_oldest(vault_path, &key);
 
         Ok(stats)
+    }
+
+    /// Populates the per-Vault oldest-timestamp cache from disk if it
+    /// is empty for this Vault. Idempotent and best-effort: a hit on a
+    /// previously-loaded cache returns immediately; a miss falls
+    /// through to [`AuditService::refresh_oldest`]. Called from
+    /// `try_record` so the first append per process per Vault picks up
+    /// any old frames that survived a previous session.
+    fn ensure_oldest_loaded(&self, vault_path: &Path, key: &[u8; KEY_LEN]) {
+        let cache_key = attempts_key(vault_path);
+        if let Ok(map) = self.oldest.lock() {
+            if map.contains_key(&cache_key) {
+                return;
+            }
+        } else {
+            return;
+        }
+        self.refresh_oldest(vault_path, key);
     }
 
     /// Recomputes and caches the oldest timestamp on disk for
@@ -1182,6 +1211,72 @@ mod tests {
 
         let events = service.read(&vault, &AuditFilter::default()).expect("read");
         assert_eq!(events.len(), 1, "compaction must drop the stale entry");
+        match &events[0] {
+            AuditEvent::VaultUnlockFailed { attempt_count, .. } => {
+                assert_eq!(*attempt_count, 2);
+            }
+            other => panic!("expected VaultUnlockFailed, got {other:?}"),
+        }
+    }
+
+    /// Regression: after a process restart, the per-Vault oldest-timestamp
+    /// cache starts empty. A fresh append's `Utc::now()` would otherwise
+    /// be the only known timestamp and the age trigger would *never*
+    /// fire against the stale frames already on disk — age retention
+    /// would silently stop working until the size cap eventually
+    /// happened to trip. Seed the cache from disk on first use so the
+    /// first append for a Vault this session correctly notices that
+    /// the existing log has aged out.
+    #[test]
+    fn restart_with_stale_on_disk_log_triggers_compaction_on_first_record() {
+        use crate::services::audit::key::InMemoryAuditKey;
+        use chrono::Duration;
+        use tempfile::tempdir;
+
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("vault.kdbx");
+        std::fs::write(&vault, b"x").expect("write vault");
+        // Both services share one key source so the second one can
+        // decrypt frames the first one wrote — this is the in-test
+        // equivalent of a `FileBackedAuditKey` surviving a process
+        // restart.
+        let key: Arc<dyn crate::services::audit::key::AuditKey> =
+            Arc::new(InMemoryAuditKey::new());
+
+        // Session 1: write a stale event into disk under a generous
+        // retention, then drop the service to simulate process exit.
+        {
+            let service = AuditService::new(dir.path().join("audit"), Arc::clone(&key));
+            service.set_retention_days(365);
+            service.set_lazy_trigger_enabled_for_test(false);
+            let stale = AuditEvent::VaultUnlockFailed {
+                timestamp: Utc::now() - Duration::days(60),
+                attempt_count: 1,
+            };
+            service.record(&vault, &stale);
+        }
+
+        // Session 2: brand-new service against the same audit dir.
+        // Configure a 1-day retention; the lazy trigger is enabled by
+        // default. The first record this session should seed the
+        // oldest-cache from disk, see the 60-day-old frame, and run
+        // compaction so the stale entry is gone.
+        let service = AuditService::new(dir.path().join("audit"), Arc::clone(&key));
+        service.set_retention_days(1);
+        service.record(
+            &vault,
+            &AuditEvent::VaultUnlockFailed {
+                timestamp: Utc::now(),
+                attempt_count: 2,
+            },
+        );
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(
+            events.len(),
+            1,
+            "stale on-disk event must be aged out on first record after restart"
+        );
         match &events[0] {
             AuditEvent::VaultUnlockFailed { attempt_count, .. } => {
                 assert_eq!(*attempt_count, 2);
