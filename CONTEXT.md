@@ -79,3 +79,9 @@ The namespaced enum of recordable events:
 - `audit.cleared` — user emptied the Audit Log; the record itself survives the clear
 
 Entry selection, group navigation, search, theme/language changes, and other non-security-relevant interactions are explicitly **not** Audit Event Kinds.
+
+### Audit Retention
+The policy that bounds how much history an Audit Log keeps. Two limits applied in order: an **age cutoff** (default 90 days, user-configurable 1–365 via `retentionDays`) drops events older than `now − retentionDays`; a **10 MB hard size cap** then drops the oldest survivors until under the cap. A single event larger than the cap is retained — the cap is a defense-in-depth ceiling, not a guarantee.
+
+### Audit Compaction
+The rewrite pass that enforces Audit Retention. Reads every encrypted frame under an exclusive file lock, partitions via `retention::partition_by_retention`, re-encrypts the keepers with fresh nonces, and atomically replaces the log file (temp + rename). Triggered lazily on append when the file crosses the size cap or the oldest cached timestamp falls outside the retention window; the explicit `AuditService::compact` is also directly callable.
