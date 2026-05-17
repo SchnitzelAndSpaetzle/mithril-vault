@@ -36,3 +36,18 @@ pub async fn get_audit_events(
         degraded: audit.is_degraded(),
     })
 }
+
+/// Truncates the per-Vault audit log and leaves behind a single
+/// `audit.cleared` event so the wipe is visible in the panel. The
+/// underlying service performs the rewrite atomically so a mid-write
+/// failure leaves the original file untouched; the caller sees that as
+/// `AppError::AuditClear`.
+#[tauri::command]
+pub async fn clear_audit_log(
+    vault_path: String,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<(), AppError> {
+    audit
+        .clear(Path::new(&vault_path))
+        .map_err(|e| AppError::AuditClear(e.to_string()))
+}

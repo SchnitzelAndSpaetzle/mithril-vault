@@ -79,6 +79,59 @@ impl AuditLogFile {
         result.map_err(StorageError::from)
     }
 
+    /// Atomically replaces the audit log file with a single encrypted
+    /// frame. Used by `AuditService::clear` to wipe history while leaving
+    /// behind a surviving `audit.cleared` event so a manual clear is
+    /// never silent.
+    ///
+    /// Atomicity strategy: write the new sole-content line to a sibling
+    /// temp file under exclusive lock on the destination, then atomically
+    /// rename it over the destination. If the temp write fails mid-way
+    /// (e.g. disk full) the destination file is left untouched, so the
+    /// caller never observes a partial state — either the original log
+    /// is intact or the new one-frame log is in place.
+    pub fn replace_with_single(&self, frame: &[u8]) -> Result<(), StorageError> {
+        let _guard = self
+            .write_lock
+            .lock()
+            .map_err(|_| StorageError::Io("audit replace mutex poisoned".into()))?;
+
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Hold an exclusive advisory lock on the (possibly-empty)
+        // destination file for the whole rename window so concurrent
+        // readers/appenders gate on us — same protocol as `append`.
+        let dest_handle = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
+        FileExt::lock_exclusive(&dest_handle)?;
+
+        let result = (|| -> std::io::Result<()> {
+            let tmp_path = tmp_path_for(&self.path);
+            // O_CREATE | O_TRUNC | O_WRONLY semantics — clean slate per
+            // call so a leftover temp from a crashed prior call doesn't
+            // contaminate the new content.
+            let mut tmp = OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&tmp_path)?;
+            let line = encode_frame(frame);
+            tmp.write_all(line.as_bytes())?;
+            tmp.write_all(b"\n")?;
+            tmp.sync_data()?;
+            drop(tmp);
+            std::fs::rename(&tmp_path, &self.path)?;
+            Ok(())
+        })();
+
+        let _ = FileExt::unlock(&dest_handle);
+        result.map_err(StorageError::from)
+    }
+
     /// Reads all frames in append order. Missing file returns an empty
     /// outcome. Lines that fail base64 decode are *counted* in
     /// [`LogReadOutcome::malformed_lines`] rather than dropped silently:
@@ -125,6 +178,12 @@ impl AuditLogFile {
         let _ = FileExt::unlock(&file);
         result
     }
+}
+
+fn tmp_path_for(path: &Path) -> PathBuf {
+    let mut s = path.as_os_str().to_owned();
+    s.push(".tmp");
+    PathBuf::from(s)
 }
 
 /// Result of [`AuditLogFile::read_all`]. `frames` is in append order and
@@ -247,6 +306,44 @@ mod tests {
         assert_eq!(outcome.frames, vec![b"first".to_vec()]);
         assert_eq!(outcome.malformed_lines, 0);
         reader.join().expect("reader join");
+    }
+
+    /// `replace_with_single` is the storage operation that backs
+    /// `AuditService::clear`: every previously-appended frame is dropped
+    /// and the file ends with exactly the single frame the caller
+    /// supplied. The rest of the slice depends on this being a clean
+    /// rewrite — multiple lines or stray bytes around the new frame would
+    /// surface in `read_all` and break the integration assertion.
+    #[test]
+    fn replace_with_single_leaves_exactly_one_frame() {
+        let dir = tempdir().expect("tempdir");
+        let log = AuditLogFile::new(dir.path().join("v.jsonl"));
+
+        log.append(b"first").expect("append first");
+        log.append(b"second").expect("append second");
+        log.append(b"third").expect("append third");
+
+        log.replace_with_single(b"surviving").expect("replace");
+
+        let outcome = log.read_all().expect("read");
+        assert_eq!(outcome.frames, vec![b"surviving".to_vec()]);
+        assert_eq!(outcome.malformed_lines, 0);
+    }
+
+    /// Calling `replace_with_single` on a Vault that never logged anything
+    /// has to still leave the log file holding exactly that one frame —
+    /// otherwise a "clear" against a never-logged Vault would silently
+    /// produce an empty file and the surviving-event guarantee from the
+    /// PRD evaporates.
+    #[test]
+    fn replace_with_single_on_missing_file_creates_file_with_that_frame() {
+        let dir = tempdir().expect("tempdir");
+        let log = AuditLogFile::new(dir.path().join("nested").join("v.jsonl"));
+
+        log.replace_with_single(b"only").expect("replace");
+
+        let outcome = log.read_all().expect("read");
+        assert_eq!(outcome.frames, vec![b"only".to_vec()]);
     }
 
     #[test]

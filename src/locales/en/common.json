@@ -33,14 +33,19 @@
       "vaultLocked": "Vault locked",
       "entryPasswordRevealed": "Password revealed",
       "entryPasswordCopied": "Password copied",
-      "entryProtectedFieldRevealed": "Protected field revealed"
+      "entryProtectedFieldRevealed": "Protected field revealed",
+      "auditCleared": "Audit log cleared"
     },
     "reason": {
       "manual": "Manual",
       "autoLock": "Auto-lock",
       "appQuit": "App quit",
       "screenLock": "Screen lock"
-    }
+    },
+    "clearButton": "Clear audit log",
+    "clearConfirmTitle": "Clear audit log?",
+    "clearConfirm": "This deletes every audit event recorded on this device for the open vault. A single \"Audit log cleared\" entry will remain so the wipe is visible.",
+    "clearError": "Failed to clear audit log: {{error}}"
   },
   "settings": {
     "title": "Settings",

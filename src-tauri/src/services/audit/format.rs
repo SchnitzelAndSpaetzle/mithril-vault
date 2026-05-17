@@ -46,6 +46,8 @@ pub enum AuditEvent {
         timestamp: DateTime<Utc>,
         entry_id: String,
     },
+    #[serde(rename = "audit.cleared")]
+    AuditCleared { timestamp: DateTime<Utc> },
 }
 
 /// Why a Vault transitioned from unlocked to locked. Serialised as
@@ -216,6 +218,34 @@ mod tests {
         let json = String::from_utf8(event.to_bytes()).expect("utf8");
         assert!(json.contains("\"kind\":\"entry.protected_field_revealed\""));
         assert!(json.contains("\"entry_id\":\"uuid-3\""));
+    }
+
+    /// Manual clear of the audit log emits exactly one surviving event
+    /// (`audit.cleared`) so a wipe is never silent. The wire tag is pinned
+    /// to the dotted, snake-case form used by every other kind so already-
+    /// written log files stay readable across refactors of the Rust enum.
+    #[test]
+    fn audit_cleared_round_trips_with_dotted_kind() {
+        let event = AuditEvent::AuditCleared {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 17, 12, 0, 0).unwrap(),
+        };
+        let bytes = event.to_bytes();
+        let parsed = AuditEvent::from_bytes(&bytes).expect("parse");
+        assert_eq!(parsed, event);
+
+        let json = std::str::from_utf8(&bytes).expect("utf8");
+        assert!(
+            json.contains("\"kind\":\"audit.cleared\""),
+            "kind must serialize as `audit.cleared`, got: {json}",
+        );
+        assert!(
+            !json.contains("entry_id"),
+            "audit.cleared must not carry entry_id: {json}",
+        );
+        assert!(
+            !json.contains("attempt_count"),
+            "audit.cleared must not carry attempt_count: {json}",
+        );
     }
 
     #[test]

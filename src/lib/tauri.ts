@@ -664,6 +664,14 @@ export const audit = {
     });
     return AuditEventsResponseSchema.parse(result);
   },
+
+  /// Truncates the per-Vault audit log and leaves behind a single
+  /// `auditCleared` event so the wipe shows up in the panel. The backend
+  /// rewrites the file atomically, so on failure the original log is
+  /// preserved and this rejects with the backend error.
+  async clear(vaultPath: string): Promise<void> {
+    await invoke("clear_audit_log", { vaultPath });
+  },
 };
 
 export const windowProtection = {
