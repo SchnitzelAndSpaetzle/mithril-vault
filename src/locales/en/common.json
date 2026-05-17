@@ -140,7 +140,7 @@
       },
       "retentionDays": {
         "label": "Retention (days)",
-        "description": "Events older than this are dropped on the next write. Valid range: 1 to 365 days.",
+        "description": "How long to keep audit events. Valid range: 1 to 365 days. Cleanup of older events is not enforced yet.",
         "validation": "Retention must be between 1 and 365 days."
       }
     },
