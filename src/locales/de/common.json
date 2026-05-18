@@ -651,7 +651,9 @@
       "highDescription": "Einträge mit mindestens einem schwerwiegenden Problem."
     },
     "findings": {
-      "password.expired": "Abgelaufen"
+      "password": {
+        "expired": "Abgelaufen"
+      }
     },
     "actions": {
       "openEntry": "Eintrag öffnen"

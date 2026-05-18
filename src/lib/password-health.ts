@@ -15,12 +15,11 @@ import type { Finding, FindingKind, PasswordHealthReport } from "./types";
 export type Severity = "critical" | "high";
 
 export function severityOf(kind: FindingKind): Severity {
+  if (kind === "password.expired") return "high";
   // Exhaustiveness lives at the union boundary — adding a new Finding
-  // Kind in `types.ts` forces an update here.
-  switch (kind) {
-    case "password.expired":
-      return "high";
-  }
+  // Kind in `types.ts` makes this `never` cast fail to compile.
+  const exhaustive: never = kind;
+  return exhaustive;
 }
 
 /// Summary the sidebar Security item renders next to its label. The

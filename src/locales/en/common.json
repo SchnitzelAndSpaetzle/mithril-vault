@@ -676,7 +676,9 @@
       "highDescription": "Entries with at least one high-severity issue."
     },
     "findings": {
-      "password.expired": "Expired"
+      "password": {
+        "expired": "Expired"
+      }
     },
     "actions": {
       "openEntry": "Open Entry"

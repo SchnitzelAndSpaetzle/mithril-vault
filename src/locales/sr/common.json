@@ -651,7 +651,9 @@
       "highDescription": "Unosi sa najmanje jednim problemom visokog prioriteta."
     },
     "findings": {
-      "password.expired": "Isteklo"
+      "password": {
+        "expired": "Isteklo"
+      }
     },
     "actions": {
       "openEntry": "Otvori unos"

@@ -651,7 +651,9 @@
       "highDescription": "Entrées présentant au moins un problème de gravité élevée."
     },
     "findings": {
-      "password.expired": "Expiré"
+      "password": {
+        "expired": "Expiré"
+      }
     },
     "actions": {
       "openEntry": "Ouvrir l'entrée"
