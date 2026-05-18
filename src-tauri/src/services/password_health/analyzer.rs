@@ -13,6 +13,8 @@
 //! pure function — tests pin the clock; the service supplies
 //! `Utc::now()`.
 
+use std::collections::HashSet;
+
 use chrono::{DateTime, Utc};
 
 /// Per-Entry input the analyzer consumes. The service layer assembles
@@ -38,6 +40,25 @@ pub enum FindingKind {
     PasswordExpired,
 }
 
+/// Two-bucket severity used to populate [`HealthTotals`] and decide
+/// which Section of the Security report an Entry surfaces in. Mirrors
+/// the wording in ADR 0002 — `Very Weak` is the only Critical Finding
+/// Kind; everything else (`Weak`, `Reused`, `Expired`) is High. Healthy
+/// Entries have no Findings and therefore no severity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Severity {
+    Critical,
+    High,
+}
+
+impl FindingKind {
+    pub fn severity(&self) -> Severity {
+        match self {
+            FindingKind::PasswordExpired => Severity::High,
+        }
+    }
+}
+
 /// A single recordable Password Health Finding. Each Finding is scoped
 /// to exactly one Entry; an Entry that hits multiple checks produces
 /// multiple Findings rather than one merged Finding because the
@@ -46,6 +67,21 @@ pub enum FindingKind {
 pub struct Finding {
     pub entry_id: String,
     pub kind: FindingKind,
+}
+
+/// Severity-bucketed counts the report renders in the Security
+/// dashboard's totals strip. `critical` and `high` count *distinct
+/// Entries* with at least one Finding of that bucket — an Entry that
+/// is both Reused and Very Weak is counted once in `critical`, not
+/// twice. `healthy` counts Entries with zero Findings. `total` is the
+/// in-scope denominator the score is computed against. All four are
+/// zero for an empty Vault.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HealthTotals {
+    pub critical: u32,
+    pub high: u32,
+    pub healthy: u32,
+    pub total: u32,
 }
 
 /// The output of [`analyze`] — a single periodic snapshot of every
@@ -59,6 +95,7 @@ pub struct Finding {
 pub struct PasswordHealthReport {
     pub score: Option<u32>,
     pub findings: Vec<Finding>,
+    pub totals: HealthTotals,
 }
 
 pub fn analyze(
@@ -71,6 +108,7 @@ pub fn analyze(
         return PasswordHealthReport {
             score: None,
             findings: Vec::new(),
+            totals: HealthTotals::default(),
         };
     }
 
@@ -83,23 +121,49 @@ pub fn analyze(
         })
         .collect();
 
-    // In this slice, every emitted Finding is scoped to a distinct
-    // Entry — there is only one Finding Kind — so `findings.len()`
-    // equals the un-healthy Entry count. Once additional Finding Kinds
-    // land, this collapse must move to a distinct-entry-id count.
-    let unhealthy = findings.len();
+    // Bucket each Entry by its highest-severity Finding so
+    // `critical + high + healthy == total` holds (the Security view
+    // adds the three numbers; an Entry double-counted between buckets
+    // would break the breakdown).
+    let mut critical_ids: HashSet<&str> = HashSet::new();
+    let mut high_ids: HashSet<&str> = HashSet::new();
+    for f in &findings {
+        match f.kind.severity() {
+            Severity::Critical => {
+                critical_ids.insert(f.entry_id.as_str());
+            }
+            Severity::High => {
+                high_ids.insert(f.entry_id.as_str());
+            }
+        }
+    }
+    // Critical wins over High when an Entry has Findings in both
+    // buckets — the more severe label is the one we surface.
+    for id in &critical_ids {
+        high_ids.remove(id);
+    }
+    let unhealthy = critical_ids.len() + high_ids.len();
     let healthy = total - unhealthy;
-    // `total <= u32::MAX` in any realistic Vault; cast is safe.
+
+    // `total <= u32::MAX` in any realistic Vault; casts are safe.
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         clippy::cast_precision_loss
     )]
     let score = ((healthy as f64 / total as f64) * 100.0).round() as u32;
+    #[allow(clippy::cast_possible_truncation)]
+    let totals = HealthTotals {
+        critical: critical_ids.len() as u32,
+        high: high_ids.len() as u32,
+        healthy: healthy as u32,
+        total: total as u32,
+    };
 
     PasswordHealthReport {
         score: Some(score),
         findings,
+        totals,
     }
 }
 
@@ -153,6 +217,42 @@ mod tests {
         let report = analyze(entries, now_fixed());
         assert_eq!(report.score, Some(100));
         assert!(report.findings.is_empty());
+    }
+
+    /// An empty Vault has no Entries in any bucket; every total is
+    /// zero. Pairs with `empty_input_produces_score_none` — both
+    /// behaviors share the same early-return path inside `analyze`.
+    #[test]
+    fn empty_input_totals_are_all_zero() {
+        let report = analyze(std::iter::empty::<EntryInput>(), now_fixed());
+        assert_eq!(report.totals, HealthTotals::default());
+    }
+
+    /// Severity-bucketed counts on a mixed Vault: two healthy + two
+    /// expired Entries. Expired is a High Finding (per
+    /// `FindingKind::severity`), so both expired Entries land in
+    /// `high` and the two healthy land in `healthy`. `critical` stays
+    /// zero — no Critical Findings exist in this slice. The sum
+    /// `critical + high + healthy` must equal `total`.
+    #[test]
+    fn totals_bucket_distinct_entries_by_highest_severity() {
+        let now = now_fixed();
+        let entries = vec![
+            healthy("a"),
+            healthy("b"),
+            expired("c", now),
+            expired("d", now),
+        ];
+        let report = analyze(entries, now);
+        assert_eq!(
+            report.totals,
+            HealthTotals {
+                critical: 0,
+                high: 2,
+                healthy: 2,
+                total: 4,
+            }
+        );
     }
 
     /// One expired Entry in a four-Entry Vault: 3 healthy / 4 total =

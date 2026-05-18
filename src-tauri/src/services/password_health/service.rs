@@ -115,10 +115,11 @@ impl PasswordHealthService {
             Outcome::Hit(report) => Ok(report),
             Outcome::Compute { generation, inputs } => {
                 let report = analyze(inputs, now);
-                self.cache
-                    .lock()
-                    .map_err(|_| AppError::Lock)?
-                    .insert(db_id.to_string(), generation, report.clone());
+                self.cache.lock().map_err(|_| AppError::Lock)?.insert(
+                    db_id.to_string(),
+                    generation,
+                    report.clone(),
+                );
                 Ok(report)
             }
         }

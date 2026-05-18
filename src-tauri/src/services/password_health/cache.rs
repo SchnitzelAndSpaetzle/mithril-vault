@@ -71,6 +71,7 @@ mod tests {
         PasswordHealthReport {
             score,
             findings: Vec::new(),
+            totals: super::super::analyzer::HealthTotals::default(),
         }
     }
 
@@ -81,10 +82,7 @@ mod tests {
     #[test]
     fn cache_returns_only_on_matching_db_and_generation() {
         let mut store = CacheStore::new();
-        assert!(
-            store.get("db1", 0).is_none(),
-            "empty cache misses"
-        );
+        assert!(store.get("db1", 0).is_none(), "empty cache misses");
 
         let r = report_with_score(Some(75));
         store.insert("db1".into(), 1, r.clone());
@@ -98,10 +96,7 @@ mod tests {
             store.get("db1", 0).is_none(),
             "older generation misses — caller has a stale handle"
         );
-        assert!(
-            store.get("db2", 1).is_none(),
-            "different Vault id misses"
-        );
+        assert!(store.get("db2", 1).is_none(), "different Vault id misses");
     }
 
     /// `evict` drops the slot so the next `get` is a miss regardless
