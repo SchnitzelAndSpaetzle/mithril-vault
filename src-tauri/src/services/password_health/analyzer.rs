@@ -90,7 +90,11 @@ pub fn analyze(
     let unhealthy = findings.len();
     let healthy = total - unhealthy;
     // `total <= u32::MAX` in any realistic Vault; cast is safe.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     let score = ((healthy as f64 / total as f64) * 100.0).round() as u32;
 
     PasswordHealthReport {
@@ -157,12 +161,7 @@ mod tests {
     #[test]
     fn single_expired_entry_in_four_yields_score_75_and_one_finding() {
         let now = now_fixed();
-        let entries = vec![
-            healthy("a"),
-            healthy("b"),
-            healthy("c"),
-            expired("d", now),
-        ];
+        let entries = vec![healthy("a"), healthy("b"), healthy("c"), expired("d", now)];
         let report = analyze(entries, now);
         assert_eq!(report.score, Some(75));
         assert_eq!(
