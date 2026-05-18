@@ -22,7 +22,7 @@ interface PasswordHealthReportViewProps {
 
 export function PasswordHealthReportView({
   dbId,
-}: PasswordHealthReportViewProps) {
+}: Readonly<PasswordHealthReportViewProps>) {
   const { t } = useTranslation();
   const { data: report, isLoading, error } = usePasswordHealthReport(dbId);
   const { data: entries } = useEntries(dbId, null);
@@ -61,7 +61,9 @@ export function PasswordHealthReportView({
   );
 }
 
-function ScoreAndTotals({ report }: { report: PasswordHealthReport }) {
+function ScoreAndTotals({
+  report,
+}: Readonly<{ report: PasswordHealthReport }>) {
   const { t } = useTranslation();
   const isEmpty = report.totals.total === 0;
   const scoreText =
@@ -102,11 +104,11 @@ function TotalsCell({
   label,
   value,
   emphasis,
-}: {
+}: Readonly<{
   label: string;
   value: number;
   emphasis?: "amber";
-}) {
+}>) {
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -126,10 +128,10 @@ function TotalsCell({
 function HighFindingsSection({
   report,
   entries,
-}: {
+}: Readonly<{
   report: PasswordHealthReport;
   entries: Entry[];
-}) {
+}>) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
