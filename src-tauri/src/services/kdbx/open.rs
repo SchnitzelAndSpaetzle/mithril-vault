@@ -11,10 +11,55 @@ use keepass::error::{
     Kdbx4OuterHeaderError, KdfConfigError, OuterCipherConfigError,
 };
 use keepass::{Database, DatabaseKey};
+use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 
 use super::KdbxService;
+
+/// Installs a freshly-decrypted `Database` into the open-databases map
+/// and returns the `DatabaseInfo` snapshot the command layer surfaces.
+///
+/// All three `open*` entry points (`open`, `open_with_keyfile`,
+/// `open_with_keyfile_only`) share this tail — only the credential
+/// payload differs. Folding it here eliminates the structurally
+/// identical `OpenDatabase { … }` literal that `SonarCloud` flagged
+/// as duplicated.
+fn install_open_database(
+    databases: &mut HashMap<String, OpenDatabase>,
+    db: Database,
+    normalized_path: String,
+    path: &str,
+    password: Option<SecureString>,
+    keyfile_path: Option<String>,
+) -> DatabaseInfo {
+    let root_group_id = db.root().id().uuid().to_string();
+    let name = db.root().name.clone();
+    let version = format_database_version(&db.config.version);
+
+    databases.insert(
+        normalized_path,
+        OpenDatabase {
+            db: Some(db),
+            path: path.to_string(),
+            is_modified: false,
+            password,
+            keyfile_path,
+            version: version.clone(),
+            name: name.clone(),
+            root_group_id: root_group_id.clone(),
+        },
+    );
+
+    DatabaseInfo {
+        name,
+        path: path.to_string(),
+        is_modified: false,
+        is_locked: false,
+        root_group_id,
+        version,
+    }
+}
 
 impl KdbxService {
     /// Opens a database with a password.
@@ -33,32 +78,14 @@ impl KdbxService {
         let key = DatabaseKey::new().with_password(password);
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root().id().uuid().to_string();
-        let name = db.root().name.clone();
-        let version = format_database_version(&db.config.version);
-
-        databases.insert(
+        Ok(install_open_database(
+            &mut databases,
+            db,
             normalized_path,
-            OpenDatabase {
-                db: Some(db),
-                path: path.to_string(),
-                is_modified: false,
-                password: Some(SecureString::from(password)),
-                keyfile_path: None,
-                version: version.clone(),
-                name: name.clone(),
-                root_group_id: root_group_id.clone(),
-            },
-        );
-
-        Ok(DatabaseInfo {
-            name,
-            path: path.to_string(),
-            is_modified: false,
-            is_locked: false,
-            root_group_id,
-            version,
-        })
+            path,
+            Some(SecureString::from(password)),
+            None,
+        ))
     }
 
     /// Opens a database with a password and keyfile.
@@ -87,32 +114,14 @@ impl KdbxService {
 
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root().id().uuid().to_string();
-        let name = db.root().name.clone();
-        let version = format_database_version(&db.config.version);
-
-        databases.insert(
+        Ok(install_open_database(
+            &mut databases,
+            db,
             normalized_path,
-            OpenDatabase {
-                db: Some(db),
-                path: path.to_string(),
-                is_modified: false,
-                password: Some(SecureString::from(password)),
-                keyfile_path: Some(keyfile_path.to_string()),
-                version: version.clone(),
-                name: name.clone(),
-                root_group_id: root_group_id.clone(),
-            },
-        );
-
-        Ok(DatabaseInfo {
-            name,
-            path: path.to_string(),
-            is_modified: false,
-            is_locked: false,
-            root_group_id,
-            version,
-        })
+            path,
+            Some(SecureString::from(password)),
+            Some(keyfile_path.to_string()),
+        ))
     }
 
     /// Opens a database using only a keyfile.
@@ -138,32 +147,14 @@ impl KdbxService {
 
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root().id().uuid().to_string();
-        let name = db.root().name.clone();
-        let version = format_database_version(&db.config.version);
-
-        databases.insert(
+        Ok(install_open_database(
+            &mut databases,
+            db,
             normalized_path,
-            OpenDatabase {
-                db: Some(db),
-                path: path.to_string(),
-                is_modified: false,
-                password: None,
-                keyfile_path: Some(keyfile_path.to_string()),
-                version: version.clone(),
-                name: name.clone(),
-                root_group_id: root_group_id.clone(),
-            },
-        );
-
-        Ok(DatabaseInfo {
-            name,
-            path: path.to_string(),
-            is_modified: false,
-            is_locked: false,
-            root_group_id,
-            version,
-        })
+            path,
+            None,
+            Some(keyfile_path.to_string()),
+        ))
     }
 
     /// Closes a specific database by its path.
