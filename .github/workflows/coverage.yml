@@ -17,6 +17,11 @@ env:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    env:
+      # Resolved here (where the `secrets` context is allowed) so the step-level
+      # `if:` below can check it via the `env` context. Holds only "true"/"false";
+      # the actual token stays scoped to the Sonar step.
+      HAS_SONAR_TOKEN: ${{ secrets.SONAR_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -61,7 +66,9 @@ jobs:
       - name: SonarQube Cloud scan
         # Skip on fork PRs and Dependabot runs where SONAR_TOKEN isn't available;
         # otherwise the step would fail and turn the whole Coverage job red.
-        if: ${{ secrets.SONAR_TOKEN != '' }}
+        # The `secrets` context isn't allowed in step-level `if:`, so the guard
+        # is resolved to a boolean via the job-level `HAS_SONAR_TOKEN` env var.
+        if: env.HAS_SONAR_TOKEN == 'true'
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
