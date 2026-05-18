@@ -5,9 +5,7 @@ on:
     types: [release-build]
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -47,6 +45,8 @@ jobs:
     name: Create Release
     needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       release_id: ${{ steps.create-release.outputs.id }}
     steps:
@@ -76,6 +76,8 @@ jobs:
   build:
     name: Build (${{ matrix.name }})
     needs: [validate, create-release]
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -141,6 +143,8 @@ jobs:
     name: Generate Checksums
     needs: [validate, create-release, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download all release assets
         uses: robinraju/release-downloader@v1
@@ -175,6 +179,10 @@ jobs:
     name: Upload SBOM to Release
     needs: [validate, create-release, sbom]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Download SBOM artifact
         uses: actions/download-artifact@v8
@@ -209,6 +217,8 @@ jobs:
     name: Generate Update Manifest
     needs: [validate, create-release, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6

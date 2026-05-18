@@ -28,14 +28,16 @@ jobs:
 
       - name: Set metadata
         id: metadata
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ inputs.version }}" != "" ] && [ "${{ inputs.version }}" != "dev" ]; then
-            VERSION="${{ inputs.version }}"
+          if [ -n "$INPUT_VERSION" ] && [ "$INPUT_VERSION" != "dev" ]; then
+            VERSION="$INPUT_VERSION"
           else
             VERSION="dev-$(git rev-parse --short HEAD)"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "artifact-name=sbom-cyclonedx-$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=sbom-cyclonedx-$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

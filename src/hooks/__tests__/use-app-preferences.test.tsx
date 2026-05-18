@@ -56,7 +56,7 @@ function makePreferences(): AppPreferences {
     },
     advanced: {
       debugMode: false,
-      dataLocation: "/tmp/mithril-vault",
+      dataLocation: "/mock/mithril-vault",
     },
     backups: {
       enabled: true,

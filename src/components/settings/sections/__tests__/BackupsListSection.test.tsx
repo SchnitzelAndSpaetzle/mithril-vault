@@ -114,13 +114,13 @@ describe("BackupsListSection", () => {
   it("renders a row per listed backup with timestamp, size and kind", async () => {
     listMock.mockResolvedValueOnce([
       {
-        path: "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+        path: "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
         timestamp: "2026-05-12T14:30:45.123Z",
         sizeBytes: 4096,
         kind: "auto",
       },
       {
-        path: "/tmp/.kdbx-backups/vault.kdbx.backup.manual.20260101T000000.000Z.kdbx",
+        path: "/mock/.kdbx-backups/vault.kdbx.backup.manual.20260101T000000.000Z.kdbx",
         timestamp: "2026-01-01T00:00:00.000Z",
         sizeBytes: 1024 * 1024,
         kind: "manual",
@@ -130,14 +130,14 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" />
+        <BackupsListSection dbId="/mock/vault.kdbx" />
       </Wrapper>
     );
 
     // Wait for the populated list — the empty state and skeleton give way
     // to two rows once the fetch resolves.
     await waitFor(() => {
-      expect(listMock).toHaveBeenCalledWith("/tmp/vault.kdbx");
+      expect(listMock).toHaveBeenCalledWith("/mock/vault.kdbx");
     });
 
     const rows = await screen.findAllByRole("listitem");
@@ -157,7 +157,7 @@ describe("BackupsListSection", () => {
 
   it("calls backups.delete with the row path when the delete button is confirmed", async () => {
     const snapshotPath =
-      "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
+      "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
     listMock.mockResolvedValue([
       {
         path: snapshotPath,
@@ -171,7 +171,7 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" />
+        <BackupsListSection dbId="/mock/vault.kdbx" />
       </Wrapper>
     );
 
@@ -198,7 +198,7 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" />
+        <BackupsListSection dbId="/mock/vault.kdbx" />
       </Wrapper>
     );
 
@@ -210,7 +210,7 @@ describe("BackupsListSection", () => {
     // refetch the list without the user pressing anything.
     listMock.mockResolvedValueOnce([
       {
-        path: "/tmp/.kdbx-backups/vault.kdbx.backup.20260513T000000.000Z.kdbx",
+        path: "/mock/.kdbx-backups/vault.kdbx.backup.20260513T000000.000Z.kdbx",
         timestamp: "2026-05-13T00:00:00.000Z",
         sizeBytes: 4096,
         kind: "auto",
@@ -218,7 +218,7 @@ describe("BackupsListSection", () => {
     ]);
     const handler = tauriEventListeners.get("backup-created");
     if (!handler) throw new Error("backup-created listener not registered");
-    handler({ payload: { path: "/tmp/.kdbx-backups/anything" } });
+    handler({ payload: { path: "/mock/.kdbx-backups/anything" } });
 
     await waitFor(() => {
       expect(listMock).toHaveBeenCalledTimes(2);
@@ -230,7 +230,7 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" backupsEnabled={true} />
+        <BackupsListSection dbId="/mock/vault.kdbx" backupsEnabled={true} />
       </Wrapper>
     );
 
@@ -260,7 +260,7 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" backupsEnabled={false} />
+        <BackupsListSection dbId="/mock/vault.kdbx" backupsEnabled={false} />
       </Wrapper>
     );
 
@@ -273,12 +273,12 @@ describe("BackupsListSection", () => {
   it("invokes backups.createManual and surfaces a success toast on click", async () => {
     listMock.mockResolvedValueOnce([]);
     createManualMock.mockResolvedValueOnce({
-      path: "/tmp/.kdbx-backups/vault.kdbx.backup.manual.20260515T120000.000Z.kdbx",
+      path: "/mock/.kdbx-backups/vault.kdbx.backup.manual.20260515T120000.000Z.kdbx",
     });
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" backupsEnabled={true} />
+        <BackupsListSection dbId="/mock/vault.kdbx" backupsEnabled={true} />
       </Wrapper>
     );
 
@@ -288,7 +288,7 @@ describe("BackupsListSection", () => {
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(createManualMock).toHaveBeenCalledWith("/tmp/vault.kdbx");
+      expect(createManualMock).toHaveBeenCalledWith("/mock/vault.kdbx");
     });
     await waitFor(() => {
       expect(toastSuccessMock).toHaveBeenCalled();
@@ -301,7 +301,7 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" backupsEnabled={true} />
+        <BackupsListSection dbId="/mock/vault.kdbx" backupsEnabled={true} />
       </Wrapper>
     );
 
@@ -318,7 +318,7 @@ describe("BackupsListSection", () => {
 
   it("does not call restore when the confirmation dialog is dismissed", async () => {
     const snapshotPath =
-      "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
+      "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
     listMock.mockResolvedValue([
       {
         path: snapshotPath,
@@ -332,7 +332,7 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" />
+        <BackupsListSection dbId="/mock/vault.kdbx" />
       </Wrapper>
     );
 
@@ -355,7 +355,7 @@ describe("BackupsListSection", () => {
 
   it("invokes backups.restore only after the user confirms the dialog", async () => {
     const snapshotPath =
-      "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
+      "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx";
     listMock.mockResolvedValue([
       {
         path: snapshotPath,
@@ -370,7 +370,7 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" />
+        <BackupsListSection dbId="/mock/vault.kdbx" />
       </Wrapper>
     );
 
@@ -387,7 +387,7 @@ describe("BackupsListSection", () => {
   it("refetches when a backup-deleted event fires", async () => {
     listMock.mockResolvedValueOnce([
       {
-        path: "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+        path: "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
         timestamp: "2026-05-12T14:30:45.123Z",
         sizeBytes: 4096,
         kind: "auto",
@@ -397,7 +397,7 @@ describe("BackupsListSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <BackupsListSection dbId="/tmp/vault.kdbx" />
+        <BackupsListSection dbId="/mock/vault.kdbx" />
       </Wrapper>
     );
 
@@ -408,7 +408,7 @@ describe("BackupsListSection", () => {
     listMock.mockResolvedValueOnce([]);
     const handler = tauriEventListeners.get("backup-deleted");
     if (!handler) throw new Error("backup-deleted listener not registered");
-    handler({ payload: { path: "/tmp/.kdbx-backups/anything" } });
+    handler({ payload: { path: "/mock/.kdbx-backups/anything" } });
 
     await waitFor(() => {
       expect(listMock).toHaveBeenCalledTimes(2);
