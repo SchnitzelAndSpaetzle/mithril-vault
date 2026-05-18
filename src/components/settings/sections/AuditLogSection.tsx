@@ -323,6 +323,63 @@ function VirtualizedRows({
   );
 }
 
+interface EventListProps {
+  showEmptyNoVault: boolean;
+  invalidRange: boolean;
+  isLoading: boolean;
+  error: Error | null;
+  filteredEvents: AuditEvent[];
+  resolveTitle: (entryId: string) => string | null;
+}
+
+function EventList({
+  showEmptyNoVault,
+  invalidRange,
+  isLoading,
+  error,
+  filteredEvents,
+  resolveTitle,
+}: Readonly<EventListProps>) {
+  const { t } = useTranslation();
+  if (showEmptyNoVault) {
+    return (
+      <p className="text-sm text-muted-foreground">{t("audit.emptyNoVault")}</p>
+    );
+  }
+  if (invalidRange) return null;
+  if (isLoading) {
+    return (
+      <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+    );
+  }
+  if (error) {
+    return (
+      <p className="text-sm text-destructive">
+        {t("audit.loadError", { error: String(error) })}
+      </p>
+    );
+  }
+  if (filteredEvents.length === 0) {
+    return <p className="text-sm text-muted-foreground">{t("audit.empty")}</p>;
+  }
+  if (filteredEvents.length >= VIRTUALIZATION_THRESHOLD) {
+    return (
+      <VirtualizedRows events={filteredEvents} resolveTitle={resolveTitle} />
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {filteredEvents.map((event, index) => (
+        <AuditRow
+          key={`${event.timestamp}-${index}`}
+          event={event}
+          resolveTitle={resolveTitle}
+        />
+      ))}
+    </ul>
+  );
+}
+
 export function AuditLogSection({
   dbId,
   isLocked = false,
@@ -436,50 +493,6 @@ export function AuditLogSection({
   const hasPicker = recentDatabases.length > 0 && effectivePath !== null;
   const showEmptyNoVault = !effectivePath;
 
-  function renderEventList() {
-    if (showEmptyNoVault) {
-      return (
-        <p className="text-sm text-muted-foreground">
-          {t("audit.emptyNoVault")}
-        </p>
-      );
-    }
-    if (invalidRange) return null;
-    if (query.isLoading) {
-      return (
-        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-      );
-    }
-    if (query.error) {
-      return (
-        <p className="text-sm text-destructive">
-          {t("audit.loadError", { error: String(query.error) })}
-        </p>
-      );
-    }
-    if (filteredEvents.length === 0) {
-      return (
-        <p className="text-sm text-muted-foreground">{t("audit.empty")}</p>
-      );
-    }
-    if (filteredEvents.length >= VIRTUALIZATION_THRESHOLD) {
-      return (
-        <VirtualizedRows events={filteredEvents} resolveTitle={resolveTitle} />
-      );
-    }
-    return (
-      <ul className="flex flex-col gap-2">
-        {filteredEvents.map((event, index) => (
-          <AuditRow
-            key={`${event.timestamp}-${index}`}
-            event={event}
-            resolveTitle={resolveTitle}
-          />
-        ))}
-      </ul>
-    );
-  }
-
   return (
     <SettingsSection
       id="audit-log"
@@ -528,7 +541,14 @@ export function AuditLogSection({
           />
         </>
       ) : null}
-      {renderEventList()}
+      <EventList
+        showEmptyNoVault={showEmptyNoVault}
+        invalidRange={invalidRange}
+        isLoading={query.isLoading}
+        error={query.error ?? null}
+        filteredEvents={filteredEvents}
+        resolveTitle={resolveTitle}
+      />
     </SettingsSection>
   );
 }
