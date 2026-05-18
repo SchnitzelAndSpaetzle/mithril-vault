@@ -45,7 +45,16 @@
     "clearButton": "Effacer le journal d'audit",
     "clearConfirmTitle": "Effacer le journal d'audit ?",
     "clearConfirm": "Cela supprime tous les événements d'audit enregistrés sur cet appareil pour le coffre ouvert. Une seule entrée « Journal d'audit effacé » sera conservée pour que l'effacement reste visible.",
-    "clearError": "Échec de l'effacement du journal d'audit : {{error}}"
+    "clearError": "Échec de l'effacement du journal d'audit : {{error}}",
+    "picker": {
+      "label": "Coffre"
+    },
+    "filter": {
+      "kinds": "Types d'événement",
+      "from": "Du",
+      "to": "Au",
+      "invalidRange": "La date « Du » doit être antérieure ou égale à la date « Au »."
+    }
   },
   "settings": {
     "title": "Paramètres",

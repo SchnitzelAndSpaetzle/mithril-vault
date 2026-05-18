@@ -45,7 +45,16 @@
     "clearButton": "Obriši dnevnik nadzora",
     "clearConfirmTitle": "Obrisati dnevnik nadzora?",
     "clearConfirm": "Ovo briše sve događaje nadzora zabeležene na ovom uređaju za otvoreni sef. Ostaje samo jedan unos „Dnevnik nadzora obrisan\" kako bi brisanje bilo vidljivo.",
-    "clearError": "Brisanje dnevnika nadzora nije uspelo: {{error}}"
+    "clearError": "Brisanje dnevnika nadzora nije uspelo: {{error}}",
+    "picker": {
+      "label": "Sef"
+    },
+    "filter": {
+      "kinds": "Vrste događaja",
+      "from": "Od",
+      "to": "Do",
+      "invalidRange": "Datum „Od\" mora biti pre ili jednak datumu „Do\"."
+    }
   },
   "settings": {
     "title": "Podešavanja",

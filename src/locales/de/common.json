@@ -45,7 +45,16 @@
     "clearButton": "Audit-Protokoll leeren",
     "clearConfirmTitle": "Audit-Protokoll leeren?",
     "clearConfirm": "Dies löscht alle für den geöffneten Tresor auf diesem Gerät aufgezeichneten Audit-Ereignisse. Ein einzelner \"Audit-Protokoll geleert\"-Eintrag bleibt erhalten, damit die Löschung sichtbar ist.",
-    "clearError": "Audit-Protokoll konnte nicht geleert werden: {{error}}"
+    "clearError": "Audit-Protokoll konnte nicht geleert werden: {{error}}",
+    "picker": {
+      "label": "Tresor"
+    },
+    "filter": {
+      "kinds": "Ereignistypen",
+      "from": "Von",
+      "to": "Bis",
+      "invalidRange": "Das \"Von\"-Datum darf nicht nach dem \"Bis\"-Datum liegen."
+    }
   },
   "settings": {
     "title": "Einstellungen",

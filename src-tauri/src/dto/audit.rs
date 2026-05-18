@@ -89,6 +89,19 @@ pub struct AuditEventsResponseDto {
     pub degraded: bool,
 }
 
+/// Snapshot of the audit subsystem's runtime state. Separate from
+/// `AuditEventsResponseDto.degraded` because the Settings panel
+/// renders a header indicator that must survive across Vault picks
+/// without needing to (re)fetch a Vault-specific event list. The
+/// header indicator clears on app restart since `degraded` is a
+/// session-wide in-memory flag.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditStatusDto {
+    pub enabled: bool,
+    pub degraded: bool,
+}
+
 impl From<AuditEvent> for AuditEventDto {
     fn from(event: AuditEvent) -> Self {
         match event {
@@ -346,5 +359,22 @@ mod tests {
     fn filter_dto_defaults_to_everything() {
         let f: AuditFilterDto = serde_json::from_str("{}").expect("parse");
         assert!(f.kinds.is_none());
+    }
+
+    /// The Settings → Audit Log panel header renders a degraded indicator
+    /// from a session-wide flag — distinct from the response-level
+    /// `degraded` returned by `get_audit_events`. The indicator must clear
+    /// on app restart, so the wire shape carries `enabled` (the master gate
+    /// state from preferences) plus `degraded` (session-wide, set whenever
+    /// any audit operation has failed internally this session).
+    #[test]
+    fn status_dto_serializes_enabled_and_degraded_as_camel_case() {
+        let dto = AuditStatusDto {
+            enabled: true,
+            degraded: false,
+        };
+        let json = serde_json::to_string(&dto).expect("ser");
+        assert!(json.contains("\"enabled\":true"), "got: {json}");
+        assert!(json.contains("\"degraded\":false"), "got: {json}");
     }
 }

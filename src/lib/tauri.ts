@@ -6,6 +6,7 @@ import type {
   AppPreferences,
   AuditEventsResponse,
   AuditFilter,
+  AuditStatus,
   BackupInfo,
   BackupListEntry,
   CreateEntryData,
@@ -28,6 +29,7 @@ import type {
 import {
   AppPreferencesSchema,
   AuditEventsResponseSchema,
+  AuditStatusSchema,
   BackupInfoSchema,
   BackupListEntrySchema,
   CreateEntryDataSchema,
@@ -671,6 +673,14 @@ export const audit = {
   /// preserved and this rejects with the backend error.
   async clear(vaultPath: string): Promise<void> {
     await invoke("clear_audit_log", { vaultPath });
+  },
+
+  /// Snapshot of audit subsystem runtime state: master gate + session-
+  /// wide `degraded` flag. Used by the Settings panel header to render
+  /// the degraded indicator independently from the per-Vault event read.
+  async getStatus(): Promise<AuditStatus> {
+    const result = await invoke("get_audit_status");
+    return AuditStatusSchema.parse(result);
   },
 };
 
