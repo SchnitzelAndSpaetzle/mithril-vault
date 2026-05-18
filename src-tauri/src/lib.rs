@@ -193,6 +193,11 @@ pub fn run() {
                         if let Some(audit) = app.try_state::<Arc<AuditService>>() {
                             audit.record_vault_locked_batch(&locked_paths, Reason::ScreenLock);
                         }
+                        if let Some(health) = app.try_state::<Arc<PasswordHealthService>>() {
+                            for path in &locked_paths {
+                                health.on_lock(path);
+                            }
+                        }
                         let _ = app.emit("database-locked", &locked_paths);
                     }
                 }
