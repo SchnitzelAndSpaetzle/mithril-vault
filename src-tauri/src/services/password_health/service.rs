@@ -17,12 +17,12 @@
 use std::sync::Mutex;
 
 use chrono::{DateTime, Utc};
-use keepass::db::EntryRef;
 use keepass::Database;
 
 use super::analyzer::{analyze, EntryInput, PasswordHealthReport};
 use super::cache::CacheStore;
 use crate::dto::error::AppError;
+use crate::services::kdbx::recycle::is_in_recycle_bin;
 use crate::services::kdbx::KdbxService;
 
 /// Walks the unlocked Vault and produces one [`EntryInput`] per
@@ -145,24 +145,6 @@ impl Default for PasswordHealthService {
     }
 }
 
-/// Walks the Entry's ancestor chain looking for `recycle_uuid`. Matches
-/// the equivalent helper in `services::kdbx::entries` — we duplicate
-/// here to keep `password_health` free of dependencies on KDBX
-/// internals beyond the `keepass` crate itself.
-fn is_in_recycle_bin(db: &Database, entry: &EntryRef<'_>, recycle_uuid: uuid::Uuid) -> bool {
-    let mut current_id = Some(entry.parent().id());
-    while let Some(gid) = current_id {
-        if gid.uuid() == recycle_uuid {
-            return true;
-        }
-        let Some(group) = db.group(gid) else {
-            return false;
-        };
-        current_id = group.parent().map(|p| p.id());
-    }
-    false
-}
-
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
@@ -175,6 +157,46 @@ mod tests {
 
     fn now_fixed() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 5, 18, 12, 0, 0).unwrap()
+    }
+
+    /// Builds a one-Entry Vault keyed on `path` and returns the
+    /// `KdbxService` and `PasswordHealthService` the cache/eviction
+    /// tests share. The seeded Entry is healthy (no expiry).
+    fn seed_single_entry_vault(path: &str) -> (KdbxService, PasswordHealthService) {
+        let mut db = Database::new();
+        {
+            let mut root = db.root_mut();
+            let mut e = root.add_entry();
+            e.set("Password", Value::protected("ok"));
+        }
+        let kdbx = KdbxService::new();
+        install_vault(&kdbx, path, db);
+        (kdbx, PasswordHealthService::new())
+    }
+
+    /// Adds an expired Entry to the Vault at `path`. When `mark` is
+    /// true, also calls `VaultMut::mark_modified()` so the cache key
+    /// advances; when false, the mutation stays "silent" — useful for
+    /// proving cache hits and `on_lock` eviction.
+    fn insert_expired_entry(
+        kdbx: &KdbxService,
+        path: &str,
+        password: &str,
+        expiry: chrono::NaiveDateTime,
+        mark: bool,
+    ) {
+        kdbx.with_vault_mut(path, |v| {
+            let mut root = v.db_mut().root_mut();
+            let mut e = root.add_entry();
+            e.set("Password", Value::protected(password));
+            e.times.expires = Some(true);
+            e.times.expiry = Some(expiry);
+            if mark {
+                v.mark_modified();
+            }
+            Ok(())
+        })
+        .expect("mutate");
     }
 
     /// Drops a pre-built `keepass::Database` into the `KdbxService`
@@ -312,32 +334,13 @@ mod tests {
     fn generate_report_busts_cache_when_mark_modified_advances_generation() {
         let now = now_fixed();
         let past = (now - chrono::Duration::days(1)).naive_utc();
-
-        let mut db = Database::new();
-        {
-            let mut root = db.root_mut();
-            let mut e = root.add_entry();
-            e.set("Password", Value::protected("ok"));
-        }
-
-        let kdbx = KdbxService::new();
         let path = "/tmp/__health_cache_bust_test__.kdbx";
-        install_vault(&kdbx, path, db);
-        let service = PasswordHealthService::new();
+        let (kdbx, service) = seed_single_entry_vault(path);
 
         let r1 = service.generate_report(&kdbx, path, now).expect("first");
         assert!(r1.findings.is_empty());
 
-        kdbx.with_vault_mut(path, |v| {
-            let mut root = v.db_mut().root_mut();
-            let mut e = root.add_entry();
-            e.set("Password", Value::protected("x"));
-            e.times.expires = Some(true);
-            e.times.expiry = Some(past);
-            v.mark_modified();
-            Ok(())
-        })
-        .expect("mutate + mark");
+        insert_expired_entry(&kdbx, path, "x", past, true);
 
         let r2 = service.generate_report(&kdbx, path, now).expect("second");
         assert_eq!(
@@ -359,34 +362,16 @@ mod tests {
     fn generate_report_hits_cache_when_generation_does_not_advance() {
         let now = now_fixed();
         let past = (now - chrono::Duration::days(1)).naive_utc();
-
-        let mut db = Database::new();
-        {
-            let mut root = db.root_mut();
-            let mut e = root.add_entry();
-            e.set("Password", Value::protected("ok"));
-        }
-
-        let kdbx = KdbxService::new();
         let path = "/tmp/__health_cache_hit_test__.kdbx";
-        install_vault(&kdbx, path, db);
-        let service = PasswordHealthService::new();
+        let (kdbx, service) = seed_single_entry_vault(path);
 
         let r1 = service.generate_report(&kdbx, path, now).expect("first");
         assert!(r1.findings.is_empty());
 
-        kdbx.with_vault_mut(path, |v| {
-            let mut root = v.db_mut().root_mut();
-            let mut e = root.add_entry();
-            e.set("Password", Value::protected("y"));
-            e.times.expires = Some(true);
-            e.times.expiry = Some(past);
-            // NOTE: deliberately not calling v.mark_modified(). The
-            // cache is keyed on generation, and generation only moves
-            // through that one call site.
-            Ok(())
-        })
-        .expect("mutate without marking");
+        // Silent mutation: the cache is keyed on generation, and
+        // generation only advances through `mark_modified`. So the
+        // expired Entry added here must not invalidate the cached r1.
+        insert_expired_entry(&kdbx, path, "y", past, false);
 
         let r2 = service.generate_report(&kdbx, path, now).expect("second");
         assert_eq!(
@@ -405,33 +390,15 @@ mod tests {
     fn on_lock_evicts_cache_so_next_call_recomputes() {
         let now = now_fixed();
         let past = (now - chrono::Duration::days(1)).naive_utc();
-
-        let mut db = Database::new();
-        {
-            let mut root = db.root_mut();
-            let mut e = root.add_entry();
-            e.set("Password", Value::protected("ok"));
-        }
-
-        let kdbx = KdbxService::new();
         let path = "/tmp/__health_on_lock_evict_test__.kdbx";
-        install_vault(&kdbx, path, db);
-        let service = PasswordHealthService::new();
+        let (kdbx, service) = seed_single_entry_vault(path);
 
         let r1 = service.generate_report(&kdbx, path, now).expect("seed");
         assert!(r1.findings.is_empty());
 
-        kdbx.with_vault_mut(path, |v| {
-            let mut root = v.db_mut().root_mut();
-            let mut e = root.add_entry();
-            e.set("Password", Value::protected("x"));
-            e.times.expires = Some(true);
-            e.times.expiry = Some(past);
-            // Deliberately no mark_modified — the cache would hit
-            // on the next read if not for the explicit eviction.
-            Ok(())
-        })
-        .expect("silent mutation");
+        // Silent mutation: without `on_lock` the next read would hit
+        // the cache. The explicit eviction is what forces recompute.
+        insert_expired_entry(&kdbx, path, "x", past, false);
 
         service.on_lock(path);
 
