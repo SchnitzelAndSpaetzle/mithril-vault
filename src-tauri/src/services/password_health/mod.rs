@@ -9,4 +9,5 @@
 //! for the architectural decisions this module implements.
 
 pub mod analyzer;
+pub mod cache;
 pub mod service;
