@@ -6,6 +6,7 @@ import type {
   AppPreferences,
   AuditEventsResponse,
   AuditFilter,
+  AuditStatus,
   BackupInfo,
   BackupListEntry,
   CreateEntryData,
@@ -28,6 +29,7 @@ import type {
 import {
   AppPreferencesSchema,
   AuditEventsResponseSchema,
+  AuditStatusSchema,
   BackupInfoSchema,
   BackupListEntrySchema,
   CreateEntryDataSchema,
@@ -663,6 +665,22 @@ export const audit = {
       filter: filter ?? null,
     });
     return AuditEventsResponseSchema.parse(result);
+  },
+
+  /// Truncates the per-Vault audit log and leaves behind a single
+  /// `auditCleared` event so the wipe shows up in the panel. The backend
+  /// rewrites the file atomically, so on failure the original log is
+  /// preserved and this rejects with the backend error.
+  async clear(vaultPath: string): Promise<void> {
+    await invoke("clear_audit_log", { vaultPath });
+  },
+
+  /// Snapshot of audit subsystem runtime state: master gate + session-
+  /// wide `degraded` flag. Used by the Settings panel header to render
+  /// the degraded indicator independently from the per-Vault event read.
+  async getStatus(): Promise<AuditStatus> {
+    const result = await invoke("get_audit_status");
+    return AuditStatusSchema.parse(result);
   },
 };
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::dto::audit::{AuditEventDto, AuditEventsResponseDto, AuditFilterDto};
+use crate::dto::audit::{AuditEventDto, AuditEventsResponseDto, AuditFilterDto, AuditStatusDto};
 use crate::dto::error::AppError;
 use crate::services::audit::{AuditFilter, AuditService};
 use std::path::Path;
@@ -35,4 +35,35 @@ pub async fn get_audit_events(
         events: dtos,
         degraded: audit.is_degraded(),
     })
+}
+
+/// Reports the audit subsystem's runtime state for the Settings panel
+/// header: whether logging is on (the master gate) and whether the
+/// session-wide `degraded` flag has tripped from any prior record/read
+/// failure. The header indicator clears on app restart because
+/// `degraded` lives in process memory — disabling-then-re-enabling
+/// alone does not clear it.
+#[tauri::command]
+pub async fn get_audit_status(
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<AuditStatusDto, AppError> {
+    Ok(AuditStatusDto {
+        enabled: audit.is_enabled(),
+        degraded: audit.is_degraded(),
+    })
+}
+
+/// Truncates the per-Vault audit log and leaves behind a single
+/// `audit.cleared` event so the wipe is visible in the panel. The
+/// underlying service performs the rewrite atomically so a mid-write
+/// failure leaves the original file untouched; the caller sees that as
+/// `AppError::AuditClear`.
+#[tauri::command]
+pub async fn clear_audit_log(
+    vault_path: String,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<(), AppError> {
+    audit
+        .clear(Path::new(&vault_path))
+        .map_err(|e| AppError::AuditClear(e.to_string()))
 }

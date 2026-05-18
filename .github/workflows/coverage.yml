@@ -17,8 +17,15 @@ env:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    env:
+      # Resolved here (where the `secrets` context is allowed) so the step-level
+      # `if:` below can check it via the `env` context. Holds only "true"/"false";
+      # the actual token stays scoped to the Sonar step.
+      HAS_SONAR_TOKEN: ${{ secrets.SONAR_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       # Frontend coverage
       - name: Setup Bun
@@ -55,6 +62,16 @@ jobs:
         working-directory: src-tauri
         # Use --release to speed up Argon2 key derivation in KDBX tests
         run: cargo llvm-cov --release --lcov --output-path rust-lcov.info
+
+      - name: SonarQube Cloud scan
+        # Skip on fork PRs and Dependabot runs where SONAR_TOKEN isn't available;
+        # otherwise the step would fail and turn the whole Coverage job red.
+        # The `secrets` context isn't allowed in step-level `if:`, so the guard
+        # is resolved to a boolean via the job-level `HAS_SONAR_TOKEN` env var.
+        if: env.HAS_SONAR_TOKEN == 'true'
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       # Upload to Codecov
       - name: Upload frontend coverage to Codecov

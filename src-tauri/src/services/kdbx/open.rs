@@ -11,10 +11,55 @@ use keepass::error::{
     Kdbx4OuterHeaderError, KdfConfigError, OuterCipherConfigError,
 };
 use keepass::{Database, DatabaseKey};
+use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 
 use super::KdbxService;
+
+/// Installs a freshly-decrypted `Database` into the open-databases map
+/// and returns the `DatabaseInfo` snapshot the command layer surfaces.
+///
+/// All three `open*` entry points (`open`, `open_with_keyfile`,
+/// `open_with_keyfile_only`) share this tail — only the credential
+/// payload differs. Folding it here eliminates the structurally
+/// identical `OpenDatabase { … }` literal that `SonarCloud` flagged
+/// as duplicated.
+fn install_open_database(
+    databases: &mut HashMap<String, OpenDatabase>,
+    db: Database,
+    normalized_path: String,
+    path: &str,
+    password: Option<SecureString>,
+    keyfile_path: Option<String>,
+) -> DatabaseInfo {
+    let root_group_id = db.root().id().uuid().to_string();
+    let name = db.root().name.clone();
+    let version = format_database_version(&db.config.version);
+
+    databases.insert(
+        normalized_path,
+        OpenDatabase {
+            db: Some(db),
+            path: path.to_string(),
+            is_modified: false,
+            password,
+            keyfile_path,
+            version: version.clone(),
+            name: name.clone(),
+            root_group_id: root_group_id.clone(),
+        },
+    );
+
+    DatabaseInfo {
+        name,
+        path: path.to_string(),
+        is_modified: false,
+        is_locked: false,
+        root_group_id,
+        version,
+    }
+}
 
 impl KdbxService {
     /// Opens a database with a password.
@@ -33,32 +78,14 @@ impl KdbxService {
         let key = DatabaseKey::new().with_password(password);
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root().id().uuid().to_string();
-        let name = db.root().name.clone();
-        let version = format_database_version(&db.config.version);
-
-        databases.insert(
+        Ok(install_open_database(
+            &mut databases,
+            db,
             normalized_path,
-            OpenDatabase {
-                db: Some(db),
-                path: path.to_string(),
-                is_modified: false,
-                password: Some(SecureString::from(password)),
-                keyfile_path: None,
-                version: version.clone(),
-                name: name.clone(),
-                root_group_id: root_group_id.clone(),
-            },
-        );
-
-        Ok(DatabaseInfo {
-            name,
-            path: path.to_string(),
-            is_modified: false,
-            is_locked: false,
-            root_group_id,
-            version,
-        })
+            path,
+            Some(SecureString::from(password)),
+            None,
+        ))
     }
 
     /// Opens a database with a password and keyfile.
@@ -87,32 +114,14 @@ impl KdbxService {
 
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root().id().uuid().to_string();
-        let name = db.root().name.clone();
-        let version = format_database_version(&db.config.version);
-
-        databases.insert(
+        Ok(install_open_database(
+            &mut databases,
+            db,
             normalized_path,
-            OpenDatabase {
-                db: Some(db),
-                path: path.to_string(),
-                is_modified: false,
-                password: Some(SecureString::from(password)),
-                keyfile_path: Some(keyfile_path.to_string()),
-                version: version.clone(),
-                name: name.clone(),
-                root_group_id: root_group_id.clone(),
-            },
-        );
-
-        Ok(DatabaseInfo {
-            name,
-            path: path.to_string(),
-            is_modified: false,
-            is_locked: false,
-            root_group_id,
-            version,
-        })
+            path,
+            Some(SecureString::from(password)),
+            Some(keyfile_path.to_string()),
+        ))
     }
 
     /// Opens a database using only a keyfile.
@@ -138,32 +147,14 @@ impl KdbxService {
 
         let db = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let root_group_id = db.root().id().uuid().to_string();
-        let name = db.root().name.clone();
-        let version = format_database_version(&db.config.version);
-
-        databases.insert(
+        Ok(install_open_database(
+            &mut databases,
+            db,
             normalized_path,
-            OpenDatabase {
-                db: Some(db),
-                path: path.to_string(),
-                is_modified: false,
-                password: None,
-                keyfile_path: Some(keyfile_path.to_string()),
-                version: version.clone(),
-                name: name.clone(),
-                root_group_id: root_group_id.clone(),
-            },
-        );
-
-        Ok(DatabaseInfo {
-            name,
-            path: path.to_string(),
-            is_modified: false,
-            is_locked: false,
-            root_group_id,
-            version,
-        })
+            path,
+            None,
+            Some(keyfile_path.to_string()),
+        ))
     }
 
     /// Closes a specific database by its path.
@@ -197,26 +188,38 @@ impl KdbxService {
     }
 
     /// Locks a specific database by dropping the decrypted data and password.
-    pub fn lock(&self, db_id: &str) -> Result<DatabaseInfo, AppError> {
+    ///
+    /// Returns `(info, did_transition)` where `did_transition` is `true`
+    /// iff *this* call actually moved the DB from unlocked to locked. The
+    /// flag is computed inside the same critical section that mutates the
+    /// state, so concurrent callers cannot both observe themselves as the
+    /// transitioning one (TOCTOU). Callers that need to record a single
+    /// audit event per real transition (`lock_database`, auto-lock,
+    /// app-quit) must gate on this flag rather than on a pre-check.
+    pub fn lock(&self, db_id: &str) -> Result<(DatabaseInfo, bool), AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
+        let did_transition = !open_db.is_locked();
         // Drop the decrypted database (frees all entry/group data from memory)
         open_db.db = None;
         // Zeroize and drop the password (SecureString implements ZeroizeOnDrop)
         open_db.password = None;
 
-        Ok(DatabaseInfo {
-            name: open_db.name.clone(),
-            path: open_db.path.clone(),
-            is_modified: open_db.is_modified,
-            is_locked: true,
-            root_group_id: open_db.root_group_id.clone(),
-            version: open_db.version.clone(),
-        })
+        Ok((
+            DatabaseInfo {
+                name: open_db.name.clone(),
+                path: open_db.path.clone(),
+                is_modified: open_db.is_modified,
+                is_locked: true,
+                root_group_id: open_db.root_group_id.clone(),
+                version: open_db.version.clone(),
+            },
+            did_transition,
+        ))
     }
 
     /// Locks all currently unlocked clean databases.
@@ -288,7 +291,20 @@ impl KdbxService {
     }
 
     /// Unlocks a locked database by re-opening it from disk with optional password.
-    pub fn unlock(&self, db_id: &str, password: Option<&str>) -> Result<DatabaseInfo, AppError> {
+    ///
+    /// Returns `(info, did_transition)` where `did_transition` is `true`
+    /// iff *this* call actually moved the DB from locked to unlocked. The
+    /// flag is decided inside the same critical section that mutates the
+    /// open-database state, so concurrent unlock calls cannot both
+    /// observe themselves as the transitioning one. Callers that need to
+    /// gate one-shot side effects on a real transition (audit
+    /// `vault.opened`, open-side backup snapshot) must read this flag
+    /// rather than pre-check `is_database_locked`.
+    pub fn unlock(
+        &self,
+        db_id: &str,
+        password: Option<&str>,
+    ) -> Result<(DatabaseInfo, bool), AppError> {
         let normalized_path = Self::normalize_path(db_id);
         let mut databases = self.lock_databases()?;
         let open_db = databases
@@ -296,14 +312,17 @@ impl KdbxService {
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
 
         if !open_db.is_locked() {
-            return Ok(DatabaseInfo {
-                name: open_db.name.clone(),
-                path: open_db.path.clone(),
-                is_modified: open_db.is_modified,
-                is_locked: false,
-                root_group_id: open_db.root_group_id.clone(),
-                version: open_db.version.clone(),
-            });
+            return Ok((
+                DatabaseInfo {
+                    name: open_db.name.clone(),
+                    path: open_db.path.clone(),
+                    is_modified: open_db.is_modified,
+                    is_locked: false,
+                    root_group_id: open_db.root_group_id.clone(),
+                    version: open_db.version.clone(),
+                },
+                false,
+            ));
         }
 
         let path = &open_db.path;
@@ -320,14 +339,17 @@ impl KdbxService {
         open_db.password = password.map(SecureString::from);
         open_db.is_modified = false;
 
-        Ok(DatabaseInfo {
-            name: open_db.name.clone(),
-            path: open_db.path.clone(),
-            is_modified: false,
-            is_locked: false,
-            root_group_id: open_db.root_group_id.clone(),
-            version: open_db.version.clone(),
-        })
+        Ok((
+            DatabaseInfo {
+                name: open_db.name.clone(),
+                path: open_db.path.clone(),
+                is_modified: false,
+                is_locked: false,
+                root_group_id: open_db.root_group_id.clone(),
+                version: open_db.version.clone(),
+            },
+            true,
+        ))
     }
 }
 

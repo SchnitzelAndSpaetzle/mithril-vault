@@ -8,12 +8,12 @@ pub mod utils;
 
 use crate::dto::error::AppError;
 use commands::{
-    add_recent_database, clear_clipboard, clear_entry_custom_icon, clear_recent_databases,
-    clear_session_key, close_database, copy_password_to_clipboard,
+    add_recent_database, clear_audit_log, clear_clipboard, clear_entry_custom_icon,
+    clear_recent_databases, clear_session_key, close_database, copy_password_to_clipboard,
     copy_protected_field_to_clipboard, copy_text_to_clipboard, create_database, create_entry,
     create_group, create_manual_backup, delete_backup, delete_entry, delete_group, delete_tag,
     fetch_entry_favicon, generate_keyfile, generate_passphrase, generate_password,
-    get_app_preferences, get_audit_events, get_custom_icons, get_database_config,
+    get_app_preferences, get_audit_events, get_audit_status, get_custom_icons, get_database_config,
     get_database_info, get_entry, get_entry_password, get_entry_protected_custom_field, get_group,
     get_group_entry_counts, get_keyfile_for_database, get_recent_databases, get_recycle_bin_id,
     get_window_content_protection_supported, has_session_key, inspect_database, list_backups,
@@ -23,6 +23,7 @@ use commands::{
     restore_backup, save_database, set_entry_custom_icon, set_window_content_protected,
     store_session_key, unlock_database, update_app_preferences, update_entry, update_group,
 };
+use services::audit::format::Reason;
 use services::audit::key::FileBackedAuditKey;
 use services::audit::AuditService;
 use services::auto_lock::AutoLockService;
@@ -90,6 +91,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             generate_password,
             generate_passphrase,
             get_audit_events,
+            get_audit_status,
+            clear_audit_log,
             get_app_preferences,
             update_app_preferences,
             reset_app_preferences,
@@ -137,10 +140,14 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
 
     let settings_service = SettingsService::new(app)?;
     // Push the persisted backup config into the KDBX service so the save
-    // hook honours it from first save onward.
-    if let Ok(prefs) = settings_service.get_app_preferences() {
-        let _ = kdbx_arc.set_backup_settings(prefs.backups);
-    }
+    // hook honours it from first save onward. Capture the audit gate too
+    // so we can apply it to AuditService below.
+    let initial_audit = settings_service
+        .get_app_preferences()
+        .map_or((true, 90), |prefs| {
+            let _ = kdbx_arc.set_backup_settings(prefs.backups);
+            (prefs.audit.enabled, prefs.audit.retention_days)
+        });
     app.manage(Arc::new(settings_service));
 
     let auto_lock_service = AutoLockService::new();
@@ -153,6 +160,8 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
     let audit_root = data_dir.join("audit");
     let key_source = Arc::new(FileBackedAuditKey::new(audit_root.join("key.bin")));
     let audit_service = AuditService::new(audit_root, key_source);
+    audit_service.set_enabled(initial_audit.0);
+    audit_service.set_retention_days(initial_audit.1);
     app.manage(Arc::new(audit_service));
 
     Ok(())
@@ -170,11 +179,15 @@ pub fn run() {
             if let Some(clipboard) = app.try_state::<Arc<ClipboardService>>() {
                 let _ = clipboard.clear();
             }
+            record_app_quit_audit_events(app);
         }
         tauri::RunEvent::Resumed => {
             if let Some(kdbx) = app.try_state::<Arc<KdbxService>>() {
                 if let Ok(locked_paths) = kdbx.lock_all() {
                     if !locked_paths.is_empty() {
+                        if let Some(audit) = app.try_state::<Arc<AuditService>>() {
+                            audit.record_vault_locked_batch(&locked_paths, Reason::ScreenLock);
+                        }
                         let _ = app.emit("database-locked", &locked_paths);
                     }
                 }
@@ -182,4 +195,26 @@ pub fn run() {
         }
         _ => {}
     });
+}
+
+/// Records one `vault.locked { reason: app_quit }` per Vault that is open
+/// and unlocked at quit time. Best-effort: audit emit failures are
+/// swallowed internally by `AuditService`, missing state simply means no
+/// records are produced (we're exiting anyway).
+fn record_app_quit_audit_events<R: Runtime>(app: &AppHandle<R>) {
+    let Some(audit) = app.try_state::<Arc<AuditService>>() else {
+        return;
+    };
+    let Some(kdbx) = app.try_state::<Arc<KdbxService>>() else {
+        return;
+    };
+    let Ok(open) = kdbx.list_open_databases() else {
+        return;
+    };
+    let unlocked_paths: Vec<String> = open
+        .into_iter()
+        .filter(|db| !db.is_locked)
+        .map(|db| db.path)
+        .collect();
+    audit.record_vault_locked_batch(&unlocked_paths, Reason::AppQuit);
 }

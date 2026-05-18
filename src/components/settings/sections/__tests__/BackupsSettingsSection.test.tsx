@@ -63,6 +63,7 @@ function makeDraft(
     browserIntegration: { enabled: false, allowedSites: [] },
     advanced: { debugMode: false, dataLocation: "/tmp" },
     backups: { enabled: true, maxVersions, directory, onOpen },
+    audit: { enabled: true, retentionDays: 90 },
   };
 }
 

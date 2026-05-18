@@ -18,6 +18,58 @@
   "clipboard": {
     "countdown": "Le presse-papiers s'efface dans {{seconds}}s"
   },
+  "audit": {
+    "title": "Journal d'audit",
+    "description": "Événements liés à la sécurité enregistrés sur cet appareil pour le coffre actuellement ouvert.",
+    "empty": "Aucun événement d'audit pour ce coffre.",
+    "emptyNoVault": "Ouvrez un coffre pour voir son journal d'audit.",
+    "loadError": "Échec du chargement des événements d'audit : {{error}}",
+    "degradedWarning": "Le sous-système d'audit a signalé une ou plusieurs erreurs internes durant cette session. Certains événements peuvent manquer.",
+    "attemptCount_one": "Tentative {{count}}",
+    "attemptCount_other": "Tentative {{count}}",
+    "kind": {
+      "vaultUnlockFailed": "Tentative de déverrouillage échouée",
+      "vaultOpened": "Coffre ouvert",
+      "vaultLocked": "Coffre verrouillé",
+      "entryPasswordRevealed": "Mot de passe affiché",
+      "entryPasswordCopied": "Mot de passe copié",
+      "entryProtectedFieldRevealed": "Champ protégé affiché",
+      "preferencesSecurityChanged": "Préférence de sécurité modifiée",
+      "auditCleared": "Journal d'audit effacé"
+    },
+    "reason": {
+      "manual": "Manuel",
+      "autoLock": "Verrouillage automatique",
+      "appQuit": "Quitter l'application",
+      "screenLock": "Verrouillage d'écran"
+    },
+    "settingName": {
+      "security": {
+        "clipboardClearTimeout": "Délai d'effacement du presse-papiers",
+        "preventScreenCapture": "Empêcher la capture d'écran",
+        "autoDownloadFavicons": "Téléchargement automatique des favicons",
+        "allowThirdPartyFaviconFallbacks": "Autoriser les services tiers de secours pour les favicons",
+        "autoLockTimeout": "Délai de verrouillage automatique"
+      },
+      "audit": {
+        "enabled": "Journalisation d'audit activée",
+        "retentionDays": "Conservation des audits (jours)"
+      }
+    },
+    "clearButton": "Effacer le journal d'audit",
+    "clearConfirmTitle": "Effacer le journal d'audit ?",
+    "clearConfirm": "Cela supprime tous les événements d'audit enregistrés sur cet appareil pour le coffre ouvert. Une seule entrée « Journal d'audit effacé » sera conservée pour que l'effacement reste visible.",
+    "clearError": "Échec de l'effacement du journal d'audit : {{error}}",
+    "picker": {
+      "label": "Coffre"
+    },
+    "filter": {
+      "kinds": "Types d'événement",
+      "from": "Du",
+      "to": "Au",
+      "invalidRange": "La date « Du » doit être antérieure ou égale à la date « Au »."
+    }
+  },
   "settings": {
     "title": "Paramètres",
     "description": "Préférences de l'application et configuration de la base de données.",
@@ -106,6 +158,19 @@
       "description": "Diagnostics et informations sur les données locales.",
       "enableDebugMode": "Activer le mode débogage",
       "dataLocation": "Emplacement des données"
+    },
+    "audit": {
+      "title": "Journal d'audit",
+      "description": "Enregistre les événements liés à la sécurité de vos coffres sur cet appareil.",
+      "enabled": {
+        "label": "Activer la journalisation d'audit",
+        "description": "Lorsqu'elle est désactivée, aucun nouvel événement n'est écrit. Votre fichier journal existant est conservé."
+      },
+      "retentionDays": {
+        "label": "Conservation (jours)",
+        "description": "Durée de conservation des événements d'audit. Plage valide : 1 à 365 jours. La purge des événements plus anciens n'est pas encore appliquée.",
+        "validation": "La conservation doit être comprise entre 1 et 365 jours."
+      }
     },
     "backups": {
       "title": "Backups",

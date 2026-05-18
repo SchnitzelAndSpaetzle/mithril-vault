@@ -565,7 +565,8 @@ fn test_lock_and_unlock() {
     assert!(!open_info.is_locked);
 
     // Lock the database
-    let lock_info = service.lock(&db_path).expect("Failed to lock");
+    let (lock_info, locked_did_transition) = service.lock(&db_path).expect("Failed to lock");
+    assert!(locked_did_transition);
     assert!(lock_info.is_locked);
     assert_eq!(lock_info.name, open_info.name);
     assert_eq!(lock_info.root_group_id, open_info.root_group_id);
@@ -585,9 +586,10 @@ fn test_lock_and_unlock() {
     );
 
     // Unlock with correct password
-    let unlock_info = service
+    let (unlock_info, unlock_did_transition) = service
         .unlock(&db_path, Some("test123"))
         .expect("Failed to unlock");
+    assert!(unlock_did_transition);
     assert!(!unlock_info.is_locked);
     assert_eq!(unlock_info.name, open_info.name);
 
@@ -596,6 +598,63 @@ fn test_lock_and_unlock() {
         .list_entries(&db_path, None)
         .expect("Failed to list entries after unlock");
     let _ = entries; // Just verify it doesn't error
+}
+
+/// `lock` must return whether *this call* moved the DB from unlocked to
+/// locked, computed inside the mutex. Two concurrent callers observing
+/// the DB as unlocked beforehand and both succeeding must not both see
+/// `did_transition = true` — only the one that actually performed the
+/// transition does. The serial version of this invariant is: a redundant
+/// lock on an already-locked DB returns `(_, false)`.
+#[test]
+fn lock_returns_did_transition_flag() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
+        eprintln!("Skipping test: fixture not found");
+        return;
+    };
+    let db_path = path.to_string_lossy().to_string();
+    let service = KdbxService::new();
+    service.open(&db_path, "test123").expect("open");
+
+    let (_, did_transition_first) = service.lock(&db_path).expect("first lock");
+    assert!(did_transition_first, "first lock must report a transition");
+
+    let (_, did_transition_second) = service.lock(&db_path).expect("second lock");
+    assert!(
+        !did_transition_second,
+        "redundant lock on already-locked DB must NOT report a transition"
+    );
+}
+
+/// `unlock` must return whether *this call* moved the DB from locked to
+/// unlocked, computed inside the mutex. A redundant unlock on an
+/// already-unlocked DB must return `(_, false)`.
+#[test]
+fn unlock_returns_did_transition_flag() {
+    let Some((_temp_dir, path)) = copy_fixture_to_temp("test-kdbx4-low-KDF.kdbx") else {
+        eprintln!("Skipping test: fixture not found");
+        return;
+    };
+    let db_path = path.to_string_lossy().to_string();
+    let service = KdbxService::new();
+    service.open(&db_path, "test123").expect("open");
+    service.lock(&db_path).expect("lock");
+
+    let (_, did_transition_first) = service
+        .unlock(&db_path, Some("test123"))
+        .expect("first unlock");
+    assert!(
+        did_transition_first,
+        "first unlock must report a transition"
+    );
+
+    let (_, did_transition_second) = service
+        .unlock(&db_path, Some("test123"))
+        .expect("second unlock");
+    assert!(
+        !did_transition_second,
+        "redundant unlock on already-unlocked DB must NOT report a transition"
+    );
 }
 
 #[test]
@@ -711,10 +770,10 @@ fn test_unlock_keyfile_only_database_without_password() {
         .open_with_keyfile_only(&db_path, &key_path)
         .expect("Failed to open with keyfile only");
 
-    let lock_info = service.lock(&db_path).expect("Failed to lock");
+    let (lock_info, _) = service.lock(&db_path).expect("Failed to lock");
     assert!(lock_info.is_locked);
 
-    let unlock_info = service
+    let (unlock_info, _) = service
         .unlock(&db_path, None)
         .expect("Failed to unlock keyfile-only database");
     assert!(!unlock_info.is_locked);

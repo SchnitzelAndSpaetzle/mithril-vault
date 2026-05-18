@@ -194,6 +194,7 @@ impl SettingsService {
     /// cannot push the backup module into invariant violations.
     fn validate_preferences(prefs: &AppPreferences) -> Result<(), AppError> {
         const MAX_VERSIONS_RANGE: std::ops::RangeInclusive<u32> = 1..=500;
+        const AUDIT_RETENTION_RANGE: std::ops::RangeInclusive<u32> = 1..=365;
         let v = prefs.backups.max_versions;
         if !MAX_VERSIONS_RANGE.contains(&v) {
             return Err(AppError::InvalidInput(format!(
@@ -207,6 +208,12 @@ impl SettingsService {
                 )));
             }
         }
+        let r = prefs.audit.retention_days;
+        if !AUDIT_RETENTION_RANGE.contains(&r) {
+            return Err(AppError::InvalidInput(format!(
+                "audit.retentionDays must be in 1..=365, got {r}"
+            )));
+        }
         Ok(())
     }
 
@@ -218,11 +225,57 @@ impl SettingsService {
     }
 }
 
+/// Allowlisted App Preference leaves whose flips emit a
+/// `preferences.security_changed` audit event. Adding a key here is a
+/// one-line change; UI/preference changes (theme, language, layout) are
+/// deliberately excluded.
+///
+/// The lookup is a `(setting_name, did_change)` pair so each entry pins
+/// both the wire identifier (dot-pathed camelCase, matching the JSON
+/// shape of `AppPreferences` over IPC) and the equality check against
+/// the typed pref struct. Old/new values are never returned — the audit
+/// log records THAT a flip happened, not what it flipped to.
+type SecurityChangeProbe = fn(&AppPreferences, &AppPreferences) -> bool;
+const AUDITED_SECURITY_LEAVES: &[(&str, SecurityChangeProbe)] = &[
+    ("security.clipboardClearTimeout", |o, n| {
+        o.security.clipboard_clear_timeout != n.security.clipboard_clear_timeout
+    }),
+    ("security.preventScreenCapture", |o, n| {
+        o.security.prevent_screen_capture != n.security.prevent_screen_capture
+    }),
+    ("security.autoDownloadFavicons", |o, n| {
+        o.security.auto_download_favicons != n.security.auto_download_favicons
+    }),
+    ("security.allowThirdPartyFaviconFallbacks", |o, n| {
+        o.security.allow_third_party_favicon_fallbacks
+            != n.security.allow_third_party_favicon_fallbacks
+    }),
+    ("security.autoLockTimeout", |o, n| {
+        o.security.auto_lock_timeout != n.security.auto_lock_timeout
+    }),
+    ("audit.enabled", |o, n| o.audit.enabled != n.audit.enabled),
+    ("audit.retentionDays", |o, n| {
+        o.audit.retention_days != n.audit.retention_days
+    }),
+];
+
+/// Returns the wire names of allowlisted App Preference leaves that
+/// differ between `old` and `new`, in declaration order. Empty when
+/// nothing audited changed — the caller (commands layer) fans the
+/// result across every currently-open Vault, recording one
+/// `preferences.security_changed` event per (vault, leaf) pair.
+pub fn diff_security_changes(old: &AppPreferences, new: &AppPreferences) -> Vec<&'static str> {
+    AUDITED_SECURITY_LEAVES
+        .iter()
+        .filter_map(|(name, changed)| if changed(old, new) { Some(*name) } else { None })
+        .collect()
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::panic)]
 mod validate_preferences_tests {
     use super::SettingsService;
-    use crate::commands::settings::{AppPreferences, BackupSettings};
+    use crate::commands::settings::{AppPreferences, AuditSettings, BackupSettings};
     use crate::dto::error::AppError;
 
     fn prefs_with_directory(dir: Option<&str>) -> AppPreferences {
@@ -232,6 +285,16 @@ mod validate_preferences_tests {
                 max_versions: 10,
                 directory: dir.map(String::from),
                 on_open: false,
+            },
+            ..AppPreferences::default()
+        }
+    }
+
+    fn prefs_with_audit_retention(days: u32) -> AppPreferences {
+        AppPreferences {
+            audit: AuditSettings {
+                enabled: true,
+                retention_days: days,
             },
             ..AppPreferences::default()
         }
@@ -272,5 +335,252 @@ mod validate_preferences_tests {
     fn no_directory_override_is_accepted() {
         let prefs = prefs_with_directory(None);
         SettingsService::validate_preferences(&prefs).expect("None should validate");
+    }
+
+    #[test]
+    fn audit_retention_zero_is_rejected() {
+        // Zero would mean "drop every event the moment it is written" once
+        // the retention policy lands in #6 — silently neutralizing the
+        // audit log. Reject at the boundary so a hand-edited settings.json
+        // cannot push the retention task into that state.
+        let prefs = prefs_with_audit_retention(0);
+        match SettingsService::validate_preferences(&prefs) {
+            Err(AppError::InvalidInput(msg)) => {
+                assert!(
+                    msg.contains("audit.retentionDays") && msg.contains("1..=365"),
+                    "error should name the field and range, got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn audit_retention_above_max_is_rejected() {
+        let prefs = prefs_with_audit_retention(366);
+        match SettingsService::validate_preferences(&prefs) {
+            Err(AppError::InvalidInput(msg)) => {
+                assert!(
+                    msg.contains("audit.retentionDays"),
+                    "error should mention 'audit.retentionDays', got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn audit_retention_boundary_values_are_accepted() {
+        for days in [1_u32, 90, 365] {
+            let prefs = prefs_with_audit_retention(days);
+            SettingsService::validate_preferences(&prefs)
+                .unwrap_or_else(|_| panic!("retention_days={days} should validate"));
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic)]
+mod diff_security_changes_tests {
+    use super::diff_security_changes;
+    use crate::commands::settings::{
+        AppPreferences, AppearanceSettings, AuditSettings, GeneralSettings, SecuritySettings,
+    };
+    use std::collections::HashSet;
+
+    /// Tracer: flipping a single allowlisted leaf reports exactly that
+    /// leaf's wire name. Nothing else changed, so nothing else fires.
+    #[test]
+    fn flipping_clipboard_clear_timeout_emits_one_leaf() {
+        let old = AppPreferences::default();
+        let new = AppPreferences {
+            security: SecuritySettings {
+                clipboard_clear_timeout: old.security.clipboard_clear_timeout + 10,
+                ..old.security.clone()
+            },
+            ..old.clone()
+        };
+        let leaves = diff_security_changes(&old, &new);
+        assert_eq!(leaves, vec!["security.clipboardClearTimeout"]);
+    }
+
+    /// PRD AC: UI/preference changes (theme, language, layout) are
+    /// deliberately excluded. The audit log must stay tightly focused on
+    /// security-relevant flips so the user can scan it without the signal
+    /// drowning in cosmetic noise.
+    #[test]
+    fn changing_theme_emits_no_leaves() {
+        let old = AppPreferences::default();
+        let new = AppPreferences {
+            appearance: AppearanceSettings {
+                theme: "dark".into(),
+                ..old.appearance.clone()
+            },
+            ..old.clone()
+        };
+        let leaves = diff_security_changes(&old, &new);
+        assert!(leaves.is_empty(), "theme is not audited, got: {leaves:?}");
+    }
+
+    #[test]
+    fn changing_language_emits_no_leaves() {
+        let old = AppPreferences::default();
+        let new = AppPreferences {
+            general: GeneralSettings {
+                language: "de".into(),
+                ..old.general.clone()
+            },
+            ..old.clone()
+        };
+        let leaves = diff_security_changes(&old, &new);
+        assert!(
+            leaves.is_empty(),
+            "language is not audited, got: {leaves:?}"
+        );
+    }
+
+    /// AC: "Multiple changes in one call produce multiple events." The
+    /// caller emits one audit record per leaf in the returned vec, so
+    /// missing one here means a missing audit record in production.
+    #[test]
+    fn two_allowlisted_flips_in_one_call_emit_both_leaves() {
+        let old = AppPreferences::default();
+        let new = AppPreferences {
+            security: SecuritySettings {
+                prevent_screen_capture: !old.security.prevent_screen_capture,
+                auto_download_favicons: !old.security.auto_download_favicons,
+                ..old.security.clone()
+            },
+            ..old.clone()
+        };
+        let leaves: HashSet<&str> = diff_security_changes(&old, &new).into_iter().collect();
+        let expected: HashSet<&str> = [
+            "security.preventScreenCapture",
+            "security.autoDownloadFavicons",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(leaves, expected);
+    }
+
+    /// Each allowlisted leaf has its own test row: flipping that leaf in
+    /// isolation must produce exactly its wire name. The table doubles as
+    /// living documentation of which paths emit and which do not. Adding
+    /// a new key to the allowlist requires adding a row here too — if a
+    /// future contributor forgets, this test stays green only by accident.
+    #[test]
+    fn every_allowlisted_leaf_emits_its_own_wire_name() {
+        struct Case {
+            name: &'static str,
+            mutate: fn(&mut AppPreferences),
+        }
+        let cases = [
+            Case {
+                name: "security.clipboardClearTimeout",
+                mutate: |p| p.security.clipboard_clear_timeout += 1,
+            },
+            Case {
+                name: "security.preventScreenCapture",
+                mutate: |p| p.security.prevent_screen_capture = !p.security.prevent_screen_capture,
+            },
+            Case {
+                name: "security.autoDownloadFavicons",
+                mutate: |p| p.security.auto_download_favicons = !p.security.auto_download_favicons,
+            },
+            Case {
+                name: "security.allowThirdPartyFaviconFallbacks",
+                mutate: |p| {
+                    p.security.allow_third_party_favicon_fallbacks =
+                        !p.security.allow_third_party_favicon_fallbacks;
+                },
+            },
+            Case {
+                name: "security.autoLockTimeout",
+                mutate: |p| p.security.auto_lock_timeout += 60,
+            },
+            Case {
+                name: "audit.enabled",
+                mutate: |p| p.audit.enabled = !p.audit.enabled,
+            },
+            Case {
+                name: "audit.retentionDays",
+                mutate: |p| p.audit.retention_days += 1,
+            },
+        ];
+        for case in &cases {
+            let old = AppPreferences::default();
+            let mut new = old.clone();
+            (case.mutate)(&mut new);
+            let leaves = diff_security_changes(&old, &new);
+            assert_eq!(
+                leaves,
+                vec![case.name],
+                "flipping {} alone must emit only that leaf",
+                case.name
+            );
+        }
+    }
+
+    /// Non-allowlisted security siblings (`showPasswordByDefault`,
+    /// `minimizeToTray`, `startMinimized`, `clearClipboardOnLock`,
+    /// `showClipboardCountdown`) must NOT emit — they are UX
+    /// preferences that happen to live under `security.*`, not
+    /// security-relevant flips. Pinning the carve-out here means a
+    /// future "let's just audit everything under security.*" refactor
+    /// fails loudly.
+    #[test]
+    fn non_allowlisted_security_siblings_emit_no_leaves() {
+        let old = AppPreferences::default();
+        let new = AppPreferences {
+            security: SecuritySettings {
+                show_password_by_default: !old.security.show_password_by_default,
+                minimize_to_tray: !old.security.minimize_to_tray,
+                start_minimized: !old.security.start_minimized,
+                clear_clipboard_on_lock: !old.security.clear_clipboard_on_lock,
+                show_clipboard_countdown: !old.security.show_clipboard_countdown,
+                ..old.security.clone()
+            },
+            ..old.clone()
+        };
+        let leaves = diff_security_changes(&old, &new);
+        assert!(
+            leaves.is_empty(),
+            "non-allowlisted security siblings must not emit, got: {leaves:?}"
+        );
+    }
+
+    /// AC: "Adding a key to the allowlist is a one-line change." The
+    /// table-driven definition above already makes the source-side
+    /// one-liner; this test pins the runtime shape (declaration order,
+    /// no duplicate wire names) so a future edit can't silently shadow a
+    /// key or reorder it in a way that surprises log consumers.
+    #[test]
+    fn allowlist_wire_names_are_unique() {
+        use super::AUDITED_SECURITY_LEAVES;
+        let mut seen = HashSet::new();
+        for (name, _) in AUDITED_SECURITY_LEAVES {
+            assert!(
+                seen.insert(*name),
+                "duplicate wire name in allowlist: {name}"
+            );
+        }
+    }
+
+    /// The audit settings unit struct must round-trip through the diff:
+    /// an unchanged `AuditSettings` (constructed via `..Default::default()`)
+    /// across the call site must NOT cause a spurious diff. This pins the
+    /// equality check against the typed `AuditSettings` struct so a future
+    /// refactor of `AuditSettings` (adding a field, swapping the order)
+    /// can't accidentally flip the eq invariant.
+    #[test]
+    fn unchanged_audit_struct_does_not_diff() {
+        let old = AppPreferences::default();
+        let new = AppPreferences {
+            audit: AuditSettings {
+                ..old.audit.clone()
+            },
+            ..old.clone()
+        };
+        assert!(diff_security_changes(&old, &new).is_empty());
     }
 }

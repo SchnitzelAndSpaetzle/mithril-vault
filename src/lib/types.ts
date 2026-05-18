@@ -281,6 +281,17 @@ export type BackupSettings = z.infer<typeof BackupSettingsSchema>;
 export const BACKUP_MAX_VERSIONS_PRESETS = [5, 10, 25, 50, 100] as const;
 export const DEFAULT_BACKUP_MAX_VERSIONS = 10;
 
+/// Audit-log preferences. `enabled` is the master gate (off => the backend
+/// `AuditService::record` becomes a no-op, existing log file untouched).
+/// `retentionDays` is bounded `1..=365` on the backend boundary; the UI
+/// must mirror the same range so an invalid value never leaves the form.
+export const AppPreferencesAuditSchema = z.object({
+  enabled: z.boolean(),
+  retentionDays: z.number().int().min(1).max(365),
+});
+export type AuditPreferences = z.infer<typeof AppPreferencesAuditSchema>;
+export const DEFAULT_AUDIT_RETENTION_DAYS = 90;
+
 export const AppPreferencesSchema = z.object({
   general: GeneralSettingsSchema,
   security: SecuritySettingsSchema,
@@ -288,6 +299,7 @@ export const AppPreferencesSchema = z.object({
   browserIntegration: BrowserIntegrationSettingsSchema,
   advanced: AdvancedSettingsSchema,
   backups: BackupSettingsSchema,
+  audit: AppPreferencesAuditSchema,
 });
 export type AppPreferences = z.infer<typeof AppPreferencesSchema>;
 
@@ -313,16 +325,61 @@ export const BackupInfoSchema = z.object({
 });
 export type BackupInfo = z.infer<typeof BackupInfoSchema>;
 
-/// Audit log event — security-relevant action recorded on this device. Today
-/// only `vaultUnlockFailed` is emitted; the union shape is set up so future
-/// kinds can be added without changing call sites.
-export const AuditEventKindSchema = z.enum(["vaultUnlockFailed"]);
+/// Audit log event — security-relevant action recorded on this device.
+/// Each kind plugs into the same row shape so the panel does not need
+/// per-kind layouts; optional fields (`attemptCount`, `reason`, `entryId`)
+/// carry the kind-specific payload.
+export const AuditEventKindSchema = z.enum([
+  "vaultUnlockFailed",
+  "vaultOpened",
+  "vaultLocked",
+  "entryPasswordRevealed",
+  "entryPasswordCopied",
+  "entryProtectedFieldRevealed",
+  "preferencesSecurityChanged",
+  "auditCleared",
+]);
 export type AuditEventKind = z.infer<typeof AuditEventKindSchema>;
+
+/// Why a Vault transitioned from unlocked to locked. Mirrors the backend
+/// `services::audit::format::Reason` enum on the camelCase wire.
+export const AuditReasonSchema = z.enum([
+  "manual",
+  "autoLock",
+  "appQuit",
+  "screenLock",
+]);
+export type AuditReason = z.infer<typeof AuditReasonSchema>;
+
+/// Allowlisted App Preference leaves whose flips surface as
+/// `preferencesSecurityChanged` events. Pinning this as a union (not a
+/// free string) ties the wire identifier to the i18n key registry, so a
+/// new allowlist entry on the backend fails the frontend type-check
+/// until its label is added under `audit.settingName.*`.
+export const SecuritySettingChangeNameSchema = z.enum([
+  "security.clipboardClearTimeout",
+  "security.preventScreenCapture",
+  "security.autoDownloadFavicons",
+  "security.allowThirdPartyFaviconFallbacks",
+  "security.autoLockTimeout",
+  "audit.enabled",
+  "audit.retentionDays",
+]);
+export type SecuritySettingChangeName = z.infer<
+  typeof SecuritySettingChangeNameSchema
+>;
 
 export const AuditEventSchema = z.object({
   kind: AuditEventKindSchema,
   timestamp: z.string().min(1),
   attemptCount: z.number().int().positive().nullable().optional(),
+  reason: AuditReasonSchema.nullable().optional(),
+  entryId: z.string().min(1).nullable().optional(),
+  /// Dot-pathed App Preference leaf for `preferencesSecurityChanged`
+  /// events (e.g. `security.preventScreenCapture`). Old/new values are
+  /// deliberately absent from the wire — the on-disk log records THAT a
+  /// flip happened, not what it flipped to.
+  settingName: SecuritySettingChangeNameSchema.nullable().optional(),
 });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 
@@ -341,6 +398,17 @@ export const AuditEventsResponseSchema = z.object({
   degraded: z.boolean(),
 });
 export type AuditEventsResponse = z.infer<typeof AuditEventsResponseSchema>;
+
+/// Snapshot of the audit subsystem's runtime state for the Settings panel
+/// header. `enabled` mirrors the master gate (`audit.enabled` preference);
+/// `degraded` is the session-wide flag set by the backend whenever any
+/// audit record/read has failed internally. The header indicator only
+/// clears on app restart because `degraded` lives in process memory.
+export const AuditStatusSchema = z.object({
+  enabled: z.boolean(),
+  degraded: z.boolean(),
+});
+export type AuditStatus = z.infer<typeof AuditStatusSchema>;
 
 export const EntrySortFieldSchema = z.enum([
   "title",

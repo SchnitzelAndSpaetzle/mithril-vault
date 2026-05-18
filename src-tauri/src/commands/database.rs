@@ -4,6 +4,7 @@ use crate::dto::database::{
     CustomIconData, DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
 };
 use crate::dto::error::AppError;
+use crate::services::audit::format::Reason;
 use crate::services::audit::AuditService;
 use crate::services::auto_lock::AutoLockService;
 use crate::services::kdbx::backups::{BackupError, BackupInfo, BackupListEntry};
@@ -13,25 +14,64 @@ use std::path::Path;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime, State};
 
-/// Maps the open/unlock result through the audit subsystem: a successful
-/// open resets the per-Vault failed-unlock counter, while an
-/// `InvalidPassword` failure records exactly one `vault.unlock_failed`
-/// event carrying the running consecutive-failure count.
+/// Maps an `open_database*` result through the audit subsystem.
 ///
-/// Returns the original result unchanged. Audit failures cannot bubble up:
-/// `AuditService::record_vault_unlock_failed` flips an internal `degraded`
-/// flag and otherwise stays silent so the user's unlock-failure UX is
-/// unaffected.
-fn record_open_outcome<T>(
+/// `KdbxService::open*` errors with `DatabaseAlreadyOpen` if the Vault is
+/// already in the open-map, so a successful open is by construction a
+/// fresh transition — no TOCTOU pre-check is needed. Records exactly
+/// one `vault.opened` on success and one `vault.unlock_failed` on
+/// `InvalidPassword`.
+fn record_open_audit<T>(
     audit: &AuditService,
     path: &str,
     result: Result<T, AppError>,
 ) -> Result<T, AppError> {
     let vault_path = Path::new(path);
     match &result {
-        Ok(_) => audit.reset_unlock_attempts(vault_path),
+        Ok(_) => audit.record_vault_opened(vault_path),
         Err(AppError::InvalidPassword) => audit.record_vault_unlock_failed(vault_path),
         Err(_) => {}
+    }
+    result
+}
+
+/// Maps an `unlock` result through the audit subsystem.
+///
+/// `KdbxService::unlock` returns `(info, did_transition)` where the bool
+/// is computed inside the same mutex that mutates the open-database
+/// state. Audit decisions gate on that flag — two concurrent callers
+/// observing a locked DB and both succeeding cannot both record
+/// `vault.opened`, because only one of them actually performs the
+/// transition. On `InvalidPassword`, records `vault.unlock_failed`.
+fn record_unlock_audit(
+    audit: &AuditService,
+    path: &str,
+    result: Result<(DatabaseInfo, bool), AppError>,
+) -> Result<(DatabaseInfo, bool), AppError> {
+    let vault_path = Path::new(path);
+    match &result {
+        Ok((_, true)) => audit.record_vault_opened(vault_path),
+        Err(AppError::InvalidPassword) => audit.record_vault_unlock_failed(vault_path),
+        Ok((_, false)) | Err(_) => {}
+    }
+    result
+}
+
+/// Maps a `lock` result through the audit subsystem.
+///
+/// Same TOCTOU-safety story as [`record_unlock_audit`]: the
+/// `did_transition` flag is computed inside `KdbxService::lock`'s
+/// mutex, so audit emit on `Ok((_, true))` records exactly one
+/// `vault.locked` per real unlocked→locked transition even under
+/// concurrent lock requests.
+fn record_lock_audit(
+    audit: &AuditService,
+    path: &str,
+    reason: Reason,
+    result: Result<(DatabaseInfo, bool), AppError>,
+) -> Result<(DatabaseInfo, bool), AppError> {
+    if let Ok((_, true)) = &result {
+        audit.record_vault_locked(Path::new(path), reason);
     }
     result
 }
@@ -94,7 +134,7 @@ pub async fn open_database<R: Runtime>(
     state: State<'_, Arc<KdbxService>>,
     audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    let info = record_open_outcome(&audit, &path, state.open(&path, &password))?;
+    let info = record_open_audit(&audit, &path, state.open(&path, &password))?;
     emit_open_backup_hook(&app, &state, &path);
     Ok(info)
 }
@@ -168,7 +208,7 @@ pub async fn open_database_with_keyfile<R: Runtime>(
     state: State<'_, Arc<KdbxService>>,
     audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    let info = record_open_outcome(
+    let info = record_open_audit(
         &audit,
         &path,
         state.open_with_keyfile(&path, &password, &keyfile_path),
@@ -186,7 +226,7 @@ pub async fn open_database_with_keyfile_only<R: Runtime>(
     state: State<'_, Arc<KdbxService>>,
     audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    let info = record_open_outcome(
+    let info = record_open_audit(
         &audit,
         &path,
         state.open_with_keyfile_only(&path, &keyfile_path),
@@ -196,15 +236,30 @@ pub async fn open_database_with_keyfile_only<R: Runtime>(
 }
 
 /// Locks the database session by dropping decrypted data from memory.
+///
+/// `KdbxService::lock` returns `(info, did_transition)` computed inside
+/// the open-database mutex; the audit emit gates on that flag so
+/// concurrent lock calls cannot both record a `vault.locked` event for
+/// the same transition.
 #[tauri::command]
 pub async fn lock_database(
     db_id: String,
     state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    state.lock(&db_id)
+    let (info, _did_transition) =
+        record_lock_audit(&audit, &db_id, Reason::Manual, state.lock(&db_id))?;
+    Ok(info)
 }
 
 /// Unlocks the database session by re-opening from disk with optional password.
+///
+/// `KdbxService::unlock` returns `(info, did_transition)` computed inside
+/// its mutex; both the audit `vault.opened` emit and the open-side backup
+/// hook gate on that flag, so a redundant unlock on an already-unlocked
+/// DB neither double-records nor re-fires the backup snapshot — and two
+/// racing unlock calls can't both observe themselves as the transitioning
+/// one.
 #[tauri::command]
 pub async fn unlock_database<R: Runtime>(
     db_id: String,
@@ -213,15 +268,9 @@ pub async fn unlock_database<R: Runtime>(
     state: State<'_, Arc<KdbxService>>,
     audit: State<'_, Arc<AuditService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    // Snapshot the locked state BEFORE calling unlock so we can tell apart
-    // an actual locked → unlocked transition from the no-op case where the
-    // caller invoked unlock on an already-unlocked DB. Without this guard
-    // the open-side backup hook would re-fire on every redundant unlock —
-    // wasted work in the happy path, and a duplicated `backup-warning`
-    // event whenever the backup dir is broken.
-    let was_locked = state.is_database_locked(&db_id)?.unwrap_or(true);
-    let info = record_open_outcome(&audit, &db_id, state.unlock(&db_id, password.as_deref()))?;
-    if was_locked {
+    let (info, did_transition) =
+        record_unlock_audit(&audit, &db_id, state.unlock(&db_id, password.as_deref()))?;
+    if did_transition {
         emit_open_backup_hook(&app, &state, &db_id);
     }
     Ok(info)
@@ -392,4 +441,157 @@ pub async fn generate_keyfile(output_path: String) -> Result<(), AppError> {
 pub async fn report_activity(state: State<'_, Arc<AutoLockService>>) -> Result<(), AppError> {
     state.report_activity();
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+mod audit_helper_tests {
+    use super::*;
+    use crate::services::audit::format::AuditEvent;
+    use crate::services::audit::key::InMemoryAuditKey;
+    use crate::services::audit::AuditFilter;
+    use tempfile::tempdir;
+
+    fn fresh_service() -> (AuditService, tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempdir().expect("tempdir");
+        let vault = dir.path().join("vault.kdbx");
+        std::fs::write(&vault, b"x").expect("write vault");
+        let svc = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+        (svc, dir, vault)
+    }
+
+    fn stub_info() -> DatabaseInfo {
+        DatabaseInfo {
+            name: "stub".to_string(),
+            path: "stub".to_string(),
+            is_modified: false,
+            is_locked: false,
+            root_group_id: "rg".to_string(),
+            version: "v".to_string(),
+        }
+    }
+
+    #[test]
+    fn record_open_audit_emits_vault_opened_on_ok() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> = record_open_audit(&audit, path, Ok(()));
+        assert!(r.is_ok());
+
+        let events = audit.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], AuditEvent::VaultOpened { .. }));
+    }
+
+    #[test]
+    fn record_open_audit_emits_unlock_failed_on_invalid_password() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> =
+            record_open_audit(&audit, path, Err(AppError::InvalidPassword));
+        assert!(matches!(r, Err(AppError::InvalidPassword)));
+
+        let events = audit.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], AuditEvent::VaultUnlockFailed { .. }));
+    }
+
+    #[test]
+    fn record_open_audit_other_error_records_nothing() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r: Result<(), AppError> =
+            record_open_audit(&audit, path, Err(AppError::DatabaseNotOpen));
+        assert!(matches!(r, Err(AppError::DatabaseNotOpen)));
+
+        assert!(audit
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
+
+    #[test]
+    fn record_unlock_audit_emits_vault_opened_only_on_real_transition() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r = record_unlock_audit(&audit, path, Ok((stub_info(), true)));
+        assert!(r.is_ok());
+        let events = audit.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], AuditEvent::VaultOpened { .. }));
+    }
+
+    #[test]
+    fn record_unlock_audit_skips_emit_on_no_op_unlock() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r = record_unlock_audit(&audit, path, Ok((stub_info(), false)));
+        assert!(r.is_ok());
+        assert!(audit
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
+
+    #[test]
+    fn record_unlock_audit_emits_unlock_failed_on_invalid_password() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r = record_unlock_audit(&audit, path, Err(AppError::InvalidPassword));
+        assert!(matches!(r, Err(AppError::InvalidPassword)));
+
+        let events = audit.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], AuditEvent::VaultUnlockFailed { .. }));
+    }
+
+    #[test]
+    fn record_lock_audit_emits_manual_lock_on_real_transition() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r = record_lock_audit(&audit, path, Reason::Manual, Ok((stub_info(), true)));
+        assert!(r.is_ok());
+
+        let events = audit.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::VaultLocked { reason, .. } => assert_eq!(*reason, Reason::Manual),
+            other => panic!("expected VaultLocked, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn record_lock_audit_skips_emit_on_no_op_lock() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r = record_lock_audit(&audit, path, Reason::Manual, Ok((stub_info(), false)));
+        assert!(r.is_ok());
+
+        assert!(audit
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
+
+    #[test]
+    fn record_lock_audit_skips_emit_on_error() {
+        let (audit, _dir, vault) = fresh_service();
+        let path = vault.to_str().expect("utf8 path");
+
+        let r = record_lock_audit(&audit, path, Reason::Manual, Err(AppError::DatabaseNotOpen));
+        assert!(matches!(r, Err(AppError::DatabaseNotOpen)));
+
+        assert!(audit
+            .read(&vault, &AuditFilter::default())
+            .expect("read")
+            .is_empty());
+    }
 }

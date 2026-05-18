@@ -28,7 +28,46 @@
     "attemptCount_one": "Attempt {{count}}",
     "attemptCount_other": "Attempt {{count}}",
     "kind": {
-      "vaultUnlockFailed": "Failed unlock attempt"
+      "vaultUnlockFailed": "Failed unlock attempt",
+      "vaultOpened": "Vault opened",
+      "vaultLocked": "Vault locked",
+      "entryPasswordRevealed": "Password revealed",
+      "entryPasswordCopied": "Password copied",
+      "entryProtectedFieldRevealed": "Protected field revealed",
+      "preferencesSecurityChanged": "Security preference changed",
+      "auditCleared": "Audit log cleared"
+    },
+    "reason": {
+      "manual": "Manual",
+      "autoLock": "Auto-lock",
+      "appQuit": "App quit",
+      "screenLock": "Screen lock"
+    },
+    "settingName": {
+      "security": {
+        "clipboardClearTimeout": "Clipboard clear timeout",
+        "preventScreenCapture": "Prevent screen capture",
+        "autoDownloadFavicons": "Auto-download favicons",
+        "allowThirdPartyFaviconFallbacks": "Allow third-party favicon fallbacks",
+        "autoLockTimeout": "Auto-lock timeout"
+      },
+      "audit": {
+        "enabled": "Audit logging enabled",
+        "retentionDays": "Audit retention (days)"
+      }
+    },
+    "clearButton": "Clear audit log",
+    "clearConfirmTitle": "Clear audit log?",
+    "clearConfirm": "This deletes every audit event recorded on this device for the open vault. A single \"Audit log cleared\" entry will remain so the wipe is visible.",
+    "clearError": "Failed to clear audit log: {{error}}",
+    "picker": {
+      "label": "Vault"
+    },
+    "filter": {
+      "kinds": "Event kinds",
+      "from": "From",
+      "to": "To",
+      "invalidRange": "The \"from\" date must be on or before the \"to\" date."
     }
   },
   "settings": {
@@ -119,6 +158,19 @@
       "description": "Diagnostics and local data information.",
       "enableDebugMode": "Enable debug mode",
       "dataLocation": "Data location"
+    },
+    "audit": {
+      "title": "Audit log",
+      "description": "Record security-relevant events for your vaults on this device.",
+      "enabled": {
+        "label": "Enable audit logging",
+        "description": "When off, no new events are written. Your existing log file is preserved."
+      },
+      "retentionDays": {
+        "label": "Retention (days)",
+        "description": "How long to keep audit events. Valid range: 1 to 365 days. Cleanup of older events is not enforced yet.",
+        "validation": "Retention must be between 1 and 365 days."
+      }
     },
     "backups": {
       "title": "Backups",

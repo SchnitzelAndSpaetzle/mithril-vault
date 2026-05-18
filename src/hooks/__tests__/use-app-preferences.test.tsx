@@ -56,12 +56,16 @@ function makePreferences(): AppPreferences {
     },
     advanced: {
       debugMode: false,
-      dataLocation: "/tmp/mithril-vault",
+      dataLocation: "/mock/mithril-vault",
     },
     backups: {
       enabled: true,
       maxVersions: 10,
       onOpen: false,
+    },
+    audit: {
+      enabled: true,
+      retentionDays: 90,
     },
   };
 }

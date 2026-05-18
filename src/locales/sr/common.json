@@ -18,6 +18,58 @@
   "clipboard": {
     "countdown": "Privremena memorija se briše za {{seconds}}s"
   },
+  "audit": {
+    "title": "Dnevnik nadzora",
+    "description": "Bezbednosno značajni događaji zabeleženi na ovom uređaju za trenutno otvoreni sef.",
+    "empty": "Još uvek nema događaja nadzora za ovaj sef.",
+    "emptyNoVault": "Otvorite sef da biste videli njegov dnevnik nadzora.",
+    "loadError": "Učitavanje događaja nadzora nije uspelo: {{error}}",
+    "degradedWarning": "Podsistem nadzora prijavio je jednu ili više internih grešaka u ovoj sesiji. Neki događaji možda nedostaju.",
+    "attemptCount_one": "Pokušaj {{count}}",
+    "attemptCount_other": "Pokušaj {{count}}",
+    "kind": {
+      "vaultUnlockFailed": "Neuspeo pokušaj otključavanja",
+      "vaultOpened": "Sef otvoren",
+      "vaultLocked": "Sef zaključan",
+      "entryPasswordRevealed": "Lozinka prikazana",
+      "entryPasswordCopied": "Lozinka kopirana",
+      "entryProtectedFieldRevealed": "Zaštićeno polje prikazano",
+      "preferencesSecurityChanged": "Bezbednosno podešavanje promenjeno",
+      "auditCleared": "Dnevnik nadzora obrisan"
+    },
+    "reason": {
+      "manual": "Ručno",
+      "autoLock": "Automatsko zaključavanje",
+      "appQuit": "Zatvaranje aplikacije",
+      "screenLock": "Zaključavanje ekrana"
+    },
+    "settingName": {
+      "security": {
+        "clipboardClearTimeout": "Vreme brisanja privremene memorije",
+        "preventScreenCapture": "Spreči snimak ekrana",
+        "autoDownloadFavicons": "Automatsko preuzimanje favikona",
+        "allowThirdPartyFaviconFallbacks": "Dozvoli usluge treće strane za rezervne favikone",
+        "autoLockTimeout": "Vreme automatskog zaključavanja"
+      },
+      "audit": {
+        "enabled": "Beleženje nadzora omogućeno",
+        "retentionDays": "Čuvanje nadzora (dani)"
+      }
+    },
+    "clearButton": "Obriši dnevnik nadzora",
+    "clearConfirmTitle": "Obrisati dnevnik nadzora?",
+    "clearConfirm": "Ovo briše sve događaje nadzora zabeležene na ovom uređaju za otvoreni sef. Ostaje samo jedan unos „Dnevnik nadzora obrisan\" kako bi brisanje bilo vidljivo.",
+    "clearError": "Brisanje dnevnika nadzora nije uspelo: {{error}}",
+    "picker": {
+      "label": "Sef"
+    },
+    "filter": {
+      "kinds": "Vrste događaja",
+      "from": "Od",
+      "to": "Do",
+      "invalidRange": "Datum „Od\" mora biti pre ili jednak datumu „Do\"."
+    }
+  },
   "settings": {
     "title": "Podešavanja",
     "description": "Podešavanja aplikacije i konfiguracija baze podataka.",
@@ -106,6 +158,19 @@
       "description": "Dijagnostika i informacije o lokalnim podacima.",
       "enableDebugMode": "Omogući režim za otklanjanje grešaka",
       "dataLocation": "Lokacija podataka"
+    },
+    "audit": {
+      "title": "Dnevnik nadzora",
+      "description": "Beleži bezbednosno značajne događaje za vaše sefove na ovom uređaju.",
+      "enabled": {
+        "label": "Omogući beleženje nadzora",
+        "description": "Kada je isključeno, novi događaji se ne upisuju. Vaša postojeća datoteka dnevnika je sačuvana."
+      },
+      "retentionDays": {
+        "label": "Čuvanje (dani)",
+        "description": "Koliko dugo se čuvaju događaji nadzora. Validan opseg: 1 do 365 dana. Brisanje starijih događaja još uvek nije primenjeno.",
+        "validation": "Čuvanje mora biti između 1 i 365 dana."
+      }
     },
     "backups": {
       "title": "Backups",

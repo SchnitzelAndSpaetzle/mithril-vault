@@ -23,17 +23,20 @@ jobs:
           fetch-depth: 0
 
       - name: Validate version format
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Invalid version format. Use semver (e.g., 0.2.0 or 0.2.0-beta.1)"
             exit 1
           fi
 
       - name: Check tag doesn't already exist
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
-            echo "::error::Tag v${{ inputs.version }} already exists"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag v$VERSION already exists"
             exit 1
           fi
 
@@ -41,8 +44,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Bump version in config files
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
           jq --arg v "$VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
           jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
           sed -i 's/^version = ".*"/version = "'"$VERSION"'"/' src-tauri/Cargo.toml
@@ -78,12 +82,17 @@ jobs:
           labels: release
 
       - name: Summary
+        env:
+          VERSION: ${{ inputs.version }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
         run: |
-          echo "## Release PR Created" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "PR #${{ steps.create-pr.outputs.pull-request-number }} has been created." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Wait for CI checks to pass" >> $GITHUB_STEP_SUMMARY
-          echo "2. Merge the PR" >> $GITHUB_STEP_SUMMARY
-          echo "3. Run **Release - Tag & Build** workflow with version \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Release PR Created"
+            echo ""
+            echo "PR #$PR_NUMBER has been created."
+            echo ""
+            echo "### Next Steps"
+            echo "1. Wait for CI checks to pass"
+            echo "2. Merge the PR"
+            echo "3. Run **Release - Tag & Build** workflow with version \`$VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"

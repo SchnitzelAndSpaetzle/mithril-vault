@@ -31,6 +31,7 @@ export const queryKeys = {
     all: ["audit"] as const,
     list: (vaultPath: string) =>
       [...queryKeys.audit.all, vaultPath, "list"] as const,
+    status: () => [...queryKeys.audit.all, "status"] as const,
   },
   groups: {
     all: ["groups"] as const,

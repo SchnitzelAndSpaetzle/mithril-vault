@@ -27,6 +27,7 @@ import { isColorPresetId } from "@/lib/theme-presets";
 import { AdvancedSettingsSection } from "@/components/settings/sections/AdvancedSettingsSection";
 import { AppearanceSettingsSection } from "@/components/settings/sections/AppearanceSettingsSection";
 import { AuditLogSection } from "@/components/settings/sections/AuditLogSection";
+import { AuditLogSettingsSection } from "@/components/settings/sections/AuditLogSettingsSection";
 import { BackupsListSection } from "@/components/settings/sections/BackupsListSection";
 import { BackupsSettingsSection } from "@/components/settings/sections/BackupsSettingsSection";
 import { BrowserIntegrationSettingsSection } from "@/components/settings/sections/BrowserIntegrationSettingsSection";
@@ -42,6 +43,7 @@ interface SettingsEditorProps {
   onResetPreferences: () => Promise<AppPreferences>;
   isBusy: boolean;
   dbId: string | null;
+  isLocked: boolean;
   databaseConfig: DatabaseConfig | null;
   isDatabaseConfigLoading: boolean;
   databaseConfigError: Error | null;
@@ -170,6 +172,7 @@ export function SettingsEditor({
   onResetPreferences,
   isBusy,
   dbId,
+  isLocked,
   databaseConfig,
   isDatabaseConfigLoading,
   databaseConfigError,
@@ -282,7 +285,8 @@ export function SettingsEditor({
       <AdvancedSettingsSection draft={draft} updateDraft={updateDraft} />
       <BackupsSettingsSection draft={draft} updateDraft={updateDraft} />
       <BackupsListSection dbId={dbId} backupsEnabled={draft.backups.enabled} />
-      <AuditLogSection dbId={dbId} />
+      <AuditLogSettingsSection draft={draft} updateDraft={updateDraft} />
+      <AuditLogSection dbId={dbId} isLocked={isLocked} />
       <DatabaseSettingsSection
         dbId={dbId}
         databaseConfig={databaseConfig}

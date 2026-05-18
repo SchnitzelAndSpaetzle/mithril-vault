@@ -5,7 +5,7 @@
 //! The test structure mirrors the command API so that command-specific logic can be tested
 //! when it is added.
 
-#![allow(clippy::expect_used)] // expect() is acceptable in tests
+#![allow(clippy::expect_used, clippy::panic)] // expect() / panic!() acceptable in tests
 
 use mithril_vault_lib::domain::secure::SecureString;
 use mithril_vault_lib::dto::database::DatabaseCreationOptions;
@@ -13,9 +13,18 @@ use mithril_vault_lib::dto::entry::{CreateEntryData, UpdateEntryData};
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::services::kdbx::KdbxService;
 use std::collections::BTreeMap;
+use std::path::Path;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use tempfile::TempDir;
+
+use mithril_vault_lib::commands::entries::{
+    audit_entry_password_revealed_on_success, audit_entry_protected_field_revealed_on_success,
+};
+use mithril_vault_lib::services::audit::format::AuditEvent;
+use mithril_vault_lib::services::audit::key::InMemoryAuditKey;
+use mithril_vault_lib::services::audit::{AuditFilter, AuditService};
 
 use super::open_test_database;
 
@@ -211,6 +220,145 @@ fn test_get_entry_password_database_not_open() {
         matches!(result, Err(AppError::DatabaseNotFound(_))),
         "Should fail with DatabaseNotFound when no database is open"
     );
+}
+
+/// Recording site: a successful `get_entry_password` must produce exactly
+/// one `entry.password_revealed` event carrying the KDBX entry UUID; a
+/// failed fetch must produce zero events. The audit hook lives in the
+/// command layer (not the `KdbxService`), so this test exercises the same
+/// free helper the `#[tauri::command]` wrapper uses.
+#[test]
+fn get_entry_password_records_exactly_one_audit_event_on_success() {
+    let (kdbx, dir, db_path_str) = create_test_database();
+    let info = kdbx.get_info(&db_path_str).expect("db info");
+    let entry = kdbx
+        .create_entry(
+            &db_path_str,
+            &info.root_group_id,
+            CreateEntryData {
+                title: "audit-target".to_string(),
+                username: String::new(),
+                password: SecureString::from("secret"),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields: None,
+            },
+        )
+        .expect("create entry");
+
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+    let pwd = audit_entry_password_revealed_on_success(
+        &audit,
+        &db_path_str,
+        &entry.id,
+        kdbx.get_entry_password(&db_path_str, &entry.id),
+    )
+    .expect("password");
+    assert_eq!(pwd, "secret");
+
+    let events = audit
+        .read(Path::new(&db_path_str), &AuditFilter::default())
+        .expect("read audit");
+    assert_eq!(events.len(), 1, "expected exactly one audit event");
+    match &events[0] {
+        AuditEvent::EntryPasswordRevealed { entry_id, .. } => {
+            assert_eq!(entry_id, &entry.id);
+        }
+        other => panic!("unexpected event kind: {other:?}"),
+    }
+}
+
+/// Recording site: a successful `get_entry_protected_custom_field`
+/// must produce exactly one `entry.protected_field_revealed` event with
+/// the entry's UUID. Mirrors the password-reveal contract so recovery
+/// codes and similar custom secrets get the same audit treatment.
+#[test]
+fn get_entry_protected_custom_field_records_exactly_one_audit_event_on_success() {
+    let (kdbx, dir, db_path_str) = create_test_database();
+    let info = kdbx.get_info(&db_path_str).expect("db info");
+    let mut protected_custom_fields: BTreeMap<String, SecureString> = BTreeMap::new();
+    protected_custom_fields.insert("PIN".to_string(), SecureString::from("0451"));
+    let entry = kdbx
+        .create_entry(
+            &db_path_str,
+            &info.root_group_id,
+            CreateEntryData {
+                title: "audit-protected".to_string(),
+                username: String::new(),
+                password: SecureString::from("pw"),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields: Some(protected_custom_fields),
+            },
+        )
+        .expect("create entry");
+
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+    let result = audit_entry_protected_field_revealed_on_success(
+        &audit,
+        &db_path_str,
+        &entry.id,
+        kdbx.get_entry_protected_custom_field(&db_path_str, &entry.id, "PIN"),
+    )
+    .expect("protected field");
+    assert_eq!(result.value, "0451");
+
+    let events = audit
+        .read(Path::new(&db_path_str), &AuditFilter::default())
+        .expect("read audit");
+    assert_eq!(events.len(), 1);
+    match &events[0] {
+        AuditEvent::EntryProtectedFieldRevealed { entry_id, .. } => {
+            assert_eq!(entry_id, &entry.id);
+        }
+        other => panic!("unexpected event kind: {other:?}"),
+    }
+}
+
+#[test]
+fn get_entry_protected_custom_field_records_zero_audit_events_on_failure() {
+    let (kdbx, dir, db_path_str) = create_test_database();
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+    let result = audit_entry_protected_field_revealed_on_success(
+        &audit,
+        &db_path_str,
+        "bogus-id",
+        kdbx.get_entry_protected_custom_field(&db_path_str, "bogus-id", "PIN"),
+    );
+    assert!(result.is_err());
+
+    let events = audit
+        .read(Path::new(&db_path_str), &AuditFilter::default())
+        .expect("read audit");
+    assert!(events.is_empty(), "no event must be recorded on failure");
+}
+
+#[test]
+fn get_entry_password_records_zero_audit_events_on_failure() {
+    let (kdbx, dir, db_path_str) = create_test_database();
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+    let result = audit_entry_password_revealed_on_success(
+        &audit,
+        &db_path_str,
+        "bogus-id",
+        kdbx.get_entry_password(&db_path_str, "bogus-id"),
+    );
+    assert!(matches!(result, Err(AppError::EntryNotFound(_))));
+
+    let events = audit
+        .read(Path::new(&db_path_str), &AuditFilter::default())
+        .expect("read audit");
+    assert!(events.is_empty(), "no event must be recorded on failure");
 }
 
 // ============================================================================
