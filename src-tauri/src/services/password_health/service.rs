@@ -101,7 +101,7 @@ impl PasswordHealthService {
         let outcome = kdbx.with_vault(db_id, |vault| {
             let generation = vault.generation();
             let cache = self.cache.lock().map_err(|_| AppError::Lock)?;
-            if let Some(cached) = cache.get(db_id, generation) {
+            if let Some(cached) = cache.get(db_id, generation, now) {
                 return Ok(Outcome::Hit(cached.clone()));
             }
             drop(cache);
@@ -114,11 +114,13 @@ impl PasswordHealthService {
         match outcome {
             Outcome::Hit(report) => Ok(report),
             Outcome::Compute { generation, inputs } => {
+                let relevant_until = earliest_future_expiry(&inputs, now);
                 let report = analyze(inputs, now);
                 self.cache.lock().map_err(|_| AppError::Lock)?.insert(
                     db_id.to_string(),
                     generation,
                     report.clone(),
+                    relevant_until,
                 );
                 Ok(report)
             }
@@ -143,6 +145,19 @@ impl Default for PasswordHealthService {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Returns the soonest in-scope expiry that has not yet elapsed at
+/// `now`, or `None` when no such expiry exists. Used by the cache to
+/// know when to start missing reads that would otherwise serve a
+/// stale "healthy" snapshot across an entry's expiry moment.
+fn earliest_future_expiry(inputs: &[EntryInput], now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    inputs
+        .iter()
+        .filter(|i| i.expires)
+        .filter_map(|i| i.expiry_time)
+        .filter(|t| *t > now)
+        .min()
 }
 
 #[cfg(test)]
@@ -407,5 +422,37 @@ mod tests {
             .expect("recompute");
         assert_eq!(r2.findings.len(), 1);
         assert_eq!(r2.findings[0].kind, FindingKind::PasswordExpired);
+    }
+
+    /// A future-expiring Entry must not produce a cache slot that
+    /// outlives its expiry instant. Caching at `t0` with the Entry's
+    /// expiry at `t1` (one hour later) and reading again at `t1`
+    /// without any Vault mutation must recompute and surface the
+    /// newly-elapsed `PasswordExpired` Finding. Pins the time
+    /// component of the cache key — without it the seed report would
+    /// be served and the entry would silently stay "healthy".
+    #[test]
+    fn generate_report_misses_cache_after_relevant_until_elapses() {
+        let t0 = now_fixed();
+        let t1 = t0 + chrono::Duration::hours(1);
+        let future_expiry = t1.naive_utc();
+        let path = "/tmp/__health_time_invalidation_test__.kdbx";
+        let (kdbx, service) = seed_single_entry_vault(path);
+
+        // Silent mutation: add an entry that expires at t1 but is
+        // healthy at t0. No mark_modified — the only freshness signal
+        // available is `now`.
+        insert_expired_entry(&kdbx, path, "future", future_expiry, false);
+
+        let r0 = service.generate_report(&kdbx, path, t0).expect("at t0");
+        assert!(r0.findings.is_empty(), "before expiry the entry is healthy");
+
+        let r1 = service.generate_report(&kdbx, path, t1).expect("at t1");
+        assert_eq!(
+            r1.findings.len(),
+            1,
+            "at the expiry instant the report must surface the Finding"
+        );
+        assert_eq!(r1.findings[0].kind, FindingKind::PasswordExpired);
     }
 }

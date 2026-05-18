@@ -168,7 +168,11 @@ pub fn analyze(
 }
 
 fn is_expired(entry: &EntryInput, now: DateTime<Utc>) -> bool {
-    entry.expires && entry.expiry_time.is_some_and(|t| t < now)
+    // `KeePass` expiry semantics are "not in the future": an entry
+    // whose expiry instant equals `now` is already expired. Using `<`
+    // would leave a one-tick window where an exactly-expired entry
+    // counts as healthy.
+    entry.expires && entry.expiry_time.is_some_and(|t| t <= now)
 }
 
 #[cfg(test)]
@@ -253,6 +257,23 @@ mod tests {
                 total: 4,
             }
         );
+    }
+
+    /// Entries whose expiry instant equals `now` must already count as
+    /// expired — `KeePass` semantics are "not in the future", not "in
+    /// the past". Pinning the boundary prevents a regression to the
+    /// strict `<` comparison.
+    #[test]
+    fn entry_with_expiry_equal_to_now_is_expired() {
+        let now = now_fixed();
+        let entry = EntryInput {
+            id: "boundary".to_string(),
+            expires: true,
+            expiry_time: Some(now),
+        };
+        let report = analyze(vec![entry], now);
+        assert_eq!(report.findings.len(), 1);
+        assert_eq!(report.findings[0].kind, FindingKind::PasswordExpired);
     }
 
     /// One expired Entry in a four-Entry Vault: 3 healthy / 4 total =
