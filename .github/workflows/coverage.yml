@@ -59,6 +59,9 @@ jobs:
         run: cargo llvm-cov --release --lcov --output-path rust-lcov.info
 
       - name: SonarQube Cloud scan
+        # Skip on fork PRs and Dependabot runs where SONAR_TOKEN isn't available;
+        # otherwise the step would fail and turn the whole Coverage job red.
+        if: ${{ secrets.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
