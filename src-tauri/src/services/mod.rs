@@ -6,6 +6,7 @@ pub mod clipboard;
 pub mod crypto;
 pub mod generator;
 pub mod kdbx;
+pub mod password_health;
 pub mod secure_storage;
 pub mod settings;
 pub mod window_protection;
