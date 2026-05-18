@@ -28,11 +28,7 @@ export interface DatabaseTabsState {
 }
 
 function createTabId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `tab_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  return crypto.randomUUID();
 }
 
 function normalizePath(path: string): string {
