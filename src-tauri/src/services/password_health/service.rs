@@ -126,6 +126,19 @@ impl PasswordHealthService {
     }
 }
 
+impl PasswordHealthService {
+    /// Drops the cached report for `db_id`. Called after a successful
+    /// Vault-lock transition so a subsequent unlock + read forces a
+    /// fresh analysis instead of returning a snapshot from the
+    /// previous session. Safe to call against a Vault that has never
+    /// been analysed — the eviction is a no-op when no slot exists.
+    pub fn on_lock(&self, db_id: &str) {
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.evict(db_id);
+        }
+    }
+}
+
 impl Default for PasswordHealthService {
     fn default() -> Self {
         Self::new()
@@ -380,5 +393,50 @@ mod tests {
             r1, r2,
             "cache must return the previous report when generation hasn't advanced"
         );
+    }
+
+    /// `on_lock` drops the cached slot for the Vault. The trick the
+    /// test relies on: mutate without `mark_modified` to keep the
+    /// generation steady (so the cache *would* hit on the next read),
+    /// then call `on_lock`. The follow-up `generate_report` must
+    /// miss-and-recompute — visible because the mutation introduced
+    /// an expired Entry that wasn't there in the seed report.
+    #[test]
+    fn on_lock_evicts_cache_so_next_call_recomputes() {
+        let now = now_fixed();
+        let past = (now - chrono::Duration::days(1)).naive_utc();
+
+        let mut db = Database::new();
+        {
+            let mut root = db.root_mut();
+            let mut e = root.add_entry();
+            e.set("Password", Value::protected("ok"));
+        }
+
+        let kdbx = KdbxService::new();
+        let path = "/tmp/__health_on_lock_evict_test__.kdbx";
+        install_vault(&kdbx, path, db);
+        let service = PasswordHealthService::new();
+
+        let r1 = service.generate_report(&kdbx, path, now).expect("seed");
+        assert!(r1.findings.is_empty());
+
+        kdbx.with_vault_mut(path, |v| {
+            let mut root = v.db_mut().root_mut();
+            let mut e = root.add_entry();
+            e.set("Password", Value::protected("x"));
+            e.times.expires = Some(true);
+            e.times.expiry = Some(past);
+            // Deliberately no mark_modified — the cache would hit
+            // on the next read if not for the explicit eviction.
+            Ok(())
+        })
+        .expect("silent mutation");
+
+        service.on_lock(path);
+
+        let r2 = service.generate_report(&kdbx, path, now).expect("recompute");
+        assert_eq!(r2.findings.len(), 1);
+        assert_eq!(r2.findings[0].kind, FindingKind::PasswordExpired);
     }
 }

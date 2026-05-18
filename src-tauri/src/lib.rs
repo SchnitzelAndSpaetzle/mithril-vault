@@ -17,12 +17,12 @@ use commands::{
     get_database_info, get_entry, get_entry_password, get_entry_protected_custom_field, get_group,
     get_group_entry_counts, get_keyfile_for_database, get_password_health_report,
     get_recent_databases, get_recycle_bin_id, get_window_content_protection_supported,
-    has_session_key, inspect_database, list_backups,
-    list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
-    open_database, open_database_with_keyfile, open_database_with_keyfile_only,
-    remove_recent_database, rename_group, rename_tag, report_activity, reset_app_preferences,
-    restore_backup, save_database, set_entry_custom_icon, set_window_content_protected,
-    store_session_key, unlock_database, update_app_preferences, update_entry, update_group,
+    has_session_key, inspect_database, list_backups, list_entries, list_groups,
+    list_open_databases, lock_database, move_entry, move_group, open_database,
+    open_database_with_keyfile, open_database_with_keyfile_only, remove_recent_database,
+    rename_group, rename_tag, report_activity, reset_app_preferences, restore_backup,
+    save_database, set_entry_custom_icon, set_window_content_protected, store_session_key,
+    unlock_database, update_app_preferences, update_entry, update_group,
 };
 use services::audit::format::Reason;
 use services::audit::key::FileBackedAuditKey;

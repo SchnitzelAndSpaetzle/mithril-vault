@@ -164,6 +164,7 @@ fn database_commands_handle_missing_database() {
         "missing.kdbx".to_string(),
         app.state(),
         app.state(),
+        app.state(),
     ))
     .expect_err("expected database not found");
     assert!(matches!(err, AppError::DatabaseNotFound(_)));

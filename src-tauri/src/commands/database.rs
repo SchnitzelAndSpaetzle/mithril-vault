@@ -9,6 +9,7 @@ use crate::services::audit::AuditService;
 use crate::services::auto_lock::AutoLockService;
 use crate::services::kdbx::backups::{BackupError, BackupInfo, BackupListEntry};
 use crate::services::kdbx::KdbxService;
+use crate::services::password_health::service::PasswordHealthService;
 use serde::Serialize;
 use std::path::Path;
 use std::sync::Arc;
@@ -246,9 +247,17 @@ pub async fn lock_database(
     db_id: String,
     state: State<'_, Arc<KdbxService>>,
     audit: State<'_, Arc<AuditService>>,
+    health: State<'_, Arc<PasswordHealthService>>,
 ) -> Result<DatabaseInfo, AppError> {
-    let (info, _did_transition) =
+    let (info, did_transition) =
         record_lock_audit(&audit, &db_id, Reason::Manual, state.lock(&db_id))?;
+    if did_transition {
+        // Drop the cached report so a future unlock-then-read pulls a
+        // fresh analysis instead of returning a snapshot from the
+        // pre-lock session. Eviction is idempotent — calling it on a
+        // redundant lock is harmless.
+        health.on_lock(&db_id);
+    }
     Ok(info)
 }
 
