@@ -706,7 +706,7 @@ export const windowProtection = {
  */
 export const passwordHealth = {
   async getReport(dbId: string): Promise<PasswordHealthReport> {
-    KeepassIdSchema.parse(dbId);
+    DbIdSchema.parse({ dbId });
     const result = await invoke("get_password_health_report", { dbId });
     return PasswordHealthReportSchema.parse(result);
   },

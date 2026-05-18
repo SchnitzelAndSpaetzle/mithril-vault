@@ -24,8 +24,16 @@ export function PasswordHealthReportView({
   dbId,
 }: PasswordHealthReportViewProps) {
   const { t } = useTranslation();
-  const { data: report, isLoading } = usePasswordHealthReport(dbId);
+  const { data: report, isLoading, error } = usePasswordHealthReport(dbId);
   const { data: entries } = useEntries(dbId, null);
+
+  if (error) {
+    return (
+      <div className="p-6 text-sm text-destructive">
+        {error instanceof Error ? error.message : String(error)}
+      </div>
+    );
+  }
 
   if (isLoading || !report) {
     return (
