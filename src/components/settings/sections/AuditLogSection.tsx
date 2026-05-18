@@ -436,6 +436,50 @@ export function AuditLogSection({
   const hasPicker = recentDatabases.length > 0 && effectivePath !== null;
   const showEmptyNoVault = !effectivePath;
 
+  function renderEventList() {
+    if (showEmptyNoVault) {
+      return (
+        <p className="text-sm text-muted-foreground">
+          {t("audit.emptyNoVault")}
+        </p>
+      );
+    }
+    if (invalidRange) return null;
+    if (query.isLoading) {
+      return (
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      );
+    }
+    if (query.error) {
+      return (
+        <p className="text-sm text-destructive">
+          {t("audit.loadError", { error: String(query.error) })}
+        </p>
+      );
+    }
+    if (filteredEvents.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground">{t("audit.empty")}</p>
+      );
+    }
+    if (filteredEvents.length >= VIRTUALIZATION_THRESHOLD) {
+      return (
+        <VirtualizedRows events={filteredEvents} resolveTitle={resolveTitle} />
+      );
+    }
+    return (
+      <ul className="flex flex-col gap-2">
+        {filteredEvents.map((event, index) => (
+          <AuditRow
+            key={`${event.timestamp}-${index}`}
+            event={event}
+            resolveTitle={resolveTitle}
+          />
+        ))}
+      </ul>
+    );
+  }
+
   return (
     <SettingsSection
       id="audit-log"
@@ -484,31 +528,7 @@ export function AuditLogSection({
           />
         </>
       ) : null}
-      {showEmptyNoVault ? (
-        <p className="text-sm text-muted-foreground">
-          {t("audit.emptyNoVault")}
-        </p>
-      ) : invalidRange ? null : query.isLoading ? (
-        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-      ) : query.error ? (
-        <p className="text-sm text-destructive">
-          {t("audit.loadError", { error: String(query.error) })}
-        </p>
-      ) : filteredEvents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("audit.empty")}</p>
-      ) : filteredEvents.length >= VIRTUALIZATION_THRESHOLD ? (
-        <VirtualizedRows events={filteredEvents} resolveTitle={resolveTitle} />
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {filteredEvents.map((event, index) => (
-            <AuditRow
-              key={`${event.timestamp}-${index}`}
-              event={event}
-              resolveTitle={resolveTitle}
-            />
-          ))}
-        </ul>
-      )}
+      {renderEventList()}
     </SettingsSection>
   );
 }
