@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Mot de passe affiché",
       "entryPasswordCopied": "Mot de passe copié",
       "entryProtectedFieldRevealed": "Champ protégé affiché",
+      "preferencesSecurityChanged": "Préférence de sécurité modifiée",
       "auditCleared": "Journal d'audit effacé"
     },
     "reason": {
@@ -41,6 +42,19 @@
       "autoLock": "Verrouillage automatique",
       "appQuit": "Quitter l'application",
       "screenLock": "Verrouillage d'écran"
+    },
+    "settingName": {
+      "security": {
+        "clipboardClearTimeout": "Délai d'effacement du presse-papiers",
+        "preventScreenCapture": "Empêcher la capture d'écran",
+        "autoDownloadFavicons": "Téléchargement automatique des favicons",
+        "allowThirdPartyFaviconFallbacks": "Autoriser les services tiers de secours pour les favicons",
+        "autoLockTimeout": "Délai de verrouillage automatique"
+      },
+      "audit": {
+        "enabled": "Journalisation d'audit activée",
+        "retentionDays": "Conservation des audits (jours)"
+      }
     },
     "clearButton": "Effacer le journal d'audit",
     "clearConfirmTitle": "Effacer le journal d'audit ?",
@@ -146,16 +160,16 @@
       "dataLocation": "Emplacement des données"
     },
     "audit": {
-      "title": "Audit log",
-      "description": "Record security-relevant events for your vaults on this device.",
+      "title": "Journal d'audit",
+      "description": "Enregistre les événements liés à la sécurité de vos coffres sur cet appareil.",
       "enabled": {
-        "label": "Enable audit logging",
-        "description": "When off, no new events are written. Your existing log file is preserved."
+        "label": "Activer la journalisation d'audit",
+        "description": "Lorsqu'elle est désactivée, aucun nouvel événement n'est écrit. Votre fichier journal existant est conservé."
       },
       "retentionDays": {
-        "label": "Retention (days)",
-        "description": "How long to keep audit events. Valid range: 1 to 365 days. Cleanup of older events is not enforced yet.",
-        "validation": "Retention must be between 1 and 365 days."
+        "label": "Conservation (jours)",
+        "description": "Durée de conservation des événements d'audit. Plage valide : 1 à 365 jours. La purge des événements plus anciens n'est pas encore appliquée.",
+        "validation": "La conservation doit être comprise entre 1 et 365 jours."
       }
     },
     "backups": {

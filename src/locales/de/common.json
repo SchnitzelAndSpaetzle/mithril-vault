@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Passwort angezeigt",
       "entryPasswordCopied": "Passwort kopiert",
       "entryProtectedFieldRevealed": "Geschütztes Feld angezeigt",
+      "preferencesSecurityChanged": "Sicherheitseinstellung geändert",
       "auditCleared": "Audit-Protokoll geleert"
     },
     "reason": {
@@ -41,6 +42,19 @@
       "autoLock": "Auto-Sperre",
       "appQuit": "App beendet",
       "screenLock": "Bildschirmsperre"
+    },
+    "settingName": {
+      "security": {
+        "clipboardClearTimeout": "Zwischenablage löschen nach",
+        "preventScreenCapture": "Bildschirmaufnahme verhindern",
+        "autoDownloadFavicons": "Favicons automatisch herunterladen",
+        "allowThirdPartyFaviconFallbacks": "Favicon-Fallback-Dienste von Drittanbietern erlauben",
+        "autoLockTimeout": "Automatische Sperre"
+      },
+      "audit": {
+        "enabled": "Audit-Protokollierung aktiviert",
+        "retentionDays": "Audit-Aufbewahrung (Tage)"
+      }
     },
     "clearButton": "Audit-Protokoll leeren",
     "clearConfirmTitle": "Audit-Protokoll leeren?",
@@ -146,16 +160,16 @@
       "dataLocation": "Datenspeicherort"
     },
     "audit": {
-      "title": "Audit log",
-      "description": "Record security-relevant events for your vaults on this device.",
+      "title": "Audit-Protokoll",
+      "description": "Sicherheitsrelevante Ereignisse für Ihre Tresore auf diesem Gerät aufzeichnen.",
       "enabled": {
-        "label": "Enable audit logging",
-        "description": "When off, no new events are written. Your existing log file is preserved."
+        "label": "Audit-Protokollierung aktivieren",
+        "description": "Bei Deaktivierung werden keine neuen Ereignisse geschrieben. Ihre bestehende Protokolldatei bleibt erhalten."
       },
       "retentionDays": {
-        "label": "Retention (days)",
-        "description": "How long to keep audit events. Valid range: 1 to 365 days. Cleanup of older events is not enforced yet.",
-        "validation": "Retention must be between 1 and 365 days."
+        "label": "Aufbewahrung (Tage)",
+        "description": "Wie lange Audit-Ereignisse aufbewahrt werden. Gültiger Bereich: 1 bis 365 Tage. Das Bereinigen älterer Ereignisse wird derzeit noch nicht erzwungen.",
+        "validation": "Die Aufbewahrung muss zwischen 1 und 365 Tagen liegen."
       }
     },
     "backups": {

@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Lozinka prikazana",
       "entryPasswordCopied": "Lozinka kopirana",
       "entryProtectedFieldRevealed": "Zaštićeno polje prikazano",
+      "preferencesSecurityChanged": "Bezbednosno podešavanje promenjeno",
       "auditCleared": "Dnevnik nadzora obrisan"
     },
     "reason": {
@@ -41,6 +42,19 @@
       "autoLock": "Automatsko zaključavanje",
       "appQuit": "Zatvaranje aplikacije",
       "screenLock": "Zaključavanje ekrana"
+    },
+    "settingName": {
+      "security": {
+        "clipboardClearTimeout": "Vreme brisanja privremene memorije",
+        "preventScreenCapture": "Spreči snimak ekrana",
+        "autoDownloadFavicons": "Automatsko preuzimanje favikona",
+        "allowThirdPartyFaviconFallbacks": "Dozvoli usluge treće strane za rezervne favikone",
+        "autoLockTimeout": "Vreme automatskog zaključavanja"
+      },
+      "audit": {
+        "enabled": "Beleženje nadzora omogućeno",
+        "retentionDays": "Čuvanje nadzora (dani)"
+      }
     },
     "clearButton": "Obriši dnevnik nadzora",
     "clearConfirmTitle": "Obrisati dnevnik nadzora?",
@@ -146,16 +160,16 @@
       "dataLocation": "Lokacija podataka"
     },
     "audit": {
-      "title": "Audit log",
-      "description": "Record security-relevant events for your vaults on this device.",
+      "title": "Dnevnik nadzora",
+      "description": "Beleži bezbednosno značajne događaje za vaše sefove na ovom uređaju.",
       "enabled": {
-        "label": "Enable audit logging",
-        "description": "When off, no new events are written. Your existing log file is preserved."
+        "label": "Omogući beleženje nadzora",
+        "description": "Kada je isključeno, novi događaji se ne upisuju. Vaša postojeća datoteka dnevnika je sačuvana."
       },
       "retentionDays": {
-        "label": "Retention (days)",
-        "description": "How long to keep audit events. Valid range: 1 to 365 days. Cleanup of older events is not enforced yet.",
-        "validation": "Retention must be between 1 and 365 days."
+        "label": "Čuvanje (dani)",
+        "description": "Koliko dugo se čuvaju događaji nadzora. Validan opseg: 1 do 365 dana. Brisanje starijih događaja još uvek nije primenjeno.",
+        "validation": "Čuvanje mora biti između 1 i 365 dana."
       }
     },
     "backups": {
