@@ -92,8 +92,8 @@ describe("useDatabaseClosed", () => {
   });
 
   it("evicts every cached query scoped to the closed Vault path", async () => {
-    const path = "/tmp/vault.kdbx";
-    const otherPath = "/tmp/other.kdbx";
+    const path = "/mock/vault.kdbx";
+    const otherPath = "/mock/other.kdbx";
     const client = new QueryClient();
 
     // Pre-populate caches for the affected Vault across every domain that

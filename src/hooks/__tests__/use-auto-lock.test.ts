@@ -134,8 +134,8 @@ describe("useAutoLock", () => {
     mockTabs = [
       {
         id: "tab-1",
-        dbId: "/tmp/test.kdbx",
-        path: "/tmp/test.kdbx",
+        dbId: "/mock/test.kdbx",
+        path: "/mock/test.kdbx",
       },
     ];
     mockActiveTabId = "tab-1";
@@ -143,13 +143,13 @@ describe("useAutoLock", () => {
     renderHook(() => useAutoLock());
 
     act(() => {
-      onDatabaseLocked?.({ payload: ["/tmp/test.kdbx"] });
+      onDatabaseLocked?.({ payload: ["/mock/test.kdbx"] });
     });
 
     expect(mockLockTab).toHaveBeenCalledWith("tab-1");
     expect(mockNavigate).toHaveBeenCalledWith({
       to: "/unlock",
-      search: { path: "/tmp/test.kdbx" },
+      search: { path: "/mock/test.kdbx" },
     });
   });
 });

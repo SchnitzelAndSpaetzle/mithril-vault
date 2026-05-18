@@ -23,7 +23,7 @@ describe("tauri wrappers validation", () => {
   });
 
   it("gets custom icons as MIME-aware payloads", async () => {
-    const dbId = "/tmp/test.kdbx";
+    const dbId = "/mock/test.kdbx";
     const customIcons = {
       "icon-1": {
         mimeType: "image/svg+xml",
@@ -37,7 +37,7 @@ describe("tauri wrappers validation", () => {
   });
 
   it("fetches and clears entry custom icons through entry wrappers", async () => {
-    const dbId = "/tmp/test.kdbx";
+    const dbId = "/mock/test.kdbx";
     const entryId = crypto.randomUUID();
     vi.mocked(invoke)
       .mockResolvedValueOnce("updated")
@@ -72,10 +72,10 @@ describe("tauri wrappers validation", () => {
 
   it("validates favicon entry ids before invoking backend", async () => {
     await expect(
-      entries.fetchFavicon("/tmp/test.kdbx", "not-a-uuid")
+      entries.fetchFavicon("/mock/test.kdbx", "not-a-uuid")
     ).rejects.toThrow();
     await expect(
-      entries.clearCustomIcon("/tmp/test.kdbx", "not-a-uuid")
+      entries.clearCustomIcon("/mock/test.kdbx", "not-a-uuid")
     ).rejects.toThrow();
     expect(invoke).not.toHaveBeenCalled();
   });
@@ -167,7 +167,7 @@ describe("tauri wrappers validation", () => {
       },
       advanced: {
         debugMode: false,
-        dataLocation: "/tmp/mithril-vault",
+        dataLocation: "/mock/mithril-vault",
       },
       backups: {
         enabled: true,
@@ -236,7 +236,7 @@ describe("tauri wrappers validation", () => {
         },
         advanced: {
           debugMode: false,
-          dataLocation: "/tmp",
+          dataLocation: "/mock",
         },
         backups: {
           enabled: true,
@@ -282,16 +282,16 @@ describe("tauri wrappers validation", () => {
   });
 
   it("parses list_backups payload into a typed BackupListEntry[]", async () => {
-    const dbPath = "/tmp/vault.kdbx";
+    const dbPath = "/mock/vault.kdbx";
     const payload = [
       {
-        path: "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+        path: "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
         timestamp: "2026-05-12T14:30:45.123Z",
         sizeBytes: 4096,
         kind: "auto",
       },
       {
-        path: "/tmp/.kdbx-backups/vault.kdbx.backup.manual.20260101T000000.000Z.kdbx",
+        path: "/mock/.kdbx-backups/vault.kdbx.backup.manual.20260101T000000.000Z.kdbx",
         timestamp: "2026-01-01T00:00:00.000Z",
         sizeBytes: 8192,
         kind: "manual",
@@ -308,20 +308,20 @@ describe("tauri wrappers validation", () => {
   it("rejects list_backups payloads with an unknown kind discriminator", async () => {
     vi.mocked(invoke).mockResolvedValueOnce([
       {
-        path: "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+        path: "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
         timestamp: "2026-05-12T14:30:45.123Z",
         sizeBytes: 4096,
         kind: "bogus",
       },
     ]);
 
-    await expect(backups.list("/tmp/vault.kdbx")).rejects.toThrow();
+    await expect(backups.list("/mock/vault.kdbx")).rejects.toThrow();
   });
 
   it("invokes create_manual_backup and returns the typed BackupInfo", async () => {
-    const dbPath = "/tmp/vault.kdbx";
+    const dbPath = "/mock/vault.kdbx";
     const payload = {
-      path: "/tmp/.kdbx-backups/vault.kdbx.backup.manual.20260515T120000.000Z.kdbx",
+      path: "/mock/.kdbx-backups/vault.kdbx.backup.manual.20260515T120000.000Z.kdbx",
     };
     vi.mocked(invoke).mockResolvedValueOnce(payload);
 
@@ -349,9 +349,9 @@ describe("tauri wrappers validation", () => {
     };
     vi.mocked(invoke).mockResolvedValueOnce(payload);
 
-    await expect(audit.list("/tmp/vault.kdbx")).resolves.toEqual(payload);
+    await expect(audit.list("/mock/vault.kdbx")).resolves.toEqual(payload);
     expect(invoke).toHaveBeenCalledWith("get_audit_events", {
-      vaultPath: "/tmp/vault.kdbx",
+      vaultPath: "/mock/vault.kdbx",
       filter: null,
     });
   });
@@ -362,7 +362,7 @@ describe("tauri wrappers validation", () => {
       degraded: true,
     });
 
-    await expect(audit.list("/tmp/vault.kdbx")).resolves.toEqual({
+    await expect(audit.list("/mock/vault.kdbx")).resolves.toEqual({
       events: [],
       degraded: true,
     });
@@ -379,12 +379,12 @@ describe("tauri wrappers validation", () => {
       ],
       degraded: false,
     });
-    await expect(audit.list("/tmp/vault.kdbx")).rejects.toThrow();
+    await expect(audit.list("/mock/vault.kdbx")).rejects.toThrow();
   });
 
   it("audit.list rejects payloads missing the degraded flag", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({ events: [] });
-    await expect(audit.list("/tmp/vault.kdbx")).rejects.toThrow();
+    await expect(audit.list("/mock/vault.kdbx")).rejects.toThrow();
   });
 
   it("audit.getStatus parses get_audit_status into a typed status", async () => {
@@ -421,12 +421,12 @@ describe("tauri wrappers validation", () => {
     vi.mocked(invoke).mockResolvedValueOnce(undefined);
 
     await backups.delete(
-      "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx"
+      "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx"
     );
 
     expect(invoke).toHaveBeenCalledWith("delete_backup", {
       backupPath:
-        "/tmp/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+        "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
     });
   });
 });
