@@ -1,29 +1,10 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 import { PasswordHealthReportView } from "@/components/security/PasswordHealthReportView";
-import { useDatabaseTabs } from "@/stores/database-tabs";
+import { requireUnlockedTab } from "@/lib/require-unlocked-tab";
 
 export const Route = createFileRoute("/dashboard/security/$dbId")({
-  beforeLoad: ({ params }) => {
-    const state = useDatabaseTabs.getState();
-    const tab = state.tabs.find(
-      (item) => item.dbId === params.dbId || item.path === params.dbId
-    );
-
-    if (!tab) {
-      throw redirect({ to: "/" });
-    }
-
-    if (tab.state === "unlocking" || tab.state === "locked") {
-      throw redirect({
-        to: "/unlock",
-        search: tab.path ? { path: tab.path } : {},
-      });
-    }
-
-    state.setActiveTab(tab.id);
-    return { tabId: tab.id };
-  },
+  beforeLoad: ({ params }) => requireUnlockedTab(params.dbId),
   component: SecurityRoutePage,
 });
 
