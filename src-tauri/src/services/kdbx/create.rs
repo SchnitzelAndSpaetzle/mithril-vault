@@ -107,6 +107,7 @@ impl KdbxService {
                 version: version.clone(),
                 name: name.to_string(),
                 root_group_id: root_group_id.clone(),
+                generation: 0,
             },
         );
 
