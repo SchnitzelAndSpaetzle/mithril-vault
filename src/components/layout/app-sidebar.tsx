@@ -23,16 +23,33 @@ import {
 import { Separator } from "@/components/ui/separator.tsx";
 import { GroupTree } from "@/components/groups/GroupTree";
 import { useActiveDatabase } from "@/hooks/use-active-database";
+import { usePasswordHealthSummary } from "@/hooks/use-password-health";
 import NavTags from "@/components/layout/nav-tags.tsx";
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { dbId } = useActiveDatabase();
+  const { totalUnhealthy, highestSeverity } = usePasswordHealthSummary(
+    dbId ?? null
+  );
 
   if (!dbId) {
     return null;
   }
+
+  const securityBadge =
+    totalUnhealthy > 0 ? (
+      <span
+        className={
+          highestSeverity === "critical"
+            ? "text-red-600 dark:text-red-500"
+            : "text-amber-600 dark:text-amber-500"
+        }
+      >
+        {totalUnhealthy}
+      </span>
+    ) : undefined;
 
   const navMain = [
     {
@@ -50,10 +67,14 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       disabled: true,
     },
     {
-      // TODO: wire security health to backend
       title: t("sidebar.security"),
       icon: ShieldIcon,
-      disabled: true,
+      badge: securityBadge,
+      onSelect: () =>
+        void navigate({
+          to: "/dashboard/security/$dbId",
+          params: { dbId },
+        }),
     },
   ];
 

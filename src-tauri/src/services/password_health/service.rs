@@ -435,7 +435,9 @@ mod tests {
 
         service.on_lock(path);
 
-        let r2 = service.generate_report(&kdbx, path, now).expect("recompute");
+        let r2 = service
+            .generate_report(&kdbx, path, now)
+            .expect("recompute");
         assert_eq!(r2.findings.len(), 1);
         assert_eq!(r2.findings[0].kind, FindingKind::PasswordExpired);
     }

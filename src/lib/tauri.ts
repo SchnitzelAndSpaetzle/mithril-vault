@@ -23,6 +23,7 @@ import type {
   Group,
   PassphraseGeneratorOptions,
   PasswordGeneratorOptions,
+  PasswordHealthReport,
   RecentDatabase,
   UpdateEntryData,
 } from "./types";
@@ -46,6 +47,7 @@ import {
   GroupSchema,
   PassphraseGeneratorOptionsSchema,
   PasswordGeneratorOptionsSchema,
+  PasswordHealthReportSchema,
   RecentDatabaseSchema,
   UpdateEntryDataSchema,
 } from "./types";
@@ -692,5 +694,20 @@ export const windowProtection = {
   async isSupported(): Promise<boolean> {
     const result = await invoke("get_window_content_protection_supported");
     return z.boolean().parse(result);
+  },
+};
+
+/**
+ * Per-Vault Password Health report. The backend `get_password_health_report`
+ * command caches on `(dbId, generation)`, so repeat calls against an
+ * unchanged Vault are free. Findings stream progressively via Tauri
+ * events in a follow-up slice; the report this returns today is the
+ * full snapshot.
+ */
+export const passwordHealth = {
+  async getReport(dbId: string): Promise<PasswordHealthReport> {
+    KeepassIdSchema.parse(dbId);
+    const result = await invoke("get_password_health_report", { dbId });
+    return PasswordHealthReportSchema.parse(result);
   },
 };

@@ -632,5 +632,32 @@
       "activeTooltip": "La prévention des captures d'écran est active",
       "notSupportedTooltip": "La prévention des captures d'écran est activée mais n'est pas prise en charge sur cette plateforme"
     }
+  },
+  "passwordHealth": {
+    "title": "Sécurité",
+    "subtitle": "Santé des mots de passe de ce coffre",
+    "scoreLabel": "Score",
+    "noScore": "—",
+    "emptyState": "Aucun mot de passe à analyser.",
+    "loading": "Analyse des mots de passe…",
+    "totals": {
+      "critical": "Critique",
+      "high": "Élevé",
+      "healthy": "Sain",
+      "total": "Total"
+    },
+    "sections": {
+      "high": "Élevé",
+      "highDescription": "Entrées présentant au moins un problème de gravité élevée."
+    },
+    "findings": {
+      "password.expired": "Expiré"
+    },
+    "actions": {
+      "openEntry": "Ouvrir l'entrée"
+    },
+    "icons": {
+      "warning": "Présente des problèmes de sécurité"
+    }
   }
 }

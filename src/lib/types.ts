@@ -410,6 +410,44 @@ export const AuditStatusSchema = z.object({
 });
 export type AuditStatus = z.infer<typeof AuditStatusSchema>;
 
+/// Namespaced enum of Password Health findings. Wire shape mirrors the
+/// backend `FindingKindDto` — additions land here when new check kinds
+/// ship in follow-up slices.
+export const FindingKindSchema = z.enum(["password.expired"]);
+export type FindingKind = z.infer<typeof FindingKindSchema>;
+
+export const FindingSchema = z.object({
+  entryId: z.string().min(1),
+  kind: FindingKindSchema,
+});
+export type Finding = z.infer<typeof FindingSchema>;
+
+export const HealthTotalsSchema = z.object({
+  critical: z.number().int().nonnegative(),
+  high: z.number().int().nonnegative(),
+  healthy: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+});
+export type HealthTotals = z.infer<typeof HealthTotalsSchema>;
+
+export const ReuseGroupSchema = z.object({
+  passwordHash: z.string().min(1),
+  entryIds: z.array(z.string().min(1)),
+});
+export type ReuseGroup = z.infer<typeof ReuseGroupSchema>;
+
+/// Per-Vault Password Health snapshot. `score` is `null` on an empty
+/// Vault (no in-scope Entries) and a `0..=100` integer otherwise.
+/// `reuseGroups` is on the wire from day one but is empty in the
+/// expired-only tracer slice.
+export const PasswordHealthReportSchema = z.object({
+  score: z.number().int().min(0).max(100).nullable(),
+  findings: z.array(FindingSchema),
+  totals: HealthTotalsSchema,
+  reuseGroups: z.array(ReuseGroupSchema),
+});
+export type PasswordHealthReport = z.infer<typeof PasswordHealthReportSchema>;
+
 export const EntrySortFieldSchema = z.enum([
   "title",
   "username",

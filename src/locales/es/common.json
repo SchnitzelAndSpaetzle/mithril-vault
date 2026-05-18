@@ -632,5 +632,32 @@
       "activeTooltip": "La protección contra capturas de pantalla está activa",
       "notSupportedTooltip": "La protección contra capturas está activada pero no es compatible con esta plataforma"
     }
+  },
+  "passwordHealth": {
+    "title": "Seguridad",
+    "subtitle": "Salud de contraseñas de esta bóveda",
+    "scoreLabel": "Puntuación",
+    "noScore": "—",
+    "emptyState": "No hay contraseñas para analizar.",
+    "loading": "Analizando contraseñas…",
+    "totals": {
+      "critical": "Crítico",
+      "high": "Alto",
+      "healthy": "Saludable",
+      "total": "Total"
+    },
+    "sections": {
+      "high": "Alto",
+      "highDescription": "Entradas con al menos un problema de gravedad alta."
+    },
+    "findings": {
+      "password.expired": "Caducada"
+    },
+    "actions": {
+      "openEntry": "Abrir entrada"
+    },
+    "icons": {
+      "warning": "Tiene problemas de seguridad"
+    }
   }
 }

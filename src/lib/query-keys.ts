@@ -33,6 +33,11 @@ export const queryKeys = {
       [...queryKeys.audit.all, vaultPath, "list"] as const,
     status: () => [...queryKeys.audit.all, "status"] as const,
   },
+  passwordHealth: {
+    all: ["password-health"] as const,
+    report: (dbId: string) =>
+      [...queryKeys.passwordHealth.all, dbId, "report"] as const,
+  },
   groups: {
     all: ["groups"] as const,
     list: (dbId: string, parentId?: string | null) =>
