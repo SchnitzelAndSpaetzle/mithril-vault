@@ -57,6 +57,21 @@ A read-only snapshot of properties intrinsic to a specific Vault (KDF parameters
 ### Secure String / Secure Bytes
 Wrappers around `String` / `Vec<u8>` that zeroize on drop and redact in Debug/Display output. Used for every value the code wants to keep out of accidental logs and core dumps — passwords, keyfile contents, derived keys.
 
+## Password Health
+
+A read-only assessment of the passwords inside an unlocked Vault. Strictly local — no network calls, no third-party services. Breach-corpus / "have-I-been-pwned" checks are explicitly **not** part of Password Health and would belong to a separate, opt-in feature. Scoped per-Vault — each open Vault has its own independent Health report; cross-Vault analysis is not a thing.
+
+In-scope Entries: non-Recycle-Bin Entries that carry a password field (including the empty string). Entries with `password: None` (TOTP-only, attachment-only) are skipped entirely. `{REF:...}` password references are resolved against the referenced Entry before analysis, when `keepass-rs` exposes the resolved value.
+
+### Password Health Finding Kind
+The namespaced enum of recordable findings:
+- `password.very_weak` — Critical. Empty password, or zxcvbn score 0 (top dictionaries, trivially guessable).
+- `password.weak` — High. zxcvbn score 1 (common patterns).
+- `password.reused` — High. Exact byte-equal password shared by ≥ 2 in-scope Entries in this Vault.
+- `password.expired` — High. The Entry's own `expires` flag is set and `expiry_time` is in the past.
+
+Findings are emitted independently — an Entry that is both Reused and Very Weak produces two findings, not one merged finding, because the remediations differ (regenerate this Entry vs. regenerate every Entry sharing the group). Password age ("password last changed N months ago") is **not** a Health Finding Kind — periodic rotation contradicts NIST SP 800-63B guidance and is intentionally absent from the model.
+
 ## Audit
 
 End-user awareness of security-relevant events. Developer debugging is a separate concern and is **not** what this section covers.
