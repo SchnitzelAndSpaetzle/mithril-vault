@@ -42,6 +42,8 @@ vi.mock("sonner", () => ({
 
 import { AuditLogSection } from "@/components/settings/sections/AuditLogSection";
 
+const TEST_DB_ID = "test-vault.kdbx";
+
 function createWrapper(setup?: (queryClient: QueryClient) => void) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -94,12 +96,12 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
     await waitFor(() => {
-      expect(listMock).toHaveBeenCalledWith("/tmp/vault.kdbx");
+      expect(listMock).toHaveBeenCalledWith(TEST_DB_ID);
     });
     expect(await screen.findByText("audit.empty")).toBeInTheDocument();
     // The degraded banner must NOT appear when degraded is false.
@@ -126,7 +128,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -145,7 +147,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -170,7 +172,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -214,7 +216,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -252,7 +254,7 @@ describe("AuditLogSection", () => {
       degraded: false,
     });
 
-    const dbId = "/tmp/vault.kdbx";
+    const dbId = TEST_DB_ID;
     const Wrapper = createWrapper((qc) => {
       // Populate the entries list cache the way useEntriesByGroup does.
       qc.setQueryData(queryKeys.entries.list(dbId, null), [
@@ -290,7 +292,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -316,7 +318,7 @@ describe("AuditLogSection", () => {
       degraded: false,
     });
 
-    const dbId = "/tmp/vault.kdbx";
+    const dbId = TEST_DB_ID;
     const Wrapper = createWrapper((qc) => {
       qc.setQueryData(queryKeys.entries.list(dbId, null), [
         { id: "uuid-copied-1", title: "Bank" },
@@ -346,7 +348,7 @@ describe("AuditLogSection", () => {
       degraded: false,
     });
 
-    const dbId = "/tmp/vault.kdbx";
+    const dbId = TEST_DB_ID;
     const Wrapper = createWrapper((qc) => {
       qc.setQueryData(queryKeys.entries.list(dbId, null), [
         { id: "uuid-pf-1", title: "Recovery codes" },
@@ -376,7 +378,7 @@ describe("AuditLogSection", () => {
       degraded: false,
     });
 
-    const dbId = "/tmp/vault.kdbx";
+    const dbId = TEST_DB_ID;
     // Cache is warm — entries were loaded earlier this session — but the
     // vault is now locked. PRD US #16: locked vaults must render entry
     // rows as UUID prefixes so the on-disk log never carries titles
@@ -414,7 +416,7 @@ describe("AuditLogSection", () => {
     // from UUID prefix to title once the IPC settles.
     entriesListMock.mockResolvedValue([{ id: "uuid-late", title: "Late" }]);
 
-    const dbId = "/tmp/vault.kdbx";
+    const dbId = TEST_DB_ID;
     const Wrapper = createWrapper();
     render(
       <Wrapper>
@@ -447,7 +449,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -463,7 +465,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -507,7 +509,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -519,7 +521,7 @@ describe("AuditLogSection", () => {
     );
 
     await waitFor(() => {
-      expect(clearMock).toHaveBeenCalledWith("/tmp/vault.kdbx");
+      expect(clearMock).toHaveBeenCalledWith(TEST_DB_ID);
     });
 
     // The panel re-fetches and ends up showing exactly the auditCleared
@@ -549,7 +551,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -580,7 +582,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -604,7 +606,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -624,7 +626,7 @@ describe("AuditLogSection", () => {
     const Wrapper = createWrapper();
     render(
       <Wrapper>
-        <AuditLogSection dbId="/tmp/vault.kdbx" />
+        <AuditLogSection dbId={TEST_DB_ID} />
       </Wrapper>
     );
 
@@ -640,7 +642,7 @@ describe("AuditLogSection", () => {
       const Wrapper = createWrapper();
       render(
         <Wrapper>
-          <AuditLogSection dbId="/tmp/vault.kdbx" />
+          <AuditLogSection dbId={TEST_DB_ID} />
         </Wrapper>
       );
 
@@ -669,7 +671,7 @@ describe("AuditLogSection", () => {
       const Wrapper = createWrapper();
       render(
         <Wrapper>
-          <AuditLogSection dbId="/tmp/vault.kdbx" />
+          <AuditLogSection dbId={TEST_DB_ID} />
         </Wrapper>
       );
 
@@ -710,7 +712,7 @@ describe("AuditLogSection", () => {
       const Wrapper = createWrapper();
       render(
         <Wrapper>
-          <AuditLogSection dbId="/tmp/vault.kdbx" />
+          <AuditLogSection dbId={TEST_DB_ID} />
         </Wrapper>
       );
 
@@ -752,7 +754,7 @@ describe("AuditLogSection", () => {
       const Wrapper = createWrapper();
       render(
         <Wrapper>
-          <AuditLogSection dbId="/tmp/vault.kdbx" />
+          <AuditLogSection dbId={TEST_DB_ID} />
         </Wrapper>
       );
 
@@ -783,7 +785,7 @@ describe("AuditLogSection", () => {
       const Wrapper = createWrapper();
       render(
         <Wrapper>
-          <AuditLogSection dbId="/tmp/vault.kdbx" />
+          <AuditLogSection dbId={TEST_DB_ID} />
         </Wrapper>
       );
 
@@ -813,7 +815,7 @@ describe("AuditLogSection", () => {
       const Wrapper = createWrapper();
       render(
         <Wrapper>
-          <AuditLogSection dbId="/tmp/vault.kdbx" />
+          <AuditLogSection dbId={TEST_DB_ID} />
         </Wrapper>
       );
 
@@ -835,7 +837,7 @@ describe("AuditLogSection", () => {
       const Wrapper = createWrapper();
       render(
         <Wrapper>
-          <AuditLogSection dbId="/tmp/vault.kdbx" />
+          <AuditLogSection dbId={TEST_DB_ID} />
         </Wrapper>
       );
 
