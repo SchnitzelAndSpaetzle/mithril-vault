@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       # Frontend coverage
       - name: Setup Bun
@@ -55,6 +57,11 @@ jobs:
         working-directory: src-tauri
         # Use --release to speed up Argon2 key derivation in KDBX tests
         run: cargo llvm-cov --release --lcov --output-path rust-lcov.info
+
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       # Upload to Codecov
       - name: Upload frontend coverage to Codecov
