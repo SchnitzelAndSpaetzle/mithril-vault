@@ -225,12 +225,12 @@ describe("AuditLogSection", () => {
 
     // Each kind label is rendered inside its row. Scope by data-kind so
     // the kind-filter checkboxes (which also render labels) are excluded.
-    expect(
-      rows.filter((r) => r.getAttribute("data-kind") === "vaultOpened")
-    ).toHaveLength(1);
-    expect(
-      rows.filter((r) => r.getAttribute("data-kind") === "vaultLocked")
-    ).toHaveLength(4);
+    expect(rows.filter((r) => r.dataset.kind === "vaultOpened")).toHaveLength(
+      1
+    );
+    expect(rows.filter((r) => r.dataset.kind === "vaultLocked")).toHaveLength(
+      4
+    );
 
     // Reason labels appear only on locked rows — one per reason variant.
     expect(screen.getByText("audit.reason.manual")).toBeInTheDocument();
@@ -649,7 +649,7 @@ describe("AuditLogSection", () => {
       const checkbox = await screen.findByRole("checkbox", {
         name: "audit.kind.vaultUnlockFailed",
       });
-      expect(checkbox.getAttribute("data-state")).toBe("checked");
+      expect(checkbox.dataset.state).toBe("checked");
     });
 
     it("hides rows whose kind is unchecked", async () => {
@@ -689,7 +689,7 @@ describe("AuditLogSection", () => {
       await waitFor(() => {
         const remaining = screen.getAllByRole("listitem");
         expect(remaining.length).toBe(1);
-        expect(remaining[0]?.getAttribute("data-kind")).toBe("vaultOpened");
+        expect(remaining[0]?.dataset.kind).toBe("vaultOpened");
       });
     });
 
@@ -721,7 +721,7 @@ describe("AuditLogSection", () => {
       // Click every checkbox to unset all.
       const checkboxes = screen
         .getAllByRole("checkbox")
-        .filter((c) => c.getAttribute("data-state") === "checked");
+        .filter((c) => c.dataset.state === "checked");
       for (const cb of checkboxes) fireEvent.click(cb);
 
       await waitFor(() => {
@@ -883,13 +883,12 @@ describe("AuditLogSection", () => {
       // specific dropdown component.
       const opts = await screen.findAllByRole("option");
       expect(opts.length).toBe(2);
-      const paths = opts.map((o) => o.getAttribute("data-vault-path"));
+      const paths = opts.map((o) => o.dataset.vaultPath);
       expect(paths).toContain("/Users/alice/Vaults/work.kdbx");
       expect(paths).toContain("/Users/alice/Vaults/personal.kdbx");
 
       const workOption = opts.find(
-        (o) =>
-          o.getAttribute("data-vault-path") === "/Users/alice/Vaults/work.kdbx"
+        (o) => o.dataset.vaultPath === "/Users/alice/Vaults/work.kdbx"
       );
       expect(workOption?.textContent).toContain("work.kdbx");
       // Path is also visible so two Vaults with the same filename remain
