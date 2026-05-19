@@ -47,6 +47,13 @@ export function useEntryMutations(dbId: string | null) {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.groups.entryCounts(dbId),
       });
+      // Password-health findings (expired/weak/reused) are derived
+      // from entry state — any create/update/move/delete can flip an
+      // entry between healthy and unhealthy, so the sidebar badge and
+      // Security view must refetch instead of holding the prior report.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.passwordHealth.report(dbId),
+      });
     }
   };
 
