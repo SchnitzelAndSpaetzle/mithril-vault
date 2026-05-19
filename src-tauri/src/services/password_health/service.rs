@@ -21,6 +21,7 @@ use keepass::Database;
 
 use super::analyzer::{analyze, EntryInput, PasswordHealthReport};
 use super::cache::CacheStore;
+use crate::domain::secure::SecureString;
 use crate::dto::error::AppError;
 use crate::services::kdbx::recycle::is_in_recycle_bin;
 use crate::services::kdbx::KdbxService;
@@ -51,7 +52,7 @@ pub fn collect_entry_inputs(db: &Database) -> Vec<EntryInput> {
         })
         .map(|entry| EntryInput {
             id: entry.id().uuid().to_string(),
-            password: entry.get_password().unwrap_or("").to_string(),
+            password: SecureString::from(entry.get_password().unwrap_or("")),
             expires: entry.times.expires.unwrap_or(false),
             expiry_time: entry.times.expiry.map(|naive| naive.and_utc()),
         })

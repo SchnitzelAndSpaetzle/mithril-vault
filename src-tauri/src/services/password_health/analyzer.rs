@@ -17,6 +17,8 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 
+use crate::domain::secure::SecureString;
+
 /// Per-Entry input the analyzer consumes. The service layer assembles
 /// one of these for every in-scope Entry before invoking [`analyze`].
 ///
@@ -24,14 +26,22 @@ use chrono::{DateTime, Utc};
 /// associated timestamp. Both come straight from the Entry record — the
 /// analyzer does not resolve "expired" until [`analyze`] compares them
 /// against the injected `now`.
-#[derive(Debug, Clone)]
+/// `Debug` is derived but the [`SecureString`] password field renders
+/// as `[REDACTED]`, so panic-printing or accidental logging cannot
+/// leak the cleartext. `Clone` is intentionally **not** derived —
+/// every additional copy is another heap region the analyzer has to
+/// zeroize, and the pipeline never needs more than one copy per
+/// Entry (the analyzer borrows). Consumers that need another copy
+/// should clone the inner `SecureString` explicitly.
+#[derive(Debug)]
 pub struct EntryInput {
     pub id: String,
-    /// Cleartext password for this Entry. Empty string is a valid
-    /// in-scope value and triggers the empty-string Very-Weak path
-    /// without consulting zxcvbn. The cleartext lives only inside the
-    /// analyzer's stack frame and is dropped when `analyze` returns.
-    pub password: String,
+    /// Cleartext password for this Entry, held in a zeroizing
+    /// wrapper. Empty string is a valid in-scope value and triggers
+    /// the empty-string Very-Weak path without consulting zxcvbn.
+    /// The cleartext lives only inside the analyzer's stack frame
+    /// and is wiped from memory when `analyze` drops the `Vec`.
+    pub password: SecureString,
     pub expires: bool,
     pub expiry_time: Option<DateTime<Utc>>,
 }
@@ -121,7 +131,7 @@ pub fn analyze(
 
     let mut findings: Vec<Finding> = Vec::new();
     for entry in &entries {
-        if let Some(kind) = classify_strength(&entry.password) {
+        if let Some(kind) = classify_strength(entry.password.as_str()) {
             findings.push(Finding {
                 entry_id: entry.id.clone(),
                 kind,
@@ -223,7 +233,7 @@ mod tests {
     fn healthy(id: &str) -> EntryInput {
         EntryInput {
             id: id.to_string(),
-            password: "correct horse battery staple".to_string(),
+            password: SecureString::from("correct horse battery staple"),
             expires: false,
             expiry_time: None,
         }
@@ -232,7 +242,7 @@ mod tests {
     fn expired(id: &str, now: DateTime<Utc>) -> EntryInput {
         EntryInput {
             id: id.to_string(),
-            password: "correct horse battery staple".to_string(),
+            password: SecureString::from("correct horse battery staple"),
             expires: true,
             expiry_time: Some(now - chrono::Duration::days(1)),
         }
@@ -241,7 +251,7 @@ mod tests {
     fn with_password(id: &str, password: &str) -> EntryInput {
         EntryInput {
             id: id.to_string(),
-            password: password.to_string(),
+            password: SecureString::from(password),
             expires: false,
             expiry_time: None,
         }
@@ -314,7 +324,7 @@ mod tests {
         let now = now_fixed();
         let entry = EntryInput {
             id: "boundary".to_string(),
-            password: "correct horse battery staple".to_string(),
+            password: SecureString::from("correct horse battery staple"),
             expires: true,
             expiry_time: Some(now),
         };
@@ -385,7 +395,7 @@ mod tests {
         let past = now - chrono::Duration::days(1);
         let entry = EntryInput {
             id: "a".to_string(),
-            password: "password".to_string(),
+            password: SecureString::from("password"),
             expires: true,
             expiry_time: Some(past),
         };
@@ -402,6 +412,25 @@ mod tests {
                 healthy: 0,
                 total: 1,
             }
+        );
+    }
+
+    /// The cleartext password on `EntryInput` is held in a
+    /// [`SecureString`] so a stray `{:?}` or `panic!` never leaks it.
+    /// If a future refactor swaps the field back to plain `String`,
+    /// the assertion below would print the actual password instead of
+    /// `[REDACTED]` and this test would fail loudly.
+    #[test]
+    fn entry_input_debug_redacts_cleartext_password() {
+        let entry = with_password("a", "hunter2-leak-canary");
+        let debug = format!("{entry:?}");
+        assert!(
+            !debug.contains("hunter2-leak-canary"),
+            "EntryInput Debug must redact the cleartext password; got: {debug}"
+        );
+        assert!(
+            debug.contains("[REDACTED]"),
+            "EntryInput Debug must show [REDACTED] for the password; got: {debug}"
         );
     }
 
