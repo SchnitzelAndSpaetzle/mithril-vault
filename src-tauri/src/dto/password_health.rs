@@ -37,6 +37,10 @@ pub struct FindingDto {
 /// a new variant in a follow-up slice is wire-additive.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FindingKindDto {
+    #[serde(rename = "password.very_weak")]
+    PasswordVeryWeak,
+    #[serde(rename = "password.weak")]
+    PasswordWeak,
     #[serde(rename = "password.expired")]
     PasswordExpired,
 }
@@ -80,6 +84,8 @@ impl From<Finding> for FindingDto {
 impl From<FindingKind> for FindingKindDto {
     fn from(kind: FindingKind) -> Self {
         match kind {
+            FindingKind::PasswordVeryWeak => FindingKindDto::PasswordVeryWeak,
+            FindingKind::PasswordWeak => FindingKindDto::PasswordWeak,
             FindingKind::PasswordExpired => FindingKindDto::PasswordExpired,
         }
     }
@@ -110,6 +116,37 @@ mod tests {
     fn finding_kind_serializes_as_namespaced_string() {
         let json = serde_json::to_string(&FindingKindDto::PasswordExpired).expect("serialize");
         assert_eq!(json, r#""password.expired""#);
+    }
+
+    /// The strength-based Finding Kinds serialize on the same
+    /// `password.<kind>` shape. The frontend `FindingKindSchema` is
+    /// keyed off these exact strings — if a future refactor renamed
+    /// them, the schema parse would reject every report.
+    #[test]
+    fn strength_finding_kinds_serialize_as_namespaced_strings() {
+        assert_eq!(
+            serde_json::to_string(&FindingKindDto::PasswordVeryWeak).expect("very_weak"),
+            r#""password.very_weak""#
+        );
+        assert_eq!(
+            serde_json::to_string(&FindingKindDto::PasswordWeak).expect("weak"),
+            r#""password.weak""#
+        );
+    }
+
+    /// End-to-end conversion from the domain `FindingKind` enum to
+    /// the DTO must preserve the new strength variants. Pins the
+    /// `From` impl so the two enums cannot drift.
+    #[test]
+    fn domain_to_dto_preserves_strength_variants() {
+        assert_eq!(
+            FindingKindDto::from(FindingKind::PasswordVeryWeak),
+            FindingKindDto::PasswordVeryWeak
+        );
+        assert_eq!(
+            FindingKindDto::from(FindingKind::PasswordWeak),
+            FindingKindDto::PasswordWeak
+        );
     }
 
     /// End-to-end conversion: a domain report with one expired Finding

@@ -36,9 +36,8 @@ use crate::services::kdbx::KdbxService;
 ///   attachment-only) are excluded — there is nothing for the
 ///   analyzer to score.
 /// - Entries with an empty-string `Password` are **included**; they
-///   contribute to the total-in-scope denominator even though no
-///   Finding Kind in this slice would emit for them. Once the
-///   Very-Weak check lands they will start emitting that Finding.
+///   contribute to the total-in-scope denominator and trigger the
+///   special-cased Very-Weak Finding inside the analyzer.
 pub fn collect_entry_inputs(db: &Database) -> Vec<EntryInput> {
     let recycle_uuid = db.meta.recyclebin_uuid;
     db.iter_all_entries()
@@ -52,6 +51,7 @@ pub fn collect_entry_inputs(db: &Database) -> Vec<EntryInput> {
         })
         .map(|entry| EntryInput {
             id: entry.id().uuid().to_string(),
+            password: entry.get_password().unwrap_or("").to_string(),
             expires: entry.times.expires.unwrap_or(false),
             expiry_time: entry.times.expiry.map(|naive| naive.and_utc()),
         })
@@ -182,7 +182,10 @@ mod tests {
         {
             let mut root = db.root_mut();
             let mut e = root.add_entry();
-            e.set("Password", Value::protected("ok"));
+            e.set(
+                "Password",
+                Value::protected("Tr0ub4dor&horse staple battery"),
+            );
         }
         let kdbx = KdbxService::new();
         install_vault(&kdbx, path, db);
@@ -257,7 +260,10 @@ mod tests {
         let in_scope_uuid = {
             let mut root = db.root_mut();
             let mut entry = root.add_entry();
-            entry.set("Password", Value::protected("secret"));
+            entry.set(
+                "Password",
+                Value::protected("Tr0ub4dor&horse staple secret"),
+            );
             entry.id().uuid()
         };
 
@@ -277,7 +283,7 @@ mod tests {
                 .id();
             let mut recycle = db.group_mut(recycle_id).expect("recycle bin must exist");
             let mut entry = recycle.add_entry();
-            entry.set("Password", Value::protected("also-secret"));
+            entry.set("Password", Value::protected("Tr0ub4dor&horse staple alt"));
             entry.id().uuid()
         };
 
@@ -308,13 +314,16 @@ mod tests {
         let _healthy_uuid = {
             let mut root = db.root_mut();
             let mut entry = root.add_entry();
-            entry.set("Password", Value::protected("ok"));
+            entry.set(
+                "Password",
+                Value::protected("Tr0ub4dor&horse staple battery"),
+            );
             entry.id().uuid()
         };
         let expired_uuid = {
             let mut root = db.root_mut();
             let mut entry = root.add_entry();
-            entry.set("Password", Value::protected("ok-too"));
+            entry.set("Password", Value::protected("Tr0ub4dor&horse staple wagon"));
             entry.times.expires = Some(true);
             entry.times.expiry = Some(past);
             entry.id().uuid()
@@ -355,7 +364,7 @@ mod tests {
         let r1 = service.generate_report(&kdbx, path, now).expect("first");
         assert!(r1.findings.is_empty());
 
-        insert_expired_entry(&kdbx, path, "x", past, true);
+        insert_expired_entry(&kdbx, path, "Tr0ub4dor&horse staple x", past, true);
 
         let r2 = service.generate_report(&kdbx, path, now).expect("second");
         assert_eq!(
@@ -386,7 +395,7 @@ mod tests {
         // Silent mutation: the cache is keyed on generation, and
         // generation only advances through `mark_modified`. So the
         // expired Entry added here must not invalidate the cached r1.
-        insert_expired_entry(&kdbx, path, "y", past, false);
+        insert_expired_entry(&kdbx, path, "Tr0ub4dor&horse staple y", past, false);
 
         let r2 = service.generate_report(&kdbx, path, now).expect("second");
         assert_eq!(
@@ -413,7 +422,7 @@ mod tests {
 
         // Silent mutation: without `on_lock` the next read would hit
         // the cache. The explicit eviction is what forces recompute.
-        insert_expired_entry(&kdbx, path, "x", past, false);
+        insert_expired_entry(&kdbx, path, "Tr0ub4dor&horse staple x", past, false);
 
         service.on_lock(path);
 
@@ -442,7 +451,13 @@ mod tests {
         // Silent mutation: add an entry that expires at t1 but is
         // healthy at t0. No mark_modified — the only freshness signal
         // available is `now`.
-        insert_expired_entry(&kdbx, path, "future", future_expiry, false);
+        insert_expired_entry(
+            &kdbx,
+            path,
+            "Tr0ub4dor&horse staple future",
+            future_expiry,
+            false,
+        );
 
         let r0 = service.generate_report(&kdbx, path, t0).expect("at t0");
         assert!(r0.findings.is_empty(), "before expiry the entry is healthy");
