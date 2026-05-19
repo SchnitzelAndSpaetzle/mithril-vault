@@ -241,9 +241,12 @@ fn entries_and_groups_commands_fail_when_not_open() {
 fn additional_group_and_database_commands_fail_when_not_open() {
     let app = setup_app();
 
-    let close_err =
-        tauri::async_runtime::block_on(close_database("nonexistent.kdbx".to_string(), app.state()))
-            .expect_err("expected database not found");
+    let close_err = tauri::async_runtime::block_on(close_database(
+        "nonexistent.kdbx".to_string(),
+        app.state(),
+        app.state(),
+    ))
+    .expect_err("expected database not found");
     assert!(matches!(close_err, AppError::DatabaseNotFound(_)));
 
     let save_err = tauri::async_runtime::block_on(save_database(
@@ -389,8 +392,12 @@ fn database_commands_cover_success_paths() {
         tauri::async_runtime::block_on(list_open_databases(app.state())).expect("list open dbs");
     assert_eq!(open_dbs.len(), 1, "One database should be open");
 
-    tauri::async_runtime::block_on(close_database(db_path_str.clone(), app.state()))
-        .expect("close database");
+    tauri::async_runtime::block_on(close_database(
+        db_path_str.clone(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("close database");
 
     let info_after_close =
         tauri::async_runtime::block_on(get_database_info(db_path_str.clone(), app.state()))
@@ -407,8 +414,12 @@ fn database_commands_cover_success_paths() {
     ))
     .expect("open database with keyfile");
 
-    tauri::async_runtime::block_on(close_database(db_path_str.clone(), app.state()))
-        .expect("close database after keyfile open");
+    tauri::async_runtime::block_on(close_database(
+        db_path_str.clone(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("close database after keyfile open");
 
     let key_only_path = temp_dir.path().join("command-key-only.kdbx");
     let key_only_path_str = key_only_path.to_string_lossy().to_string();
@@ -423,8 +434,12 @@ fn database_commands_cover_success_paths() {
     ))
     .expect("create keyfile-only database");
 
-    tauri::async_runtime::block_on(close_database(key_only_path_str.clone(), app.state()))
-        .expect("close keyfile-only database");
+    tauri::async_runtime::block_on(close_database(
+        key_only_path_str.clone(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("close keyfile-only database");
 
     tauri::async_runtime::block_on(open_database_with_keyfile_only(
         key_only_path_str.clone(),
@@ -435,8 +450,12 @@ fn database_commands_cover_success_paths() {
     ))
     .expect("open with keyfile only");
 
-    tauri::async_runtime::block_on(close_database(key_only_path_str.clone(), app.state()))
-        .expect("final close");
+    tauri::async_runtime::block_on(close_database(
+        key_only_path_str.clone(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("final close");
 
     cleanup_app_files(&app);
 }
@@ -497,8 +516,12 @@ fn create_manual_backup_command_writes_manual_snapshot_visible_in_listing() {
         .expect("manual snapshot appears in listing");
     assert_eq!(manual_entry.kind, BackupKind::Manual);
 
-    tauri::async_runtime::block_on(close_database(db_path_str.clone(), app.state()))
-        .expect("close database");
+    tauri::async_runtime::block_on(close_database(
+        db_path_str.clone(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("close database");
     cleanup_app_files(&app);
 }
 

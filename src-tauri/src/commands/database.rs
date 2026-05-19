@@ -142,12 +142,20 @@ pub async fn open_database<R: Runtime>(
 
 /// Closes a specific open database.
 /// The `db_id` is the path to the database file.
+///
+/// Evicts the password-health cache slot *after* the close succeeds so
+/// a subsequent open of the same path computes a fresh report instead
+/// of returning the previous session's snapshot — generation restarts
+/// at 0 on a fresh open, which would otherwise look like a cache hit.
 #[tauri::command]
 pub async fn close_database(
     db_id: String,
     state: State<'_, Arc<KdbxService>>,
+    health: State<'_, Arc<PasswordHealthService>>,
 ) -> Result<(), AppError> {
-    state.close(&db_id)
+    state.close(&db_id)?;
+    health.on_lock(&db_id);
+    Ok(())
 }
 
 /// Create a new KDBX4 database
@@ -403,8 +411,16 @@ pub async fn restore_backup<R: Runtime>(
     backup_path: String,
     app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
+    health: State<'_, Arc<PasswordHealthService>>,
 ) -> Result<(), AppError> {
     let source_path = state.restore_backup(&backup_path)?;
+    // Restore replaces the on-disk file under the Vault that owns
+    // `source_path`. The in-memory slot is locked-in-place rather than
+    // removed, so the lock-time eviction wired into `lock_database`
+    // does not run here. Evict explicitly so the next unlock recomputes
+    // against the freshly-restored bytes instead of serving the
+    // pre-restore report from cache.
+    health.on_lock(&source_path);
     let _ = app.emit(
         "database-closed",
         DatabaseClosedPayload {
