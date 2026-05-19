@@ -6,6 +6,7 @@ pub mod database;
 pub mod entries;
 pub mod generator;
 pub mod groups;
+pub mod password_health;
 pub mod secure_storage;
 pub mod settings;
 pub mod window;
@@ -22,6 +23,7 @@ pub use database::{
 pub use entries::*;
 pub use generator::*;
 pub use groups::*;
+pub use password_health::*;
 pub use secure_storage::*;
 pub use settings::*;
 pub use window::*;

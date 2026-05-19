@@ -632,5 +632,34 @@
       "activeTooltip": "Zaštita od snimanja ekrana je aktivna",
       "notSupportedTooltip": "Zaštita od snimanja ekrana je uključena, ali nije podržana na ovoj platformi"
     }
+  },
+  "passwordHealth": {
+    "title": "Bezbednost",
+    "subtitle": "Zdravlje lozinki za ovaj sef",
+    "scoreLabel": "Ocena",
+    "noScore": "—",
+    "emptyState": "Nema lozinki za analizu.",
+    "loading": "Analiza lozinki…",
+    "totals": {
+      "critical": "Kritično",
+      "high": "Visoko",
+      "healthy": "Zdravo",
+      "total": "Ukupno"
+    },
+    "sections": {
+      "high": "Visoko",
+      "highDescription": "Unosi sa najmanje jednim problemom visokog prioriteta."
+    },
+    "findings": {
+      "password": {
+        "expired": "Isteklo"
+      }
+    },
+    "actions": {
+      "openEntry": "Otvori unos"
+    },
+    "icons": {
+      "warning": "Ima bezbednosne probleme"
+    }
   }
 }

@@ -59,6 +59,13 @@ export function useGroupMutations(dbId: string | null) {
           query.queryKey[0] === queryKeys.entries.all[0] &&
           query.queryKey[1] === dbId,
       });
+      // Moving a subtree into or out of the Recycle Bin changes which
+      // entries the password-health scope filter includes; deleting a
+      // group also tombstones its entries. Invalidate the report so
+      // the next read pulls a fresh analysis instead of stale findings.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.passwordHealth.report(dbId),
+      });
     }
   };
 

@@ -632,5 +632,34 @@
       "activeTooltip": "Bildschirmaufnahmeschutz ist aktiv",
       "notSupportedTooltip": "Bildschirmaufnahmeschutz ist aktiviert, wird auf dieser Plattform aber nicht unterstützt"
     }
+  },
+  "passwordHealth": {
+    "title": "Sicherheit",
+    "subtitle": "Passwortzustand für diesen Tresor",
+    "scoreLabel": "Bewertung",
+    "noScore": "—",
+    "emptyState": "Keine Passwörter zu analysieren.",
+    "loading": "Passwörter werden analysiert…",
+    "totals": {
+      "critical": "Kritisch",
+      "high": "Hoch",
+      "healthy": "Gesund",
+      "total": "Gesamt"
+    },
+    "sections": {
+      "high": "Hoch",
+      "highDescription": "Einträge mit mindestens einem schwerwiegenden Problem."
+    },
+    "findings": {
+      "password": {
+        "expired": "Abgelaufen"
+      }
+    },
+    "actions": {
+      "openEntry": "Eintrag öffnen"
+    },
+    "icons": {
+      "warning": "Hat Sicherheitsprobleme"
+    }
   }
 }

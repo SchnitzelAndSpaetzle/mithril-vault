@@ -1,3 +1,4 @@
+use crate::domain::kdbx::OpenDatabase;
 use crate::dto::error::AppError;
 use keepass::db::{
     Entry as KeepassEntry, EntryId, EntryMut, EntryRef, GroupId, GroupMut, GroupRef, Times,
@@ -10,6 +11,7 @@ use super::KdbxService;
 /// duration of the closure passed to `KdbxService::with_vault`.
 pub(crate) struct Vault<'a> {
     db: &'a Database,
+    generation: u64,
 }
 
 /// Scoped write access to an unlocked Vault. Holds the databases lock for the
@@ -19,6 +21,7 @@ pub(crate) struct Vault<'a> {
 pub(crate) struct VaultMut<'a> {
     db: &'a mut Database,
     is_modified: &'a mut bool,
+    generation: &'a mut u64,
 }
 
 impl KdbxService {
@@ -33,7 +36,10 @@ impl KdbxService {
             .get(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
         let db = open_db.db_or_locked()?;
-        f(Vault { db })
+        f(Vault {
+            db,
+            generation: open_db.generation,
+        })
     }
 
     pub(crate) fn with_vault_mut<R>(
@@ -46,15 +52,24 @@ impl KdbxService {
         let open_db = databases
             .get_mut(&normalized_path)
             .ok_or_else(|| AppError::DatabaseNotFound(db_id.to_string()))?;
-        // Split the borrow so VaultMut can hold disjoint references to the
-        // database and the modified flag without alias conflicts.
+        // Split the borrow into three disjoint slots so VaultMut can hold
+        // references to the database, the modified flag, and the generation
+        // counter at the same time without alias conflicts.
         let open_db_path = open_db.path.clone();
-        let db = open_db
-            .db
+        let OpenDatabase {
+            db: db_slot,
+            is_modified,
+            generation,
+            ..
+        } = open_db;
+        let db = db_slot
             .as_mut()
             .ok_or(AppError::DatabaseLocked(open_db_path))?;
-        let is_modified = &mut open_db.is_modified;
-        let mut vault = VaultMut { db, is_modified };
+        let mut vault = VaultMut {
+            db,
+            is_modified,
+            generation,
+        };
         f(&mut vault)
     }
 }
@@ -111,6 +126,11 @@ pub(crate) fn group_has_children(group: &GroupRef<'_>) -> bool {
 impl<'a> Vault<'a> {
     pub fn db(&self) -> &'a Database {
         self.db
+    }
+
+    #[allow(dead_code)] // wired up by the upcoming password-health coordinator
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     pub fn root(&self) -> GroupRef<'a> {
@@ -242,7 +262,106 @@ impl VaultMut<'_> {
         count
     }
 
+    #[allow(dead_code)] // wired up by the upcoming password-health coordinator
+    pub fn generation(&self) -> u64 {
+        *self.generation
+    }
+
     pub fn mark_modified(&mut self) {
         *self.is_modified = true;
+        *self.generation = self.generation.saturating_add(1);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use crate::domain::kdbx::OpenDatabase;
+    use crate::services::kdbx::KdbxService;
+    use keepass::Database;
+
+    /// Drops a hand-built `OpenDatabase` straight into the service's
+    /// internal map so the test can drive `with_vault[_mut]` without
+    /// going through disk-backed `create_database`. The path doesn't
+    /// need to exist on disk — `KdbxService::normalize_path` falls back
+    /// to the literal string when canonicalize fails.
+    fn install_test_vault(service: &KdbxService, path: &str) {
+        let db = Database::new();
+        let root_id = db.root().id().uuid().to_string();
+        let open = OpenDatabase {
+            db: Some(db),
+            path: path.to_string(),
+            is_modified: false,
+            password: None,
+            keyfile_path: None,
+            version: "test".into(),
+            name: "test".into(),
+            root_group_id: root_id,
+            generation: 0,
+        };
+        let normalized = KdbxService::normalize_path(path);
+        service
+            .lock_databases()
+            .expect("lock databases")
+            .insert(normalized, open);
+    }
+
+    /// Every call to `mark_modified` must produce a strictly increasing
+    /// generation counter. The Password Health service keys its cache
+    /// on `(db_id, generation)`; if the counter ever fails to advance
+    /// after a write, the next `get_password_health_report` call would
+    /// return a stale report.
+    #[test]
+    fn mark_modified_bumps_generation() {
+        let service = KdbxService::new();
+        let path = "/tmp/__health_gen_test__.kdbx";
+        install_test_vault(&service, path);
+
+        let g0 = service
+            .with_vault(path, |v| Ok(v.generation()))
+            .expect("read g0");
+        service
+            .with_vault_mut(path, |v| {
+                v.mark_modified();
+                Ok(())
+            })
+            .expect("bump 1");
+        let g1 = service
+            .with_vault(path, |v| Ok(v.generation()))
+            .expect("read g1");
+        service
+            .with_vault_mut(path, |v| {
+                v.mark_modified();
+                Ok(())
+            })
+            .expect("bump 2");
+        let g2 = service
+            .with_vault(path, |v| Ok(v.generation()))
+            .expect("read g2");
+
+        assert_eq!(g0, 0);
+        assert_eq!(g1, 1);
+        assert_eq!(g2, 2);
+    }
+
+    /// Entering `with_vault_mut` is only the *opportunity* to mutate —
+    /// the counter does not move until the closure actually calls
+    /// `mark_modified`. Read-mostly mut paths (e.g. `report_activity`
+    /// touching last-access timestamps without dirtying) must not
+    /// invalidate the Password Health cache.
+    #[test]
+    fn entering_with_vault_mut_without_mark_modified_does_not_bump_generation() {
+        let service = KdbxService::new();
+        let path = "/tmp/__health_gen_test_noop__.kdbx";
+        install_test_vault(&service, path);
+
+        service
+            .with_vault_mut(path, |_v| Ok(()))
+            .expect("enter without marking");
+
+        let gen = service
+            .with_vault(path, |v| Ok(v.generation()))
+            .expect("read gen");
+        assert_eq!(gen, 0);
     }
 }

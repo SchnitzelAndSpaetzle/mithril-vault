@@ -1,11 +1,11 @@
 use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::dto::error::AppError;
-use keepass::db::{Entry as KeepassEntry, EntryRef, Times, Value};
-use keepass::Database;
+use keepass::db::{Entry as KeepassEntry, Times, Value};
 
 use super::conversions::{
     apply_custom_fields, convert_entry, is_standard_entry_field, replace_custom_fields,
 };
+use super::recycle::is_in_recycle_bin;
 use super::KdbxService;
 
 impl KdbxService {
@@ -284,23 +284,6 @@ impl KdbxService {
             Ok(entry_model)
         })
     }
-}
-
-fn is_in_recycle_bin(db: &Database, entry: &EntryRef<'_>, recycle_uuid: uuid::Uuid) -> bool {
-    // Walk ancestors by GroupId rather than holding a GroupRef across the
-    // loop — re-looking up via db.group(gid) gives each iteration its own
-    // borrow scope, matching is_ancestor_of's pattern in mapping.rs.
-    let mut current_id = Some(entry.parent().id());
-    while let Some(gid) = current_id {
-        if gid.uuid() == recycle_uuid {
-            return true;
-        }
-        let Some(group) = db.group(gid) else {
-            return false;
-        };
-        current_id = group.parent().map(|p| p.id());
-    }
-    false
 }
 
 fn populate_entry(entry: &mut keepass::db::EntryMut<'_>, data: &CreateEntryData) {

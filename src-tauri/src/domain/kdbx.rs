@@ -13,6 +13,13 @@ pub struct OpenDatabase {
     pub version: String,
     pub name: String,
     pub root_group_id: String,
+    /// Monotonically increasing per-unlock counter, bumped by
+    /// `VaultMut::mark_modified()`. The Password Health service keys
+    /// its `(db_id, generation)` cache on this counter so a fresh
+    /// analysis runs after every Vault mutation — see ADR 0002. Reset
+    /// to zero on `unlock()` so a re-unlocked Vault doesn't carry
+    /// stale generation numbers from its previous session.
+    pub generation: u64,
 }
 
 impl OpenDatabase {

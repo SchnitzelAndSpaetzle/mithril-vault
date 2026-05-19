@@ -4,6 +4,8 @@ import { ItemSeparator } from "@/components/ui/item";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
 import { useEntries } from "@/hooks/use-entries";
+import { usePasswordHealthReport } from "@/hooks/use-password-health";
+import { findingsForEntry } from "@/lib/password-health";
 import { useEntryListInteraction } from "@/hooks/use-entry-list-interaction";
 import { useSortedEntries } from "@/hooks/use-sorted-entries";
 import { useSearch } from "@tanstack/react-router";
@@ -25,6 +27,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   const { dbId } = useActiveDatabase();
   const search = useSearch({ strict: false });
   const { data: customIcons } = useCustomIcons(dbId);
+  const { data: healthReport } = usePasswordHealthReport(dbId ?? null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const sortBy: EntrySortField = search.sortBy ?? "title";
@@ -129,6 +132,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
                 customIcons={customIcons ?? EMPTY_ICONS}
                 isSelected={entry.id === selectedEntryId}
                 onClick={handleItemClick}
+                findings={findingsForEntry(healthReport, entry.id)}
               />
               <ItemSeparator />
             </div>

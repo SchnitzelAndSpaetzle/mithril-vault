@@ -18,6 +18,7 @@ import { Route as authUnlockRouteImport } from './routes/(auth)/unlock'
 import { Route as authNewRouteImport } from './routes/(auth)/new'
 import { Route as authImportFileRouteImport } from './routes/(auth)/import-file'
 import { Route as DashboardIndexDbIdRouteImport } from './routes/dashboard/index.$dbId'
+import { Route as DashboardSecurityDbIdRouteImport } from './routes/dashboard/security.$dbId'
 import { Route as DashboardEntryNewRouteImport } from './routes/dashboard/entry/new'
 import { Route as DashboardEntryEditRouteImport } from './routes/dashboard/entry/edit'
 import { Route as DashboardEntryIdRouteImport } from './routes/dashboard/entry/$id'
@@ -66,6 +67,11 @@ const DashboardIndexDbIdRoute = DashboardIndexDbIdRouteImport.update({
   path: '/index/$dbId',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
+const DashboardSecurityDbIdRoute = DashboardSecurityDbIdRouteImport.update({
+  id: '/security/$dbId',
+  path: '/security/$dbId',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 const DashboardEntryNewRoute = DashboardEntryNewRouteImport.update({
   id: '/entry/new',
   path: '/entry/new',
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/entry/$id': typeof DashboardEntryIdRoute
   '/dashboard/entry/edit': typeof DashboardEntryEditRoute
   '/dashboard/entry/new': typeof DashboardEntryNewRoute
+  '/dashboard/security/$dbId': typeof DashboardSecurityDbIdRoute
   '/dashboard/index/$dbId': typeof DashboardIndexDbIdRoute
 }
 export interface FileRoutesByTo {
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/dashboard/entry/$id': typeof DashboardEntryIdRoute
   '/dashboard/entry/edit': typeof DashboardEntryEditRoute
   '/dashboard/entry/new': typeof DashboardEntryNewRoute
+  '/dashboard/security/$dbId': typeof DashboardSecurityDbIdRoute
   '/dashboard/index/$dbId': typeof DashboardIndexDbIdRoute
 }
 export interface FileRoutesById {
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/dashboard/entry/$id': typeof DashboardEntryIdRoute
   '/dashboard/entry/edit': typeof DashboardEntryEditRoute
   '/dashboard/entry/new': typeof DashboardEntryNewRoute
+  '/dashboard/security/$dbId': typeof DashboardSecurityDbIdRoute
   '/dashboard/index/$dbId': typeof DashboardIndexDbIdRoute
 }
 export interface FileRouteTypes {
@@ -135,6 +144,7 @@ export interface FileRouteTypes {
     | '/dashboard/entry/$id'
     | '/dashboard/entry/edit'
     | '/dashboard/entry/new'
+    | '/dashboard/security/$dbId'
     | '/dashboard/index/$dbId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/dashboard/entry/$id'
     | '/dashboard/entry/edit'
     | '/dashboard/entry/new'
+    | '/dashboard/security/$dbId'
     | '/dashboard/index/$dbId'
   id:
     | '__root__'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/dashboard/entry/$id'
     | '/dashboard/entry/edit'
     | '/dashboard/entry/new'
+    | '/dashboard/security/$dbId'
     | '/dashboard/index/$dbId'
   fileRoutesById: FileRoutesById
 }
@@ -235,6 +247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardIndexDbIdRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
+    '/dashboard/security/$dbId': {
+      id: '/dashboard/security/$dbId'
+      path: '/security/$dbId'
+      fullPath: '/dashboard/security/$dbId'
+      preLoaderRoute: typeof DashboardSecurityDbIdRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/entry/new': {
       id: '/dashboard/entry/new'
       path: '/entry/new'
@@ -282,6 +301,7 @@ interface DashboardRouteRouteChildren {
   DashboardEntryIdRoute: typeof DashboardEntryIdRoute
   DashboardEntryEditRoute: typeof DashboardEntryEditRoute
   DashboardEntryNewRoute: typeof DashboardEntryNewRoute
+  DashboardSecurityDbIdRoute: typeof DashboardSecurityDbIdRoute
   DashboardIndexDbIdRoute: typeof DashboardIndexDbIdRoute
 }
 
@@ -290,6 +310,7 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardEntryIdRoute: DashboardEntryIdRoute,
   DashboardEntryEditRoute: DashboardEntryEditRoute,
   DashboardEntryNewRoute: DashboardEntryNewRoute,
+  DashboardSecurityDbIdRoute: DashboardSecurityDbIdRoute,
   DashboardIndexDbIdRoute: DashboardIndexDbIdRoute,
 }
 

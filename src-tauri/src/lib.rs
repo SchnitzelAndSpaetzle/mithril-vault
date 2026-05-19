@@ -15,13 +15,14 @@ use commands::{
     fetch_entry_favicon, generate_keyfile, generate_passphrase, generate_password,
     get_app_preferences, get_audit_events, get_audit_status, get_custom_icons, get_database_config,
     get_database_info, get_entry, get_entry_password, get_entry_protected_custom_field, get_group,
-    get_group_entry_counts, get_keyfile_for_database, get_recent_databases, get_recycle_bin_id,
-    get_window_content_protection_supported, has_session_key, inspect_database, list_backups,
-    list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
-    open_database, open_database_with_keyfile, open_database_with_keyfile_only,
-    remove_recent_database, rename_group, rename_tag, report_activity, reset_app_preferences,
-    restore_backup, save_database, set_entry_custom_icon, set_window_content_protected,
-    store_session_key, unlock_database, update_app_preferences, update_entry, update_group,
+    get_group_entry_counts, get_keyfile_for_database, get_password_health_report,
+    get_recent_databases, get_recycle_bin_id, get_window_content_protection_supported,
+    has_session_key, inspect_database, list_backups, list_entries, list_groups,
+    list_open_databases, lock_database, move_entry, move_group, open_database,
+    open_database_with_keyfile, open_database_with_keyfile_only, remove_recent_database,
+    rename_group, rename_tag, report_activity, reset_app_preferences, restore_backup,
+    save_database, set_entry_custom_icon, set_window_content_protected, store_session_key,
+    unlock_database, update_app_preferences, update_entry, update_group,
 };
 use services::audit::format::Reason;
 use services::audit::key::FileBackedAuditKey;
@@ -29,6 +30,7 @@ use services::audit::AuditService;
 use services::auto_lock::AutoLockService;
 use services::clipboard::ClipboardService;
 use services::kdbx::KdbxService;
+use services::password_health::service::PasswordHealthService;
 use services::secure_storage::SecureStorageService;
 use services::settings::SettingsService;
 use services::window_protection::WindowProtectionService;
@@ -111,6 +113,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             report_activity,
             set_window_content_protected,
             get_window_content_protection_supported,
+            get_password_health_report,
         ])
 }
 
@@ -164,6 +167,8 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
     audit_service.set_retention_days(initial_audit.1);
     app.manage(Arc::new(audit_service));
 
+    app.manage(Arc::new(PasswordHealthService::new()));
+
     Ok(())
 }
 
@@ -187,6 +192,11 @@ pub fn run() {
                     if !locked_paths.is_empty() {
                         if let Some(audit) = app.try_state::<Arc<AuditService>>() {
                             audit.record_vault_locked_batch(&locked_paths, Reason::ScreenLock);
+                        }
+                        if let Some(health) = app.try_state::<Arc<PasswordHealthService>>() {
+                            for path in &locked_paths {
+                                health.on_lock(path);
+                            }
                         }
                         let _ = app.emit("database-locked", &locked_paths);
                     }

@@ -135,7 +135,7 @@ describe("AuditLogSection", () => {
     const rows = await screen.findAllByRole("listitem");
     expect(rows.length).toBe(2);
     rows.forEach((row) => {
-      expect(row.getAttribute("data-kind")).toBe("vaultUnlockFailed");
+      expect(row.dataset["kind"]).toBe("vaultUnlockFailed");
       // The kind label is rendered inside each row.
       expect(row.textContent).toContain("audit.kind.vaultUnlockFailed");
     });
@@ -269,8 +269,8 @@ describe("AuditLogSection", () => {
     );
 
     const row = await screen.findByRole("listitem");
-    expect(row.getAttribute("data-kind")).toBe("entryPasswordRevealed");
-    expect(row.getAttribute("data-entry-id")).toBe("uuid-abc-1234567890");
+    expect(row.dataset["kind"]).toBe("entryPasswordRevealed");
+    expect(row.dataset["entryId"]).toBe("uuid-abc-1234567890");
     // Title comes from the cache.
     expect(row.textContent).toContain("GitHub");
   });
@@ -297,7 +297,7 @@ describe("AuditLogSection", () => {
     );
 
     const row = await screen.findByRole("listitem");
-    expect(row.getAttribute("data-kind")).toBe("entryPasswordRevealed");
+    expect(row.dataset["kind"]).toBe("entryPasswordRevealed");
     // UUID prefix (first 8 chars) as the visible fallback identifier.
     expect(row.textContent).toContain("8f1c2e3a");
     // The full UUID must NOT be rendered — otherwise the row is unreadably long.
@@ -331,7 +331,7 @@ describe("AuditLogSection", () => {
     );
 
     const row = await screen.findByRole("listitem");
-    expect(row.getAttribute("data-kind")).toBe("entryPasswordCopied");
+    expect(row.dataset["kind"]).toBe("entryPasswordCopied");
     expect(row.textContent).toContain("Bank");
     expect(row.textContent).toContain("audit.kind.entryPasswordCopied");
   });
@@ -361,7 +361,7 @@ describe("AuditLogSection", () => {
     );
 
     const row = await screen.findByRole("listitem");
-    expect(row.getAttribute("data-kind")).toBe("entryProtectedFieldRevealed");
+    expect(row.dataset["kind"]).toBe("entryProtectedFieldRevealed");
     expect(row.textContent).toContain("Recovery codes");
     expect(row.textContent).toContain("audit.kind.entryProtectedFieldRevealed");
   });
@@ -529,7 +529,7 @@ describe("AuditLogSection", () => {
     await waitFor(() => {
       const rows = screen.getAllByRole("listitem");
       expect(rows.length).toBe(1);
-      expect(rows[0]?.getAttribute("data-kind")).toBe("auditCleared");
+      expect(rows[0]?.dataset["kind"]).toBe("auditCleared");
     });
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
@@ -565,7 +565,7 @@ describe("AuditLogSection", () => {
     });
     // Pre-clear event still visible — the original log was preserved.
     const rows = screen.getAllByRole("listitem");
-    expect(rows[0]?.getAttribute("data-kind")).toBe("vaultUnlockFailed");
+    expect(rows[0]?.dataset["kind"]).toBe("vaultUnlockFailed");
   });
 
   it("renders an auditCleared row with the localized kind label", async () => {
@@ -587,7 +587,7 @@ describe("AuditLogSection", () => {
     );
 
     const row = await screen.findByRole("listitem");
-    expect(row.getAttribute("data-kind")).toBe("auditCleared");
+    expect(row.dataset["kind"]).toBe("auditCleared");
     expect(row.textContent).toContain("audit.kind.auditCleared");
   });
 
@@ -611,7 +611,7 @@ describe("AuditLogSection", () => {
     );
 
     const row = await screen.findByRole("listitem");
-    expect(row.getAttribute("data-kind")).toBe("preferencesSecurityChanged");
+    expect(row.dataset["kind"]).toBe("preferencesSecurityChanged");
     expect(row.textContent).toContain("audit.kind.preferencesSecurityChanged");
     // i18n mock echoes keys; the row must render the per-setting label key
     // so each allowlisted leaf gets a human-readable name in production.

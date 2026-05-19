@@ -48,6 +48,7 @@ fn install_open_database(
             version: version.clone(),
             name: name.clone(),
             root_group_id: root_group_id.clone(),
+            generation: 0,
         },
     );
 

@@ -657,5 +657,34 @@
       "activeTooltip": "Screen capture prevention is active",
       "notSupportedTooltip": "Screen capture prevention is enabled but not supported on this platform"
     }
+  },
+  "passwordHealth": {
+    "title": "Security",
+    "subtitle": "Password health for this vault",
+    "scoreLabel": "Score",
+    "noScore": "—",
+    "emptyState": "No passwords to analyze.",
+    "loading": "Analyzing passwords…",
+    "totals": {
+      "critical": "Critical",
+      "high": "High",
+      "healthy": "Healthy",
+      "total": "Total"
+    },
+    "sections": {
+      "high": "High",
+      "highDescription": "Entries with at least one high-severity issue."
+    },
+    "findings": {
+      "password": {
+        "expired": "Expired"
+      }
+    },
+    "actions": {
+      "openEntry": "Open Entry"
+    },
+    "icons": {
+      "warning": "Has security issues"
+    }
   }
 }
