@@ -15,7 +15,8 @@ import type { Finding, FindingKind, PasswordHealthReport } from "./types";
 export type Severity = "critical" | "high";
 
 export function severityOf(kind: FindingKind): Severity {
-  if (kind === "password.expired") return "high";
+  if (kind === "password.very_weak") return "critical";
+  if (kind === "password.weak" || kind === "password.expired") return "high";
   // Exhaustiveness lives at the union boundary — adding a new Finding
   // Kind in `types.ts` makes this `never` cast fail to compile.
   const exhaustive: never = kind;

@@ -647,11 +647,15 @@
       "total": "Total"
     },
     "sections": {
+      "critical": "Crítico",
+      "criticalDescription": "Entradas con al menos un problema crítico. Corrige estos primero.",
       "high": "Alto",
       "highDescription": "Entradas con al menos un problema de gravedad alta."
     },
     "findings": {
       "password": {
+        "very_weak": "Contraseña muy débil",
+        "weak": "Contraseña débil",
         "expired": "Caducada"
       }
     },

@@ -672,11 +672,15 @@
       "total": "Total"
     },
     "sections": {
+      "critical": "Critical",
+      "criticalDescription": "Entries with at least one critical issue. Fix these first.",
       "high": "High",
       "highDescription": "Entries with at least one high-severity issue."
     },
     "findings": {
       "password": {
+        "very_weak": "Very weak password",
+        "weak": "Weak password",
         "expired": "Expired"
       }
     },
