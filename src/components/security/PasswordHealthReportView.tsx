@@ -12,8 +12,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useEntries } from "@/hooks/use-entries";
 import { usePasswordHealthReport } from "@/hooks/use-password-health";
+import { useDatabaseTabs } from "@/stores/database-tabs";
 import type { Entry, Finding, PasswordHealthReport } from "@/lib/types";
 
 interface PasswordHealthReportViewProps {
@@ -134,6 +136,8 @@ function HighFindingsSection({
 }>) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { tab } = useActiveDatabase();
+  const updateTabState = useDatabaseTabs((s) => s.updateTabState);
 
   // Group findings by entry so the row collapses an Entry that hits
   // multiple Findings of the same severity into a single visual row.
@@ -149,6 +153,18 @@ function HighFindingsSection({
   }
 
   const entryById = new Map(entries.map((e) => [e.id, e]));
+
+  // The entry detail view's Edit action reads `tab.selectedEntryId`,
+  // not the URL param — so we have to mirror the EntryList click
+  // pattern (update tab state, then navigate) instead of navigating
+  // directly. The route's `beforeLoad` already activated this tab via
+  // `requireUnlockedTab`, so `useActiveDatabase` resolves to it.
+  const openEntry = (entryId: string) => {
+    if (tab) {
+      updateTabState(tab.id, { selectedEntryId: entryId });
+    }
+    void navigate({ to: "/dashboard/entry/$id", params: { id: entryId } });
+  };
 
   return (
     <section className="flex flex-col gap-2">
@@ -182,12 +198,7 @@ function HighFindingsSection({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
-                  void navigate({
-                    to: "/dashboard/entry/$id",
-                    params: { id: entryId },
-                  })
-                }
+                onClick={() => openEntry(entryId)}
               >
                 {t("passwordHealth.actions.openEntry")}
               </Button>
