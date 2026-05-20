@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { PasswordHealthReport } from "@/lib/types";
 import {
   findingsForEntry,
-  reuseGroupsForHighSection,
+  reuseGroupsForSection,
   severityOf,
   summarize,
 } from "@/lib/password-health";
@@ -139,11 +139,11 @@ describe("summarize with critical findings", () => {
   });
 });
 
-describe("reuseGroupsForHighSection", () => {
+describe("reuseGroupsForSection", () => {
   // The common case: members of a reuse group have no other Findings
   // (or only High Findings) and the group must appear in the High
   // section so the report agrees with the High totals strip.
-  it("keeps a reuse group when at least one member has no Critical Finding", () => {
+  it("returns a reuse group in 'high' when every member is High-only", () => {
     const report: PasswordHealthReport = {
       score: 50,
       findings: [
@@ -153,19 +153,20 @@ describe("reuseGroupsForHighSection", () => {
       totals: { critical: 0, high: 2, healthy: 0, total: 2 },
       reuseGroups: [{ entryIds: ["a", "b"] }],
     };
-    expect(reuseGroupsForHighSection(report)).toEqual([
+    expect(reuseGroupsForSection(report, "high")).toEqual([
       { entryIds: ["a", "b"] },
     ]);
+    expect(reuseGroupsForSection(report, "critical")).toEqual([]);
   });
 
   // Both members of the group are also Very Weak. The backend totals
-  // intentionally count them as Critical and remove them from High,
-  // so the High section would show "High 0" alongside a reused row —
-  // confusing. The group must be hidden from the High section; the
-  // per-Entry Critical rows already surface the reuse signal because
-  // each one carries the Very Weak Finding from the same shared
-  // password. Pinned in the PR-256 review.
-  it("drops a reuse group whose every member is in the Critical bucket", () => {
+  // count them as Critical and remove them from High, so rendering
+  // the reuse group in High would produce "High 0" alongside a
+  // reused-password row. Moving the group to Critical keeps the
+  // shared-password signal visible — different remediation from
+  // Very Weak — without misleading the totals strip. Pinned in the
+  // PR-256 review.
+  it("returns a reuse group in 'critical' when every member is Critical", () => {
     const report: PasswordHealthReport = {
       score: 0,
       findings: [
@@ -177,14 +178,19 @@ describe("reuseGroupsForHighSection", () => {
       totals: { critical: 2, high: 0, healthy: 0, total: 2 },
       reuseGroups: [{ entryIds: ["a", "b"] }],
     };
-    expect(reuseGroupsForHighSection(report)).toEqual([]);
+    expect(reuseGroupsForSection(report, "critical")).toEqual([
+      { entryIds: ["a", "b"] },
+    ]);
+    expect(reuseGroupsForSection(report, "high")).toEqual([]);
   });
 
   // Mixed group: one member is Very Weak (Critical bucket), the
-  // others are not. The group still renders in High because the
+  // others are not. The group renders in High because the
   // shared-password problem applies to the non-Critical members —
-  // their remediation depends on knowing the group exists.
-  it("keeps a mixed group where at least one member is High-only", () => {
+  // their remediation depends on knowing the group exists. Pinning
+  // the rule "any non-Critical member ⇒ High" so a future refactor
+  // can't quietly flip mixed groups into Critical.
+  it("returns a mixed group in 'high' when at least one member is non-Critical", () => {
     const report: PasswordHealthReport = {
       score: 33,
       findings: [
@@ -196,17 +202,18 @@ describe("reuseGroupsForHighSection", () => {
       totals: { critical: 1, high: 2, healthy: 0, total: 3 },
       reuseGroups: [{ entryIds: ["a", "b", "c"] }],
     };
-    expect(reuseGroupsForHighSection(report)).toEqual([
+    expect(reuseGroupsForSection(report, "high")).toEqual([
       { entryIds: ["a", "b", "c"] },
     ]);
+    expect(reuseGroupsForSection(report, "critical")).toEqual([]);
   });
 
   // The helper accepts a possibly-undefined report so callers don't
   // need to gate it; pre-loaded states return an empty list rather
   // than throwing.
   it("returns [] for null/undefined reports", () => {
-    expect(reuseGroupsForHighSection(null)).toEqual([]);
-    expect(reuseGroupsForHighSection(undefined)).toEqual([]);
+    expect(reuseGroupsForSection(null, "high")).toEqual([]);
+    expect(reuseGroupsForSection(undefined, "critical")).toEqual([]);
   });
 });
 

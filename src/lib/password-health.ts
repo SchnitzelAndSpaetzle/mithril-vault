@@ -78,19 +78,24 @@ export function summarize(
   };
 }
 
-/// Reuse groups that should render in the High section of the report
-/// view. Drops groups whose every member is already in the Critical
-/// bucket (e.g. two Entries sharing a zxcvbn score-0 password) — the
-/// backend's `high` total intentionally subtracts those Entries, so
-/// rendering a "Reused" row in High when `High: 0` would mislead the
-/// reader. The Critical per-Entry rows already surface the reuse
-/// signal via their Very-Weak finding.
+/// Reuse groups that should render in the requested section of the
+/// report view. A group's "section severity" is the worst-case
+/// severity of any of its members:
+/// - if at least one member has a non-`password.reused` Critical
+///   Finding (Very Weak), the whole group lives in Critical;
+/// - otherwise it lives in High (the default per ADR 0002).
 ///
-/// A member is in the Critical bucket iff it has at least one
-/// non-`password.reused` Finding whose kind maps to `critical` —
-/// matches the bucketing rule in `PasswordHealthReportView`.
-export function reuseGroupsForHighSection(
-  report: PasswordHealthReport | null | undefined
+/// This keeps every emitted reuse group visible somewhere — moving
+/// instead of hiding — so the inline-expandable "one row per shared
+/// password" UX survives the case where every member also has Very
+/// Weak. It also keeps the totals strip honest: a Critical-bucketed
+/// Entry no longer adds a row to a "High 0" section.
+///
+/// Membership in the Critical bucket mirrors the rule in
+/// `PasswordHealthReportView::bucketEntriesBySeverity`.
+export function reuseGroupsForSection(
+  report: PasswordHealthReport | null | undefined,
+  severity: Severity
 ): ReuseGroup[] {
   if (!report) return [];
   const criticalEntryIds = new Set<string>();
@@ -100,9 +105,10 @@ export function reuseGroupsForHighSection(
       criticalEntryIds.add(finding.entryId);
     }
   }
-  return report.reuseGroups.filter((group) =>
-    group.entryIds.some((id) => !criticalEntryIds.has(id))
-  );
+  return report.reuseGroups.filter((group) => {
+    const allCritical = group.entryIds.every((id) => criticalEntryIds.has(id));
+    return severity === "critical" ? allCritical : !allCritical;
+  });
 }
 
 /// Returns every Finding scoped to a given Entry id, in the order the
