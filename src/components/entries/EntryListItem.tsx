@@ -28,6 +28,13 @@ interface EntryListItemProps extends Entry {
   /// from `useEntryFindings(dbId, entry.id)` on the parent. An empty
   /// array renders no icon; one or more Findings render the warning.
   findings?: Finding[];
+  /// Size of the reuse group this Entry belongs to, when applicable
+  /// (≥ 2). Used to fill the "Reused (N entries)" tooltip — the
+  /// number is not derivable from the Finding alone, so the parent
+  /// passes it in. `undefined` when the Entry has no reused finding
+  /// or the report isn't loaded yet; falsy renders the plain kind
+  /// label without the count.
+  reusedGroupSize?: number | undefined;
 }
 
 const EntryListItem = memo(function EntryListItem({
@@ -40,6 +47,7 @@ const EntryListItem = memo(function EntryListItem({
   isSelected,
   onClick,
   findings,
+  reusedGroupSize,
 }: EntryListItemProps) {
   const iconComponent = getKeepassIcon(iconId ?? 0);
   const customIcon = customIconUuid ? customIcons[customIconUuid] : null;
@@ -78,7 +86,10 @@ const EntryListItem = memo(function EntryListItem({
         </ItemContent>
         <ItemActions className="shrink-0">
           {findings && findings.length > 0 && (
-            <FindingsIndicator findings={findings} />
+            <FindingsIndicator
+              findings={findings}
+              reusedGroupSize={reusedGroupSize}
+            />
           )}
         </ItemActions>
       </a>
@@ -91,14 +102,25 @@ const EntryListItem = memo(function EntryListItem({
 /// High-only findings keep the amber TriangleAlert. The tooltip and
 /// aria-label spell out each Finding Kind in plain language so screen
 /// readers don't read out enum identifiers.
-function FindingsIndicator({ findings }: Readonly<{ findings: Finding[] }>) {
+function FindingsIndicator({
+  findings,
+  reusedGroupSize,
+}: Readonly<{ findings: Finding[]; reusedGroupSize?: number | undefined }>) {
   const { t } = useTranslation();
   const hasCritical = findings.some((f) => severityOf(f.kind) === "critical");
   // De-duplicate Finding Kinds before formatting — an Entry with two
   // expired-style Findings (theoretical) should still show one row.
   const uniqueKinds = Array.from(new Set(findings.map((f) => f.kind)));
   const label = uniqueKinds
-    .map((kind) => t(`passwordHealth.findings.${kind}`))
+    .map((kind) => {
+      // Reused gets the member-count suffix from the parent. Without
+      // the count we fall back to the plain kind label so the
+      // indicator still renders when the report is still loading.
+      if (kind === "password.reused" && reusedGroupSize) {
+        return t("passwordHealth.reused.tooltip", { count: reusedGroupSize });
+      }
+      return t(`passwordHealth.findings.${kind}`);
+    })
     .join(" · ");
 
   const Icon = hasCritical ? OctagonAlert : TriangleAlert;

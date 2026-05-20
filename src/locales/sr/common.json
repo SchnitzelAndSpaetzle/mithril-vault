@@ -656,8 +656,19 @@
       "password": {
         "very_weak": "Vrlo slaba lozinka",
         "weak": "Slaba lozinka",
+        "reused": "Ponovo upotrebljena lozinka",
         "expired": "Isteklo"
       }
+    },
+    "reused": {
+      "memberCount_one": "{{count}} unos deli ovu lozinku",
+      "memberCount_few": "{{count}} unosa dele ovu lozinku",
+      "memberCount_other": "{{count}} unosa deli ovu lozinku",
+      "tooltip_one": "Ponovo upotrebljena ({{count}} unos)",
+      "tooltip_few": "Ponovo upotrebljena ({{count}} unosa)",
+      "tooltip_other": "Ponovo upotrebljena ({{count}} unosa)",
+      "expand": "Prikaži unose koji dele ovu lozinku",
+      "collapse": "Sakrij unose koji dele ovu lozinku"
     },
     "actions": {
       "openEntry": "Otvori unos"

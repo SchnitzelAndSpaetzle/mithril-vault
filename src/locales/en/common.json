@@ -681,8 +681,17 @@
       "password": {
         "very_weak": "Very weak password",
         "weak": "Weak password",
+        "reused": "Reused password",
         "expired": "Expired"
       }
+    },
+    "reused": {
+      "memberCount_one": "{{count}} entry shares this password",
+      "memberCount_other": "{{count}} entries share this password",
+      "tooltip_one": "Reused ({{count}} entry)",
+      "tooltip_other": "Reused ({{count}} entries)",
+      "expand": "Show entries that share this password",
+      "collapse": "Hide entries that share this password"
     },
     "actions": {
       "openEntry": "Open Entry"

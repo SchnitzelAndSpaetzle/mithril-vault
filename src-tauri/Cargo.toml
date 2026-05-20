@@ -52,6 +52,10 @@ fs4 = { version = "0.13", features = ["sync"] }
 # Password Health analyzer's strength check (zxcvbn score 0/1).
 # Entropy/pattern detection only; no network.
 zxcvbn = "3"
+# Password Health reuse grouping. Keyed BLAKE3 with a fresh random key
+# generated per analysis run — the hash is never persisted and the key
+# is dropped with the analyzer's stack frame.
+blake3 = "1.8.5"
 
 [profile.dev.package.scrypt]
 opt-level = 3

@@ -6,7 +6,12 @@
 //! pure derivations (highest-severity per Entry, sidebar summary) that
 //! the route view and sidebar badge read.
 
-import type { Finding, FindingKind, PasswordHealthReport } from "./types";
+import type {
+  Finding,
+  FindingKind,
+  PasswordHealthReport,
+  ReuseGroup,
+} from "./types";
 
 /// Severity bucket a Finding Kind belongs to. Mirrors the backend's
 /// `analyzer::Severity`: `very_weak` is Critical, every other Finding
@@ -16,7 +21,12 @@ export type Severity = "critical" | "high";
 
 export function severityOf(kind: FindingKind): Severity {
   if (kind === "password.very_weak") return "critical";
-  if (kind === "password.weak" || kind === "password.expired") return "high";
+  if (
+    kind === "password.weak" ||
+    kind === "password.reused" ||
+    kind === "password.expired"
+  )
+    return "high";
   // Exhaustiveness lives at the union boundary — adding a new Finding
   // Kind in `types.ts` makes this `never` cast fail to compile.
   const exhaustive: never = kind;
@@ -66,6 +76,39 @@ export function summarize(
     totalUnhealthy: seen.size,
     highestSeverity: highest,
   };
+}
+
+/// Reuse groups that should render in the requested section of the
+/// report view. A group's "section severity" is the worst-case
+/// severity of any of its members:
+/// - if at least one member has a non-`password.reused` Critical
+///   Finding (Very Weak), the whole group lives in Critical;
+/// - otherwise it lives in High (the default per ADR 0002).
+///
+/// This keeps every emitted reuse group visible somewhere — moving
+/// instead of hiding — so the inline-expandable "one row per shared
+/// password" UX survives the case where every member also has Very
+/// Weak. It also keeps the totals strip honest: a Critical-bucketed
+/// Entry no longer adds a row to a "High 0" section.
+///
+/// Membership in the Critical bucket mirrors the rule in
+/// `PasswordHealthReportView::bucketEntriesBySeverity`.
+export function reuseGroupsForSection(
+  report: PasswordHealthReport | null | undefined,
+  severity: Severity
+): ReuseGroup[] {
+  if (!report) return [];
+  const criticalEntryIds = new Set<string>();
+  for (const finding of report.findings) {
+    if (finding.kind === "password.reused") continue;
+    if (severityOf(finding.kind) === "critical") {
+      criticalEntryIds.add(finding.entryId);
+    }
+  }
+  return report.reuseGroups.filter((group) => {
+    const allCritical = group.entryIds.every((id) => criticalEntryIds.has(id));
+    return severity === "critical" ? allCritical : !allCritical;
+  });
 }
 
 /// Returns every Finding scoped to a given Entry id, in the order the

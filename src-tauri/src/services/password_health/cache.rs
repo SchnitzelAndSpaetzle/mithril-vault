@@ -110,6 +110,7 @@ mod tests {
             score,
             findings: Vec::new(),
             totals: super::super::analyzer::HealthTotals::default(),
+            reuse_groups: Vec::new(),
         }
     }
 
