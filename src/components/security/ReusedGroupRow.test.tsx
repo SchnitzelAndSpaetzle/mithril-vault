@@ -100,7 +100,9 @@ describe("ReusedGroupRow", () => {
     const openButtons = screen.getAllByRole("button", {
       name: "passwordHealth.actions.openEntry",
     });
-    fireEvent.click(openButtons[1]);
+    const secondMemberButton = openButtons[1];
+    expect(secondMemberButton).toBeDefined();
+    fireEvent.click(secondMemberButton as HTMLElement);
     expect(onOpenEntry).toHaveBeenCalledWith("b");
   });
 

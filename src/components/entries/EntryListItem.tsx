@@ -34,7 +34,7 @@ interface EntryListItemProps extends Entry {
   /// passes it in. `undefined` when the Entry has no reused finding
   /// or the report isn't loaded yet; falsy renders the plain kind
   /// label without the count.
-  reusedGroupSize?: number;
+  reusedGroupSize?: number | undefined;
 }
 
 const EntryListItem = memo(function EntryListItem({
@@ -105,7 +105,7 @@ const EntryListItem = memo(function EntryListItem({
 function FindingsIndicator({
   findings,
   reusedGroupSize,
-}: Readonly<{ findings: Finding[]; reusedGroupSize?: number }>) {
+}: Readonly<{ findings: Finding[]; reusedGroupSize?: number | undefined }>) {
   const { t } = useTranslation();
   const hasCritical = findings.some((f) => severityOf(f.kind) === "critical");
   // De-duplicate Finding Kinds before formatting — an Entry with two
