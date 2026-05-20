@@ -602,11 +602,19 @@ mod tests {
         );
     }
 
+    // The EFF large diceware wordlist contains four hyphenated
+    // entries (`drop-down`, `felt-tip`, `t-shirt`, `yo-yo`). The
+    // default `"-"` separator would make `split('-')` ambiguous and
+    // these tests would flake at ~0.3% per 6-word passphrase. Pin a
+    // separator that is guaranteed not to appear in any EFF word.
+    const TEST_SEPARATOR: &str = "_";
+
     #[test]
     fn generates_passphrase_with_correct_word_count() {
         let options = PassphraseGeneratorOptions {
             word_count: 6,
             include_number: false,
+            separator: TEST_SEPARATOR.into(),
             ..Default::default()
         };
 
@@ -616,7 +624,7 @@ mod tests {
             passphrase: String::new(),
             entropy_bits: 0.0,
         });
-        let word_count = generated.passphrase.split('-').count();
+        let word_count = generated.passphrase.split(TEST_SEPARATOR).count();
         assert_eq!(word_count, 6);
     }
 
@@ -626,7 +634,7 @@ mod tests {
             word_count: 4,
             capitalize: true,
             include_number: false,
-            ..Default::default()
+            separator: TEST_SEPARATOR.into(),
         };
 
         let result = generate_passphrase(&options);
@@ -635,7 +643,7 @@ mod tests {
             passphrase: String::new(),
             entropy_bits: 0.0,
         });
-        for word in generated.passphrase.split('-') {
+        for word in generated.passphrase.split(TEST_SEPARATOR) {
             let first = word.chars().next();
             assert!(
                 first.is_some_and(char::is_uppercase),
