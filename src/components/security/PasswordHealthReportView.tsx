@@ -47,7 +47,11 @@ export function PasswordHealthReportView({
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    // The dashboard SidebarInset sets `overflow-hidden`, so this view
+    // must own its own scroll container. Without `flex-1 min-h-0
+    // overflow-auto` the page silently clips on Vaults with many
+    // findings — the user can't reach the tail of the list.
+    <div className="flex flex-1 min-h-0 flex-col gap-6 overflow-auto p-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">
           {t("passwordHealth.title")}
