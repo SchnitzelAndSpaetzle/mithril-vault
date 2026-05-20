@@ -647,11 +647,15 @@
       "total": "Gesamt"
     },
     "sections": {
+      "critical": "Kritisch",
+      "criticalDescription": "Einträge mit mindestens einem kritischen Problem. Diese zuerst beheben.",
       "high": "Hoch",
       "highDescription": "Einträge mit mindestens einem schwerwiegenden Problem."
     },
     "findings": {
       "password": {
+        "very_weak": "Sehr schwaches Passwort",
+        "weak": "Schwaches Passwort",
         "expired": "Abgelaufen"
       }
     },

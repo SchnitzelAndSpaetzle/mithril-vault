@@ -413,7 +413,11 @@ export type AuditStatus = z.infer<typeof AuditStatusSchema>;
 /// Namespaced enum of Password Health findings. Wire shape mirrors the
 /// backend `FindingKindDto` — additions land here when new check kinds
 /// ship in follow-up slices.
-export const FindingKindSchema = z.enum(["password.expired"]);
+export const FindingKindSchema = z.enum([
+  "password.very_weak",
+  "password.weak",
+  "password.expired",
+]);
 export type FindingKind = z.infer<typeof FindingKindSchema>;
 
 export const FindingSchema = z.object({

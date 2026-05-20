@@ -1,5 +1,5 @@
 import type { CustomIconMap, Entry, Finding } from "@/lib/types";
-import { TriangleAlert } from "lucide-react";
+import { OctagonAlert, TriangleAlert } from "lucide-react";
 import { createElement, memo } from "react";
 import { useTranslation } from "react-i18next";
 import { severityOf } from "@/lib/password-health";
@@ -41,7 +41,6 @@ const EntryListItem = memo(function EntryListItem({
   onClick,
   findings,
 }: EntryListItemProps) {
-  const { t } = useTranslation();
   const iconComponent = getKeepassIcon(iconId ?? 0);
   const customIcon = customIconUuid ? customIcons[customIconUuid] : null;
   const customIconSrc = customIcon
@@ -79,27 +78,42 @@ const EntryListItem = memo(function EntryListItem({
         </ItemContent>
         <ItemActions className="shrink-0">
           {findings && findings.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <TriangleAlert
-                  className={cn(
-                    "size-4",
-                    findings.some((f) => severityOf(f.kind) === "critical")
-                      ? "text-red-600 dark:text-red-500"
-                      : "text-amber-600 dark:text-amber-500"
-                  )}
-                  aria-label={t("passwordHealth.icons.warning")}
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                {t("passwordHealth.icons.warning")}
-              </TooltipContent>
-            </Tooltip>
+            <FindingsIndicator findings={findings} />
           )}
         </ItemActions>
       </a>
     </Item>
   );
 });
+
+/// Renders the per-Entry warning icon for the EntryList. Critical
+/// findings (e.g. very_weak / empty password) use a red OctagonAlert;
+/// High-only findings keep the amber TriangleAlert. The tooltip and
+/// aria-label spell out each Finding Kind in plain language so screen
+/// readers don't read out enum identifiers.
+function FindingsIndicator({ findings }: Readonly<{ findings: Finding[] }>) {
+  const { t } = useTranslation();
+  const hasCritical = findings.some((f) => severityOf(f.kind) === "critical");
+  // De-duplicate Finding Kinds before formatting — an Entry with two
+  // expired-style Findings (theoretical) should still show one row.
+  const uniqueKinds = Array.from(new Set(findings.map((f) => f.kind)));
+  const label = uniqueKinds
+    .map((kind) => t(`passwordHealth.findings.${kind}`))
+    .join(" · ");
+
+  const Icon = hasCritical ? OctagonAlert : TriangleAlert;
+  const colorClass = hasCritical
+    ? "text-red-600 dark:text-red-500"
+    : "text-amber-600 dark:text-amber-500";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Icon className={cn("size-4", colorClass)} aria-label={label} />
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default EntryListItem;

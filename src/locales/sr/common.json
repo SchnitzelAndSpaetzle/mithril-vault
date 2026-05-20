@@ -647,11 +647,15 @@
       "total": "Ukupno"
     },
     "sections": {
+      "critical": "Kritično",
+      "criticalDescription": "Unosi sa najmanje jednim kritičnim problemom. Njih prvo popravite.",
       "high": "Visoko",
       "highDescription": "Unosi sa najmanje jednim problemom visokog prioriteta."
     },
     "findings": {
       "password": {
+        "very_weak": "Vrlo slaba lozinka",
+        "weak": "Slaba lozinka",
         "expired": "Isteklo"
       }
     },

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { TriangleAlert } from "lucide-react";
+import { OctagonAlert, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -15,6 +15,7 @@ import {
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useEntries } from "@/hooks/use-entries";
 import { usePasswordHealthReport } from "@/hooks/use-password-health";
+import { severityOf, type Severity } from "@/lib/password-health";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import type { Entry, Finding, PasswordHealthReport } from "@/lib/types";
 
@@ -46,7 +47,11 @@ export function PasswordHealthReportView({
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    // The dashboard SidebarInset sets `overflow-hidden`, so this view
+    // must own its own scroll container. Without `flex-1 min-h-0
+    // overflow-auto` the page silently clips on Vaults with many
+    // findings — the user can't reach the tail of the list.
+    <div className="flex flex-1 min-h-0 flex-col gap-6 overflow-auto p-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">
           {t("passwordHealth.title")}
@@ -58,7 +63,16 @@ export function PasswordHealthReportView({
 
       <ScoreAndTotals report={report} />
 
-      <HighFindingsSection report={report} entries={entries ?? []} />
+      <FindingsSection
+        severity="critical"
+        report={report}
+        entries={entries ?? []}
+      />
+      <FindingsSection
+        severity="high"
+        report={report}
+        entries={entries ?? []}
+      />
     </div>
   );
 }
@@ -127,10 +141,49 @@ function TotalsCell({
   );
 }
 
-function HighFindingsSection({
+// Bucket each Entry by its highest-severity Finding so an Entry that
+// is both Very Weak and Expired surfaces only in the Critical section,
+// not both. Mirrors the totals-strip rule in the backend analyzer.
+function bucketEntriesBySeverity(
+  findings: Finding[]
+): Map<Severity, Map<string, Finding[]>> {
+  const highestPerEntry = new Map<string, Severity>();
+  for (const finding of findings) {
+    const severity = severityOf(finding.kind);
+    const prior = highestPerEntry.get(finding.entryId);
+    if (prior === "critical") continue;
+    if (severity === "critical" || prior === undefined) {
+      highestPerEntry.set(finding.entryId, severity);
+    }
+  }
+
+  const buckets = new Map<Severity, Map<string, Finding[]>>([
+    ["critical", new Map()],
+    ["high", new Map()],
+  ]);
+  for (const finding of findings) {
+    const bucket = highestPerEntry.get(finding.entryId);
+    if (!bucket) continue;
+    const list = buckets.get(bucket)?.get(finding.entryId) ?? [];
+    list.push(finding);
+    buckets.get(bucket)?.set(finding.entryId, list);
+  }
+  return buckets;
+}
+
+interface SectionChrome {
+  Icon: typeof TriangleAlert;
+  iconClass: string;
+  title: string;
+  description: string;
+}
+
+function FindingsSection({
+  severity,
   report,
   entries,
 }: Readonly<{
+  severity: Severity;
   report: PasswordHealthReport;
   entries: Entry[];
 }>) {
@@ -139,16 +192,8 @@ function HighFindingsSection({
   const { tab } = useActiveDatabase();
   const updateTabState = useDatabaseTabs((s) => s.updateTabState);
 
-  // Group findings by entry so the row collapses an Entry that hits
-  // multiple Findings of the same severity into a single visual row.
-  const byEntry = new Map<string, Finding[]>();
-  for (const finding of report.findings) {
-    const list = byEntry.get(finding.entryId) ?? [];
-    list.push(finding);
-    byEntry.set(finding.entryId, list);
-  }
-
-  if (byEntry.size === 0) {
+  const byEntry = bucketEntriesBySeverity(report.findings).get(severity);
+  if (!byEntry || byEntry.size === 0) {
     return null;
   }
 
@@ -166,17 +211,28 @@ function HighFindingsSection({
     void navigate({ to: "/dashboard/entry/$id", params: { id: entryId } });
   };
 
+  const chrome: SectionChrome =
+    severity === "critical"
+      ? {
+          Icon: OctagonAlert,
+          iconClass: "text-red-600 dark:text-red-500",
+          title: t("passwordHealth.sections.critical"),
+          description: t("passwordHealth.sections.criticalDescription"),
+        }
+      : {
+          Icon: TriangleAlert,
+          iconClass: "text-amber-600 dark:text-amber-500",
+          title: t("passwordHealth.sections.high"),
+          description: t("passwordHealth.sections.highDescription"),
+        };
+
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <TriangleAlert className="size-4 text-amber-600 dark:text-amber-500" />
-        <h2 className="text-lg font-medium">
-          {t("passwordHealth.sections.high")}
-        </h2>
+        <chrome.Icon className={`size-4 ${chrome.iconClass}`} />
+        <h2 className="text-lg font-medium">{chrome.title}</h2>
       </div>
-      <p className="text-sm text-muted-foreground">
-        {t("passwordHealth.sections.highDescription")}
-      </p>
+      <p className="text-sm text-muted-foreground">{chrome.description}</p>
       <ul className="divide-y rounded-md border bg-card">
         {Array.from(byEntry.entries()).map(([entryId, findings]) => {
           const entry = entryById.get(entryId);
