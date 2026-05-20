@@ -656,8 +656,17 @@
       "password": {
         "very_weak": "Sehr schwaches Passwort",
         "weak": "Schwaches Passwort",
+        "reused": "Wiederverwendetes Passwort",
         "expired": "Abgelaufen"
       }
+    },
+    "reused": {
+      "memberCount_one": "{{count}} Eintrag teilt dieses Passwort",
+      "memberCount_other": "{{count}} Einträge teilen dieses Passwort",
+      "tooltip_one": "Wiederverwendet ({{count}} Eintrag)",
+      "tooltip_other": "Wiederverwendet ({{count}} Einträge)",
+      "expand": "Einträge mit demselben Passwort anzeigen",
+      "collapse": "Einträge mit demselben Passwort ausblenden"
     },
     "actions": {
       "openEntry": "Eintrag öffnen"

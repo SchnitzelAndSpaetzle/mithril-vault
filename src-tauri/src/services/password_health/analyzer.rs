@@ -13,9 +13,11 @@
 //! pure function — tests pin the clock; the service supplies
 //! `Utc::now()`.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use chrono::{DateTime, Utc};
+use rand::rand_core::TryRng;
+use rand::rngs::SysRng;
 
 use crate::domain::secure::SecureString;
 
@@ -46,13 +48,13 @@ pub struct EntryInput {
     pub expiry_time: Option<DateTime<Utc>>,
 }
 
-/// The namespaced enum of recordable Password Health findings. The
-/// reuse check (`PasswordReused`) lands in a follow-up slice. See
+/// The namespaced enum of recordable Password Health findings. See
 /// CONTEXT.md → "Password Health Finding Kind".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FindingKind {
     PasswordVeryWeak,
     PasswordWeak,
+    PasswordReused,
     PasswordExpired,
 }
 
@@ -71,9 +73,20 @@ impl FindingKind {
     pub fn severity(&self) -> Severity {
         match self {
             FindingKind::PasswordVeryWeak => Severity::Critical,
-            FindingKind::PasswordWeak | FindingKind::PasswordExpired => Severity::High,
+            FindingKind::PasswordWeak
+            | FindingKind::PasswordReused
+            | FindingKind::PasswordExpired => Severity::High,
         }
     }
+}
+
+/// A set of in-scope Entries in this Vault whose passwords are byte-equal.
+/// Each member is also emitted as an individual `PasswordReused` Finding;
+/// the group exists so the UI can render one expandable row per shared
+/// password instead of N independent rows. `entry_ids` always has size ≥ 2.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReuseGroup {
+    pub entry_ids: Vec<String>,
 }
 
 /// A single recordable Password Health Finding. Each Finding is scoped
@@ -113,6 +126,10 @@ pub struct PasswordHealthReport {
     pub score: Option<u32>,
     pub findings: Vec<Finding>,
     pub totals: HealthTotals,
+    /// One entry per byte-equal-password cluster of size ≥ 2.
+    /// Empty-string passwords are excluded — they reach `findings` as
+    /// `PasswordVeryWeak` but never group together.
+    pub reuse_groups: Vec<ReuseGroup>,
 }
 
 pub fn analyze(
@@ -126,8 +143,15 @@ pub fn analyze(
             score: None,
             findings: Vec::new(),
             totals: HealthTotals::default(),
+            reuse_groups: Vec::new(),
         };
     }
+
+    let reuse_groups = compute_reuse_groups(&entries);
+    let reused_ids: HashSet<&str> = reuse_groups
+        .iter()
+        .flat_map(|g| g.entry_ids.iter().map(String::as_str))
+        .collect();
 
     let mut findings: Vec<Finding> = Vec::new();
     for entry in &entries {
@@ -135,6 +159,12 @@ pub fn analyze(
             findings.push(Finding {
                 entry_id: entry.id.clone(),
                 kind,
+            });
+        }
+        if reused_ids.contains(entry.id.as_str()) {
+            findings.push(Finding {
+                entry_id: entry.id.clone(),
+                kind: FindingKind::PasswordReused,
             });
         }
         if is_expired(entry, now) {
@@ -188,7 +218,73 @@ pub fn analyze(
         score: Some(score),
         findings,
         totals,
+        reuse_groups,
     }
+}
+
+/// Cluster Entries by byte-equal password and return one
+/// [`ReuseGroup`] per cluster of size ≥ 2.
+///
+/// Passwords are hashed with keyed BLAKE3 using a fresh 32-byte key
+/// generated per call so the in-memory hash bytes are unlinkable
+/// across analysis runs. The cluster membership is independent of
+/// the key — same inputs always yield the same partition; only the
+/// hash bytes (used internally as map keys) shift between runs.
+/// Empty-string passwords are skipped (per ADR 0002): the Very-Weak
+/// Finding from [`classify_strength`] already names the remediation,
+/// and an "all empty" group isn't a meaningful "shared secret".
+fn compute_reuse_groups(entries: &[EntryInput]) -> Vec<ReuseGroup> {
+    let mut hash_key = [0u8; blake3::KEY_LEN];
+    // `SysRng::try_fill_bytes` can only fail if the OS RNG itself
+    // fails — at that point the process can't safely produce any
+    // randomness and reuse grouping is the least of our worries. Fall
+    // back to an all-zero key: the partition is still correct (the
+    // hash is deterministic for that run) and the only loss is the
+    // per-run unlinkability of the in-memory bytes, which we treat
+    // as best-effort rather than a soundness guarantee.
+    if SysRng.try_fill_bytes(&mut hash_key).is_err() {
+        hash_key = [0u8; blake3::KEY_LEN];
+    }
+    // `BTreeMap` keeps iteration order stable across runs (only the
+    // hash bytes — used as keys — shift). We reorder by first-seen
+    // Entry index below so the wire ordering doesn't leak the
+    // per-run randomness.
+    let mut by_hash: BTreeMap<[u8; blake3::OUT_LEN], Vec<&str>> = BTreeMap::new();
+    for entry in entries {
+        let password = entry.password.as_str();
+        if password.is_empty() {
+            continue;
+        }
+        let hash = blake3::keyed_hash(&hash_key, password.as_bytes());
+        by_hash
+            .entry(*hash.as_bytes())
+            .or_default()
+            .push(entry.id.as_str());
+    }
+
+    let order: std::collections::HashMap<&str, usize> = entries
+        .iter()
+        .enumerate()
+        .map(|(i, e)| (e.id.as_str(), i))
+        .collect();
+    let mut groups: Vec<ReuseGroup> = by_hash
+        .into_values()
+        .filter(|ids| ids.len() >= 2)
+        .map(|ids| ReuseGroup {
+            entry_ids: ids.into_iter().map(String::from).collect(),
+        })
+        .collect();
+    for g in &mut groups {
+        g.entry_ids
+            .sort_by_key(|id| *order.get(id.as_str()).unwrap_or(&usize::MAX));
+    }
+    groups.sort_by_key(|g| {
+        g.entry_ids
+            .first()
+            .and_then(|id| order.get(id.as_str()).copied())
+            .unwrap_or(usize::MAX)
+    });
+    groups
 }
 
 /// Classify a password's strength into a Finding Kind, or return
@@ -233,7 +329,10 @@ mod tests {
     fn healthy(id: &str) -> EntryInput {
         EntryInput {
             id: id.to_string(),
-            password: SecureString::from("correct horse battery staple"),
+            // Per-id suffix so the helper Entries don't reuse-group
+            // with one another. The string still scores ≥ 2 on zxcvbn
+            // because the diceware prefix dominates the entropy.
+            password: SecureString::from(format!("correct horse battery staple {id}")),
             expires: false,
             expiry_time: None,
         }
@@ -242,7 +341,7 @@ mod tests {
     fn expired(id: &str, now: DateTime<Utc>) -> EntryInput {
         EntryInput {
             id: id.to_string(),
-            password: SecureString::from("correct horse battery staple"),
+            password: SecureString::from(format!("correct horse battery staple {id}")),
             expires: true,
             expiry_time: Some(now - chrono::Duration::days(1)),
         }
@@ -448,6 +547,199 @@ mod tests {
         assert_eq!(FindingKind::PasswordVeryWeak.severity(), Severity::Critical);
         assert_eq!(report.totals.critical, 1);
         assert_eq!(report.totals.high, 0);
+    }
+
+    /// Two in-scope Entries sharing a byte-equal non-empty password
+    /// must each emit a `PasswordReused` Finding, and the report must
+    /// carry exactly one `ReuseGroup` whose `entry_ids` contain both
+    /// Entry ids. Pinned in the issue's acceptance criteria.
+    #[test]
+    fn two_entries_with_same_password_emit_reused_findings_and_one_group() {
+        let report = analyze(
+            vec![
+                with_password("a", "shared-passw0rd-Tr0ub4dor!"),
+                with_password("b", "shared-passw0rd-Tr0ub4dor!"),
+            ],
+            now_fixed(),
+        );
+
+        let reused: Vec<&Finding> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::PasswordReused)
+            .collect();
+        let reused_ids: HashSet<&str> = reused.iter().map(|f| f.entry_id.as_str()).collect();
+        assert_eq!(reused_ids, HashSet::from(["a", "b"]));
+
+        assert_eq!(report.reuse_groups.len(), 1);
+        let group_ids: HashSet<&str> = report.reuse_groups[0]
+            .entry_ids
+            .iter()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(group_ids, HashSet::from(["a", "b"]));
+    }
+
+    /// Determinism: the per-analysis hash-key randomness must not
+    /// influence grouping outcomes. Two runs with the same input
+    /// Entries must produce `reuse_groups` whose memberships and
+    /// order match exactly. (The raw hash bytes underlying the
+    /// partition shift between runs, but `reuse_groups` only carries
+    /// `entry_ids`.) Pinned in the issue's acceptance criteria.
+    #[test]
+    fn reuse_groups_deterministic_across_runs() {
+        let inputs = || {
+            vec![
+                with_password("a", "Tr0ub4dor-staple-horse-d1"),
+                with_password("b", "Tr0ub4dor-staple-horse-d2"),
+                with_password("c", "Tr0ub4dor-staple-horse-d1"),
+                with_password("d", "Tr0ub4dor-staple-horse-d2"),
+                with_password("e", "Tr0ub4dor-staple-horse-d1"),
+            ]
+        };
+        let r1 = analyze(inputs(), now_fixed());
+        let r2 = analyze(inputs(), now_fixed());
+        assert_eq!(
+            r1.reuse_groups, r2.reuse_groups,
+            "reuse_groups must be deterministic across runs"
+        );
+        // Two groups expected: {a, c, e} and {b, d}, in first-seen
+        // input order. Pin the exact ordering to catch a regression
+        // that lets the hash-key randomness leak through.
+        assert_eq!(r1.reuse_groups.len(), 2);
+        assert_eq!(
+            r1.reuse_groups[0].entry_ids,
+            vec!["a".to_string(), "c".to_string(), "e".to_string()]
+        );
+        assert_eq!(
+            r1.reuse_groups[1].entry_ids,
+            vec!["b".to_string(), "d".to_string()]
+        );
+    }
+
+    /// An Entry that is both Reused (with one other Entry) and
+    /// zxcvbn-score-0 (Very Weak) emits two independent Findings —
+    /// remediations differ — but lands in the `critical` totals
+    /// bucket once. The reused partner is the only other Entry in
+    /// scope and emits its own Reused Finding; the unhealthy
+    /// denominator is two, not three. Pinned in the issue's
+    /// acceptance criteria.
+    #[test]
+    fn reused_and_very_weak_on_same_entry_emits_two_findings_one_unhealthy() {
+        // "password" is the canonical zxcvbn-score-0 string. Both
+        // Entries share it, so both also reuse-flag.
+        let report = analyze(
+            vec![
+                with_password("a", "password"),
+                with_password("b", "password"),
+            ],
+            now_fixed(),
+        );
+
+        // Both Entries get the Reused Finding (group of two).
+        let reused_count = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::PasswordReused)
+            .count();
+        assert_eq!(reused_count, 2, "each member of the group must emit Reused");
+
+        // Both Entries also get Very Weak (zxcvbn score 0).
+        let very_weak_count = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::PasswordVeryWeak)
+            .count();
+        assert_eq!(
+            very_weak_count, 2,
+            "each Entry must independently emit Very Weak"
+        );
+
+        // Critical wins over High when an Entry has Findings in both
+        // buckets. Both Entries land in `critical`.
+        assert_eq!(
+            report.totals,
+            HealthTotals {
+                critical: 2,
+                high: 0,
+                healthy: 0,
+                total: 2,
+            }
+        );
+    }
+
+    /// Three in-scope Entries sharing one byte-equal password produce
+    /// three `PasswordReused` Findings (one per Entry) and a single
+    /// `ReuseGroup` whose `entry_ids` enumerate all three members.
+    /// Pinned in the issue's acceptance criteria — proves the
+    /// grouping logic scales beyond the pair-only case.
+    #[test]
+    fn three_entries_with_same_password_emit_three_findings_one_group_with_three() {
+        let report = analyze(
+            vec![
+                with_password("a", "Tr0ub4dor-staple-horse-3"),
+                with_password("b", "Tr0ub4dor-staple-horse-3"),
+                with_password("c", "Tr0ub4dor-staple-horse-3"),
+            ],
+            now_fixed(),
+        );
+
+        let reused_ids: HashSet<&str> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::PasswordReused)
+            .map(|f| f.entry_id.as_str())
+            .collect();
+        assert_eq!(reused_ids, HashSet::from(["a", "b", "c"]));
+
+        assert_eq!(report.reuse_groups.len(), 1);
+        let group_ids: HashSet<&str> = report.reuse_groups[0]
+            .entry_ids
+            .iter()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(group_ids, HashSet::from(["a", "b", "c"]));
+    }
+
+    /// Empty-string passwords must NOT reuse-group with one another:
+    /// per ADR 0002 they are "each has no secret" rather than "sharing
+    /// the same secret", and the Very-Weak finding carries the
+    /// remediation. Two empty-password Entries produce two
+    /// `PasswordVeryWeak` Findings, zero `PasswordReused` Findings,
+    /// and no `ReuseGroup`.
+    #[test]
+    fn empty_passwords_do_not_reuse_group_only_very_weak() {
+        let report = analyze(
+            vec![with_password("a", ""), with_password("b", "")],
+            now_fixed(),
+        );
+        let kinds: Vec<&FindingKind> = report.findings.iter().map(|f| &f.kind).collect();
+        assert!(
+            !kinds.contains(&&FindingKind::PasswordReused),
+            "empty passwords must not emit PasswordReused; got {kinds:?}"
+        );
+        assert_eq!(
+            kinds
+                .iter()
+                .filter(|k| **k == &FindingKind::PasswordVeryWeak)
+                .count(),
+            2,
+            "both empty-password Entries must each emit one PasswordVeryWeak; got {kinds:?}"
+        );
+        assert!(
+            report.reuse_groups.is_empty(),
+            "empty-password Entries must not produce a ReuseGroup; got {:?}",
+            report.reuse_groups
+        );
+    }
+
+    /// `PasswordReused` is a High-severity Finding Kind (per ADR 0002
+    /// → "Password Health Finding Kind"). Pinning the mapping protects
+    /// the totals-bucket math: an Entry that is only Reused must land
+    /// in `high`, not `critical`.
+    #[test]
+    fn password_reused_is_high_severity() {
+        assert_eq!(FindingKind::PasswordReused.severity(), Severity::High);
     }
 
     /// One expired Entry in a four-Entry Vault: 3 healthy / 4 total =

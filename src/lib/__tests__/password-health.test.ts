@@ -80,6 +80,14 @@ describe("severityOf", () => {
   it("maps password.weak to high", () => {
     expect(severityOf("password.weak")).toBe("high");
   });
+
+  // Pinning the wire identifier *and* the severity here catches both
+  // a backend rename (the Zod schema would reject the parse) and a
+  // future bucket reshuffle that would put reused into Critical and
+  // bring it to parity with very_weak in the report-view layout.
+  it("maps password.reused to high", () => {
+    expect(severityOf("password.reused")).toBe("high");
+  });
 });
 
 describe("summarize with critical findings", () => {

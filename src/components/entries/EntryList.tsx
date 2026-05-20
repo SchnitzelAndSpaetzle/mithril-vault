@@ -42,6 +42,20 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
 
   const sortedEntries = useSortedEntries(entries, sortBy, sortOrder);
 
+  // Pre-index reuse-group sizes per Entry id so the per-row tooltip
+  // can stitch in "Reused (N entries)" without iterating the
+  // `reuseGroups` array for every row in the virtualized list.
+  const reusedGroupSizeByEntryId = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!healthReport) return map;
+    for (const group of healthReport.reuseGroups) {
+      for (const id of group.entryIds) {
+        map.set(id, group.entryIds.length);
+      }
+    }
+    return map;
+  }, [healthReport]);
+
   const tagFilter = search.tag as string | undefined;
   const displayEntries = useMemo(
     () =>
@@ -133,6 +147,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
                 isSelected={entry.id === selectedEntryId}
                 onClick={handleItemClick}
                 findings={findingsForEntry(healthReport, entry.id)}
+                reusedGroupSize={reusedGroupSizeByEntryId.get(entry.id)}
               />
               <ItemSeparator />
             </div>

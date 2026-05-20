@@ -656,8 +656,17 @@
       "password": {
         "very_weak": "Mot de passe très faible",
         "weak": "Mot de passe faible",
+        "reused": "Mot de passe réutilisé",
         "expired": "Expiré"
       }
+    },
+    "reused": {
+      "memberCount_one": "{{count}} entrée partage ce mot de passe",
+      "memberCount_other": "{{count}} entrées partagent ce mot de passe",
+      "tooltip_one": "Réutilisé ({{count}} entrée)",
+      "tooltip_other": "Réutilisé ({{count}} entrées)",
+      "expand": "Afficher les entrées partageant ce mot de passe",
+      "collapse": "Masquer les entrées partageant ce mot de passe"
     },
     "actions": {
       "openEntry": "Ouvrir l'entrée"

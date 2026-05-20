@@ -416,6 +416,7 @@ export type AuditStatus = z.infer<typeof AuditStatusSchema>;
 export const FindingKindSchema = z.enum([
   "password.very_weak",
   "password.weak",
+  "password.reused",
   "password.expired",
 ]);
 export type FindingKind = z.infer<typeof FindingKindSchema>;
@@ -434,9 +435,12 @@ export const HealthTotalsSchema = z.object({
 });
 export type HealthTotals = z.infer<typeof HealthTotalsSchema>;
 
+/// Group of in-scope Entries whose passwords are byte-equal. The
+/// backend hashes with a per-analysis-run keyed BLAKE3; the hash bytes
+/// never cross IPC. Members always count ≥ 2 — singleton groups are
+/// elided before serialization.
 export const ReuseGroupSchema = z.object({
-  passwordHash: z.string().min(1),
-  entryIds: z.array(z.string().min(1)),
+  entryIds: z.array(z.string().min(1)).min(2),
 });
 export type ReuseGroup = z.infer<typeof ReuseGroupSchema>;
 
