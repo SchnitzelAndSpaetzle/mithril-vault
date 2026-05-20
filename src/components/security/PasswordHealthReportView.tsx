@@ -15,7 +15,11 @@ import {
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useEntries } from "@/hooks/use-entries";
 import { usePasswordHealthReport } from "@/hooks/use-password-health";
-import { severityOf, type Severity } from "@/lib/password-health";
+import {
+  reuseGroupsForHighSection,
+  severityOf,
+  type Severity,
+} from "@/lib/password-health";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import type { Entry, Finding, PasswordHealthReport } from "@/lib/types";
 import { ReusedGroupRow } from "./ReusedGroupRow";
@@ -205,8 +209,13 @@ function FindingsSection({
   const updateTabState = useDatabaseTabs((s) => s.updateTabState);
 
   const byEntry = bucketEntriesBySeverity(report.findings).get(severity);
-  // Reused groups live in the High section (per ADR 0002).
-  const reuseGroups = severity === "high" ? report.reuseGroups : [];
+  // Reused groups live in the High section (per ADR 0002), but a
+  // group whose every member is also Very Weak is hidden — those
+  // entries are bucketed Critical, so the High total subtracts them
+  // and the section would otherwise show "High 0" alongside a
+  // reused-password row.
+  const reuseGroups =
+    severity === "high" ? reuseGroupsForHighSection(report) : [];
   const perEntryCount = byEntry?.size ?? 0;
   if (perEntryCount === 0 && reuseGroups.length === 0) {
     return null;

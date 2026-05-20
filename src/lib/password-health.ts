@@ -6,7 +6,12 @@
 //! pure derivations (highest-severity per Entry, sidebar summary) that
 //! the route view and sidebar badge read.
 
-import type { Finding, FindingKind, PasswordHealthReport } from "./types";
+import type {
+  Finding,
+  FindingKind,
+  PasswordHealthReport,
+  ReuseGroup,
+} from "./types";
 
 /// Severity bucket a Finding Kind belongs to. Mirrors the backend's
 /// `analyzer::Severity`: `very_weak` is Critical, every other Finding
@@ -71,6 +76,33 @@ export function summarize(
     totalUnhealthy: seen.size,
     highestSeverity: highest,
   };
+}
+
+/// Reuse groups that should render in the High section of the report
+/// view. Drops groups whose every member is already in the Critical
+/// bucket (e.g. two Entries sharing a zxcvbn score-0 password) — the
+/// backend's `high` total intentionally subtracts those Entries, so
+/// rendering a "Reused" row in High when `High: 0` would mislead the
+/// reader. The Critical per-Entry rows already surface the reuse
+/// signal via their Very-Weak finding.
+///
+/// A member is in the Critical bucket iff it has at least one
+/// non-`password.reused` Finding whose kind maps to `critical` —
+/// matches the bucketing rule in `PasswordHealthReportView`.
+export function reuseGroupsForHighSection(
+  report: PasswordHealthReport | null | undefined
+): ReuseGroup[] {
+  if (!report) return [];
+  const criticalEntryIds = new Set<string>();
+  for (const finding of report.findings) {
+    if (finding.kind === "password.reused") continue;
+    if (severityOf(finding.kind) === "critical") {
+      criticalEntryIds.add(finding.entryId);
+    }
+  }
+  return report.reuseGroups.filter((group) =>
+    group.entryIds.some((id) => !criticalEntryIds.has(id))
+  );
 }
 
 /// Returns every Finding scoped to a given Entry id, in the order the

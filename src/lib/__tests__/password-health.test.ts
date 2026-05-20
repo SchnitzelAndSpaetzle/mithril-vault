@@ -3,7 +3,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { PasswordHealthReport } from "@/lib/types";
-import { findingsForEntry, severityOf, summarize } from "@/lib/password-health";
+import {
+  findingsForEntry,
+  reuseGroupsForHighSection,
+  severityOf,
+  summarize,
+} from "@/lib/password-health";
 
 const emptyReport: PasswordHealthReport = {
   score: null,
@@ -131,6 +136,77 @@ describe("summarize with critical findings", () => {
       totalUnhealthy: 1,
       highestSeverity: "critical",
     });
+  });
+});
+
+describe("reuseGroupsForHighSection", () => {
+  // The common case: members of a reuse group have no other Findings
+  // (or only High Findings) and the group must appear in the High
+  // section so the report agrees with the High totals strip.
+  it("keeps a reuse group when at least one member has no Critical Finding", () => {
+    const report: PasswordHealthReport = {
+      score: 50,
+      findings: [
+        { entryId: "a", kind: "password.reused" },
+        { entryId: "b", kind: "password.reused" },
+      ],
+      totals: { critical: 0, high: 2, healthy: 0, total: 2 },
+      reuseGroups: [{ entryIds: ["a", "b"] }],
+    };
+    expect(reuseGroupsForHighSection(report)).toEqual([
+      { entryIds: ["a", "b"] },
+    ]);
+  });
+
+  // Both members of the group are also Very Weak. The backend totals
+  // intentionally count them as Critical and remove them from High,
+  // so the High section would show "High 0" alongside a reused row —
+  // confusing. The group must be hidden from the High section; the
+  // per-Entry Critical rows already surface the reuse signal because
+  // each one carries the Very Weak Finding from the same shared
+  // password. Pinned in the PR-256 review.
+  it("drops a reuse group whose every member is in the Critical bucket", () => {
+    const report: PasswordHealthReport = {
+      score: 0,
+      findings: [
+        { entryId: "a", kind: "password.very_weak" },
+        { entryId: "a", kind: "password.reused" },
+        { entryId: "b", kind: "password.very_weak" },
+        { entryId: "b", kind: "password.reused" },
+      ],
+      totals: { critical: 2, high: 0, healthy: 0, total: 2 },
+      reuseGroups: [{ entryIds: ["a", "b"] }],
+    };
+    expect(reuseGroupsForHighSection(report)).toEqual([]);
+  });
+
+  // Mixed group: one member is Very Weak (Critical bucket), the
+  // others are not. The group still renders in High because the
+  // shared-password problem applies to the non-Critical members —
+  // their remediation depends on knowing the group exists.
+  it("keeps a mixed group where at least one member is High-only", () => {
+    const report: PasswordHealthReport = {
+      score: 33,
+      findings: [
+        { entryId: "a", kind: "password.very_weak" },
+        { entryId: "a", kind: "password.reused" },
+        { entryId: "b", kind: "password.reused" },
+        { entryId: "c", kind: "password.reused" },
+      ],
+      totals: { critical: 1, high: 2, healthy: 0, total: 3 },
+      reuseGroups: [{ entryIds: ["a", "b", "c"] }],
+    };
+    expect(reuseGroupsForHighSection(report)).toEqual([
+      { entryIds: ["a", "b", "c"] },
+    ]);
+  });
+
+  // The helper accepts a possibly-undefined report so callers don't
+  // need to gate it; pre-loaded states return an empty list rather
+  // than throwing.
+  it("returns [] for null/undefined reports", () => {
+    expect(reuseGroupsForHighSection(null)).toEqual([]);
+    expect(reuseGroupsForHighSection(undefined)).toEqual([]);
   });
 });
 
