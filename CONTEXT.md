@@ -16,6 +16,9 @@ This pattern is load-bearing for unlocked KDBX tree reads and mutations. Entry, 
 ### Entry
 A single credential record inside a Vault. Has a title, URL, username, password, optional notes, tags, custom fields, and an icon. Password material is read separately from the rest (see CLAUDE.md "minimal data in list views").
 
+### Entry Expiry
+A user-chosen flag + timestamp on an Entry (KDBX `Times.expires` + `Times.expiry`) marking when the Entry is considered stale. It is a property of the **Entry**, not of the password field — editing the password does not reset or clear it; only the user changes the date. It is explicit and one-shot, not periodic rotation (periodic rotation stays deliberately absent per NIST, see Password Health). An Entry whose `expires` flag is set and whose `expiry` is in the past is **Expired**; this is the same condition that drives the `password.expired` Password Health Finding.
+
 ### Group
 A folder inside a Vault that contains Entries and other Groups. Forms a tree rooted at the Vault's root Group.
 
