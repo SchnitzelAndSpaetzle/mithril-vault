@@ -656,8 +656,17 @@
       "password": {
         "very_weak": "Contraseña muy débil",
         "weak": "Contraseña débil",
+        "reused": "Contraseña reutilizada",
         "expired": "Caducada"
       }
+    },
+    "reused": {
+      "memberCount_one": "{{count}} entrada comparte esta contraseña",
+      "memberCount_other": "{{count}} entradas comparten esta contraseña",
+      "tooltip_one": "Reutilizada ({{count}} entrada)",
+      "tooltip_other": "Reutilizada ({{count}} entradas)",
+      "expand": "Mostrar entradas que comparten esta contraseña",
+      "collapse": "Ocultar entradas que comparten esta contraseña"
     },
     "actions": {
       "openEntry": "Abrir entrada"

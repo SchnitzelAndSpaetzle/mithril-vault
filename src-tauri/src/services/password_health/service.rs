@@ -39,6 +39,15 @@ use crate::services::kdbx::KdbxService;
 /// - Entries with an empty-string `Password` are **included**; they
 ///   contribute to the total-in-scope denominator and trigger the
 ///   special-cased Very-Weak Finding inside the analyzer.
+///
+/// `{REF:...}` references: the upstream `keepass 0.12.x` crate's
+/// `Entry::get_password` returns the literal field value and does
+/// not expose resolved placeholders. The analyzer therefore treats
+/// the literal `{REF:...}` string as the password and may emit a
+/// Very-Weak or unique-but-actually-shared classification for it.
+/// When the crate later exposes resolution, swap the call here for
+/// the resolved accessor — the analyzer itself does not need to
+/// change. Tracked in ADR 0002 → "Reference resolution".
 pub fn collect_entry_inputs(db: &Database) -> Vec<EntryInput> {
     let recycle_uuid = db.meta.recyclebin_uuid;
     db.iter_all_entries()

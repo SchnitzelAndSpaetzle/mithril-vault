@@ -15,9 +15,14 @@ import {
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useEntries } from "@/hooks/use-entries";
 import { usePasswordHealthReport } from "@/hooks/use-password-health";
-import { severityOf, type Severity } from "@/lib/password-health";
+import {
+  reuseGroupsForSection,
+  severityOf,
+  type Severity,
+} from "@/lib/password-health";
 import { useDatabaseTabs } from "@/stores/database-tabs";
 import type { Entry, Finding, PasswordHealthReport } from "@/lib/types";
+import { ReusedGroupRow } from "./ReusedGroupRow";
 
 interface PasswordHealthReportViewProps {
   dbId: string;
@@ -144,11 +149,22 @@ function TotalsCell({
 // Bucket each Entry by its highest-severity Finding so an Entry that
 // is both Very Weak and Expired surfaces only in the Critical section,
 // not both. Mirrors the totals-strip rule in the backend analyzer.
+//
+// `Reused` Findings are not surfaced as per-Entry rows — they live
+// in the dedicated `ReusedGroupRow` (one row per shared password,
+// inline-expandable) so the High section doesn't duplicate the group
+// membership. An Entry that is Reused-only therefore has no
+// per-Entry row at all; an Entry that is Reused + Very Weak still
+// appears in the Critical section because Very Weak wins on
+// severity and carries its own remediation message.
 function bucketEntriesBySeverity(
   findings: Finding[]
 ): Map<Severity, Map<string, Finding[]>> {
+  const findingsExcludingReused = findings.filter(
+    (f) => f.kind !== "password.reused"
+  );
   const highestPerEntry = new Map<string, Severity>();
-  for (const finding of findings) {
+  for (const finding of findingsExcludingReused) {
     const severity = severityOf(finding.kind);
     const prior = highestPerEntry.get(finding.entryId);
     if (prior === "critical") continue;
@@ -161,7 +177,7 @@ function bucketEntriesBySeverity(
     ["critical", new Map()],
     ["high", new Map()],
   ]);
-  for (const finding of findings) {
+  for (const finding of findingsExcludingReused) {
     const bucket = highestPerEntry.get(finding.entryId);
     if (!bucket) continue;
     const list = buckets.get(bucket)?.get(finding.entryId) ?? [];
@@ -193,7 +209,15 @@ function FindingsSection({
   const updateTabState = useDatabaseTabs((s) => s.updateTabState);
 
   const byEntry = bucketEntriesBySeverity(report.findings).get(severity);
-  if (!byEntry || byEntry.size === 0) {
+  // Reused groups default to High (per ADR 0002), but a group whose
+  // every member is also Very Weak is promoted to Critical — those
+  // entries are bucketed Critical, so leaving the group in High
+  // would mean "High 0" plus a reused-password row. The helper
+  // partitions the report's `reuseGroups` between the two sections
+  // so every emitted group renders exactly once.
+  const reuseGroups = reuseGroupsForSection(report, severity);
+  const perEntryCount = byEntry?.size ?? 0;
+  if (perEntryCount === 0 && reuseGroups.length === 0) {
     return null;
   }
 
@@ -234,33 +258,42 @@ function FindingsSection({
       </div>
       <p className="text-sm text-muted-foreground">{chrome.description}</p>
       <ul className="divide-y rounded-md border bg-card">
-        {Array.from(byEntry.entries()).map(([entryId, findings]) => {
-          const entry = entryById.get(entryId);
-          return (
-            <li
-              key={entryId}
-              className="flex items-center justify-between gap-3 px-4 py-3"
-            >
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="truncate font-medium">
-                  {entry?.title ?? entryId}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {findings
-                    .map((f) => t(`passwordHealth.findings.${f.kind}`))
-                    .join(" · ")}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openEntry(entryId)}
+        {reuseGroups.map((group, index) => (
+          <ReusedGroupRow
+            key={`reuse-${index}-${group.entryIds[0]}`}
+            entryIds={group.entryIds}
+            entries={entries}
+            onOpenEntry={openEntry}
+          />
+        ))}
+        {byEntry &&
+          Array.from(byEntry.entries()).map(([entryId, findings]) => {
+            const entry = entryById.get(entryId);
+            return (
+              <li
+                key={entryId}
+                className="flex items-center justify-between gap-3 px-4 py-3"
               >
-                {t("passwordHealth.actions.openEntry")}
-              </Button>
-            </li>
-          );
-        })}
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="truncate font-medium">
+                    {entry?.title ?? entryId}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {findings
+                      .map((f) => t(`passwordHealth.findings.${f.kind}`))
+                      .join(" · ")}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openEntry(entryId)}
+                >
+                  {t("passwordHealth.actions.openEntry")}
+                </Button>
+              </li>
+            );
+          })}
       </ul>
     </section>
   );

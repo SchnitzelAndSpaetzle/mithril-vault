@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::services::password_health::analyzer::{
-    Finding, FindingKind, HealthTotals, PasswordHealthReport,
+    Finding, FindingKind, HealthTotals, PasswordHealthReport, ReuseGroup,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -21,7 +21,6 @@ pub struct PasswordHealthReportDto {
     pub score: Option<u32>,
     pub findings: Vec<FindingDto>,
     pub totals: HealthTotalsDto,
-    /// Empty in this slice — the reuse check ships in slice 2.
     pub reuse_groups: Vec<ReuseGroupDto>,
 }
 
@@ -41,6 +40,8 @@ pub enum FindingKindDto {
     PasswordVeryWeak,
     #[serde(rename = "password.weak")]
     PasswordWeak,
+    #[serde(rename = "password.reused")]
+    PasswordReused,
     #[serde(rename = "password.expired")]
     PasswordExpired,
 }
@@ -54,10 +55,14 @@ pub struct HealthTotalsDto {
     pub total: u32,
 }
 
+/// Wire shape per the PRD: only the member Entry ids — the per-analysis
+/// hash bytes stay backend-internal. Hash values are key-randomized per
+/// run, so leaking them would be a "what was in your Vault" signal even
+/// across re-analyses; the frontend doesn't need them to render the
+/// inline-expanded member list.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ReuseGroupDto {
-    pub password_hash: String,
     pub entry_ids: Vec<String>,
 }
 
@@ -67,7 +72,19 @@ impl From<PasswordHealthReport> for PasswordHealthReportDto {
             score: report.score,
             findings: report.findings.into_iter().map(FindingDto::from).collect(),
             totals: report.totals.into(),
-            reuse_groups: Vec::new(),
+            reuse_groups: report
+                .reuse_groups
+                .into_iter()
+                .map(ReuseGroupDto::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<ReuseGroup> for ReuseGroupDto {
+    fn from(group: ReuseGroup) -> Self {
+        Self {
+            entry_ids: group.entry_ids,
         }
     }
 }
@@ -86,6 +103,7 @@ impl From<FindingKind> for FindingKindDto {
         match kind {
             FindingKind::PasswordVeryWeak => FindingKindDto::PasswordVeryWeak,
             FindingKind::PasswordWeak => FindingKindDto::PasswordWeak,
+            FindingKind::PasswordReused => FindingKindDto::PasswordReused,
             FindingKind::PasswordExpired => FindingKindDto::PasswordExpired,
         }
     }
@@ -134,6 +152,67 @@ mod tests {
         );
     }
 
+    /// `password.reused` is the wire identifier the frontend pattern
+    /// matches on (matches the dotted convention shared by the other
+    /// Finding Kinds). Pinning the exact JSON catches a refactor that
+    /// silently renames the variant to `"PasswordReused"` or
+    /// `"password_reused"` and breaks the report view.
+    #[test]
+    fn reused_finding_kind_serializes_as_namespaced_string() {
+        assert_eq!(
+            serde_json::to_string(&FindingKindDto::PasswordReused).expect("reused"),
+            r#""password.reused""#
+        );
+    }
+
+    /// The domain `FindingKind::PasswordReused` maps to the matching
+    /// DTO variant. Pins the From impl so adding the new variant on
+    /// either side doesn't silently lose information at the IPC edge.
+    #[test]
+    fn domain_to_dto_preserves_reused_variant() {
+        assert_eq!(
+            FindingKindDto::from(FindingKind::PasswordReused),
+            FindingKindDto::PasswordReused,
+        );
+    }
+
+    /// `ReuseGroupDto` carries only `entryIds` on the wire — the
+    /// per-analysis hash bytes never leave Rust. Pinning the JSON
+    /// shape catches a refactor that resurrects the previous
+    /// `passwordHash` field.
+    #[test]
+    fn reuse_group_dto_serializes_with_entry_ids_only() {
+        let dto = ReuseGroupDto {
+            entry_ids: vec!["a".into(), "b".into()],
+        };
+        let value: serde_json::Value = serde_json::to_value(&dto).expect("serialize");
+        let obj = value.as_object().expect("object");
+        assert!(obj.contains_key("entryIds"));
+        assert!(!obj.contains_key("passwordHash"));
+        assert_eq!(obj.len(), 1, "ReuseGroupDto must expose only entryIds");
+    }
+
+    /// End-to-end conversion: a domain report carrying a `ReuseGroup`
+    /// maps to a DTO whose `reuseGroups` Vec has one matching entry.
+    /// Pins the new `From<PasswordHealthReport>` arm.
+    #[test]
+    fn report_dto_carries_reuse_groups_from_domain() {
+        use crate::services::password_health::analyzer::ReuseGroup;
+
+        let domain = PasswordHealthReport {
+            score: Some(100),
+            findings: Vec::new(),
+            totals: HealthTotals::default(),
+            reuse_groups: vec![ReuseGroup {
+                entry_ids: vec!["a".into(), "b".into()],
+            }],
+        };
+
+        let dto: PasswordHealthReportDto = domain.into();
+        assert_eq!(dto.reuse_groups.len(), 1);
+        assert_eq!(dto.reuse_groups[0].entry_ids, vec!["a", "b"]);
+    }
+
     /// End-to-end conversion from the domain `FindingKind` enum to
     /// the DTO must preserve the new strength variants. Pins the
     /// `From` impl so the two enums cannot drift.
@@ -168,6 +247,7 @@ mod tests {
                 healthy: 3,
                 total: 4,
             },
+            reuse_groups: Vec::new(),
         };
 
         let dto: PasswordHealthReportDto = domain.into();
