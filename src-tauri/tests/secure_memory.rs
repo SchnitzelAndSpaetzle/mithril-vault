@@ -97,6 +97,8 @@ fn test_save_reopen_with_secure_password() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -180,6 +182,8 @@ fn test_protected_custom_fields_with_secure_string() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");

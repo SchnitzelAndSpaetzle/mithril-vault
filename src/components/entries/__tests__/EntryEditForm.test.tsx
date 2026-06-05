@@ -50,6 +50,7 @@ const {
         createdAt: "2024-02-17T15:56:34Z",
         modifiedAt: "2024-02-17T15:58:43Z",
         accessedAt: "2024-02-17T15:58:43Z",
+        expires: false,
       },
       {
         id: "entry-b",
@@ -66,6 +67,7 @@ const {
         createdAt: "2024-02-17T15:56:34Z",
         modifiedAt: "2024-02-17T15:58:43Z",
         accessedAt: "2024-02-17T15:58:43Z",
+        expires: false,
       },
     ])
   ),
@@ -152,6 +154,7 @@ const mockEntry: Entry = {
   createdAt: "2024-02-17T15:56:34Z",
   modifiedAt: "2024-02-17T15:58:43Z",
   accessedAt: "2024-02-17T15:58:43Z",
+  expires: false,
 };
 
 const mockEntryTwo: Entry = {
@@ -169,6 +172,7 @@ const mockEntryTwo: Entry = {
   createdAt: "2024-02-17T15:56:34Z",
   modifiedAt: "2024-02-17T15:58:43Z",
   accessedAt: "2024-02-17T15:58:43Z",
+  expires: false,
 };
 
 const mockEntryWithCustomIcon: Entry = {

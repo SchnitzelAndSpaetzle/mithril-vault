@@ -268,6 +268,8 @@ mod tests {
             tags: None,
             custom_fields: None,
             protected_custom_fields: None,
+            expires: None,
+            expiry_time: None,
         }
     }
 

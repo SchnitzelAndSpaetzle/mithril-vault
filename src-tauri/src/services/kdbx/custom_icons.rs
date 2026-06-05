@@ -252,6 +252,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("create entry A");
@@ -269,6 +271,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("create entry B");
@@ -393,6 +397,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("update title");
@@ -433,6 +439,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("update icon to builtin 0");

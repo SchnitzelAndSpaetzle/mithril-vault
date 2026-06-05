@@ -3,7 +3,8 @@ use crate::dto::error::AppError;
 use keepass::db::{Entry as KeepassEntry, Times, Value};
 
 use super::conversions::{
-    apply_custom_fields, convert_entry, is_standard_entry_field, replace_custom_fields,
+    apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field,
+    replace_custom_fields,
 };
 use super::recycle::is_in_recycle_bin;
 use super::KdbxService;
@@ -106,7 +107,7 @@ impl KdbxService {
             let new_eid = {
                 let mut group = vault.group_mut(group_id)?;
                 let mut entry = group.add_entry();
-                populate_entry(&mut entry, &data);
+                populate_entry(&mut entry, &data)?;
                 entry.id()
             };
 
@@ -176,6 +177,7 @@ impl KdbxService {
                         data.protected_custom_fields.as_ref(),
                     );
                 }
+                apply_expiry(&mut entry, data.expires, data.expiry_time.as_deref())?;
 
                 entry.times.last_modification = Some(Times::now());
                 entry.as_ref().parent().id().uuid().to_string()
@@ -286,7 +288,10 @@ impl KdbxService {
     }
 }
 
-fn populate_entry(entry: &mut keepass::db::EntryMut<'_>, data: &CreateEntryData) {
+fn populate_entry(
+    entry: &mut keepass::db::EntryMut<'_>,
+    data: &CreateEntryData,
+) -> Result<(), AppError> {
     entry
         .fields
         .insert("Title".to_string(), Value::Unprotected(data.title.clone()));
@@ -320,6 +325,8 @@ fn populate_entry(entry: &mut keepass::db::EntryMut<'_>, data: &CreateEntryData)
         data.custom_fields.as_ref(),
         data.protected_custom_fields.as_ref(),
     );
+    apply_expiry(entry, data.expires, data.expiry_time.as_deref())?;
+    Ok(())
 }
 
 fn rename_tag_in_entry(entry: &mut KeepassEntry, old_name: &str, new_name: &str) -> bool {
@@ -505,6 +512,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("create entry A");
@@ -522,11 +531,217 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("create entry B");
 
         (service, dir, db_path_str, entry_a.id, entry_b.id)
+    }
+
+    fn create_entry_with_expiry(
+        service: &KdbxService,
+        db_path: &str,
+        group_id: &str,
+        expires: Option<bool>,
+        expiry_time: Option<String>,
+    ) -> Entry {
+        service
+            .create_entry(
+                db_path,
+                group_id,
+                CreateEntryData {
+                    title: "Expiring".to_string(),
+                    username: "carol".to_string(),
+                    password: SecureString::from("secret"),
+                    url: None,
+                    notes: None,
+                    icon_id: Some(0),
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                    expires,
+                    expiry_time,
+                },
+            )
+            .expect("create expiring entry")
+    }
+
+    #[test]
+    fn create_entry_round_trips_expiry() {
+        let (service, _dir, db_path, _a, _b) = create_test_database();
+        let info = service.get_info(&db_path).expect("database info");
+
+        let created = create_entry_with_expiry(
+            &service,
+            &db_path,
+            &info.root_group_id,
+            Some(true),
+            Some("2030-01-01T12:00:00+00:00".to_string()),
+        );
+
+        assert!(created.expires, "created entry should report expires=true");
+        assert_eq!(
+            created.expiry_time.as_deref(),
+            Some("2030-01-01T12:00:00+00:00"),
+            "created entry should echo the UTC expiry timestamp"
+        );
+
+        // Reload from the KDBX tree and assert the flag + timestamp survive.
+        let reloaded = service.get_entry(&db_path, &created.id).expect("get entry");
+        assert!(reloaded.expires);
+        assert_eq!(reloaded.expiry_time, created.expiry_time);
+    }
+
+    #[test]
+    fn unchecking_expiry_retains_the_stored_timestamp() {
+        let (service, _dir, db_path, _a, _b) = create_test_database();
+        let info = service.get_info(&db_path).expect("database info");
+
+        let created = create_entry_with_expiry(
+            &service,
+            &db_path,
+            &info.root_group_id,
+            Some(true),
+            Some("2030-01-01T12:00:00+00:00".to_string()),
+        );
+
+        // Uncheck "Expires": flip the flag off, leave the timestamp unspecified.
+        let updated = service
+            .update_entry(
+                &db_path,
+                &created.id,
+                UpdateEntryData {
+                    title: None,
+                    username: None,
+                    password: None,
+                    url: None,
+                    notes: None,
+                    icon_id: None,
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                    expires: Some(false),
+                    expiry_time: None,
+                },
+            )
+            .expect("update entry");
+
+        assert!(!updated.expires, "expires flag should be cleared");
+        assert_eq!(
+            updated.expiry_time, created.expiry_time,
+            "the previously stored timestamp must be retained on uncheck"
+        );
+    }
+
+    #[test]
+    fn past_expiry_time_round_trips() {
+        let (service, _dir, db_path, _a, _b) = create_test_database();
+        let info = service.get_info(&db_path).expect("database info");
+
+        // A past date is a valid expiry — it records an already-stale credential.
+        let created = create_entry_with_expiry(
+            &service,
+            &db_path,
+            &info.root_group_id,
+            Some(true),
+            Some("2000-06-15T08:30:00+00:00".to_string()),
+        );
+
+        assert!(created.expires);
+        let reloaded = service.get_entry(&db_path, &created.id).expect("get entry");
+        assert!(reloaded.expires);
+        assert_eq!(
+            reloaded.expiry_time.as_deref(),
+            Some("2000-06-15T08:30:00+00:00")
+        );
+    }
+
+    #[test]
+    fn updating_only_the_password_leaves_expiry_untouched() {
+        let (service, _dir, db_path, _a, _b) = create_test_database();
+        let info = service.get_info(&db_path).expect("database info");
+
+        let created = create_entry_with_expiry(
+            &service,
+            &db_path,
+            &info.root_group_id,
+            Some(true),
+            Some("2030-01-01T12:00:00+00:00".to_string()),
+        );
+
+        // Rotate the password; send nothing for expiry.
+        let updated = service
+            .update_entry(
+                &db_path,
+                &created.id,
+                UpdateEntryData {
+                    title: None,
+                    username: None,
+                    password: Some(SecureString::from("rotated")),
+                    url: None,
+                    notes: None,
+                    icon_id: None,
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
+                },
+            )
+            .expect("update entry");
+
+        assert!(updated.expires, "expiry flag must be unchanged");
+        assert_eq!(
+            updated.expiry_time, created.expiry_time,
+            "expiry timestamp must be unchanged by a password-only edit"
+        );
+    }
+
+    #[test]
+    fn entry_without_expiry_defaults_to_not_expiring() {
+        let (service, _dir, db_path, _a, _b) = create_test_database();
+        let info = service.get_info(&db_path).expect("database info");
+
+        // Expiry is opt-in: omitting it yields a non-expiring entry.
+        let created = create_entry_with_expiry(&service, &db_path, &info.root_group_id, None, None);
+
+        assert!(!created.expires);
+        assert_eq!(created.expiry_time, None);
+
+        let reloaded = service.get_entry(&db_path, &created.id).expect("get entry");
+        assert!(!reloaded.expires);
+        assert_eq!(reloaded.expiry_time, None);
+    }
+
+    #[test]
+    fn malformed_expiry_time_is_rejected() {
+        let (service, _dir, db_path, _a, _b) = create_test_database();
+        let info = service.get_info(&db_path).expect("database info");
+
+        let result = service.create_entry(
+            &db_path,
+            &info.root_group_id,
+            CreateEntryData {
+                title: "Bad".to_string(),
+                username: "dave".to_string(),
+                password: SecureString::from("secret"),
+                url: None,
+                notes: None,
+                icon_id: Some(0),
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields: None,
+                expires: Some(true),
+                expiry_time: Some("not-a-timestamp".to_string()),
+            },
+        );
+
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "a non-RFC3339 expiry timestamp should be rejected, got {result:?}"
+        );
     }
 
     #[test]

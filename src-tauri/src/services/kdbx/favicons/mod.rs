@@ -250,6 +250,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("create entry A");
@@ -267,6 +269,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("create entry B");
@@ -302,6 +306,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("set invalid url");
@@ -331,6 +337,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("set url");
@@ -376,6 +384,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("set url");

@@ -1,7 +1,9 @@
 use crate::domain::secure::SecureString;
 use crate::dto::entry::{CustomFieldMeta, Entry};
+use crate::dto::error::AppError;
 use crate::dto::group::Group;
-use keepass::db::{Entry as KeepassEntry, EntryRef, GroupRef, Icon, Value};
+use chrono::DateTime;
+use keepass::db::{Entry as KeepassEntry, EntryMut, EntryRef, GroupRef, Icon, Value};
 use std::collections::BTreeMap;
 
 pub(crate) fn convert_entry(entry: &EntryRef<'_>, group_id: &str) -> Entry {
@@ -45,6 +47,11 @@ pub(crate) fn convert_entry(entry: &EntryRef<'_>, group_id: &str) -> Entry {
             .last_access
             .map(|t| t.to_string())
             .unwrap_or_default(),
+        expires: entry.times.expires.unwrap_or(false),
+        // Stored as a naive UTC instant (the KDBX format carries no timezone);
+        // surface it as RFC 3339 so the frontend and Password Health agree,
+        // consistent with `expiry.and_utc()` in the analyzer.
+        expiry_time: entry.times.expiry.map(|t| t.and_utc().to_rfc3339()),
     }
 }
 
@@ -72,6 +79,31 @@ pub(crate) fn convert_group(group: &GroupRef<'_>, parent_id: Option<&str>) -> Gr
         custom_icon_uuid,
         children,
     }
+}
+
+/// Writes the expiry flag and timestamp from DTO values into a keepass entry's
+/// `Times`. Each field is independent: `expires` flips the flag only when
+/// `Some`, and `expiry_time` is written only when `Some`. Unchecking expiry
+/// (`expires=Some(false)`, `expiry_time=None`) therefore clears the flag while
+/// retaining the previously stored timestamp, mirroring KeePass/KeePassXC.
+///
+/// The timestamp crosses IPC as RFC 3339; it is stored as a naive UTC instant
+/// (the KDBX format carries no timezone), consistent with the read path in
+/// `convert_entry`. A value that does not parse is rejected as invalid input.
+pub(crate) fn apply_expiry(
+    entry: &mut EntryMut<'_>,
+    expires: Option<bool>,
+    expiry_time: Option<&str>,
+) -> Result<(), AppError> {
+    if let Some(expires) = expires {
+        entry.times.expires = Some(expires);
+    }
+    if let Some(raw) = expiry_time {
+        let parsed = DateTime::parse_from_rfc3339(raw)
+            .map_err(|e| AppError::InvalidInput(format!("invalid expiryTime: {e}")))?;
+        entry.times.expiry = Some(parsed.with_timezone(&chrono::Utc).naive_utc());
+    }
+    Ok(())
 }
 
 pub(crate) fn is_standard_entry_field(key: &str) -> bool {
