@@ -69,7 +69,7 @@ jobs:
         # The `secrets` context isn't allowed in step-level `if:`, so the guard
         # is resolved to a boolean via the job-level `HAS_SONAR_TOKEN` env var.
         if: env.HAS_SONAR_TOKEN == 'true'
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
