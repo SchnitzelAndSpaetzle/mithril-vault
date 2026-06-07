@@ -101,6 +101,26 @@ pub(crate) fn parse_expiry_time(
         .transpose()
 }
 
+/// Rejects enabling expiry without any timestamp to anchor it. An entry with
+/// `expires=true` but no `expiry` is an ambiguous state — Password Health only
+/// flags entries that carry a timestamp, so such an entry could never report as
+/// expired. Enabling expiry therefore requires a timestamp to fall back on:
+/// either one supplied in this request (`new_expiry`) or one already stored on
+/// the entry (`existing_expiry`, the re-enable case). Disabling or leaving the
+/// flag untouched is always allowed.
+pub(crate) fn validate_expiry_enabled(
+    expires: Option<bool>,
+    new_expiry: Option<chrono::NaiveDateTime>,
+    existing_expiry: Option<chrono::NaiveDateTime>,
+) -> Result<(), AppError> {
+    if expires == Some(true) && new_expiry.is_none() && existing_expiry.is_none() {
+        return Err(AppError::InvalidInput(
+            "enabling expiry requires an expiryTime".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Writes the expiry flag and an already-parsed timestamp into a keepass
 /// entry's `Times`. Each field is independent: `expires` flips the flag only
 /// when `Some`, and `expiry` is written only when `Some`. Unchecking expiry
