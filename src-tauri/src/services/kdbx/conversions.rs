@@ -81,29 +81,45 @@ pub(crate) fn convert_group(group: &GroupRef<'_>, parent_id: Option<&str>) -> Gr
     }
 }
 
-/// Writes the expiry flag and timestamp from DTO values into a keepass entry's
-/// `Times`. Each field is independent: `expires` flips the flag only when
-/// `Some`, and `expiry_time` is written only when `Some`. Unchecking expiry
-/// (`expires=Some(false)`, `expiry_time=None`) therefore clears the flag while
+/// Parses an optional RFC 3339 expiry timestamp into the naive UTC instant the
+/// KDBX format stores (it carries no timezone), consistent with the read path
+/// in `convert_entry`. `None` passes through as `None` ("leave the timestamp
+/// untouched"); a value that does not parse is rejected as invalid input.
+///
+/// This is the *fallible* half of expiry handling and runs as up-front
+/// validation, before any entry is created or mutated, so a malformed payload
+/// cannot leave a partial/phantom entry behind.
+pub(crate) fn parse_expiry_time(
+    expiry_time: Option<&str>,
+) -> Result<Option<chrono::NaiveDateTime>, AppError> {
+    expiry_time
+        .map(|raw| {
+            DateTime::parse_from_rfc3339(raw)
+                .map(|dt| dt.with_timezone(&chrono::Utc).naive_utc())
+                .map_err(|e| AppError::InvalidInput(format!("invalid expiryTime: {e}")))
+        })
+        .transpose()
+}
+
+/// Writes the expiry flag and an already-parsed timestamp into a keepass
+/// entry's `Times`. Each field is independent: `expires` flips the flag only
+/// when `Some`, and `expiry` is written only when `Some`. Unchecking expiry
+/// (`expires=Some(false)`, `expiry=None`) therefore clears the flag while
 /// retaining the previously stored timestamp, mirroring KeePass/KeePassXC.
 ///
-/// The timestamp crosses IPC as RFC 3339; it is stored as a naive UTC instant
-/// (the KDBX format carries no timezone), consistent with the read path in
-/// `convert_entry`. A value that does not parse is rejected as invalid input.
+/// Infallible by construction: the timestamp is validated earlier via
+/// `parse_expiry_time`, keeping the tree mutation atomic.
 pub(crate) fn apply_expiry(
     entry: &mut EntryMut<'_>,
     expires: Option<bool>,
-    expiry_time: Option<&str>,
-) -> Result<(), AppError> {
+    expiry: Option<chrono::NaiveDateTime>,
+) {
     if let Some(expires) = expires {
         entry.times.expires = Some(expires);
     }
-    if let Some(raw) = expiry_time {
-        let parsed = DateTime::parse_from_rfc3339(raw)
-            .map_err(|e| AppError::InvalidInput(format!("invalid expiryTime: {e}")))?;
-        entry.times.expiry = Some(parsed.with_timezone(&chrono::Utc).naive_utc());
+    if let Some(expiry) = expiry {
+        entry.times.expiry = Some(expiry);
     }
-    Ok(())
 }
 
 pub(crate) fn is_standard_entry_field(key: &str) -> bool {

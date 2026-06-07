@@ -3,7 +3,7 @@ use crate::dto::error::AppError;
 use keepass::db::{Entry as KeepassEntry, Times, Value};
 
 use super::conversions::{
-    apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field,
+    apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
     replace_custom_fields,
 };
 use super::recycle::is_in_recycle_bin;
@@ -104,10 +104,14 @@ impl KdbxService {
         data: CreateEntryData,
     ) -> Result<Entry, AppError> {
         self.with_vault_mut(db_id, |vault| {
+            // Validate the expiry timestamp before touching the tree so a
+            // malformed payload can't leave a phantom entry behind.
+            let expiry = parse_expiry_time(data.expiry_time.as_deref())?;
             let new_eid = {
                 let mut group = vault.group_mut(group_id)?;
                 let mut entry = group.add_entry();
-                populate_entry(&mut entry, &data)?;
+                populate_entry(&mut entry, &data);
+                apply_expiry(&mut entry, data.expires, expiry);
                 entry.id()
             };
 
@@ -131,6 +135,9 @@ impl KdbxService {
     ) -> Result<Entry, AppError> {
         self.with_vault_mut(db_id, |vault| {
             let eid = vault.find_entry_id(id)?;
+            // Validate the expiry timestamp before applying any field updates so
+            // a malformed payload leaves the entry unchanged.
+            let expiry = parse_expiry_time(data.expiry_time.as_deref())?;
 
             let group_uuid = {
                 let mut entry = vault
@@ -177,7 +184,7 @@ impl KdbxService {
                         data.protected_custom_fields.as_ref(),
                     );
                 }
-                apply_expiry(&mut entry, data.expires, data.expiry_time.as_deref())?;
+                apply_expiry(&mut entry, data.expires, expiry);
 
                 entry.times.last_modification = Some(Times::now());
                 entry.as_ref().parent().id().uuid().to_string()
@@ -288,10 +295,7 @@ impl KdbxService {
     }
 }
 
-fn populate_entry(
-    entry: &mut keepass::db::EntryMut<'_>,
-    data: &CreateEntryData,
-) -> Result<(), AppError> {
+fn populate_entry(entry: &mut keepass::db::EntryMut<'_>, data: &CreateEntryData) {
     entry
         .fields
         .insert("Title".to_string(), Value::Unprotected(data.title.clone()));
@@ -325,8 +329,6 @@ fn populate_entry(
         data.custom_fields.as_ref(),
         data.protected_custom_fields.as_ref(),
     );
-    apply_expiry(entry, data.expires, data.expiry_time.as_deref())?;
-    Ok(())
 }
 
 fn rename_tag_in_entry(entry: &mut KeepassEntry, old_name: &str, new_name: &str) -> bool {
@@ -568,6 +570,24 @@ mod tests {
             .expect("create expiring entry")
     }
 
+    /// An `UpdateEntryData` that touches nothing; tests override single fields
+    /// via `..empty_update()` struct-update syntax.
+    fn empty_update() -> UpdateEntryData {
+        UpdateEntryData {
+            title: None,
+            username: None,
+            password: None,
+            url: None,
+            notes: None,
+            icon_id: None,
+            tags: None,
+            custom_fields: None,
+            protected_custom_fields: None,
+            expires: None,
+            expiry_time: None,
+        }
+    }
+
     #[test]
     fn create_entry_round_trips_expiry() {
         let (service, _dir, db_path, _a, _b) = create_test_database();
@@ -613,17 +633,8 @@ mod tests {
                 &db_path,
                 &created.id,
                 UpdateEntryData {
-                    title: None,
-                    username: None,
-                    password: None,
-                    url: None,
-                    notes: None,
-                    icon_id: None,
-                    tags: None,
-                    custom_fields: None,
-                    protected_custom_fields: None,
                     expires: Some(false),
-                    expiry_time: None,
+                    ..empty_update()
                 },
             )
             .expect("update entry");
@@ -677,17 +688,8 @@ mod tests {
                 &db_path,
                 &created.id,
                 UpdateEntryData {
-                    title: None,
-                    username: None,
                     password: Some(SecureString::from("rotated")),
-                    url: None,
-                    notes: None,
-                    icon_id: None,
-                    tags: None,
-                    custom_fields: None,
-                    protected_custom_fields: None,
-                    expires: None,
-                    expiry_time: None,
+                    ..empty_update()
                 },
             )
             .expect("update entry");
@@ -716,16 +718,23 @@ mod tests {
     }
 
     #[test]
-    fn malformed_expiry_time_is_rejected() {
+    fn malformed_expiry_on_create_leaves_no_phantom_entry() {
+        // A rejected create must be atomic: validating the timestamp before
+        // inserting the entry means nothing is added to the tree on failure.
         let (service, _dir, db_path, _a, _b) = create_test_database();
         let info = service.get_info(&db_path).expect("database info");
+
+        let before = service
+            .list_entries(&db_path, Some(&info.root_group_id))
+            .expect("list before")
+            .len();
 
         let result = service.create_entry(
             &db_path,
             &info.root_group_id,
             CreateEntryData {
-                title: "Bad".to_string(),
-                username: "dave".to_string(),
+                title: "Phantom".to_string(),
+                username: "eve".to_string(),
                 password: SecureString::from("secret"),
                 url: None,
                 notes: None,
@@ -737,10 +746,36 @@ mod tests {
                 expiry_time: Some("not-a-timestamp".to_string()),
             },
         );
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
 
-        assert!(
-            matches!(result, Err(AppError::InvalidInput(_))),
-            "a non-RFC3339 expiry timestamp should be rejected, got {result:?}"
+        let after = service
+            .list_entries(&db_path, Some(&info.root_group_id))
+            .expect("list after")
+            .len();
+        assert_eq!(before, after, "a rejected create must not add an entry");
+    }
+
+    #[test]
+    fn malformed_expiry_on_update_leaves_entry_unchanged() {
+        // A rejected update must be atomic: validating the timestamp before
+        // applying field mutations means a bad payload changes nothing.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let result = service.update_entry(
+            &db_path,
+            &entry_a,
+            UpdateEntryData {
+                title: Some("Renamed".to_string()),
+                expiry_time: Some("not-a-timestamp".to_string()),
+                ..empty_update()
+            },
+        );
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
+
+        let reloaded = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert_eq!(
+            reloaded.title, "Entry A",
+            "a rejected update must not apply the title change"
         );
     }
 
