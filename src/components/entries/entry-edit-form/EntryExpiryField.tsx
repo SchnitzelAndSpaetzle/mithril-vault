@@ -25,7 +25,7 @@ interface EntryExpiryFieldProps {
 export function EntryExpiryField({
   control,
   isPending,
-}: EntryExpiryFieldProps) {
+}: Readonly<EntryExpiryFieldProps>) {
   const { t } = useTranslation();
   const { field: expiresField } = useController({ name: "expires", control });
   const { field: expiryTimeField, fieldState } = useController({

@@ -185,7 +185,7 @@ function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  function TestWrapper({ children }: { children: React.ReactNode }) {
+  function TestWrapper({ children }: Readonly<{ children: React.ReactNode }>) {
     return (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );

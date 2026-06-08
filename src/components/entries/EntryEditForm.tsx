@@ -38,7 +38,7 @@ export function EntryEditForm({
   onSave,
   onCancel,
   onDirtyChange,
-}: EntryEditFormProps) {
+}: Readonly<EntryEditFormProps>) {
   const {
     form,
     isEditMode,
