@@ -31,7 +31,7 @@ function DateTimePicker({
   placeholder,
   disabled,
   id,
-}: DateTimePickerProps) {
+}: Readonly<DateTimePickerProps>) {
   const timeValue = value ? dayjs(value).format(TIME_FORMAT) : "";
 
   function handleDaySelect(day: Date | undefined) {
