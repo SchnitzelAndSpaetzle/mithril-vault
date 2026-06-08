@@ -60,3 +60,19 @@ export function resolveExpiryPreset(preset: ExpiryPreset, now: Date): Date {
   const { amount, unit } = PRESET_DURATIONS[preset];
   return dayjs(now).add(amount, unit).toDate();
 }
+
+/**
+ * Whether an Entry is Expired at `now`: its `expires` flag is set and its
+ * `expiryTime` is strictly in the past. A cleared flag or a missing/future
+ * timestamp is never Expired. Binary — there is no "expires-soon" state.
+ *
+ * Driven purely from the Entry's own fields, so it holds even when the
+ * Password Health report has not been loaded.
+ */
+export function isExpired(
+  entry: { expires: boolean; expiryTime?: string | null | undefined },
+  now: Date
+): boolean {
+  if (!entry.expires || !entry.expiryTime) return false;
+  return new Date(entry.expiryTime).getTime() < now.getTime();
+}

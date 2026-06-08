@@ -18,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getKeepassIcon } from "@/lib/keepass-icons";
+import { isExpired } from "@/lib/entry-expiry";
 import { cn } from "@/lib/utils";
 
 interface EntryListItemProps extends Entry {
@@ -48,8 +49,11 @@ const EntryListItem = memo(function EntryListItem({
   onClick,
   findings,
   reusedGroupSize,
+  expires,
+  expiryTime,
 }: EntryListItemProps) {
   const iconComponent = getKeepassIcon(iconId ?? 0);
+  const expired = isExpired({ expires, expiryTime }, new Date());
   const customIcon = customIconUuid ? customIcons[customIconUuid] : null;
   const customIconSrc = customIcon
     ? `data:${customIcon.mimeType};base64,${customIcon.data}`
@@ -79,7 +83,14 @@ const EntryListItem = memo(function EntryListItem({
           </Avatar>
         </ItemMedia>
         <ItemContent className="min-w-0 flex-1 overflow-hidden">
-          <ItemTitle className="block truncate w-full">{title}</ItemTitle>
+          <ItemTitle
+            className={cn(
+              "block truncate w-full",
+              expired && "line-through text-muted-foreground"
+            )}
+          >
+            {title}
+          </ItemTitle>
           <ItemDescription className="line-clamp-none truncate w-full min-w-0">
             {username}
           </ItemDescription>

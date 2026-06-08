@@ -333,6 +333,8 @@
       "tags": "Tags",
       "created": "Erstellt",
       "modified": "Geändert",
+      "expired": "Abgelaufen",
+      "expires": "Läuft ab",
       "revealPassword": "Passwort anzeigen",
       "hidePassword": "Passwort verbergen",
       "autoType": "Auto-Type",

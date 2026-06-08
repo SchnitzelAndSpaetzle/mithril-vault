@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import {
   EXPIRY_PRESETS,
   type ExpiryPreset,
+  isExpired,
   resolveExpiryPreset,
 } from "@/lib/entry-expiry";
 
@@ -73,5 +74,29 @@ describe("resolveExpiryPreset", () => {
     const before = NOW.getTime();
     resolveExpiryPreset("6mo", NOW);
     expect(NOW.getTime()).toBe(before);
+  });
+});
+
+describe("isExpired", () => {
+  const past = dayjs(NOW).subtract(1, "day").toISOString();
+  const future = dayjs(NOW).add(1, "day").toISOString();
+
+  it("is true when the flag is set and the expiry is in the past", () => {
+    expect(isExpired({ expires: true, expiryTime: past }, NOW)).toBe(true);
+  });
+
+  it("is false when the flag is set but the expiry is in the future", () => {
+    expect(isExpired({ expires: true, expiryTime: future }, NOW)).toBe(false);
+  });
+
+  it("is false when the flag is not set, even with a past expiry", () => {
+    expect(isExpired({ expires: false, expiryTime: past }, NOW)).toBe(false);
+  });
+
+  it("is false when the expiry timestamp is missing", () => {
+    expect(isExpired({ expires: true, expiryTime: null }, NOW)).toBe(false);
+    expect(isExpired({ expires: true, expiryTime: undefined }, NOW)).toBe(
+      false
+    );
   });
 });

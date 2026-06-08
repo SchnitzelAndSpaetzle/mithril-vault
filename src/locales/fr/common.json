@@ -333,6 +333,8 @@
       "tags": "Étiquettes",
       "created": "Créé",
       "modified": "Modifié",
+      "expired": "Expiré",
+      "expires": "Expire le",
       "revealPassword": "révéler le mot de passe",
       "hidePassword": "masquer le mot de passe",
       "autoType": "saisie automatique",
