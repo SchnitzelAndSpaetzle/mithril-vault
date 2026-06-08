@@ -35,6 +35,8 @@ pub struct Entry {
     pub created_at: String,
     pub modified_at: String,
     pub accessed_at: String,
+    pub expires: bool,
+    pub expiry_time: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +61,8 @@ pub struct CreateEntryData {
     pub tags: Option<Vec<String>>,
     pub custom_fields: Option<BTreeMap<String, String>>,
     pub protected_custom_fields: Option<BTreeMap<String, SecureString>>,
+    pub expires: Option<bool>,
+    pub expiry_time: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,4 +77,6 @@ pub struct UpdateEntryData {
     pub tags: Option<Vec<String>>,
     pub custom_fields: Option<BTreeMap<String, String>>,
     pub protected_custom_fields: Option<BTreeMap<String, SecureString>>,
+    pub expires: Option<bool>,
+    pub expiry_time: Option<String>,
 }

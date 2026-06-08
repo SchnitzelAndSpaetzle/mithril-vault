@@ -22,6 +22,7 @@ function makeEntry(overrides: Partial<Entry> = {}): Entry {
     createdAt: "2024-01-01T00:00:00Z",
     modifiedAt: "2024-01-01T00:00:00Z",
     accessedAt: "2024-01-01T00:00:00Z",
+    expires: false,
     ...overrides,
   };
 }

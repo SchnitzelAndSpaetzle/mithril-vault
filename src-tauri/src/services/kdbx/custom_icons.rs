@@ -208,73 +208,7 @@ fn hash_bytes(bytes: &[u8]) -> [u8; 32] {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::domain::secure::SecureString;
-    use crate::dto::database::DatabaseCreationOptions;
-    use crate::dto::entry::CreateEntryData;
-    use tempfile::TempDir;
-
-    fn create_test_database() -> (KdbxService, TempDir, String, String, String) {
-        let dir = tempfile::tempdir().expect("create temp dir");
-        let db_path = dir.path().join("custom-icon-tests.kdbx");
-        let db_path_str = db_path.to_string_lossy().to_string();
-
-        let options = DatabaseCreationOptions {
-            create_default_groups: true,
-            kdf_memory: Some(1024 * 1024),
-            kdf_iterations: Some(1),
-            kdf_parallelism: Some(1),
-            description: None,
-        };
-
-        let service = KdbxService::new();
-        service
-            .create_database(
-                &db_path_str,
-                Some("testpass"),
-                None,
-                "Custom Icon Tests",
-                &options,
-            )
-            .expect("create db");
-        let info = service.get_info(&db_path_str).expect("database info");
-
-        let entry_a = service
-            .create_entry(
-                &db_path_str,
-                &info.root_group_id,
-                CreateEntryData {
-                    title: "Entry A".to_string(),
-                    username: "alice".to_string(),
-                    password: SecureString::from("secret"),
-                    url: None,
-                    notes: None,
-                    icon_id: Some(0),
-                    tags: None,
-                    custom_fields: None,
-                    protected_custom_fields: None,
-                },
-            )
-            .expect("create entry A");
-        let entry_b = service
-            .create_entry(
-                &db_path_str,
-                &info.root_group_id,
-                CreateEntryData {
-                    title: "Entry B".to_string(),
-                    username: "bob".to_string(),
-                    password: SecureString::from("secret"),
-                    url: None,
-                    notes: None,
-                    icon_id: Some(0),
-                    tags: None,
-                    custom_fields: None,
-                    protected_custom_fields: None,
-                },
-            )
-            .expect("create entry B");
-
-        (service, dir, db_path_str, entry_a.id, entry_b.id)
-    }
+    use crate::services::kdbx::test_support::create_test_database;
 
     #[test]
     fn detect_icon_mime_recognizes_supported_signatures() {
@@ -393,6 +327,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("update title");
@@ -433,6 +369,8 @@ mod tests {
                     tags: None,
                     custom_fields: None,
                     protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
                 },
             )
             .expect("update icon to builtin 0");

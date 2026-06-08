@@ -1,7 +1,9 @@
 use crate::domain::secure::SecureString;
 use crate::dto::entry::{CustomFieldMeta, Entry};
+use crate::dto::error::AppError;
 use crate::dto::group::Group;
-use keepass::db::{Entry as KeepassEntry, EntryRef, GroupRef, Icon, Value};
+use chrono::DateTime;
+use keepass::db::{Entry as KeepassEntry, EntryMut, EntryRef, GroupRef, Icon, Value};
 use std::collections::BTreeMap;
 
 pub(crate) fn convert_entry(entry: &EntryRef<'_>, group_id: &str) -> Entry {
@@ -45,6 +47,11 @@ pub(crate) fn convert_entry(entry: &EntryRef<'_>, group_id: &str) -> Entry {
             .last_access
             .map(|t| t.to_string())
             .unwrap_or_default(),
+        expires: entry.times.expires.unwrap_or(false),
+        // Stored as a naive UTC instant (the KDBX format carries no timezone);
+        // surface it as RFC 3339 so the frontend and Password Health agree,
+        // consistent with `expiry.and_utc()` in the analyzer.
+        expiry_time: entry.times.expiry.map(|t| t.and_utc().to_rfc3339()),
     }
 }
 
@@ -71,6 +78,67 @@ pub(crate) fn convert_group(group: &GroupRef<'_>, parent_id: Option<&str>) -> Gr
         icon,
         custom_icon_uuid,
         children,
+    }
+}
+
+/// Parses an optional RFC 3339 expiry timestamp into the naive UTC instant the
+/// KDBX format stores (it carries no timezone), consistent with the read path
+/// in `convert_entry`. `None` passes through as `None` ("leave the timestamp
+/// untouched"); a value that does not parse is rejected as invalid input.
+///
+/// This is the *fallible* half of expiry handling and runs as up-front
+/// validation, before any entry is created or mutated, so a malformed payload
+/// cannot leave a partial/phantom entry behind.
+pub(crate) fn parse_expiry_time(
+    expiry_time: Option<&str>,
+) -> Result<Option<chrono::NaiveDateTime>, AppError> {
+    expiry_time
+        .map(|raw| {
+            DateTime::parse_from_rfc3339(raw)
+                .map(|dt| dt.with_timezone(&chrono::Utc).naive_utc())
+                .map_err(|e| AppError::InvalidInput(format!("invalid expiryTime: {e}")))
+        })
+        .transpose()
+}
+
+/// Rejects enabling expiry without any timestamp to anchor it. An entry with
+/// `expires=true` but no `expiry` is an ambiguous state — Password Health only
+/// flags entries that carry a timestamp, so such an entry could never report as
+/// expired. Enabling expiry therefore requires a timestamp to fall back on:
+/// either one supplied in this request (`new_expiry`) or one already stored on
+/// the entry (`existing_expiry`, the re-enable case). Disabling or leaving the
+/// flag untouched is always allowed.
+pub(crate) fn validate_expiry_enabled(
+    expires: Option<bool>,
+    new_expiry: Option<chrono::NaiveDateTime>,
+    existing_expiry: Option<chrono::NaiveDateTime>,
+) -> Result<(), AppError> {
+    if expires == Some(true) && new_expiry.is_none() && existing_expiry.is_none() {
+        return Err(AppError::InvalidInput(
+            "enabling expiry requires an expiryTime".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Writes the expiry flag and an already-parsed timestamp into a keepass
+/// entry's `Times`. Each field is independent: `expires` flips the flag only
+/// when `Some`, and `expiry` is written only when `Some`. Unchecking expiry
+/// (`expires=Some(false)`, `expiry=None`) therefore clears the flag while
+/// retaining the previously stored timestamp, mirroring KeePass/KeePassXC.
+///
+/// Infallible by construction: the timestamp is validated earlier via
+/// `parse_expiry_time`, keeping the tree mutation atomic.
+pub(crate) fn apply_expiry(
+    entry: &mut EntryMut<'_>,
+    expires: Option<bool>,
+    expiry: Option<chrono::NaiveDateTime>,
+) {
+    if let Some(expires) = expires {
+        entry.times.expires = Some(expires);
+    }
+    if let Some(expiry) = expiry {
+        entry.times.expiry = Some(expiry);
     }
 }
 

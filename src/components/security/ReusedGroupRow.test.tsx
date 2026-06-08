@@ -20,6 +20,7 @@ function entry(id: string, title: string): Entry {
     createdAt: "",
     modifiedAt: "",
     accessedAt: "",
+    expires: false,
   };
 }
 

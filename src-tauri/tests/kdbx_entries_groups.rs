@@ -380,6 +380,8 @@ fn test_protected_fields_kdbx4_roundtrip() {
                 tags: None,
                 custom_fields: Some(custom_fields),
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -473,6 +475,8 @@ fn test_protected_fields_persist_after_save() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected1),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry 1");
@@ -498,6 +502,8 @@ fn test_protected_fields_persist_after_save() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected2),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry 2");

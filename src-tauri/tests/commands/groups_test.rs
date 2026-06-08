@@ -695,6 +695,8 @@ fn test_get_group_entry_counts_direct_entries_only() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create root entry");
@@ -713,6 +715,8 @@ fn test_get_group_entry_counts_direct_entries_only() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create child entry");

@@ -719,6 +719,8 @@ fn test_lock_all_skips_modified_databases() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("Failed to create entry");
