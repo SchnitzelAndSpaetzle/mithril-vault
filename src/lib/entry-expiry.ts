@@ -70,7 +70,7 @@ export function resolveExpiryPreset(preset: ExpiryPreset, now: Date): Date {
  * Password Health report has not been loaded.
  */
 export function isExpired(
-  entry: { expires: boolean; expiryTime?: string | null },
+  entry: { expires: boolean; expiryTime?: string | null | undefined },
   now: Date
 ): boolean {
   if (!entry.expires || !entry.expiryTime) return false;
