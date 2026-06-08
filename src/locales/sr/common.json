@@ -333,6 +333,8 @@
       "tags": "Oznake",
       "created": "Kreirano",
       "modified": "Izmenjeno",
+      "expired": "Isteklo",
+      "expires": "Ističe",
       "revealPassword": "prikaži lozinku",
       "hidePassword": "sakrij lozinku",
       "autoType": "automatski unos",

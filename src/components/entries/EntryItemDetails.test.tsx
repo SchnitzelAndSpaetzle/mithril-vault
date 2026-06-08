@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: MIT
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import dayjs from "dayjs";
+
+import EntryItemDetails from "./EntryItemDetails";
+import type { Entry } from "@/lib/types";
+
+const baseEntry: Entry = {
+  id: "entry-1",
+  groupId: "root",
+  title: "GitHub",
+  username: "octocat",
+  url: null,
+  notes: null,
+  iconId: 0,
+  customIconUuid: null,
+  tags: [],
+  customFields: {},
+  customFieldMeta: [],
+  createdAt: "2026-01-01T00:00:00Z",
+  modifiedAt: "2026-01-02T00:00:00Z",
+  accessedAt: "2026-01-02T00:00:00Z",
+  expires: false,
+  expiryTime: null,
+};
+
+// Mutable holder the mocked hook reads from. vi.hoisted runs before the
+// vi.mock factories so they can close over it safely.
+const state = vi.hoisted(() => ({ entry: null as Entry | null }));
+
+vi.mock("@/hooks/use-entry-detail", () => ({
+  useEntryDetail: () => ({
+    entry: state.entry,
+    isLoading: false,
+    isError: false,
+    password: null,
+    isPasswordVisible: false,
+    isPasswordLoading: false,
+    isTransitioning: false,
+    revealPassword: vi.fn(),
+    hidePassword: vi.fn(),
+  }),
+}));
+
+vi.mock("@/hooks/use-custom-icons", () => ({
+  useCustomIcons: () => ({ data: {} }),
+}));
+
+vi.mock("@/hooks/use-copy-to-clipboard", () => ({
+  useCopyToClipboard: () => ({ copy: vi.fn(), isCopied: false }),
+}));
+
+vi.mock("@/hooks/use-clipboard-countdown", () => ({
+  useClipboardCountdown: () => vi.fn(),
+}));
+
+vi.mock("@/hooks/use-clipboard-timeout", () => ({
+  useClipboardTimeout: () => 30,
+}));
+
+vi.mock("@/lib/tauri", () => ({
+  clipboard: { copyPassword: vi.fn(), copyProtectedField: vi.fn() },
+  entries: { getProtectedCustomField: vi.fn() },
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
+
+function renderDetails(override: Partial<Entry>) {
+  state.entry = { ...baseEntry, ...override };
+  return render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+}
+
+describe("EntryItemDetails expired indicator", () => {
+  beforeEach(() => {
+    state.entry = null;
+  });
+
+  it("strikes through the title and shows an Expired badge when expired", () => {
+    renderDetails({ expires: true, expiryTime: "2000-01-01T00:00:00Z" });
+
+    const title = screen.getByRole("heading", { name: "GitHub" });
+    expect(title.className).toContain("line-through");
+    expect(title.className).toContain("text-muted-foreground");
+    expect(screen.getByText("entries.detail.expired")).toBeInTheDocument();
+  });
+
+  it("shows the absolute expiry date in local time alongside the metadata", () => {
+    const expiryTime = "2000-06-15T12:00:00Z";
+    renderDetails({ expires: true, expiryTime });
+
+    expect(screen.getByText("entries.detail.expires")).toBeInTheDocument();
+    // Rendered in the viewer's local time via dayjs — assert the local
+    // calendar year appears so the row reflects the actual instant.
+    const localYear = String(dayjs(expiryTime).year());
+    expect(
+      screen.getByText((text) => text.includes(localYear))
+    ).toBeInTheDocument();
+  });
+
+  it("shows no badge or strikethrough for a non-expired Entry", () => {
+    renderDetails({ expires: false });
+
+    const title = screen.getByRole("heading", { name: "GitHub" });
+    expect(title.className).not.toContain("line-through");
+    expect(
+      screen.queryByText("entries.detail.expired")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("entries.detail.expires")
+    ).not.toBeInTheDocument();
+  });
+});

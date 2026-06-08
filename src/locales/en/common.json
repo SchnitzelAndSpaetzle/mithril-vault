@@ -356,6 +356,8 @@
       "tags": "Tags",
       "created": "Created",
       "modified": "Modified",
+      "expired": "Expired",
+      "expires": "Expires",
       "revealPassword": "reveal password",
       "hidePassword": "hide password",
       "autoType": "auto-type",

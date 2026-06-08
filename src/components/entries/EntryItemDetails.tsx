@@ -1,5 +1,6 @@
 import { createElement, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
+import dayjs from "dayjs";
 import { Separator } from "@/components/ui/separator.tsx";
 import {
   Check,
@@ -25,6 +26,8 @@ import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
 import { getKeepassIcon } from "@/lib/keepass-icons";
+import { isExpired } from "@/lib/entry-expiry";
+import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import type { CustomFieldMeta } from "@/lib/types";
@@ -64,6 +67,8 @@ export default function EntryItemDetails({
     ? `data:${customIcon.mimeType};base64,${customIcon.data}`
     : undefined;
 
+  const expired = isExpired(entry, new Date());
+
   return (
     <>
       {/* Title section */}
@@ -74,9 +79,17 @@ export default function EntryItemDetails({
             {createElement(iconComponent, { className: "h-4 w-4" })}
           </AvatarFallback>
         </Avatar>
-        <h4 className="scroll-m-20 text-xl font-semibold tracking-tight">
+        <h4
+          className={cn(
+            "scroll-m-20 text-xl font-semibold tracking-tight",
+            expired && "line-through text-muted-foreground"
+          )}
+        >
           {entry.title}
         </h4>
+        {expired && (
+          <Badge variant="destructive">{t("entries.detail.expired")}</Badge>
+        )}
       </div>
 
       {/* Main fields */}
@@ -177,6 +190,15 @@ export default function EntryItemDetails({
           label={t("entries.detail.modified")}
           value={formatDate(entry.modifiedAt)}
         />
+        {entry.expires && entry.expiryTime && (
+          <>
+            <Separator />
+            <EntryFieldBasic
+              label={t("entries.detail.expires")}
+              value={formatExpiry(entry.expiryTime)}
+            />
+          </>
+        )}
       </div>
     </>
   );
@@ -521,6 +543,12 @@ function EntryFieldBasic({ label, value }: { label: string; value: string }) {
       </small>
     </div>
   );
+}
+
+// The expiry instant is stored UTC; render it in the viewer's local time
+// via dayjs so the displayed date matches the date picker in the editor.
+function formatExpiry(isoString: string): string {
+  return dayjs(isoString).format("MMM D, YYYY h:mm:ss A");
 }
 
 function formatDate(isoString: string): string {
