@@ -33,6 +33,8 @@ export const EntrySchema = z.object({
   createdAt: z.string(),
   modifiedAt: z.string(),
   accessedAt: z.string(),
+  expires: z.boolean(),
+  expiryTime: z.string().nullable().optional(),
 });
 export type Entry = z.infer<typeof EntrySchema>;
 
@@ -119,6 +121,8 @@ export const CreateEntryDataSchema = z.object({
   tags: z.array(z.string()).optional(),
   customFields: z.record(z.string(), z.string()).optional(),
   protectedCustomFields: z.record(z.string(), z.string()).optional(),
+  expires: z.boolean().optional(),
+  expiryTime: z.string().optional(),
 });
 export type CreateEntryData = z.infer<typeof CreateEntryDataSchema>;
 
@@ -132,6 +136,8 @@ export const UpdateEntryDataSchema = z.object({
   tags: z.array(z.string()).optional(),
   customFields: z.record(z.string(), z.string()).optional(),
   protectedCustomFields: z.record(z.string(), z.string()).optional(),
+  expires: z.boolean().optional(),
+  expiryTime: z.string().optional(),
 });
 export type UpdateEntryData = z.infer<typeof UpdateEntryDataSchema>;
 

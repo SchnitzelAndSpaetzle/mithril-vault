@@ -30,6 +30,7 @@ const mockEntry: Entry = {
   createdAt: "2024-02-17T15:56:34Z",
   modifiedAt: "2024-02-17T15:58:43Z",
   accessedAt: "2024-02-17T15:58:43Z",
+  expires: false,
 };
 
 vi.mock("@/hooks/use-entry-detail", () => ({

@@ -12,6 +12,8 @@ pub mod open;
 pub mod recycle;
 pub mod restore;
 pub mod save;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub mod vault;
 
 use crate::commands::settings::BackupSettings;

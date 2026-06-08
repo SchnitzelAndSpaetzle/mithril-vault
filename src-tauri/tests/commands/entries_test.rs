@@ -245,6 +245,8 @@ fn get_entry_password_records_exactly_one_audit_event_on_success() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -296,6 +298,8 @@ fn get_entry_protected_custom_field_records_exactly_one_audit_event_on_success()
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -385,6 +389,8 @@ fn test_create_entry_success() {
         tags: Some(vec!["tag1".to_string()]),
         custom_fields: Some(custom_fields),
         protected_custom_fields: Some(protected_custom_fields),
+        expires: None,
+        expiry_time: None,
     };
 
     let entry = service
@@ -436,6 +442,8 @@ fn test_create_entry_group_not_found() {
         tags: None,
         custom_fields: None,
         protected_custom_fields: None,
+        expires: None,
+        expiry_time: None,
     };
 
     let result = service.create_entry(&db_path_str, "missing-group", data);
@@ -468,6 +476,8 @@ fn test_get_entry_protected_custom_field_requires_protection() {
                 tags: None,
                 custom_fields: Some(custom_fields),
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -499,6 +509,8 @@ fn test_update_entry_success() {
         tags: None,
         custom_fields: None,
         protected_custom_fields: None,
+        expires: None,
+        expiry_time: None,
     };
 
     let entry = service
@@ -527,6 +539,8 @@ fn test_update_entry_success() {
                 tags: Some(vec!["tag2".to_string()]),
                 custom_fields: Some(custom_fields),
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("update entry");
@@ -575,6 +589,8 @@ fn test_update_entry_not_found() {
             tags: None,
             custom_fields: None,
             protected_custom_fields: None,
+            expires: None,
+            expiry_time: None,
         },
     );
 
@@ -607,6 +623,8 @@ fn test_delete_entry_moves_to_recycle_bin() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -700,6 +718,8 @@ fn test_move_entry_success() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -755,6 +775,8 @@ fn test_rename_tag_updates_entry_tags_and_custom_tag_fields() {
                 tags: Some(vec!["alpha; beta".to_string(), "beta".to_string()]),
                 custom_fields: Some(custom_fields),
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -807,6 +829,8 @@ fn test_delete_tag_updates_entry_tags_and_custom_tag_fields() {
                 tags: Some(vec!["alpha".to_string(), "beta; epsilon".to_string()]),
                 custom_fields: Some(custom_fields),
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -853,6 +877,8 @@ fn test_rename_tag_returns_zero_for_same_old_and_new_name() {
                 tags: Some(vec!["alpha".to_string()]),
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -932,6 +958,8 @@ fn test_protected_custom_field_roundtrip_save_reopen() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -982,6 +1010,8 @@ fn test_protected_custom_field_empty_value() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1022,6 +1052,8 @@ fn test_protected_custom_field_unicode_value() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1062,6 +1094,8 @@ fn test_protected_custom_field_special_characters() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1096,6 +1130,8 @@ fn test_update_entry_add_protected_custom_field() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1118,6 +1154,8 @@ fn test_update_entry_add_protected_custom_field() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("update entry");
@@ -1162,6 +1200,8 @@ fn test_update_entry_modify_protected_custom_field() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1190,6 +1230,8 @@ fn test_update_entry_modify_protected_custom_field() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(updated_protected),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("update entry");
@@ -1231,6 +1273,8 @@ fn test_multiple_protected_custom_fields() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1291,6 +1335,8 @@ fn test_mixed_protected_and_unprotected_fields() {
                 tags: None,
                 custom_fields: Some(custom_fields),
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1379,6 +1425,8 @@ fn test_get_protected_field_field_not_found() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: Some(protected_custom_fields),
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1450,6 +1498,8 @@ fn test_password_roundtrip_save_reopen() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1496,6 +1546,8 @@ fn test_password_unicode() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
@@ -1531,6 +1583,8 @@ fn test_password_special_characters() {
                 tags: None,
                 custom_fields: None,
                 protected_custom_fields: None,
+                expires: None,
+                expiry_time: None,
             },
         )
         .expect("create entry");
