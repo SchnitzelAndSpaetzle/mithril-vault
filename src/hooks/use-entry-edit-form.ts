@@ -38,6 +38,8 @@ function getEntryFormDefaults(
       tags: [],
       customFields: [],
       groupId: defaultGroupId,
+      expires: false,
+      expiryTime: null,
     };
   }
 
@@ -56,6 +58,15 @@ function getEntryFormDefaults(
       isProtected: meta.isProtected,
     })),
     groupId: entry.groupId,
+    expires: entry.expires,
+    expiryTime: entry.expiryTime ? new Date(entry.expiryTime) : null,
+  };
+}
+
+function toExpiryPayload(values: EntryFormValues) {
+  return {
+    expires: values.expires,
+    expiryTime: values.expiryTime ? values.expiryTime.toISOString() : undefined,
   };
 }
 
@@ -166,6 +177,7 @@ export function useEntryEditForm({
             tags: values.tags,
             customFields,
             protectedCustomFields,
+            ...toExpiryPayload(values),
           },
         });
 
@@ -200,6 +212,7 @@ export function useEntryEditForm({
           tags: values.tags,
           customFields,
           protectedCustomFields,
+          ...toExpiryPayload(values),
         },
       });
       if (values.customIconUuid) {
@@ -265,6 +278,7 @@ export function useEntryEditForm({
           tags: values.tags,
           customFields,
           protectedCustomFields,
+          ...toExpiryPayload(values),
         },
       });
       if (values.customIconUuid) {

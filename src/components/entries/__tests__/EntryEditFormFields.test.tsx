@@ -46,6 +46,8 @@ const defaultValues: EntryFormValues = {
   customIconUuid: null,
   tags: [],
   customFields: [],
+  expires: false,
+  expiryTime: null,
 };
 
 function renderWithForm(
