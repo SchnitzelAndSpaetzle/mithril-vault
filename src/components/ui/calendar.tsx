@@ -147,7 +147,11 @@ function CalendarRoot({ className, rootRef, ...props }: RootProps) {
   );
 }
 
-function CalendarChevron({ className, orientation, ...props }: ChevronProps) {
+function CalendarChevron({
+  className,
+  orientation,
+  ...props
+}: Readonly<ChevronProps>) {
   if (orientation === "left") {
     return <ChevronLeftIcon className={cn("size-4", className)} {...props} />;
   }
