@@ -74,12 +74,21 @@ const entryFormBaseSchema = z.object({
   tags: z.array(z.string()),
   customFields: z.array(entryCustomFieldSchema),
   groupId: z.string().optional(),
+  expires: z.boolean(),
+  // Held as a Date in the form (matches DateTimePicker); converted to UTC ISO
+  // 8601 at the IPC boundary. Past dates are valid.
+  expiryTime: z.date().nullable(),
 });
 
-export const entryFormSchema = entryFormBaseSchema.refine(
-  (data) => data.url === "" || /^https?:\/\/.+/.test(data.url),
-  { message: "Must be a valid URL.", path: ["url"] }
-);
+export const entryFormSchema = entryFormBaseSchema
+  .refine((data) => data.url === "" || /^https?:\/\/.+/.test(data.url), {
+    message: "Must be a valid URL.",
+    path: ["url"],
+  })
+  .refine((data) => !data.expires || data.expiryTime !== null, {
+    message: "An expiry date is required when expiry is enabled.",
+    path: ["expiryTime"],
+  });
 
 // Use the base schema for type inference to avoid type mismatch with react-hook-form
 export type EntryFormValues = z.infer<typeof entryFormBaseSchema>;

@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { CustomFieldsEditor } from "@/components/entries/custom-fields-editor";
 import { FieldGroup } from "@/components/ui/field";
 import {
+  EntryExpiryField,
   EntryFormActions,
   EntryGroupField,
   EntryNotesField,
@@ -138,6 +139,7 @@ export function EntryEditForm({
           watchedPassword={watchedPassword}
           onUseGeneratedPassword={setGeneratedPassword}
         />
+        <EntryExpiryField control={form.control} isPending={isPending} />
         <EntryUrlField control={form.control} isPending={isPending} />
         <EntryTagsField
           control={form.control}
