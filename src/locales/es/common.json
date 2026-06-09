@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Contraseña revelada",
       "entryPasswordCopied": "Contraseña copiada",
       "entryProtectedFieldRevealed": "Campo protegido revelado",
+      "entryAttachmentExported": "Adjunto descargado",
       "preferencesSecurityChanged": "Preferencia de seguridad modificada",
       "auditCleared": "Registro de auditoría borrado"
     },
@@ -342,7 +343,10 @@
       "revealField": "revelar {{field}}",
       "hideField": "ocultar {{field}}",
       "attachments": "Adjuntos",
-      "noAttachments": "Sin adjuntos"
+      "noAttachments": "Sin adjuntos",
+      "downloadAttachment": "Descargar adjunto",
+      "attachmentDownloaded": "{{filename}} descargado",
+      "attachmentDownloadFailed": "No se pudo descargar {{filename}}"
     },
     "sort": {
       "sortBy": "Ordenar por",

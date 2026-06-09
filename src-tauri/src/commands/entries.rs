@@ -1,3 +1,4 @@
+use crate::domain::secure::SecureBytes;
 use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::dto::error::AppError;
 use crate::services::audit::AuditService;
@@ -38,6 +39,29 @@ pub fn audit_entry_protected_field_revealed_on_success<T>(
 ) -> Result<T, AppError> {
     if result.is_ok() {
         audit.record_entry_protected_field_revealed(Path::new(vault_path), entry_id);
+    }
+    result
+}
+
+/// Maps an attachment-export outcome through the audit subsystem: a
+/// successful download (bytes written to disk) records exactly one
+/// `entry.attachment_exported` event carrying the entry UUID and the
+/// Attachment's filename; any error path records nothing.
+///
+/// The audit lives here on the download-only path rather than inside
+/// `get_entry_attachment`, because the byte fetch is reused by in-app
+/// preview — which must not be audited (only leaving the Vault's
+/// encryption boundary is). Kept as a free function so integration tests
+/// can drive it without a Tauri runtime.
+pub fn audit_attachment_exported_on_success<T>(
+    audit: &AuditService,
+    vault_path: &str,
+    entry_id: &str,
+    attachment_id: &str,
+    result: Result<T, AppError>,
+) -> Result<T, AppError> {
+    if result.is_ok() {
+        audit.record_entry_attachment_exported(Path::new(vault_path), entry_id, attachment_id);
     }
     result
 }
@@ -98,6 +122,44 @@ pub async fn get_entry_protected_custom_field(
         &db_id,
         &id,
         state.get_entry_protected_custom_field(&db_id, &id, &key),
+    )
+}
+
+/// Fetches a single Attachment's bytes on demand, keyed by filename, as
+/// [`SecureBytes`]. This is the reusable lazy byte-fetch (Preview reuses
+/// it); it records no audit event. Bytes are never included in
+/// `list_entries` / `get_entry` responses.
+#[tauri::command]
+pub async fn get_entry_attachment(
+    db_id: String,
+    id: String,
+    filename: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<SecureBytes, AppError> {
+    state.get_entry_attachment(&db_id, &id, &filename)
+}
+
+/// Exports (downloads) a single Attachment by writing its bytes to a
+/// user-chosen path. The frontend opens the save dialog and passes the
+/// resulting `dest_path`; the bytes are written here in Rust so decrypted
+/// data never crosses into JS. A successful write records exactly one
+/// `entry.attachment_exported` event (entry UUID + filename); a failed
+/// read or write records nothing.
+#[tauri::command]
+pub async fn export_entry_attachment(
+    db_id: String,
+    id: String,
+    filename: String,
+    dest_path: String,
+    state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<(), AppError> {
+    audit_attachment_exported_on_success(
+        audit.inner(),
+        &db_id,
+        &id,
+        &filename,
+        state.export_entry_attachment(&db_id, &id, &filename, Path::new(&dest_path)),
     )
 }
 

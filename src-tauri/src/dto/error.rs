@@ -29,6 +29,9 @@ pub enum AppError {
     #[error("Custom field not found: {0}")]
     CustomFieldNotFound(String),
 
+    #[error("Attachment not found: {0}")]
+    AttachmentNotFound(String),
+
     #[error("Custom field is not protected: {0}")]
     CustomFieldNotProtected(String),
 

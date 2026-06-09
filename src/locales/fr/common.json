@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Mot de passe affiché",
       "entryPasswordCopied": "Mot de passe copié",
       "entryProtectedFieldRevealed": "Champ protégé affiché",
+      "entryAttachmentExported": "Pièce jointe téléchargée",
       "preferencesSecurityChanged": "Préférence de sécurité modifiée",
       "auditCleared": "Journal d'audit effacé"
     },
@@ -342,7 +343,10 @@
       "revealField": "révéler {{field}}",
       "hideField": "masquer {{field}}",
       "attachments": "Pièces jointes",
-      "noAttachments": "Aucune pièce jointe"
+      "noAttachments": "Aucune pièce jointe",
+      "downloadAttachment": "Télécharger la pièce jointe",
+      "attachmentDownloaded": "{{filename}} téléchargé",
+      "attachmentDownloadFailed": "Échec du téléchargement de {{filename}}"
     },
     "sort": {
       "sortBy": "Trier par",

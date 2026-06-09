@@ -46,6 +46,12 @@ pub enum AuditEvent {
         timestamp: DateTime<Utc>,
         entry_id: String,
     },
+    #[serde(rename = "entry.attachment_exported")]
+    EntryAttachmentExported {
+        timestamp: DateTime<Utc>,
+        entry_id: String,
+        attachment_id: String,
+    },
     #[serde(rename = "preferences.security_changed")]
     PreferencesSecurityChanged {
         timestamp: DateTime<Utc>,
@@ -223,6 +229,25 @@ mod tests {
         let json = String::from_utf8(event.to_bytes()).expect("utf8");
         assert!(json.contains("\"kind\":\"entry.protected_field_revealed\""));
         assert!(json.contains("\"entry_id\":\"uuid-3\""));
+    }
+
+    /// A download writes an Attachment's bytes outside the Vault's encryption
+    /// boundary, so it carries both `entry_id` and the `attachment_id` (the
+    /// filename) — but never the on-disk path, per the Audit model's
+    /// "no titles/paths" rule. The wire tag is pinned to the dotted form.
+    #[test]
+    fn entry_attachment_exported_round_trips_with_entry_id_and_attachment_id() {
+        let event = AuditEvent::EntryAttachmentExported {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 16, 10, 0, 0).unwrap(),
+            entry_id: "uuid-4".to_string(),
+            attachment_id: "recovery-codes.txt".to_string(),
+        };
+        let parsed = AuditEvent::from_bytes(&event.to_bytes()).expect("parse");
+        assert_eq!(parsed, event);
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(json.contains("\"kind\":\"entry.attachment_exported\""));
+        assert!(json.contains("\"entry_id\":\"uuid-4\""));
+        assert!(json.contains("\"attachment_id\":\"recovery-codes.txt\""));
     }
 
     /// Manual clear of the audit log emits exactly one surviving event

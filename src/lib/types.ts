@@ -350,6 +350,7 @@ export const AuditEventKindSchema = z.enum([
   "entryPasswordRevealed",
   "entryPasswordCopied",
   "entryProtectedFieldRevealed",
+  "entryAttachmentExported",
   "preferencesSecurityChanged",
   "auditCleared",
 ]);
@@ -394,6 +395,10 @@ export const AuditEventSchema = z.object({
   /// deliberately absent from the wire — the on-disk log records THAT a
   /// flip happened, not what it flipped to.
   settingName: SecuritySettingChangeNameSchema.nullable().optional(),
+  /// Attachment filename for `entryAttachmentExported` events. The on-disk
+  /// save path is deliberately absent — the log records WHICH Attachment
+  /// left the Vault, never WHERE it landed (the "no titles/paths" rule).
+  attachmentId: z.string().min(1).nullable().optional(),
 });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 

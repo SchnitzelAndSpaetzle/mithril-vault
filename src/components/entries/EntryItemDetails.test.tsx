@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import dayjs from "dayjs";
 
 import EntryItemDetails from "./EntryItemDetails";
@@ -61,12 +61,23 @@ vi.mock("@/hooks/use-clipboard-timeout", () => ({
   useClipboardTimeout: () => 30,
 }));
 
+const exportAttachment = vi.hoisted(() => vi.fn());
+const save = vi.hoisted(() => vi.fn());
+const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/tauri", () => ({
   clipboard: { copyPassword: vi.fn(), copyProtectedField: vi.fn() },
-  entries: { getProtectedCustomField: vi.fn() },
+  entries: { getProtectedCustomField: vi.fn(), exportAttachment },
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({ save }));
+
+vi.mock("sonner", () => ({
+  toast: { success: toastSuccess, error: toastError },
+}));
 
 function renderDetails(override: Partial<Entry>) {
   state.entry = { ...baseEntry, ...override };
@@ -117,6 +128,24 @@ describe("EntryItemDetails expired indicator", () => {
 describe("EntryItemDetails attachments section", () => {
   beforeEach(() => {
     state.entry = null;
+    exportAttachment.mockReset();
+    save.mockReset();
+    toastSuccess.mockReset();
+    toastError.mockReset();
+  });
+
+  it("renders a Download action for each attachment row", () => {
+    renderDetails({
+      attachments: [
+        { filename: "a.txt", size: 1, mimeType: "text/plain" },
+        { filename: "b.png", size: 2, mimeType: "image/png" },
+      ],
+    });
+
+    const buttons = screen.getAllByRole("button", {
+      name: "entries.detail.downloadAttachment",
+    });
+    expect(buttons).toHaveLength(2);
   });
 
   it("renders one row per attachment with its filename and human-readable size", () => {
@@ -130,6 +159,80 @@ describe("EntryItemDetails attachments section", () => {
     expect(row).toHaveTextContent("report.pdf");
     // 2048 bytes formatted as decimal KB (2.048 → "2 KB").
     expect(row).toHaveTextContent("2 KB");
+  });
+
+  it("downloads via a save dialog with the filename pre-filled, then exports the bytes", async () => {
+    save.mockResolvedValue("/home/user/Downloads/report.pdf");
+    exportAttachment.mockResolvedValue(undefined);
+
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "entries.detail.downloadAttachment",
+      })
+    );
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith({ defaultPath: "report.pdf" });
+    });
+    expect(exportAttachment).toHaveBeenCalledWith(
+      "db-1",
+      "entry-1",
+      "report.pdf",
+      "/home/user/Downloads/report.pdf"
+    );
+    expect(toastSuccess).toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the save dialog is cancelled", async () => {
+    save.mockResolvedValue(null);
+
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "entries.detail.downloadAttachment",
+      })
+    );
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalled();
+    });
+    expect(exportAttachment).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an error toast when the export fails", async () => {
+    save.mockResolvedValue("/home/user/Downloads/report.pdf");
+    exportAttachment.mockRejectedValue(new Error("disk full"));
+
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "entries.detail.downloadAttachment",
+      })
+    );
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalled();
+    });
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it("shows an empty state and no rows when there are no attachments", () => {

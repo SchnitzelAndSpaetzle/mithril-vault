@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Passwort angezeigt",
       "entryPasswordCopied": "Passwort kopiert",
       "entryProtectedFieldRevealed": "Geschütztes Feld angezeigt",
+      "entryAttachmentExported": "Anhang heruntergeladen",
       "preferencesSecurityChanged": "Sicherheitseinstellung geändert",
       "auditCleared": "Audit-Protokoll geleert"
     },
@@ -342,7 +343,10 @@
       "revealField": "{{field}} anzeigen",
       "hideField": "{{field}} verbergen",
       "attachments": "Anhänge",
-      "noAttachments": "Keine Anhänge"
+      "noAttachments": "Keine Anhänge",
+      "downloadAttachment": "Anhang herunterladen",
+      "attachmentDownloaded": "{{filename}} heruntergeladen",
+      "attachmentDownloadFailed": "{{filename}} konnte nicht heruntergeladen werden"
     },
     "sort": {
       "sortBy": "Sortieren nach",

@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Password revealed",
       "entryPasswordCopied": "Password copied",
       "entryProtectedFieldRevealed": "Protected field revealed",
+      "entryAttachmentExported": "Attachment downloaded",
       "preferencesSecurityChanged": "Security preference changed",
       "auditCleared": "Audit log cleared"
     },
@@ -365,7 +366,10 @@
       "revealField": "reveal {{field}}",
       "hideField": "hide {{field}}",
       "attachments": "Attachments",
-      "noAttachments": "No attachments"
+      "noAttachments": "No attachments",
+      "downloadAttachment": "Download attachment",
+      "attachmentDownloaded": "Downloaded {{filename}}",
+      "attachmentDownloadFailed": "Failed to download {{filename}}"
     },
     "sort": {
       "sortBy": "Sort by",

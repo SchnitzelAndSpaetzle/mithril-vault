@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator.tsx";
 import {
   Check,
   Copy,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
@@ -33,6 +34,7 @@ import { isExpired } from "@/lib/entry-expiry";
 import { formatAttachmentSize } from "@/lib/entry-attachment";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import type { AttachmentMeta, CustomFieldMeta } from "@/lib/types";
 
@@ -184,7 +186,11 @@ export default function EntryItemDetails({
       )}
 
       {/* Attachments */}
-      <AttachmentsSection attachments={entry.attachments} />
+      <AttachmentsSection
+        attachments={entry.attachments}
+        dbId={dbId}
+        entryId={entryId}
+      />
 
       {/* Metadata */}
       <div className="border rounded-md">
@@ -562,8 +568,12 @@ function attachmentIcon(mimeType: string) {
 
 function AttachmentsSection({
   attachments,
+  dbId,
+  entryId,
 }: Readonly<{
   attachments: AttachmentMeta[];
+  dbId: string;
+  entryId: string;
 }>) {
   const { t } = useTranslation();
 
@@ -572,6 +582,23 @@ function AttachmentsSection({
   const sorted = [...attachments].sort((a, b) =>
     a.filename.localeCompare(b.filename, undefined, { sensitivity: "base" })
   );
+
+  // Download is the only export path (ADR-0003): pick a destination with the
+  // original filename pre-filled, then let the backend fetch the bytes and
+  // write them in Rust so decrypted data never crosses into JS. A cancelled
+  // dialog (null path) is a no-op; the audit event fires backend-side only on
+  // a successful write.
+  const handleDownload = async (filename: string) => {
+    try {
+      const destPath = await save({ defaultPath: filename });
+      if (!destPath) return;
+      await entriesApi.exportAttachment(dbId, entryId, filename, destPath);
+      toast.success(t("entries.detail.attachmentDownloaded", { filename }));
+    } catch (error) {
+      console.error("Failed to download attachment:", error);
+      toast.error(t("entries.detail.attachmentDownloadFailed", { filename }));
+    }
+  };
 
   return (
     <div className="border rounded-md">
@@ -600,6 +627,15 @@ function AttachmentsSection({
                   <span className="shrink-0 text-sm text-muted-foreground">
                     {formatAttachmentSize(attachment.size)}
                   </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    aria-label={t("entries.detail.downloadAttachment")}
+                    onClick={() => void handleDownload(attachment.filename)}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
                 </div>
               </li>
             );

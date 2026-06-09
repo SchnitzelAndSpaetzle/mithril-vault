@@ -14,7 +14,8 @@ use mithril_vault_lib::commands::database::{
     save_database, unlock_database,
 };
 use mithril_vault_lib::commands::entries::{
-    clear_entry_custom_icon, delete_tag, fetch_entry_favicon, list_entries, rename_tag,
+    audit_attachment_exported_on_success, clear_entry_custom_icon, delete_tag, fetch_entry_favicon,
+    list_entries, rename_tag,
 };
 use mithril_vault_lib::commands::generator::{
     generate_passphrase, generate_password, PassphraseGeneratorOptions, PasswordGeneratorOptions,
@@ -574,6 +575,59 @@ fn audit_entry_password_copied_on_success_records_exactly_one_event() {
     match &events[0] {
         AuditEvent::EntryPasswordCopied { entry_id, .. } => {
             assert_eq!(entry_id, "uuid-copy");
+        }
+        other => panic!("unexpected event kind: {other:?}"),
+    }
+}
+
+/// Recording site: a successful Attachment download (bytes written to disk)
+/// must produce exactly one `entry.attachment_exported` event carrying the
+/// entry UUID and the Attachment's filename. A failed export (read or write
+/// error) must produce zero events — the audit reflects bytes that actually
+/// left the Vault, never a mere attempt. Preview reuses the byte-fetch but is
+/// not audited, so the audit lives on this download-only wrapper, not on
+/// `get_entry_attachment`.
+#[test]
+fn audit_attachment_exported_on_success_records_exactly_one_event() {
+    use std::path::Path;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    let dir = tempdir().expect("tempdir");
+    let vault = dir.path().join("vault.kdbx");
+    std::fs::write(&vault, b"x").expect("write vault");
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+
+    let vault_str = vault.to_string_lossy().to_string();
+    audit_attachment_exported_on_success(
+        &audit,
+        &vault_str,
+        "uuid-att",
+        "recovery-codes.txt",
+        Ok::<(), AppError>(()),
+    )
+    .expect("ok");
+    audit_attachment_exported_on_success::<()>(
+        &audit,
+        &vault_str,
+        "uuid-att",
+        "recovery-codes.txt",
+        Err(AppError::Io("simulated write failure".into())),
+    )
+    .expect_err("propagates error");
+
+    let events = audit
+        .read(Path::new(&vault_str), &AuditFilter::default())
+        .expect("read");
+    assert_eq!(events.len(), 1, "only the successful download is recorded");
+    match &events[0] {
+        AuditEvent::EntryAttachmentExported {
+            entry_id,
+            attachment_id,
+            ..
+        } => {
+            assert_eq!(entry_id, "uuid-att");
+            assert_eq!(attachment_id, "recovery-codes.txt");
         }
         other => panic!("unexpected event kind: {other:?}"),
     }

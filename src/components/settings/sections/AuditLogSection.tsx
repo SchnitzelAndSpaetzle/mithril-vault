@@ -85,6 +85,7 @@ function AuditRow({
   const title = entryId ? resolveTitle(entryId) : null;
   const entryLabel = entryId ? (title ?? entryId.slice(0, 8)) : null;
   const settingName = event.settingName ?? null;
+  const attachmentId = event.attachmentId ?? null;
   return (
     <li
       ref={liRef}
@@ -92,11 +93,13 @@ function AuditRow({
       data-kind={event.kind}
       data-entry-id={entryId ?? undefined}
       data-setting-name={settingName ?? undefined}
+      data-attachment-id={attachmentId ?? undefined}
       className="flex flex-col gap-1 rounded-md border bg-card/50 p-3 text-sm md:flex-row md:items-center md:justify-between"
     >
       <span className="font-medium">{t(`audit.kind.${event.kind}`)}</span>
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         {entryLabel ? <span>{entryLabel}</span> : null}
+        {attachmentId ? <span>{attachmentId}</span> : null}
         {settingName ? (
           <span>{t(`audit.settingName.${settingName}`)}</span>
         ) : null}
