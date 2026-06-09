@@ -1,3 +1,4 @@
+use crate::domain::kdbx::{ensure_writable_version, format_database_version};
 use crate::domain::secure::SecureString;
 use crate::dto::error::AppError;
 use crate::services::kdbx::backups::{self, BackupInfo};
@@ -32,16 +33,22 @@ impl KdbxService {
         let path = open_db.path.clone();
         let password = open_db.password.clone();
         let keyfile_path = open_db.keyfile_path.clone();
-        let db = open_db
-            .db
-            .as_ref()
-            .ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
 
         // Fail-closed pre-image snapshot. Returns Ok(None) when the source
         // does not yet exist (first save of a brand-new vault or first save
         // after save_as to a fresh path) — those proceed without a backup.
         let backup_settings = self.current_backup_settings()?;
         let snapshot_info = backups::snapshot(Path::new(&path), &backup_settings)?;
+
+        // Upgrade legacy KDBX 4.0 vaults to the writable 4.1 format and refresh
+        // the cached display version to match what lands on disk.
+        let db = open_db
+            .db
+            .as_mut()
+            .ok_or_else(|| AppError::DatabaseLocked(path.clone()))?;
+        ensure_writable_version(db);
+        let version_label = format_database_version(&db.config.version);
+        let db = &*db;
 
         atomic_write(
             &path,
@@ -58,6 +65,7 @@ impl KdbxService {
             },
         )?;
 
+        open_db.version = version_label;
         open_db.is_modified = false;
         Ok(snapshot_info)
     }
@@ -97,10 +105,16 @@ impl KdbxService {
             }
 
             let keyfile_path = open_db.keyfile_path.clone();
+
+            // Upgrade legacy KDBX 4.0 vaults to the writable 4.1 format and
+            // refresh the cached display version to match what lands on disk.
             let db = open_db
                 .db
-                .as_ref()
+                .as_mut()
                 .ok_or_else(|| AppError::DatabaseLocked(open_db.path.clone()))?;
+            ensure_writable_version(db);
+            let version_label = format_database_version(&db.config.version);
+            let db = &*db;
 
             atomic_write(
                 new_path,
@@ -121,6 +135,7 @@ impl KdbxService {
             if new_password.is_some() {
                 open_db.password = new_password.map(SecureString::from);
             }
+            open_db.version = version_label;
             open_db.is_modified = false;
         }
 

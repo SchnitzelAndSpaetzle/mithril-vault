@@ -73,7 +73,7 @@ fn test_create_database_with_default_options() {
         .expect("Failed to create database with default options");
 
     assert_eq!(info.name, "Default Options DB");
-    assert_eq!(info.version, "KDBX 4.0");
+    assert_eq!(info.version, "KDBX 4.1");
     assert!(!info.root_group_id.is_empty());
 
     service.close(&db_path_str).expect("Failed to close");
@@ -106,7 +106,7 @@ fn test_create_database_with_keyfile() {
         .expect("Failed to create database with keyfile");
 
     assert_eq!(info.name, "Keyfile DB");
-    assert_eq!(info.version, "KDBX 4.0");
+    assert_eq!(info.version, "KDBX 4.1");
 
     service.close(&db_path_str).expect("Failed to close");
 
@@ -310,7 +310,7 @@ fn test_create_database_with_custom_kdf_settings() {
         )
         .expect("Failed to create database with custom KDF");
 
-    assert_eq!(info.version, "KDBX 4.0");
+    assert_eq!(info.version, "KDBX 4.1");
 
     service.close(&db_path_str).expect("Failed to close");
     service
@@ -350,7 +350,7 @@ fn test_create_database_with_all_options() {
         .expect("Failed to create database with all options");
 
     assert_eq!(info.name, "Full Featured DB");
-    assert_eq!(info.version, "KDBX 4.0");
+    assert_eq!(info.version, "KDBX 4.1");
 
     let groups = service
         .list_groups(&db_path_str)
@@ -380,7 +380,7 @@ fn test_create_database_legacy_api_still_works() {
         .expect("Legacy create() should still work");
 
     assert_eq!(info.name, "Legacy DB");
-    assert_eq!(info.version, "KDBX 4.0");
+    assert_eq!(info.version, "KDBX 4.1");
 
     service.close(&db_path_str).expect("Failed to close");
     service
