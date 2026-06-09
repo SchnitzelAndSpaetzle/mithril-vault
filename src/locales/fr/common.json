@@ -340,7 +340,9 @@
       "autoType": "saisie automatique",
       "openUrl": "ouvrir l'URL",
       "revealField": "révéler {{field}}",
-      "hideField": "masquer {{field}}"
+      "hideField": "masquer {{field}}",
+      "attachments": "Pièces jointes",
+      "noAttachments": "Aucune pièce jointe"
     },
     "sort": {
       "sortBy": "Trier par",

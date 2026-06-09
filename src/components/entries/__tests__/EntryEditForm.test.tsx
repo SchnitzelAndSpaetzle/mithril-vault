@@ -155,6 +155,7 @@ const mockEntry: Entry = {
   modifiedAt: "2024-02-17T15:58:43Z",
   accessedAt: "2024-02-17T15:58:43Z",
   expires: false,
+  attachments: [],
 };
 
 const mockEntryTwo: Entry = {
@@ -173,6 +174,7 @@ const mockEntryTwo: Entry = {
   modifiedAt: "2024-02-17T15:58:43Z",
   accessedAt: "2024-02-17T15:58:43Z",
   expires: false,
+  attachments: [],
 };
 
 const mockEntryWithCustomIcon: Entry = {

@@ -340,7 +340,9 @@
       "autoType": "auto-escritura",
       "openUrl": "abrir URL",
       "revealField": "revelar {{field}}",
-      "hideField": "ocultar {{field}}"
+      "hideField": "ocultar {{field}}",
+      "attachments": "Adjuntos",
+      "noAttachments": "Sin adjuntos"
     },
     "sort": {
       "sortBy": "Ordenar por",

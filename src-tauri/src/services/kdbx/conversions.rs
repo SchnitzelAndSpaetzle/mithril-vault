@@ -1,5 +1,5 @@
 use crate::domain::secure::SecureString;
-use crate::dto::entry::{CustomFieldMeta, Entry};
+use crate::dto::entry::{AttachmentMeta, CustomFieldMeta, Entry};
 use crate::dto::error::AppError;
 use crate::dto::group::Group;
 use chrono::DateTime;
@@ -19,6 +19,7 @@ pub(crate) fn convert_entry(entry: &EntryRef<'_>, group_id: &str) -> Entry {
         None => (None, None),
     };
     let (custom_fields, custom_field_meta) = collect_custom_fields(entry);
+    let attachments = collect_attachments(entry);
 
     Entry {
         id: entry.id().uuid().to_string(),
@@ -52,7 +53,56 @@ pub(crate) fn convert_entry(entry: &EntryRef<'_>, group_id: &str) -> Entry {
         // surface it as RFC 3339 so the frontend and Password Health agree,
         // consistent with `expiry.and_utc()` in the analyzer.
         expiry_time: entry.times.expiry.map(|t| t.and_utc().to_rfc3339()),
+        attachments,
     }
+}
+
+/// Collects an Entry's Attachment metadata — filename, byte size, and a MIME
+/// hint derived from the extension — from its native KDBX binary references.
+/// KDBX3 (XML) and KDBX4 (header) binaries are normalized to one model by the
+/// `keepass` crate, so both surface here identically. The byte payload is never
+/// read out; only its length is, keeping list/get responses lightweight per
+/// ADR-0003.
+fn collect_attachments(entry: &EntryRef<'_>) -> Vec<AttachmentMeta> {
+    entry
+        .attachments_named()
+        .map(|(filename, attachment)| AttachmentMeta {
+            filename: filename.to_string(),
+            size: attachment.data.get().len() as u64,
+            mime_type: derive_attachment_mime(filename),
+        })
+        .collect()
+}
+
+/// Derives a MIME hint from a filename's extension. Covers the formats the
+/// attachments feature cares about (previewable images and plain text per
+/// `CONTEXT.md`/ADR-0003) plus common document types; everything else falls
+/// back to `application/octet-stream`. Extension match is case-insensitive.
+fn derive_attachment_mime(filename: &str) -> String {
+    let ext = filename
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "svg" => "image/svg+xml",
+        "txt" | "log" | "conf" | "ini" => "text/plain",
+        "md" => "text/markdown",
+        "csv" => "text/csv",
+        "json" => "application/json",
+        "xml" => "application/xml",
+        "yaml" | "yml" => "application/yaml",
+        "pdf" => "application/pdf",
+        "zip" => "application/zip",
+        _ => "application/octet-stream",
+    };
+
+    mime.to_string()
 }
 
 pub(crate) fn convert_group(group: &GroupRef<'_>, parent_id: Option<&str>) -> Group {

@@ -18,6 +18,13 @@ export const CustomFieldMetaSchema = z.object({
 });
 export type CustomFieldMeta = z.infer<typeof CustomFieldMetaSchema>;
 
+export const AttachmentMetaSchema = z.object({
+  filename: z.string(),
+  size: z.number().int().nonnegative(),
+  mimeType: z.string(),
+});
+export type AttachmentMeta = z.infer<typeof AttachmentMetaSchema>;
+
 export const EntrySchema = z.object({
   id: z.string(),
   groupId: z.string(),
@@ -35,6 +42,7 @@ export const EntrySchema = z.object({
   accessedAt: z.string(),
   expires: z.boolean(),
   expiryTime: z.string().nullable().optional(),
+  attachments: z.array(AttachmentMetaSchema),
 });
 export type Entry = z.infer<typeof EntrySchema>;
 

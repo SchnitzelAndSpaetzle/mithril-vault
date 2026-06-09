@@ -21,6 +21,7 @@ function entry(id: string, title: string): Entry {
     modifiedAt: "",
     accessedAt: "",
     expires: false,
+    attachments: [],
   };
 }
 

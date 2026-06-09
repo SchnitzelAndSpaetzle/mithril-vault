@@ -24,6 +24,7 @@ const baseEntry: Entry = {
   accessedAt: "2026-01-02T00:00:00Z",
   expires: false,
   expiryTime: null,
+  attachments: [],
 };
 
 // Mutable holder the mocked hook reads from. vi.hoisted runs before the
@@ -110,5 +111,51 @@ describe("EntryItemDetails expired indicator", () => {
     expect(
       screen.queryByText("entries.detail.expires")
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("EntryItemDetails attachments section", () => {
+  beforeEach(() => {
+    state.entry = null;
+  });
+
+  it("renders one row per attachment with its filename and human-readable size", () => {
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    const row = screen.getByRole("listitem");
+    expect(row).toHaveTextContent("report.pdf");
+    // 2048 bytes formatted as decimal KB (2.048 → "2 KB").
+    expect(row).toHaveTextContent("2 KB");
+  });
+
+  it("shows an empty state and no rows when there are no attachments", () => {
+    renderDetails({ attachments: [] });
+
+    expect(
+      screen.getByText("entries.detail.noAttachments")
+    ).toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+  });
+
+  it("sorts attachment rows by filename, case-insensitively", () => {
+    renderDetails({
+      attachments: [
+        { filename: "Zebra.txt", size: 10, mimeType: "text/plain" },
+        { filename: "apple.png", size: 20, mimeType: "image/png" },
+        { filename: "Banana.gif", size: 30, mimeType: "image/gif" },
+      ],
+    });
+
+    const filenames = screen
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
+
+    expect(filenames[0]).toContain("apple.png");
+    expect(filenames[1]).toContain("Banana.gif");
+    expect(filenames[2]).toContain("Zebra.txt");
   });
 });
