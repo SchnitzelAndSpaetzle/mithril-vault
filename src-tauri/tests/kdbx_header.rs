@@ -259,10 +259,10 @@ fn test_created_database_config() {
         .get_config(&db_path_str)
         .expect("Failed to get config");
 
-    // Newly created databases should be KDBX 4.0
+    // Newly created databases should be KDBX 4.1
     assert_eq!(
-        config.version, "KDBX 4.0",
-        "New database should be KDBX 4.0"
+        config.version, "KDBX 4.1",
+        "New database should be KDBX 4.1"
     );
 
     // Default config: AES256 outer cipher, ChaCha20 inner cipher, GZip compression, Argon2id KDF

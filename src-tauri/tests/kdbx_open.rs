@@ -356,7 +356,7 @@ fn test_create_database_returns_kdbx4_version() {
         .create(&db_path.to_string_lossy(), "testpass", "Version Test")
         .expect("Failed to create database");
 
-    assert_eq!(info.version, "KDBX 4.0", "New databases should be KDBX 4.0");
+    assert_eq!(info.version, "KDBX 4.1", "New databases should be KDBX 4.1");
 }
 
 #[test]

@@ -39,6 +39,18 @@ impl OpenDatabase {
     }
 }
 
+/// Upgrades a database's in-memory format version to one the writer accepts.
+///
+/// keepass 0.13 serializes only KDBX 4.1 and rejects KDBX 4.0 output with
+/// `Unsupported database version`. Vaults opened from legacy 4.0 files keep
+/// `KDB4(0)` in their config, so we bump them to the current writable minor
+/// version before every save. New vaults are already created as `KDB4(1)`.
+pub fn ensure_writable_version(db: &mut Database) {
+    if matches!(db.config.version, DatabaseVersion::KDB4(0)) {
+        db.config.version = DatabaseVersion::KDB4(1);
+    }
+}
+
 /// Formats a database version for display.
 pub fn format_database_version(version: &DatabaseVersion) -> String {
     match version {
