@@ -1,4 +1,4 @@
-use crate::domain::kdbx::OpenDatabase;
+use crate::domain::kdbx::{format_database_version, OpenDatabase};
 use crate::domain::secure::SecureString;
 use crate::dto::database::{DatabaseCreationOptions, DatabaseInfo};
 use crate::dto::error::AppError;
@@ -49,7 +49,8 @@ impl KdbxService {
         }
 
         let mut config = DatabaseConfig::default();
-        config.version = DatabaseVersion::KDB4(0);
+        // KDBX 4.1 — keepass 0.13 no longer supports writing KDBX 4.0.
+        config.version = DatabaseVersion::KDB4(1);
         config.outer_cipher_config = OuterCipherConfig::AES256;
         config.compression_config = CompressionConfig::GZip;
         config.inner_cipher_config = InnerCipherConfig::ChaCha20;
@@ -93,7 +94,7 @@ impl KdbxService {
             },
         )?;
 
-        let version = String::from("KDBX 4.0");
+        let version = format_database_version(&db.config.version);
 
         let normalized_path = Self::normalize_path(path);
         databases.insert(
