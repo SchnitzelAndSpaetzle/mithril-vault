@@ -19,6 +19,11 @@ A single credential record inside a Vault. Has a title, URL, username, password,
 ### Entry Expiry
 A user-chosen flag + timestamp on an Entry (KDBX `Times.expires` + `Times.expiry`) marking when the Entry is considered stale. It is a property of the **Entry**, not of the password field — editing the password does not reset or clear it; only the user changes the date. It is explicit and one-shot, not periodic rotation (periodic rotation stays deliberately absent per NIST, see Password Health). An Entry whose `expires` flag is set and whose `expiry` is in the past is **Expired**; this is the same condition that drives the `password.expired` Password Health Finding.
 
+### Attachment
+A file stored inside a Vault and presented as belonging to a single Entry — a named binary blob (filename + bytes) the user attached to that Entry. An Entry may have many Attachments.
+
+Modeled to the user as **per-Entry and private**: adding the same file to two Entries is two independent Attachments, and deleting one never affects the other. The KDBX format actually stores blobs in a Vault-level pool that Entries reference (and `keepass-rs` dedups identical bytes across that pool), but that sharing is an invisible storage optimization — it never surfaces in the API or UI. All Attachment operations are scoped to an Entry; there is no global attachment manager.
+
 ### Group
 A folder inside a Vault that contains Entries and other Groups. Forms a tree rooted at the Vault's root Group.
 
@@ -93,6 +98,7 @@ The namespaced enum of recordable events:
 - `entry.password_revealed` — eye-icon click on the password field
 - `entry.password_copied` — clipboard write of an Entry's password
 - `entry.protected_field_revealed` — reveal on a protected custom field
+- `entry.attachment_exported` — an Attachment's bytes were written to a file on disk (download); carries `entry_id` + `attachment_id` only. In-app preview, add, and delete are not audited — only leaving the Vault's encryption boundary is.
 - `preferences.security_changed` — change to an allowlisted security-relevant App Preference, with `setting_name` only (no old/new values)
 - `audit.cleared` — user emptied the Audit Log; the record itself survives the clear
 
