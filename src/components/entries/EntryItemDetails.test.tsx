@@ -29,7 +29,10 @@ const baseEntry: Entry = {
 
 // Mutable holder the mocked hook reads from. vi.hoisted runs before the
 // vi.mock factories so they can close over it safely.
-const state = vi.hoisted(() => ({ entry: null as Entry | null }));
+const state = vi.hoisted(() => ({
+  entry: null as Entry | null,
+  isTransitioning: false,
+}));
 
 vi.mock("@/hooks/use-entry-detail", () => ({
   useEntryDetail: () => ({
@@ -39,7 +42,7 @@ vi.mock("@/hooks/use-entry-detail", () => ({
     password: null,
     isPasswordVisible: false,
     isPasswordLoading: false,
-    isTransitioning: false,
+    isTransitioning: state.isTransitioning,
     revealPassword: vi.fn(),
     hidePassword: vi.fn(),
   }),
@@ -128,6 +131,7 @@ describe("EntryItemDetails expired indicator", () => {
 describe("EntryItemDetails attachments section", () => {
   beforeEach(() => {
     state.entry = null;
+    state.isTransitioning = false;
     exportAttachment.mockReset();
     save.mockReset();
     toastSuccess.mockReset();
@@ -188,6 +192,24 @@ describe("EntryItemDetails attachments section", () => {
     );
     expect(toastSuccess).toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("disables Download and ignores clicks while the entry is transitioning", () => {
+    state.isTransitioning = true;
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    const button = screen.getByRole("button", {
+      name: "entries.detail.downloadAttachment",
+    });
+    expect(button).toBeDisabled();
+
+    fireEvent.click(button);
+    expect(save).not.toHaveBeenCalled();
+    expect(exportAttachment).not.toHaveBeenCalled();
   });
 
   it("does nothing when the save dialog is cancelled", async () => {

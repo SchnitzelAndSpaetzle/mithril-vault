@@ -1,7 +1,9 @@
 use crate::domain::secure::SecureBytes;
 use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::dto::error::AppError;
+use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::db::{Entry as KeepassEntry, Times, Value};
+use std::io::Write;
 
 use super::conversions::{
     apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
@@ -104,8 +106,16 @@ impl KdbxService {
         dest: &std::path::Path,
     ) -> Result<(), AppError> {
         let bytes = self.get_entry_attachment(db_id, entry_id, filename)?;
-        std::fs::write(dest, bytes.as_bytes())?;
-        Ok(())
+        let dest_str = dest
+            .to_str()
+            .ok_or_else(|| AppError::InvalidPath(dest.to_string_lossy().into_owned()))?;
+        // Atomic temp-file + rename (secure 0600 perms by default): a failed
+        // write — disk full, interrupted I/O — leaves any pre-existing file at
+        // the chosen destination untouched rather than truncated or partial.
+        atomic_write(dest_str, &AtomicWriteOptions::default(), |file| {
+            file.write_all(bytes.as_bytes())
+                .map_err(|e| AppError::Io(e.to_string()))
+        })
     }
 
     /// Fetches a protected custom field value.
@@ -941,6 +951,31 @@ mod tests {
 
         let written = std::fs::read(&dest).expect("read written file");
         assert_eq!(written, payload);
+    }
+
+    #[test]
+    fn export_entry_attachment_replaces_an_existing_destination_file() {
+        // Downloading over an existing file must end with exactly the
+        // Attachment's bytes — the atomic temp-file + rename replaces the
+        // target wholesale rather than appending or leaving stale bytes.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("note.txt", Value::unprotected(b"new".to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let dest = dir.path().join("note.txt");
+        std::fs::write(&dest, b"older longer contents").expect("seed existing file");
+
+        service
+            .export_entry_attachment(&db_path, &entry_a, "note.txt", &dest)
+            .expect("export over existing file");
+
+        assert_eq!(std::fs::read(&dest).expect("read"), b"new");
     }
 
     #[test]

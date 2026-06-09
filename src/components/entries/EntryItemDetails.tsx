@@ -190,6 +190,7 @@ export default function EntryItemDetails({
         attachments={entry.attachments}
         dbId={dbId}
         entryId={entryId}
+        isDisabled={isTransitioning}
       />
 
       {/* Metadata */}
@@ -570,10 +571,12 @@ function AttachmentsSection({
   attachments,
   dbId,
   entryId,
+  isDisabled,
 }: Readonly<{
   attachments: AttachmentMeta[];
   dbId: string;
   entryId: string;
+  isDisabled: boolean;
 }>) {
   const { t } = useTranslation();
 
@@ -589,6 +592,10 @@ function AttachmentsSection({
   // dialog (null path) is a no-op; the audit event fires backend-side only on
   // a successful write.
   const handleDownload = async (filename: string) => {
+    // Guard against a click landing mid-transition: useEntryDetail serves the
+    // previous entry as placeholder data while switching, so the displayed
+    // filename could belong to a different entry than the current entryId.
+    if (isDisabled) return;
     try {
       const destPath = await save({ defaultPath: filename });
       if (!destPath) return;
@@ -632,6 +639,7 @@ function AttachmentsSection({
                     size="icon"
                     className="h-7 w-7 shrink-0"
                     aria-label={t("entries.detail.downloadAttachment")}
+                    disabled={isDisabled}
                     onClick={() => void handleDownload(attachment.filename)}
                   >
                     <Download className="h-4 w-4" />
