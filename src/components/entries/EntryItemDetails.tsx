@@ -44,7 +44,7 @@ interface EntryItemDetailsProps {
 export default function EntryItemDetails({
   entryId,
   dbId,
-}: EntryItemDetailsProps) {
+}: Readonly<EntryItemDetailsProps>) {
   const { t } = useTranslation();
   const {
     entry,
@@ -247,7 +247,7 @@ function PasswordRow({
   isDisabled,
   onReveal,
   onHide,
-}: {
+}: Readonly<{
   dbId: string;
   entryId: string;
   password: string | null;
@@ -256,7 +256,7 @@ function PasswordRow({
   isDisabled: boolean;
   onReveal: () => void;
   onHide: () => void;
-}) {
+}>) {
   const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
   const startCountdown = useClipboardCountdown();
@@ -333,7 +333,10 @@ function PasswordRow({
   );
 }
 
-function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
+function UrlRow({
+  url,
+  isDisabled,
+}: Readonly<{ url: string; isDisabled: boolean }>) {
   const { t } = useTranslation();
   const { copy, isCopied } = useCopyToClipboard();
 
@@ -391,12 +394,12 @@ function ProtectedCustomFieldRow({
   entryId,
   meta,
   isDisabled,
-}: {
+}: Readonly<{
   dbId: string;
   entryId: string;
   meta: CustomFieldMeta;
   isDisabled: boolean;
-}) {
+}>) {
   const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
   const startCountdown = useClipboardCountdown();
@@ -492,11 +495,11 @@ function EntryFieldRow({
   label,
   value,
   isDisabled,
-}: {
+}: Readonly<{
   label: string;
   value: string;
   isDisabled: boolean;
-}) {
+}>) {
   const { t } = useTranslation();
   const { copy, isCopied } = useCopyToClipboard();
 
@@ -559,9 +562,9 @@ function attachmentIcon(mimeType: string) {
 
 function AttachmentsSection({
   attachments,
-}: {
+}: Readonly<{
   attachments: AttachmentMeta[];
-}) {
+}>) {
   const { t } = useTranslation();
 
   // Sorted by filename, case-insensitively, for a stable display order (the
@@ -607,7 +610,10 @@ function AttachmentsSection({
   );
 }
 
-function EntryFieldBasic({ label, value }: { label: string; value: string }) {
+function EntryFieldBasic({
+  label,
+  value,
+}: Readonly<{ label: string; value: string }>) {
   return (
     <div className="flex justify-between items-center px-4 py-2">
       <small className="text-sm font-medium">{label}</small>
