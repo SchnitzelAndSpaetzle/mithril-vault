@@ -284,7 +284,27 @@
       "removeField": "Benutzerdefiniertes Feld entfernen",
       "fetchFavicon": "Favicon von URL abrufen",
       "refreshFavicon": "Favicon von URL aktualisieren",
-      "clearCustomIcon": "Benutzerdefiniertes Symbol entfernen"
+      "clearCustomIcon": "Benutzerdefiniertes Symbol entfernen",
+      "expiry": {
+        "label": "Läuft ab",
+        "presetLabel": "Ablauf-Vorgabe",
+        "presetPlaceholder": "Vorgabe auswählen",
+        "pickPlaceholder": "Datum und Uhrzeit wählen",
+        "presets": {
+          "12h": "12 Stunden",
+          "24h": "24 Stunden",
+          "1w": "1 Woche",
+          "2w": "2 Wochen",
+          "3w": "3 Wochen",
+          "1mo": "1 Monat",
+          "2mo": "2 Monate",
+          "3mo": "3 Monate",
+          "6mo": "6 Monate",
+          "1y": "1 Jahr",
+          "2y": "2 Jahre",
+          "3y": "3 Jahre"
+        }
+      }
     },
     "toast": {
       "created": "Eintrag erstellt",
@@ -313,6 +333,8 @@
       "tags": "Tags",
       "created": "Erstellt",
       "modified": "Geändert",
+      "expired": "Abgelaufen",
+      "expires": "Läuft ab",
       "revealPassword": "Passwort anzeigen",
       "hidePassword": "Passwort verbergen",
       "autoType": "Auto-Type",

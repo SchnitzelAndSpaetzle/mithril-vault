@@ -89,3 +89,27 @@ describe("EntryListItem findings indicator", () => {
     );
   });
 });
+
+describe("EntryListItem expired indicator", () => {
+  // An Expired Entry's title is struck through and muted, driven purely
+  // from the Entry's own expires flag + past expiry — independent of the
+  // Password Health report.
+  it("strikes through and mutes the title when expired", () => {
+    renderItem({ expires: true, expiryTime: "2000-01-01T00:00:00Z" });
+    const title = screen.getByText("GitHub");
+    expect(title.className).toContain("line-through");
+    expect(title.className).toContain("text-muted-foreground");
+  });
+
+  it("does not strike through a non-expired Entry (future expiry)", () => {
+    renderItem({ expires: true, expiryTime: "2999-01-01T00:00:00Z" });
+    const title = screen.getByText("GitHub");
+    expect(title.className).not.toContain("line-through");
+  });
+
+  it("does not strike through when the expires flag is unset", () => {
+    renderItem({ expires: false, expiryTime: "2000-01-01T00:00:00Z" });
+    const title = screen.getByText("GitHub");
+    expect(title.className).not.toContain("line-through");
+  });
+});

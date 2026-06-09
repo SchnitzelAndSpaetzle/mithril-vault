@@ -307,7 +307,27 @@
       "removeField": "Remove custom field",
       "fetchFavicon": "Fetch favicon from URL",
       "refreshFavicon": "Refresh favicon from URL",
-      "clearCustomIcon": "Clear custom icon"
+      "clearCustomIcon": "Clear custom icon",
+      "expiry": {
+        "label": "Expires",
+        "presetLabel": "Expiry preset",
+        "presetPlaceholder": "Choose a preset",
+        "pickPlaceholder": "Pick a date and time",
+        "presets": {
+          "12h": "12 hours",
+          "24h": "24 hours",
+          "1w": "1 week",
+          "2w": "2 weeks",
+          "3w": "3 weeks",
+          "1mo": "1 month",
+          "2mo": "2 months",
+          "3mo": "3 months",
+          "6mo": "6 months",
+          "1y": "1 year",
+          "2y": "2 years",
+          "3y": "3 years"
+        }
+      }
     },
     "toast": {
       "created": "Entry created",
@@ -336,6 +356,8 @@
       "tags": "Tags",
       "created": "Created",
       "modified": "Modified",
+      "expired": "Expired",
+      "expires": "Expires",
       "revealPassword": "reveal password",
       "hidePassword": "hide password",
       "autoType": "auto-type",

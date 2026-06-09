@@ -284,7 +284,27 @@
       "removeField": "Ukloni prilagođeno polje",
       "fetchFavicon": "Preuzmi favikonu sa URL-a",
       "refreshFavicon": "Osveži favikonu sa URL-a",
-      "clearCustomIcon": "Ukloni prilagođenu ikonu"
+      "clearCustomIcon": "Ukloni prilagođenu ikonu",
+      "expiry": {
+        "label": "Ističe",
+        "presetLabel": "Unapred zadat rok isteka",
+        "presetPlaceholder": "Izaberite unapred zadatu vrednost",
+        "pickPlaceholder": "Izaberite datum i vreme",
+        "presets": {
+          "12h": "12 sati",
+          "24h": "24 sata",
+          "1w": "1 nedelja",
+          "2w": "2 nedelje",
+          "3w": "3 nedelje",
+          "1mo": "1 mesec",
+          "2mo": "2 meseca",
+          "3mo": "3 meseca",
+          "6mo": "6 meseci",
+          "1y": "1 godina",
+          "2y": "2 godine",
+          "3y": "3 godine"
+        }
+      }
     },
     "toast": {
       "created": "Unos kreiran",
@@ -313,6 +333,8 @@
       "tags": "Oznake",
       "created": "Kreirano",
       "modified": "Izmenjeno",
+      "expired": "Isteklo",
+      "expires": "Ističe",
       "revealPassword": "prikaži lozinku",
       "hidePassword": "sakrij lozinku",
       "autoType": "automatski unos",

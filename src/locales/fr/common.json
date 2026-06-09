@@ -284,7 +284,27 @@
       "removeField": "Supprimer le champ personnalisé",
       "fetchFavicon": "Récupérer le favicon depuis l'URL",
       "refreshFavicon": "Actualiser le favicon depuis l'URL",
-      "clearCustomIcon": "Supprimer l'icône personnalisée"
+      "clearCustomIcon": "Supprimer l'icône personnalisée",
+      "expiry": {
+        "label": "Expire",
+        "presetLabel": "Préréglage d'expiration",
+        "presetPlaceholder": "Choisir un préréglage",
+        "pickPlaceholder": "Choisir une date et une heure",
+        "presets": {
+          "12h": "12 heures",
+          "24h": "24 heures",
+          "1w": "1 semaine",
+          "2w": "2 semaines",
+          "3w": "3 semaines",
+          "1mo": "1 mois",
+          "2mo": "2 mois",
+          "3mo": "3 mois",
+          "6mo": "6 mois",
+          "1y": "1 an",
+          "2y": "2 ans",
+          "3y": "3 ans"
+        }
+      }
     },
     "toast": {
       "created": "Entrée créée",
@@ -313,6 +333,8 @@
       "tags": "Étiquettes",
       "created": "Créé",
       "modified": "Modifié",
+      "expired": "Expiré",
+      "expires": "Expire le",
       "revealPassword": "révéler le mot de passe",
       "hidePassword": "masquer le mot de passe",
       "autoType": "saisie automatique",

@@ -284,7 +284,27 @@
       "removeField": "Eliminar campo personalizado",
       "fetchFavicon": "Obtener favicon desde la URL",
       "refreshFavicon": "Actualizar favicon desde la URL",
-      "clearCustomIcon": "Quitar icono personalizado"
+      "clearCustomIcon": "Quitar icono personalizado",
+      "expiry": {
+        "label": "Caduca",
+        "presetLabel": "Preajuste de caducidad",
+        "presetPlaceholder": "Elige un preajuste",
+        "pickPlaceholder": "Elige una fecha y hora",
+        "presets": {
+          "12h": "12 horas",
+          "24h": "24 horas",
+          "1w": "1 semana",
+          "2w": "2 semanas",
+          "3w": "3 semanas",
+          "1mo": "1 mes",
+          "2mo": "2 meses",
+          "3mo": "3 meses",
+          "6mo": "6 meses",
+          "1y": "1 año",
+          "2y": "2 años",
+          "3y": "3 años"
+        }
+      }
     },
     "toast": {
       "created": "Entrada creada",
@@ -313,6 +333,8 @@
       "tags": "Etiquetas",
       "created": "Creado",
       "modified": "Modificado",
+      "expired": "Caducado",
+      "expires": "Caduca",
       "revealPassword": "revelar contraseña",
       "hidePassword": "ocultar contraseña",
       "autoType": "auto-escritura",

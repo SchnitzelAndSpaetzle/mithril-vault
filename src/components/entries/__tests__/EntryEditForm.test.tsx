@@ -185,7 +185,7 @@ function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  function TestWrapper({ children }: { children: React.ReactNode }) {
+  function TestWrapper({ children }: Readonly<{ children: React.ReactNode }>) {
     return (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -941,6 +941,149 @@ describe("EntryEditForm", () => {
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledWith(mockResult);
       expect(mockFetchFavicon).toHaveBeenCalledWith("db-1", "entry-1", false);
+    });
+  });
+
+  describe("expiry", () => {
+    const mockEntryWithExpiry: Entry = {
+      ...mockEntry,
+      id: "entry-expiry",
+      expires: true,
+      expiryTime: "2027-06-15T10:30:00.000Z",
+    };
+
+    it("renders the expiry checkbox after the password field, off by default", () => {
+      render(
+        <EntryEditForm
+          dbId="db-1"
+          groupId="group-1"
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      const checkbox = screen.getByRole("checkbox", {
+        name: "entries.form.expiry.label",
+      });
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox).toHaveAttribute("data-state", "unchecked");
+
+      const password = screen.getByPlaceholderText(
+        "entries.form.passwordPlaceholder"
+      );
+      expect(
+        password.compareDocumentPosition(checkbox) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it("hides the preset dropdown and picker until the checkbox is ticked", () => {
+      const { container } = render(
+        <EntryEditForm
+          dbId="db-1"
+          groupId="group-1"
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      expect(
+        container.querySelector('[data-slot="date-time-picker-trigger"]')
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: "entries.form.expiry.label" })
+      );
+
+      const trigger = container.querySelector(
+        '[data-slot="date-time-picker-trigger"]'
+      );
+      expect(trigger).toBeInTheDocument();
+      // First tick pre-selects "1 year", so the picker shows a value rather
+      // than its empty placeholder.
+      expect(trigger).not.toHaveTextContent(
+        "entries.form.expiry.pickPlaceholder"
+      );
+    });
+
+    it("does not send expiry on create when the checkbox is off", async () => {
+      const onSave = vi.fn();
+      mockCreateEntry.mockResolvedValueOnce({ ...mockEntry, id: "new-1" });
+
+      render(
+        <EntryEditForm
+          dbId="db-1"
+          groupId="group-1"
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await act(async () => {
+        fireEvent.change(
+          screen.getByPlaceholderText("entries.form.titlePlaceholder"),
+          { target: { value: "No Expiry" } }
+        );
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByText("entries.form.createEntry"));
+      });
+
+      await waitFor(() => {
+        expect(mockCreateEntry).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              expires: false,
+              expiryTime: undefined,
+            }),
+          })
+        );
+      });
+    });
+
+    it("loads an existing entry's expiry and persists it on update", async () => {
+      const onSave = vi.fn();
+      mockUpdateEntry.mockResolvedValueOnce(mockEntryWithExpiry);
+
+      render(
+        <EntryEditForm
+          entry={mockEntryWithExpiry}
+          dbId="db-1"
+          groupId="group-1"
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText("entries.form.titlePlaceholder")
+        ).toHaveValue("Test Entry");
+      });
+
+      expect(
+        screen.getByRole("checkbox", { name: "entries.form.expiry.label" })
+      ).toHaveAttribute("data-state", "checked");
+
+      await act(async () => {
+        fireEvent.click(screen.getByText("entries.form.saveChanges"));
+      });
+
+      await waitFor(() => {
+        expect(mockUpdateEntry).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: "entry-expiry",
+            data: expect.objectContaining({
+              expires: true,
+              expiryTime: "2027-06-15T10:30:00.000Z",
+            }),
+          })
+        );
+      });
     });
   });
 });
