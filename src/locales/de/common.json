@@ -340,7 +340,9 @@
       "autoType": "Auto-Type",
       "openUrl": "URL öffnen",
       "revealField": "{{field}} anzeigen",
-      "hideField": "{{field}} verbergen"
+      "hideField": "{{field}} verbergen",
+      "attachments": "Anhänge",
+      "noAttachments": "Keine Anhänge"
     },
     "sort": {
       "sortBy": "Sortieren nach",

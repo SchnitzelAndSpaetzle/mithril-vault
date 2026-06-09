@@ -363,7 +363,9 @@
       "autoType": "auto-type",
       "openUrl": "open url",
       "revealField": "reveal {{field}}",
-      "hideField": "hide {{field}}"
+      "hideField": "hide {{field}}",
+      "attachments": "Attachments",
+      "noAttachments": "No attachments"
     },
     "sort": {
       "sortBy": "Sort by",

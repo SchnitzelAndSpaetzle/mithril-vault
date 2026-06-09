@@ -47,6 +47,7 @@ const baseProps = {
   modifiedAt: "",
   accessedAt: "",
   expires: false,
+  attachments: [],
   customIcons: {},
 };
 

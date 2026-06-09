@@ -18,6 +18,21 @@ pub struct CustomFieldValue {
     pub value: String,
 }
 
+/// Metadata for an Entry's Attachment — never its byte payload.
+///
+/// Attachments are presented as per-Entry and private (see `CONTEXT.md` →
+/// "Attachment"); the KDBX Vault-level binary pool and its dedup stay
+/// invisible. Bytes are fetched per-file on demand, so list/get responses
+/// carry only the filename, byte size, and a MIME hint derived from the
+/// filename extension.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentMeta {
+    pub filename: String,
+    pub size: u64,
+    pub mime_type: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
@@ -37,6 +52,7 @@ pub struct Entry {
     pub accessed_at: String,
     pub expires: bool,
     pub expiry_time: Option<String>,
+    pub attachments: Vec<AttachmentMeta>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

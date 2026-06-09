@@ -8,6 +8,9 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  File,
+  FileText,
+  Image,
   Keyboard,
   Loader2,
 } from "lucide-react";
@@ -27,10 +30,11 @@ import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
 import { getKeepassIcon } from "@/lib/keepass-icons";
 import { isExpired } from "@/lib/entry-expiry";
+import { formatAttachmentSize } from "@/lib/entry-attachment";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
-import type { CustomFieldMeta } from "@/lib/types";
+import type { AttachmentMeta, CustomFieldMeta } from "@/lib/types";
 
 interface EntryItemDetailsProps {
   entryId: string;
@@ -40,7 +44,7 @@ interface EntryItemDetailsProps {
 export default function EntryItemDetails({
   entryId,
   dbId,
-}: EntryItemDetailsProps) {
+}: Readonly<EntryItemDetailsProps>) {
   const { t } = useTranslation();
   const {
     entry,
@@ -179,6 +183,9 @@ export default function EntryItemDetails({
         </div>
       )}
 
+      {/* Attachments */}
+      <AttachmentsSection attachments={entry.attachments} />
+
       {/* Metadata */}
       <div className="border rounded-md">
         <EntryFieldBasic
@@ -240,7 +247,7 @@ function PasswordRow({
   isDisabled,
   onReveal,
   onHide,
-}: {
+}: Readonly<{
   dbId: string;
   entryId: string;
   password: string | null;
@@ -249,7 +256,7 @@ function PasswordRow({
   isDisabled: boolean;
   onReveal: () => void;
   onHide: () => void;
-}) {
+}>) {
   const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
   const startCountdown = useClipboardCountdown();
@@ -326,7 +333,10 @@ function PasswordRow({
   );
 }
 
-function UrlRow({ url, isDisabled }: { url: string; isDisabled: boolean }) {
+function UrlRow({
+  url,
+  isDisabled,
+}: Readonly<{ url: string; isDisabled: boolean }>) {
   const { t } = useTranslation();
   const { copy, isCopied } = useCopyToClipboard();
 
@@ -384,12 +394,12 @@ function ProtectedCustomFieldRow({
   entryId,
   meta,
   isDisabled,
-}: {
+}: Readonly<{
   dbId: string;
   entryId: string;
   meta: CustomFieldMeta;
   isDisabled: boolean;
-}) {
+}>) {
   const { t } = useTranslation();
   const clipboardClearTimeout = useClipboardTimeout();
   const startCountdown = useClipboardCountdown();
@@ -485,11 +495,11 @@ function EntryFieldRow({
   label,
   value,
   isDisabled,
-}: {
+}: Readonly<{
   label: string;
   value: string;
   isDisabled: boolean;
-}) {
+}>) {
   const { t } = useTranslation();
   const { copy, isCopied } = useCopyToClipboard();
 
@@ -534,7 +544,76 @@ function EntryFieldRow({
   );
 }
 
-function EntryFieldBasic({ label, value }: { label: string; value: string }) {
+// Pick a file-type glyph from the MIME hint. Coarse on purpose: the read-only
+// slice only needs images vs. text vs. everything-else; richer mapping can
+// follow when preview/download land.
+function attachmentIcon(mimeType: string) {
+  if (mimeType.startsWith("image/")) return Image;
+  if (
+    mimeType.startsWith("text/") ||
+    mimeType === "application/json" ||
+    mimeType === "application/xml" ||
+    mimeType === "application/yaml"
+  ) {
+    return FileText;
+  }
+  return File;
+}
+
+function AttachmentsSection({
+  attachments,
+}: Readonly<{
+  attachments: AttachmentMeta[];
+}>) {
+  const { t } = useTranslation();
+
+  // Sorted by filename, case-insensitively, for a stable display order (the
+  // KDBX binary pool is unordered). Copy first so we never mutate props.
+  const sorted = [...attachments].sort((a, b) =>
+    a.filename.localeCompare(b.filename, undefined, { sensitivity: "base" })
+  );
+
+  return (
+    <div className="border rounded-md">
+      <div className="px-4 py-2">
+        <small className="text-sm font-medium">
+          {t("entries.detail.attachments")}
+        </small>
+      </div>
+      <Separator />
+      {sorted.length === 0 ? (
+        <p className="px-4 py-2 text-sm text-muted-foreground">
+          {t("entries.detail.noAttachments")}
+        </p>
+      ) : (
+        <ul>
+          {sorted.map((attachment, index) => {
+            const Icon = attachmentIcon(attachment.mimeType);
+            return (
+              <li key={attachment.filename}>
+                {index > 0 && <Separator />}
+                <div className="flex min-w-0 items-center gap-3 px-4 py-2">
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {attachment.filename}
+                  </span>
+                  <span className="shrink-0 text-sm text-muted-foreground">
+                    {formatAttachmentSize(attachment.size)}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function EntryFieldBasic({
+  label,
+  value,
+}: Readonly<{ label: string; value: string }>) {
   return (
     <div className="flex justify-between items-center px-4 py-2">
       <small className="text-sm font-medium">{label}</small>

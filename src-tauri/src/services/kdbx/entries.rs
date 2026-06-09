@@ -480,7 +480,10 @@ fn dedupe_preserving_order(tags: &mut Vec<String>) {
 mod tests {
     use super::*;
     use crate::domain::secure::SecureString;
+    use crate::dto::entry::AttachmentMeta;
     use crate::services::kdbx::test_support::create_test_database;
+    use keepass::db::Value;
+    use std::collections::HashMap;
 
     fn create_entry_with_expiry(
         service: &KdbxService,
@@ -806,6 +809,50 @@ mod tests {
         assert_eq!(
             reloaded.title, "Entry A",
             "a rejected update must not apply the title change"
+        );
+    }
+
+    #[test]
+    fn get_entry_extracts_attachment_metadata_without_bytes() {
+        // Seed attachments the way another KeePass client would: native KDBX
+        // binaries keyed by filename, one unprotected and one protected. The
+        // DTO must surface filename + byte size + a MIME hint derived from the
+        // extension — and never the byte payload itself.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("Notes.txt", Value::unprotected(b"hello world".to_vec()));
+                entry.add_attachment("logo.png", Value::protected(vec![0u8; 2048]));
+                Ok(())
+            })
+            .expect("seed attachments");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+
+        let by_name: HashMap<&str, &AttachmentMeta> = entry
+            .attachments
+            .iter()
+            .map(|a| (a.filename.as_str(), a))
+            .collect();
+
+        let notes = by_name.get("Notes.txt").expect("Notes.txt metadata");
+        assert_eq!(notes.size, 11, "size is the byte length of the binary");
+        assert_eq!(notes.mime_type, "text/plain");
+
+        let logo = by_name.get("logo.png").expect("logo.png metadata");
+        assert_eq!(logo.size, 2048);
+        assert_eq!(logo.mime_type, "image/png");
+    }
+
+    #[test]
+    fn entry_without_attachments_reports_an_empty_list() {
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "an entry with no binaries has no attachment metadata"
         );
     }
 

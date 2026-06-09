@@ -340,7 +340,9 @@
       "autoType": "automatski unos",
       "openUrl": "otvori URL",
       "revealField": "prikaži {{field}}",
-      "hideField": "sakrij {{field}}"
+      "hideField": "sakrij {{field}}",
+      "attachments": "Prilozi",
+      "noAttachments": "Nema priloga"
     },
     "sort": {
       "sortBy": "Sortiraj po",

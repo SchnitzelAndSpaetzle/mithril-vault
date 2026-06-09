@@ -157,7 +157,7 @@ export function EntryEditForm({
           secretLoadError={secretLoadError}
           onCancel={handleCancel}
           onRetrySecretLoad={retrySecretLoad}
-          onSaveAndNew={!isEditMode ? saveAndCreateAnother : undefined}
+          onSaveAndNew={isEditMode ? undefined : saveAndCreateAnother}
         />
       </FieldGroup>
     </form>
