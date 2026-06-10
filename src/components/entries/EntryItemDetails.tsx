@@ -30,8 +30,9 @@ import { useCustomIcons } from "@/hooks/use-custom-icons";
 import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
 import { useQueryClient } from "@tanstack/react-query";
-import { clipboard, database, entries as entriesApi } from "@/lib/tauri";
+import { clipboard, entries as entriesApi } from "@/lib/tauri";
 import { queryKeys } from "@/lib/query-keys";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import { getKeepassIcon } from "@/lib/keepass-icons";
 import { isExpired } from "@/lib/entry-expiry";
 import { formatAttachmentSize } from "@/lib/entry-attachment";
@@ -629,22 +630,29 @@ function AttachmentsSection({
     if (!confirmed) return;
     try {
       await entriesApi.deleteAttachment(dbId, entryId, filename);
-      await database.save(dbId);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.entries.detail(dbId, entryId),
-        }),
-        queryClient.invalidateQueries({
-          predicate: (query) =>
-            query.queryKey[0] === queryKeys.entries.all[0] &&
-            query.queryKey[1] === dbId,
-        }),
-      ]);
-      toast.success(t("entries.detail.attachmentDeleted", { filename }));
     } catch (error) {
       console.error("Failed to delete attachment:", error);
       toast.error(t("entries.detail.attachmentDeleteFailed", { filename }));
+      return;
     }
+    // The reference is now gone from the in-memory Vault. Persist via the
+    // shared helper, which surfaces its own toast on a disk/backup failure
+    // without rejecting — mirroring the entry-mutation convention. We must
+    // still invalidate either way so the UI reflects backend memory (the row
+    // disappears); skipping it on save failure would leave a stale row whose
+    // later actions target an attachment that no longer exists.
+    await saveWithErrorToast(dbId, t);
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.entries.detail(dbId, entryId),
+      }),
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === queryKeys.entries.all[0] &&
+          query.queryKey[1] === dbId,
+      }),
+    ]);
+    toast.success(t("entries.detail.attachmentDeleted", { filename }));
   };
 
   return (

@@ -103,6 +103,22 @@ function renderDetails(override: Partial<Entry>) {
   );
 }
 
+// A single previewable-but-not-previewed attachment, the fixture the
+// download and delete flows exercise their happy/error paths against.
+const PDF_ATTACHMENT = {
+  filename: "report.pdf",
+  size: 2048,
+  mimeType: "application/pdf",
+} as const;
+
+function renderWithPdf() {
+  renderDetails({ attachments: [PDF_ATTACHMENT] });
+}
+
+function clickAttachmentAction(name: string) {
+  fireEvent.click(screen.getByRole("button", { name }));
+}
+
 describe("EntryItemDetails expired indicator", () => {
   beforeEach(() => {
     state.entry = null;
@@ -169,11 +185,7 @@ describe("EntryItemDetails attachments section", () => {
   });
 
   it("renders one row per attachment with its filename and human-readable size", () => {
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
+    renderWithPdf();
 
     const row = screen.getByRole("listitem");
     expect(row).toHaveTextContent("report.pdf");
@@ -185,17 +197,8 @@ describe("EntryItemDetails attachments section", () => {
     save.mockResolvedValue("/home/user/Downloads/report.pdf");
     exportAttachment.mockResolvedValue(undefined);
 
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "entries.detail.downloadAttachment",
-      })
-    );
+    renderWithPdf();
+    clickAttachmentAction("entries.detail.downloadAttachment");
 
     await waitFor(() => {
       expect(save).toHaveBeenCalledWith({ defaultPath: "report.pdf" });
@@ -212,11 +215,7 @@ describe("EntryItemDetails attachments section", () => {
 
   it("disables Download and ignores clicks while the entry is transitioning", () => {
     state.isTransitioning = true;
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
+    renderWithPdf();
 
     const button = screen.getByRole("button", {
       name: "entries.detail.downloadAttachment",
@@ -231,17 +230,8 @@ describe("EntryItemDetails attachments section", () => {
   it("does nothing when the save dialog is cancelled", async () => {
     save.mockResolvedValue(null);
 
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "entries.detail.downloadAttachment",
-      })
-    );
+    renderWithPdf();
+    clickAttachmentAction("entries.detail.downloadAttachment");
 
     await waitFor(() => {
       expect(save).toHaveBeenCalled();
@@ -255,17 +245,8 @@ describe("EntryItemDetails attachments section", () => {
     save.mockResolvedValue("/home/user/Downloads/report.pdf");
     exportAttachment.mockRejectedValue(new Error("disk full"));
 
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "entries.detail.downloadAttachment",
-      })
-    );
+    renderWithPdf();
+    clickAttachmentAction("entries.detail.downloadAttachment");
 
     await waitFor(() => {
       expect(toastError).toHaveBeenCalled();
@@ -331,15 +312,8 @@ describe("EntryItemDetails attachment delete", () => {
     deleteAttachment.mockResolvedValue(undefined);
     databaseSave.mockResolvedValue(undefined);
 
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "entries.detail.deleteAttachment" })
-    );
+    renderWithPdf();
+    clickAttachmentAction("entries.detail.deleteAttachment");
 
     await waitFor(() => {
       expect(ask).toHaveBeenCalled();
@@ -357,15 +331,8 @@ describe("EntryItemDetails attachment delete", () => {
   it("leaves the attachment intact when the confirmation is cancelled", async () => {
     ask.mockResolvedValue(false);
 
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "entries.detail.deleteAttachment" })
-    );
+    renderWithPdf();
+    clickAttachmentAction("entries.detail.deleteAttachment");
 
     await waitFor(() => {
       expect(ask).toHaveBeenCalled();
@@ -377,11 +344,7 @@ describe("EntryItemDetails attachment delete", () => {
 
   it("disables Delete and ignores clicks while the entry is transitioning", () => {
     state.isTransitioning = true;
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
+    renderWithPdf();
 
     const button = screen.getByRole("button", {
       name: "entries.detail.deleteAttachment",
@@ -397,19 +360,37 @@ describe("EntryItemDetails attachment delete", () => {
     ask.mockResolvedValue(true);
     deleteAttachment.mockRejectedValue(new Error("locked"));
 
-    renderDetails({
-      attachments: [
-        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
-      ],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "entries.detail.deleteAttachment" })
-    );
+    renderWithPdf();
+    clickAttachmentAction("entries.detail.deleteAttachment");
 
     await waitFor(() => {
       expect(toastError).toHaveBeenCalled();
     });
     expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("still completes the delete flow when persisting to disk fails", async () => {
+    // The reference is already gone from the in-memory Vault once
+    // deleteAttachment resolves, so a save failure must not abort the
+    // success path — otherwise the row lingers and later actions target an
+    // attachment that no longer exists. The save error is surfaced on its
+    // own; the delete still reports success and the entry queries refresh.
+    ask.mockResolvedValue(true);
+    deleteAttachment.mockResolvedValue(undefined);
+    databaseSave.mockRejectedValue(new Error("disk full"));
+
+    renderWithPdf();
+    clickAttachmentAction("entries.detail.deleteAttachment");
+
+    // The delete success path still runs despite the save rejection.
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalled();
+    });
+    expect(deleteAttachment).toHaveBeenCalledWith(
+      "db-1",
+      "entry-1",
+      "report.pdf"
+    );
+    expect(databaseSave).toHaveBeenCalledWith("db-1");
   });
 });
