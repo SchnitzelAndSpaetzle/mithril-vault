@@ -346,7 +346,12 @@
       "noAttachments": "Aucune pièce jointe",
       "downloadAttachment": "Télécharger la pièce jointe",
       "attachmentDownloaded": "{{filename}} téléchargé",
-      "attachmentDownloadFailed": "Échec du téléchargement de {{filename}}"
+      "attachmentDownloadFailed": "Échec du téléchargement de {{filename}}",
+      "deleteAttachment": "Supprimer la pièce jointe",
+      "deleteAttachmentConfirmTitle": "Supprimer la pièce jointe",
+      "deleteAttachmentConfirm": "Retirer {{filename}} de cette entrée ?",
+      "attachmentDeleted": "{{filename}} supprimé",
+      "attachmentDeleteFailed": "Échec de la suppression de {{filename}}"
     },
     "sort": {
       "sortBy": "Trier par",

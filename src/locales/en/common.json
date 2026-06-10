@@ -369,7 +369,12 @@
       "noAttachments": "No attachments",
       "downloadAttachment": "Download attachment",
       "attachmentDownloaded": "Downloaded {{filename}}",
-      "attachmentDownloadFailed": "Failed to download {{filename}}"
+      "attachmentDownloadFailed": "Failed to download {{filename}}",
+      "deleteAttachment": "Delete attachment",
+      "deleteAttachmentConfirmTitle": "Delete attachment",
+      "deleteAttachmentConfirm": "Remove {{filename}} from this entry?",
+      "attachmentDeleted": "Deleted {{filename}}",
+      "attachmentDeleteFailed": "Failed to delete {{filename}}"
     },
     "sort": {
       "sortBy": "Sort by",

@@ -346,7 +346,12 @@
       "noAttachments": "Nema priloga",
       "downloadAttachment": "Preuzmi prilog",
       "attachmentDownloaded": "Preuzeto: {{filename}}",
-      "attachmentDownloadFailed": "Preuzimanje nije uspelo: {{filename}}"
+      "attachmentDownloadFailed": "Preuzimanje nije uspelo: {{filename}}",
+      "deleteAttachment": "Obriši prilog",
+      "deleteAttachmentConfirmTitle": "Obriši prilog",
+      "deleteAttachmentConfirm": "Ukloniti {{filename}} iz ovog unosa?",
+      "attachmentDeleted": "Obrisano: {{filename}}",
+      "attachmentDeleteFailed": "Brisanje nije uspelo: {{filename}}"
     },
     "sort": {
       "sortBy": "Sortiraj po",

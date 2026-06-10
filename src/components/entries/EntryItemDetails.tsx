@@ -14,6 +14,7 @@ import {
   Image,
   Keyboard,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,13 +29,16 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
 import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
+import { useQueryClient } from "@tanstack/react-query";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
+import { queryKeys } from "@/lib/query-keys";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import { getKeepassIcon } from "@/lib/keepass-icons";
 import { isExpired } from "@/lib/entry-expiry";
 import { formatAttachmentSize } from "@/lib/entry-attachment";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { save } from "@tauri-apps/plugin-dialog";
+import { ask, save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import type { AttachmentMeta, CustomFieldMeta } from "@/lib/types";
 
@@ -579,6 +583,7 @@ function AttachmentsSection({
   isDisabled: boolean;
 }>) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
 
   // Sorted by filename, case-insensitively, for a stable display order (the
   // KDBX binary pool is unordered). Copy first so we never mutate props.
@@ -605,6 +610,49 @@ function AttachmentsSection({
       console.error("Failed to download attachment:", error);
       toast.error(t("entries.detail.attachmentDownloadFailed", { filename }));
     }
+  };
+
+  // Deleting an attachment is destructive and has no undo, so we confirm
+  // first. On confirm the backend drops the Entry's reference (and the
+  // orphaned blob), then we persist and invalidate the entry queries so the
+  // row disappears. A cancelled prompt leaves the attachment intact.
+  const handleDelete = async (filename: string) => {
+    // Same mid-transition guard as download: the displayed filename could
+    // belong to the previous entry while useEntryDetail swaps placeholders.
+    if (isDisabled) return;
+    const confirmed = await ask(
+      t("entries.detail.deleteAttachmentConfirm", { filename }),
+      {
+        title: t("entries.detail.deleteAttachmentConfirmTitle"),
+        kind: "warning",
+      }
+    );
+    if (!confirmed) return;
+    try {
+      await entriesApi.deleteAttachment(dbId, entryId, filename);
+    } catch (error) {
+      console.error("Failed to delete attachment:", error);
+      toast.error(t("entries.detail.attachmentDeleteFailed", { filename }));
+      return;
+    }
+    // The reference is now gone from the in-memory Vault. Persist via the
+    // shared helper, which surfaces its own toast on a disk/backup failure
+    // without rejecting — mirroring the entry-mutation convention. We must
+    // still invalidate either way so the UI reflects backend memory (the row
+    // disappears); skipping it on save failure would leave a stale row whose
+    // later actions target an attachment that no longer exists.
+    await saveWithErrorToast(dbId, t);
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.entries.detail(dbId, entryId),
+      }),
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === queryKeys.entries.all[0] &&
+          query.queryKey[1] === dbId,
+      }),
+    ]);
+    toast.success(t("entries.detail.attachmentDeleted", { filename }));
   };
 
   return (
@@ -643,6 +691,16 @@ function AttachmentsSection({
                     onClick={() => void handleDownload(attachment.filename)}
                   >
                     <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                    aria-label={t("entries.detail.deleteAttachment")}
+                    disabled={isDisabled}
+                    onClick={() => void handleDelete(attachment.filename)}
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </li>
