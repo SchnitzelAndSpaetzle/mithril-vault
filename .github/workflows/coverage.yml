@@ -75,14 +75,14 @@ jobs:
 
       # Upload to Codecov
       - name: Upload frontend coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage/lcov.info
           flags: frontend
           fail_ci_if_error: true
 
       - name: Upload backend coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./src-tauri/rust-lcov.info
           flags: backend
