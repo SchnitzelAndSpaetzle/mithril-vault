@@ -230,6 +230,7 @@ impl AuditService {
             | AuditEvent::EntryPasswordRevealed { timestamp, .. }
             | AuditEvent::EntryPasswordCopied { timestamp, .. }
             | AuditEvent::EntryProtectedFieldRevealed { timestamp, .. }
+            | AuditEvent::EntryAttachmentExported { timestamp, .. }
             | AuditEvent::PreferencesSecurityChanged { timestamp, .. }
             | AuditEvent::AuditCleared { timestamp } => *timestamp,
         };
@@ -404,6 +405,25 @@ impl AuditService {
         let event = AuditEvent::EntryProtectedFieldRevealed {
             timestamp: Utc::now(),
             entry_id: entry_id.to_string(),
+        };
+        self.record(vault_path, &event);
+    }
+
+    /// Appends one `entry.attachment_exported` event after an Attachment's
+    /// bytes are successfully written outside the Vault (a download). Carries
+    /// the entry UUID and the Attachment's filename (its per-Entry identifier)
+    /// — never the on-disk save path. In-app preview, add, and delete are not
+    /// audited; only leaving the encryption boundary is. Infallible by contract.
+    pub fn record_entry_attachment_exported(
+        &self,
+        vault_path: &Path,
+        entry_id: &str,
+        attachment_id: &str,
+    ) {
+        let event = AuditEvent::EntryAttachmentExported {
+            timestamp: Utc::now(),
+            entry_id: entry_id.to_string(),
+            attachment_id: attachment_id.to_string(),
         };
         self.record(vault_path, &event);
     }
@@ -628,6 +648,7 @@ fn event_timestamp(event: &AuditEvent) -> DateTime<Utc> {
         | AuditEvent::EntryPasswordRevealed { timestamp, .. }
         | AuditEvent::EntryPasswordCopied { timestamp, .. }
         | AuditEvent::EntryProtectedFieldRevealed { timestamp, .. }
+        | AuditEvent::EntryAttachmentExported { timestamp, .. }
         | AuditEvent::PreferencesSecurityChanged { timestamp, .. }
         | AuditEvent::AuditCleared { timestamp } => *timestamp,
     }
@@ -856,6 +877,28 @@ mod tests {
                 assert_eq!(entry_id, "uuid-1");
             }
             other => panic!("expected EntryPasswordRevealed, got {other:?}"),
+        }
+        assert!(!service.is_degraded());
+    }
+
+    #[test]
+    fn record_entry_attachment_exported_appends_exactly_one_event() {
+        let (service, _dir, vault) = fresh_service();
+
+        service.record_entry_attachment_exported(&vault, "uuid-att", "recovery-codes.txt");
+
+        let events = service.read(&vault, &AuditFilter::default()).expect("read");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AuditEvent::EntryAttachmentExported {
+                entry_id,
+                attachment_id,
+                ..
+            } => {
+                assert_eq!(entry_id, "uuid-att");
+                assert_eq!(attachment_id, "recovery-codes.txt");
+            }
+            other => panic!("expected EntryAttachmentExported, got {other:?}"),
         }
         assert!(!service.is_degraded());
     }

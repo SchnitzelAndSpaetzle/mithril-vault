@@ -304,6 +304,24 @@ export const entries = {
     return z.string().parse(result);
   },
 
+  /**
+   * Exports (downloads) a single Attachment by writing its bytes to a
+   * user-chosen path. The save dialog runs in the UI; the resolved
+   * `destPath` is handed to the backend, which fetches the bytes and writes
+   * them in Rust so decrypted data never crosses into JS. A successful write
+   * records an `entry.attachment_exported` audit event.
+   */
+  async exportAttachment(
+    dbId: string,
+    id: string,
+    filename: string,
+    destPath: string
+  ): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    await invoke("export_entry_attachment", { dbId, id, filename, destPath });
+  },
+
   async getProtectedCustomField(
     dbId: string,
     id: string,

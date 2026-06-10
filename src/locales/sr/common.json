@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Lozinka prikazana",
       "entryPasswordCopied": "Lozinka kopirana",
       "entryProtectedFieldRevealed": "Zaštićeno polje prikazano",
+      "entryAttachmentExported": "Prilog preuzet",
       "preferencesSecurityChanged": "Bezbednosno podešavanje promenjeno",
       "auditCleared": "Dnevnik nadzora obrisan"
     },
@@ -342,7 +343,10 @@
       "revealField": "prikaži {{field}}",
       "hideField": "sakrij {{field}}",
       "attachments": "Prilozi",
-      "noAttachments": "Nema priloga"
+      "noAttachments": "Nema priloga",
+      "downloadAttachment": "Preuzmi prilog",
+      "attachmentDownloaded": "Preuzeto: {{filename}}",
+      "attachmentDownloadFailed": "Preuzimanje nije uspelo: {{filename}}"
     },
     "sort": {
       "sortBy": "Sortiraj po",

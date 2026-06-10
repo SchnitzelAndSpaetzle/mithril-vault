@@ -1,6 +1,9 @@
+use crate::domain::secure::SecureBytes;
 use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
 use crate::dto::error::AppError;
+use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::db::{Entry as KeepassEntry, Times, Value};
+use std::io::Write;
 
 use super::conversions::{
     apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
@@ -63,6 +66,55 @@ impl KdbxService {
                 .get_password()
                 .map(std::string::ToString::to_string)
                 .unwrap_or_default())
+        })
+    }
+
+    /// Fetches a single Attachment's bytes on demand, keyed by its filename
+    /// (the per-Entry Attachment identifier). Bytes are returned as
+    /// [`SecureBytes`] so they zeroize promptly after the caller is done —
+    /// mirroring the `get_entry_password` lazy-reveal pattern. This is the
+    /// reusable byte-fetch path; it never records an audit event (only the
+    /// export/download path does), so in-app preview can reuse it freely.
+    pub fn get_entry_attachment(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        filename: &str,
+    ) -> Result<SecureBytes, AppError> {
+        self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(entry_id)?;
+            let attachment = entry
+                .attachment_by_name(filename)
+                .ok_or_else(|| AppError::AttachmentNotFound(filename.to_string()))?;
+            Ok(SecureBytes::new(attachment.data.get().clone()))
+        })
+    }
+
+    /// Exports a single Attachment by writing its bytes to `dest` on disk —
+    /// the only path by which Attachment bytes leave the Vault's encryption
+    /// boundary. Bytes are fetched via [`get_entry_attachment`] and written
+    /// from Rust so they never cross IPC into JS. The caller (command layer)
+    /// records the `entry.attachment_exported` audit event only when this
+    /// succeeds; a failed read or write records nothing.
+    ///
+    /// [`get_entry_attachment`]: Self::get_entry_attachment
+    pub fn export_entry_attachment(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        filename: &str,
+        dest: &std::path::Path,
+    ) -> Result<(), AppError> {
+        let bytes = self.get_entry_attachment(db_id, entry_id, filename)?;
+        let dest_str = dest
+            .to_str()
+            .ok_or_else(|| AppError::InvalidPath(dest.to_string_lossy().into_owned()))?;
+        // Atomic temp-file + rename (secure 0600 perms by default): a failed
+        // write — disk full, interrupted I/O — leaves any pre-existing file at
+        // the chosen destination untouched rather than truncated or partial.
+        atomic_write(dest_str, &AtomicWriteOptions::default(), |file| {
+            file.write_all(bytes.as_bytes())
+                .map_err(|e| AppError::Io(e.to_string()))
         })
     }
 
@@ -844,6 +896,101 @@ mod tests {
         let logo = by_name.get("logo.png").expect("logo.png metadata");
         assert_eq!(logo.size, 2048);
         assert_eq!(logo.mime_type, "image/png");
+    }
+
+    #[test]
+    fn get_entry_attachment_round_trips_exact_stored_bytes() {
+        // The on-demand byte fetch must return the attachment's bytes verbatim,
+        // for both unprotected and protected (memory-protected) binaries — the
+        // download path writes exactly these bytes to disk. Prior art for the
+        // binary-in-vault round-trip shape: services/kdbx/custom_icons.rs.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let plain = b"recovery-code-12345".to_vec();
+        let secret = vec![0xAB_u8; 4096];
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("codes.txt", Value::unprotected(plain.clone()));
+                entry.add_attachment("blob.bin", Value::protected(secret.clone()));
+                Ok(())
+            })
+            .expect("seed attachments");
+
+        let fetched_plain = service
+            .get_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("fetch unprotected attachment");
+        assert_eq!(fetched_plain.as_bytes(), plain.as_slice());
+
+        let fetched_secret = service
+            .get_entry_attachment(&db_path, &entry_a, "blob.bin")
+            .expect("fetch protected attachment");
+        assert_eq!(fetched_secret.as_bytes(), secret.as_slice());
+    }
+
+    #[test]
+    fn export_entry_attachment_writes_exact_bytes_to_destination() {
+        // The download path resolves to a Rust-side write so decrypted bytes
+        // never cross into JS. The file on disk must be byte-identical to the
+        // stored Attachment.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let payload = vec![0x01, 0x02, 0x03, 0xFF, 0x00, 0x42];
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("export-me.bin", Value::unprotected(payload.clone()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let dest = dir.path().join("downloaded.bin");
+        service
+            .export_entry_attachment(&db_path, &entry_a, "export-me.bin", &dest)
+            .expect("export attachment");
+
+        let written = std::fs::read(&dest).expect("read written file");
+        assert_eq!(written, payload);
+    }
+
+    #[test]
+    fn export_entry_attachment_replaces_an_existing_destination_file() {
+        // Downloading over an existing file must end with exactly the
+        // Attachment's bytes — the atomic temp-file + rename replaces the
+        // target wholesale rather than appending or leaving stale bytes.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("note.txt", Value::unprotected(b"new".to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let dest = dir.path().join("note.txt");
+        std::fs::write(&dest, b"older longer contents").expect("seed existing file");
+
+        service
+            .export_entry_attachment(&db_path, &entry_a, "note.txt", &dest)
+            .expect("export over existing file");
+
+        assert_eq!(std::fs::read(&dest).expect("read"), b"new");
+    }
+
+    #[test]
+    fn get_entry_attachment_errors_on_unknown_filename() {
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("present.txt", Value::unprotected(b"x".to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let result = service.get_entry_attachment(&db_path, &entry_a, "missing.txt");
+        assert!(matches!(result, Err(AppError::AttachmentNotFound(name)) if name == "missing.txt"));
     }
 
     #[test]

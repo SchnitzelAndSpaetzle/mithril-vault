@@ -18,6 +18,7 @@ pub enum AuditEventKindDto {
     EntryPasswordRevealed,
     EntryPasswordCopied,
     EntryProtectedFieldRevealed,
+    EntryAttachmentExported,
     PreferencesSecurityChanged,
     AuditCleared,
 }
@@ -65,6 +66,12 @@ pub struct AuditEventDto {
     /// not what it flipped to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setting_name: Option<String>,
+    /// Filename (the per-Entry Attachment identifier) for
+    /// `entry.attachment_exported`. The on-disk save path is deliberately
+    /// not carried — the audit log records *which* Attachment left the
+    /// Vault, never *where* it landed, per the "no titles/paths" rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachment_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -103,6 +110,7 @@ pub struct AuditStatusDto {
 }
 
 impl From<AuditEvent> for AuditEventDto {
+    #[allow(clippy::too_many_lines)] // flat per-variant match; splitting hurts readability
     fn from(event: AuditEvent) -> Self {
         match event {
             AuditEvent::VaultUnlockFailed {
@@ -115,6 +123,7 @@ impl From<AuditEvent> for AuditEventDto {
                 reason: None,
                 entry_id: None,
                 setting_name: None,
+                attachment_id: None,
             },
             AuditEvent::VaultOpened { timestamp } => Self {
                 kind: AuditEventKindDto::VaultOpened,
@@ -123,6 +132,7 @@ impl From<AuditEvent> for AuditEventDto {
                 reason: None,
                 entry_id: None,
                 setting_name: None,
+                attachment_id: None,
             },
             AuditEvent::VaultLocked { timestamp, reason } => Self {
                 kind: AuditEventKindDto::VaultLocked,
@@ -131,6 +141,7 @@ impl From<AuditEvent> for AuditEventDto {
                 reason: Some(reason.into()),
                 entry_id: None,
                 setting_name: None,
+                attachment_id: None,
             },
             AuditEvent::PreferencesSecurityChanged {
                 timestamp,
@@ -142,6 +153,7 @@ impl From<AuditEvent> for AuditEventDto {
                 reason: None,
                 entry_id: None,
                 setting_name: Some(setting_name),
+                attachment_id: None,
             },
             AuditEvent::EntryPasswordRevealed {
                 timestamp,
@@ -153,6 +165,7 @@ impl From<AuditEvent> for AuditEventDto {
                 reason: None,
                 entry_id: Some(entry_id),
                 setting_name: None,
+                attachment_id: None,
             },
             AuditEvent::EntryPasswordCopied {
                 timestamp,
@@ -164,6 +177,7 @@ impl From<AuditEvent> for AuditEventDto {
                 reason: None,
                 entry_id: Some(entry_id),
                 setting_name: None,
+                attachment_id: None,
             },
             AuditEvent::EntryProtectedFieldRevealed {
                 timestamp,
@@ -175,6 +189,20 @@ impl From<AuditEvent> for AuditEventDto {
                 reason: None,
                 entry_id: Some(entry_id),
                 setting_name: None,
+                attachment_id: None,
+            },
+            AuditEvent::EntryAttachmentExported {
+                timestamp,
+                entry_id,
+                attachment_id,
+            } => Self {
+                kind: AuditEventKindDto::EntryAttachmentExported,
+                timestamp,
+                attempt_count: None,
+                reason: None,
+                entry_id: Some(entry_id),
+                setting_name: None,
+                attachment_id: Some(attachment_id),
             },
             AuditEvent::AuditCleared { timestamp } => Self {
                 kind: AuditEventKindDto::AuditCleared,
@@ -183,6 +211,7 @@ impl From<AuditEvent> for AuditEventDto {
                 reason: None,
                 entry_id: None,
                 setting_name: None,
+                attachment_id: None,
             },
         }
     }
@@ -203,6 +232,7 @@ mod tests {
             reason: None,
             entry_id: None,
             setting_name: None,
+            attachment_id: None,
         };
         let json = serde_json::to_string(&dto).expect("ser");
         assert!(json.contains("\"vaultUnlockFailed\""));
@@ -292,6 +322,39 @@ mod tests {
         assert!(
             !json.contains("attemptCount"),
             "attemptCount must be omitted for entry kinds: {json}"
+        );
+    }
+
+    #[test]
+    fn entry_attachment_exported_event_converts_to_dto_with_entry_id_and_attachment_id() {
+        let ts = Utc.with_ymd_and_hms(2026, 6, 9, 10, 0, 0).unwrap();
+        let dto: AuditEventDto = AuditEvent::EntryAttachmentExported {
+            timestamp: ts,
+            entry_id: "uuid-att".to_string(),
+            attachment_id: "recovery-codes.txt".to_string(),
+        }
+        .into();
+
+        assert!(matches!(
+            dto.kind,
+            AuditEventKindDto::EntryAttachmentExported
+        ));
+        assert_eq!(dto.timestamp, ts);
+        assert_eq!(dto.entry_id.as_deref(), Some("uuid-att"));
+        assert_eq!(dto.attachment_id.as_deref(), Some("recovery-codes.txt"));
+        assert!(dto.attempt_count.is_none());
+        assert!(dto.reason.is_none());
+        assert!(dto.setting_name.is_none());
+
+        let json = serde_json::to_string(&dto).expect("ser");
+        assert!(
+            json.contains("\"entryAttachmentExported\""),
+            "kind must serialize as camelCase, got: {json}"
+        );
+        assert!(json.contains("\"entryId\":\"uuid-att\""));
+        assert!(
+            json.contains("\"attachmentId\":\"recovery-codes.txt\""),
+            "attachmentId must be camelCase on the wire, got: {json}"
         );
     }
 
