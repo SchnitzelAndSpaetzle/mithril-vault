@@ -118,6 +118,33 @@ impl KdbxService {
         })
     }
 
+    /// Removes a single Attachment from an Entry, keyed by its filename. The
+    /// `keepass` crate drops the Entry's reference and — when it was the last
+    /// reference — the now-orphaned blob from the Vault-level binary pool, so
+    /// no separate pool cleanup is needed. The Entry's modification time is
+    /// bumped and the Vault is marked modified (the caller persists). Deleting
+    /// an unknown filename is an [`AppError::AttachmentNotFound`] that leaves
+    /// the Vault untouched.
+    pub fn delete_entry_attachment(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        filename: &str,
+    ) -> Result<(), AppError> {
+        self.with_vault_mut(db_id, |vault| {
+            {
+                let mut entry = vault.entry_mut(entry_id)?;
+                if entry.attachment_by_name_mut(filename).is_none() {
+                    return Err(AppError::AttachmentNotFound(filename.to_string()));
+                }
+                entry.remove_attachment_by_name(filename);
+                entry.times.last_modification = Some(Times::now());
+            }
+            vault.mark_modified();
+            Ok(())
+        })
+    }
+
     /// Fetches a protected custom field value.
     pub fn get_entry_protected_custom_field(
         &self,
@@ -1001,6 +1028,92 @@ mod tests {
             entry.attachments.is_empty(),
             "an entry with no binaries has no attachment metadata"
         );
+    }
+
+    #[test]
+    fn delete_entry_attachment_removes_reference_and_orphaned_blob() {
+        // Deleting the only Attachment referencing a pooled blob must drop both
+        // the Entry's reference and the now-orphaned blob from the Vault-level
+        // pool, and mark the Vault modified. Prior art for the binary-in-vault
+        // round-trip shape: services/kdbx/custom_icons.rs.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("codes.txt", Value::unprotected(b"secret".to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let generation_before = service
+            .with_vault(&db_path, |vault| Ok(vault.generation()))
+            .expect("generation before");
+
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "the Entry's attachment reference must be gone after delete"
+        );
+
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(
+                    vault.db().num_attachments(),
+                    0,
+                    "the orphaned blob must be cleaned from the Vault pool"
+                );
+                assert!(
+                    vault.generation() > generation_before,
+                    "a successful delete must mark the Vault modified"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn delete_entry_attachment_errors_on_unknown_filename_and_leaves_vault_untouched() {
+        // Deleting a filename the Entry doesn't carry must be a clean
+        // AttachmentNotFound error and must not mark the Vault modified, so a
+        // stale or mistargeted click never produces a phantom unsaved change.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("present.txt", Value::unprotected(b"x".to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let generation_before = service
+            .with_vault(&db_path, |vault| Ok(vault.generation()))
+            .expect("generation before");
+
+        let result = service.delete_entry_attachment(&db_path, &entry_a, "missing.txt");
+        assert!(matches!(result, Err(AppError::AttachmentNotFound(name)) if name == "missing.txt"));
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert_eq!(
+            entry.attachments.len(),
+            1,
+            "the existing attachment must survive a failed delete"
+        );
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "a failed delete must not mark the Vault modified"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
     }
 
     #[test]

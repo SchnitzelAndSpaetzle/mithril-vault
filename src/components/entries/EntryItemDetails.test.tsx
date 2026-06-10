@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
 import EntryItemDetails from "./EntryItemDetails";
@@ -65,18 +66,26 @@ vi.mock("@/hooks/use-clipboard-timeout", () => ({
 }));
 
 const exportAttachment = vi.hoisted(() => vi.fn());
+const deleteAttachment = vi.hoisted(() => vi.fn());
+const databaseSave = vi.hoisted(() => vi.fn());
 const save = vi.hoisted(() => vi.fn());
+const ask = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/tauri", () => ({
   clipboard: { copyPassword: vi.fn(), copyProtectedField: vi.fn() },
-  entries: { getProtectedCustomField: vi.fn(), exportAttachment },
+  entries: {
+    getProtectedCustomField: vi.fn(),
+    exportAttachment,
+    deleteAttachment,
+  },
+  database: { save: databaseSave },
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ save }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ save, ask }));
 
 vi.mock("sonner", () => ({
   toast: { success: toastSuccess, error: toastError },
@@ -84,7 +93,14 @@ vi.mock("sonner", () => ({
 
 function renderDetails(override: Partial<Entry>) {
   state.entry = { ...baseEntry, ...override };
-  return render(<EntryItemDetails entryId="entry-1" dbId="db-1" />);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <EntryItemDetails entryId="entry-1" dbId="db-1" />
+    </QueryClientProvider>
+  );
 }
 
 describe("EntryItemDetails expired indicator", () => {
@@ -282,5 +298,118 @@ describe("EntryItemDetails attachments section", () => {
     expect(filenames[0]).toContain("apple.png");
     expect(filenames[1]).toContain("Banana.gif");
     expect(filenames[2]).toContain("Zebra.txt");
+  });
+});
+
+describe("EntryItemDetails attachment delete", () => {
+  beforeEach(() => {
+    state.entry = null;
+    state.isTransitioning = false;
+    deleteAttachment.mockReset();
+    databaseSave.mockReset();
+    ask.mockReset();
+    toastSuccess.mockReset();
+    toastError.mockReset();
+  });
+
+  it("renders a Delete action for each attachment row", () => {
+    renderDetails({
+      attachments: [
+        { filename: "a.txt", size: 1, mimeType: "text/plain" },
+        { filename: "b.png", size: 2, mimeType: "image/png" },
+      ],
+    });
+
+    const buttons = screen.getAllByRole("button", {
+      name: "entries.detail.deleteAttachment",
+    });
+    expect(buttons).toHaveLength(2);
+  });
+
+  it("confirms, then deletes the attachment and persists on confirm", async () => {
+    ask.mockResolvedValue(true);
+    deleteAttachment.mockResolvedValue(undefined);
+    databaseSave.mockResolvedValue(undefined);
+
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.deleteAttachment" })
+    );
+
+    await waitFor(() => {
+      expect(ask).toHaveBeenCalled();
+    });
+    expect(deleteAttachment).toHaveBeenCalledWith(
+      "db-1",
+      "entry-1",
+      "report.pdf"
+    );
+    expect(databaseSave).toHaveBeenCalledWith("db-1");
+    expect(toastSuccess).toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("leaves the attachment intact when the confirmation is cancelled", async () => {
+    ask.mockResolvedValue(false);
+
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.deleteAttachment" })
+    );
+
+    await waitFor(() => {
+      expect(ask).toHaveBeenCalled();
+    });
+    expect(deleteAttachment).not.toHaveBeenCalled();
+    expect(databaseSave).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("disables Delete and ignores clicks while the entry is transitioning", () => {
+    state.isTransitioning = true;
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    const button = screen.getByRole("button", {
+      name: "entries.detail.deleteAttachment",
+    });
+    expect(button).toBeDisabled();
+
+    fireEvent.click(button);
+    expect(ask).not.toHaveBeenCalled();
+    expect(deleteAttachment).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an error toast when the delete fails", async () => {
+    ask.mockResolvedValue(true);
+    deleteAttachment.mockRejectedValue(new Error("locked"));
+
+    renderDetails({
+      attachments: [
+        { filename: "report.pdf", size: 2048, mimeType: "application/pdf" },
+      ],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.deleteAttachment" })
+    );
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalled();
+    });
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 });

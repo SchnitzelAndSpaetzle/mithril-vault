@@ -346,7 +346,12 @@
       "noAttachments": "Sin adjuntos",
       "downloadAttachment": "Descargar adjunto",
       "attachmentDownloaded": "{{filename}} descargado",
-      "attachmentDownloadFailed": "No se pudo descargar {{filename}}"
+      "attachmentDownloadFailed": "No se pudo descargar {{filename}}",
+      "deleteAttachment": "Eliminar adjunto",
+      "deleteAttachmentConfirmTitle": "Eliminar adjunto",
+      "deleteAttachmentConfirm": "¿Quitar {{filename}} de esta entrada?",
+      "attachmentDeleted": "{{filename}} eliminado",
+      "attachmentDeleteFailed": "No se pudo eliminar {{filename}}"
     },
     "sort": {
       "sortBy": "Ordenar por",

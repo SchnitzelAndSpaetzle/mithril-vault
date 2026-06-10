@@ -322,6 +322,23 @@ export const entries = {
     await invoke("export_entry_attachment", { dbId, id, filename, destPath });
   },
 
+  /**
+   * Removes a single Attachment from an Entry, keyed by filename. The backend
+   * drops the Entry's reference and (when it was the last reference) the
+   * orphaned blob from the Vault-level pool, then marks the Vault modified.
+   * The caller persists via `database.save` and refreshes the entry. There is
+   * no undo, so the UI confirms before invoking this.
+   */
+  async deleteAttachment(
+    dbId: string,
+    id: string,
+    filename: string
+  ): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    await invoke("delete_entry_attachment", { dbId, id, filename });
+  },
+
   async getProtectedCustomField(
     dbId: string,
     id: string,

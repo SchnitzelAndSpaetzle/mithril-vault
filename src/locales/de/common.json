@@ -346,7 +346,12 @@
       "noAttachments": "Keine Anhänge",
       "downloadAttachment": "Anhang herunterladen",
       "attachmentDownloaded": "{{filename}} heruntergeladen",
-      "attachmentDownloadFailed": "{{filename}} konnte nicht heruntergeladen werden"
+      "attachmentDownloadFailed": "{{filename}} konnte nicht heruntergeladen werden",
+      "deleteAttachment": "Anhang löschen",
+      "deleteAttachmentConfirmTitle": "Anhang löschen",
+      "deleteAttachmentConfirm": "{{filename}} aus diesem Eintrag entfernen?",
+      "attachmentDeleted": "{{filename}} gelöscht",
+      "attachmentDeleteFailed": "{{filename}} konnte nicht gelöscht werden"
     },
     "sort": {
       "sortBy": "Sortieren nach",

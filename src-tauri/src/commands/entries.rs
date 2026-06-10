@@ -163,6 +163,20 @@ pub async fn export_entry_attachment(
     )
 }
 
+/// Removes a single Attachment from an Entry, keyed by filename. Drops the
+/// Entry's reference and (when it was the last reference) the orphaned blob
+/// from the Vault-level pool, then marks the Vault modified; the frontend
+/// persists and refreshes. There is no undo, so the UI confirms first.
+#[tauri::command]
+pub async fn delete_entry_attachment(
+    db_id: String,
+    id: String,
+    filename: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.delete_entry_attachment(&db_id, &id, &filename)
+}
+
 /// Creates a new entry in a group.
 /// The `db_id` is the path to the database file.
 #[tauri::command]
