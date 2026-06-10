@@ -3,7 +3,7 @@ use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryDat
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::db::{Entry as KeepassEntry, Times, Value};
-use std::io::Write;
+use std::io::{Read, Write};
 
 use super::conversions::{
     apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
@@ -172,20 +172,44 @@ impl KdbxService {
             .ok_or_else(|| AppError::InvalidPath(source_path.to_string_lossy().into_owned()))?
             .to_string();
 
-        // Stat the file before reading it so an over-cap pick is rejected
-        // without ever pulling its bytes into memory.
-        let size = std::fs::metadata(source_path)
-            .map_err(|e| AppError::Io(e.to_string()))?
-            .len();
-        if size > HARD_CAP_BYTES {
+        let metadata = std::fs::metadata(source_path).map_err(|e| AppError::Io(e.to_string()))?;
+
+        // Reject anything that isn't a regular file. A directory, FIFO, or
+        // device like `/dev/zero` reports a meaningless metadata length, so the
+        // stat-based cap below can't be trusted for it and an unbounded read
+        // could hang or exhaust memory.
+        if !metadata.is_file() {
+            return Err(AppError::InvalidInput(format!(
+                "not a regular file: {}",
+                source_path.to_string_lossy()
+            )));
+        }
+
+        // Fast path: reject an obviously oversized file from its stat'd size
+        // before opening it at all.
+        if metadata.len() > HARD_CAP_BYTES {
             return Err(AppError::AttachmentTooLarge {
                 filename,
-                size,
+                size: metadata.len(),
                 cap: HARD_CAP_BYTES,
             });
         }
 
-        let bytes = std::fs::read(source_path).map_err(|e| AppError::Io(e.to_string()))?;
+        // Authoritative guard: bound the read itself to one byte past the cap.
+        // A regular file that grows after the stat (TOCTOU) can never push more
+        // than the cap into memory — reading `cap + 1` bytes proves it's over.
+        let file = std::fs::File::open(source_path).map_err(|e| AppError::Io(e.to_string()))?;
+        let mut bytes = Vec::new();
+        file.take(HARD_CAP_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| AppError::Io(e.to_string()))?;
+        if bytes.len() as u64 > HARD_CAP_BYTES {
+            return Err(AppError::AttachmentTooLarge {
+                filename,
+                size: bytes.len() as u64,
+                cap: HARD_CAP_BYTES,
+            });
+        }
 
         self.with_vault_mut(db_id, |vault| {
             let stored_name = {
@@ -1337,6 +1361,29 @@ mod tests {
             entry.attachments.len(),
             2,
             "both attachments coexist after the auto-rename"
+        );
+    }
+
+    #[test]
+    fn add_entry_attachment_rejects_a_non_regular_file() {
+        // A path that isn't a regular file (a directory here; on Unix also
+        // FIFOs, /dev/zero, …) has a meaningless metadata length and an
+        // unbounded read could hang or OOM, so it must be rejected before any
+        // bytes are pulled in. Defends the hard cap against special files.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let not_a_file = dir.path().join("a-directory");
+        std::fs::create_dir(&not_a_file).expect("mk dir");
+
+        let result = service.add_entry_attachment(&db_path, &entry_a, &not_a_file);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "a non-regular file must be rejected, got {result:?}"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "nothing is stored for a rejected add"
         );
     }
 
