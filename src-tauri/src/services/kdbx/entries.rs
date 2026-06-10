@@ -590,6 +590,29 @@ mod tests {
         )
     }
 
+    /// Seeds a single unprotected attachment on `entry_id` and returns the
+    /// Vault's generation immediately after, so a delete test can assert the
+    /// generation moved (a successful delete marks the Vault modified) or
+    /// stayed put (a rejected delete leaves it untouched).
+    fn seed_attachment(
+        service: &KdbxService,
+        db_path: &str,
+        entry_id: &str,
+        filename: &str,
+        bytes: &[u8],
+    ) -> u64 {
+        service
+            .with_vault_mut(db_path, |vault| {
+                let mut entry = vault.entry_mut(entry_id)?;
+                entry.add_attachment(filename, Value::unprotected(bytes.to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+        service
+            .with_vault(db_path, |vault| Ok(vault.generation()))
+            .expect("generation after seed")
+    }
+
     /// An `UpdateEntryData` that touches nothing; tests override single fields
     /// via `..empty_update()` struct-update syntax.
     fn empty_update() -> UpdateEntryData {
@@ -1037,18 +1060,8 @@ mod tests {
         // pool, and mark the Vault modified. Prior art for the binary-in-vault
         // round-trip shape: services/kdbx/custom_icons.rs.
         let (service, _dir, db_path, entry_a, _b) = create_test_database();
-
-        service
-            .with_vault_mut(&db_path, |vault| {
-                let mut entry = vault.entry_mut(&entry_a)?;
-                entry.add_attachment("codes.txt", Value::unprotected(b"secret".to_vec()));
-                Ok(())
-            })
-            .expect("seed attachment");
-
-        let generation_before = service
-            .with_vault(&db_path, |vault| Ok(vault.generation()))
-            .expect("generation before");
+        let generation_before =
+            seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
 
         service
             .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
@@ -1082,18 +1095,7 @@ mod tests {
         // AttachmentNotFound error and must not mark the Vault modified, so a
         // stale or mistargeted click never produces a phantom unsaved change.
         let (service, _dir, db_path, entry_a, _b) = create_test_database();
-
-        service
-            .with_vault_mut(&db_path, |vault| {
-                let mut entry = vault.entry_mut(&entry_a)?;
-                entry.add_attachment("present.txt", Value::unprotected(b"x".to_vec()));
-                Ok(())
-            })
-            .expect("seed attachment");
-
-        let generation_before = service
-            .with_vault(&db_path, |vault| Ok(vault.generation()))
-            .expect("generation before");
+        let generation_before = seed_attachment(&service, &db_path, &entry_a, "present.txt", b"x");
 
         let result = service.delete_entry_attachment(&db_path, &entry_a, "missing.txt");
         assert!(matches!(result, Err(AppError::AttachmentNotFound(name)) if name == "missing.txt"));
