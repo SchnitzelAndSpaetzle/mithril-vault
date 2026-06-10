@@ -305,6 +305,31 @@ export const entries = {
   },
 
   /**
+   * Adds a file on disk to an Entry as a native KDBX binary. The file-picker
+   * dialog runs in the UI and yields a filesystem `sourcePath`; the backend
+   * reads the bytes, enforces the hard size cap, auto-renames on a filename
+   * collision within the Entry, and marks the Vault modified immediately. The
+   * frontend never loads file bytes into JS memory on add. Returns the
+   * filename the attachment was stored under (may differ from the source
+   * basename after an auto-rename). The caller persists via `database.save`
+   * and refreshes the entry.
+   */
+  async addAttachment(
+    dbId: string,
+    id: string,
+    sourcePath: string
+  ): Promise<string> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("add_entry_attachment", {
+      dbId,
+      id,
+      sourcePath,
+    });
+    return z.string().parse(result);
+  },
+
+  /**
    * Exports (downloads) a single Attachment by writing its bytes to a
    * user-chosen path. The save dialog runs in the UI; the resolved
    * `destPath` is handed to the backend, which fetches the bytes and writes

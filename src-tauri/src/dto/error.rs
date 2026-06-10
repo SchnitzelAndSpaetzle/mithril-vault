@@ -32,6 +32,13 @@ pub enum AppError {
     #[error("Attachment not found: {0}")]
     AttachmentNotFound(String),
 
+    #[error("Attachment '{filename}' is {size} bytes, exceeding the {cap}-byte limit")]
+    AttachmentTooLarge {
+        filename: String,
+        size: u64,
+        cap: u64,
+    },
+
     #[error("Custom field is not protected: {0}")]
     CustomFieldNotProtected(String),
 

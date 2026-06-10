@@ -177,6 +177,24 @@ pub async fn delete_entry_attachment(
     state.delete_entry_attachment(&db_id, &id, &filename)
 }
 
+/// Adds a file on disk to an Entry as a native KDBX binary. The frontend
+/// passes a filesystem `source_path` (from the file-picker dialog), never the
+/// file bytes; the backend reads it, enforces the hard size cap, auto-renames
+/// on a filename collision within the Entry, and marks the Vault modified
+/// immediately — independent of the Entry edit-form save cycle. Returns the
+/// filename the attachment was stored under (which may differ from the source
+/// basename after an auto-rename). The frontend persists via `database.save`
+/// and refreshes the entry.
+#[tauri::command]
+pub async fn add_entry_attachment(
+    db_id: String,
+    id: String,
+    source_path: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<String, AppError> {
+    state.add_entry_attachment(&db_id, &id, Path::new(&source_path))
+}
+
 /// Creates a new entry in a group.
 /// The `db_id` is the path to the database file.
 #[tauri::command]

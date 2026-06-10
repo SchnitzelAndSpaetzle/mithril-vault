@@ -67,9 +67,11 @@ vi.mock("@/hooks/use-clipboard-timeout", () => ({
 
 const exportAttachment = vi.hoisted(() => vi.fn());
 const deleteAttachment = vi.hoisted(() => vi.fn());
+const addAttachment = vi.hoisted(() => vi.fn());
 const databaseSave = vi.hoisted(() => vi.fn());
 const save = vi.hoisted(() => vi.fn());
 const ask = vi.hoisted(() => vi.fn());
+const open = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 
@@ -79,13 +81,14 @@ vi.mock("@/lib/tauri", () => ({
     getProtectedCustomField: vi.fn(),
     exportAttachment,
     deleteAttachment,
+    addAttachment,
   },
   database: { save: databaseSave },
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ save, ask }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ save, ask, open }));
 
 vi.mock("sonner", () => ({
   toast: { success: toastSuccess, error: toastError },
@@ -392,5 +395,89 @@ describe("EntryItemDetails attachment delete", () => {
       "report.pdf"
     );
     expect(databaseSave).toHaveBeenCalledWith("db-1");
+  });
+});
+
+describe("EntryItemDetails attachment add", () => {
+  beforeEach(() => {
+    state.entry = null;
+    state.isTransitioning = false;
+    addAttachment.mockReset();
+    databaseSave.mockReset();
+    open.mockReset();
+    toastSuccess.mockReset();
+    toastError.mockReset();
+  });
+
+  it("opens a multi-select file dialog, adds each picked path, then persists", async () => {
+    open.mockResolvedValue(["/home/user/codes.txt", "/home/user/scan.pdf"]);
+    addAttachment.mockResolvedValue(undefined);
+    databaseSave.mockResolvedValue(undefined);
+
+    renderDetails({ attachments: [] });
+    clickAttachmentAction("entries.detail.addAttachment");
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.objectContaining({ multiple: true })
+      );
+    });
+    // One add per picked path, in the order the dialog returned them.
+    expect(addAttachment).toHaveBeenNthCalledWith(
+      1,
+      "db-1",
+      "entry-1",
+      "/home/user/codes.txt"
+    );
+    expect(addAttachment).toHaveBeenNthCalledWith(
+      2,
+      "db-1",
+      "entry-1",
+      "/home/user/scan.pdf"
+    );
+    expect(databaseSave).toHaveBeenCalledWith("db-1");
+    expect(toastSuccess).toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the file dialog is cancelled", async () => {
+    open.mockResolvedValue(null);
+
+    renderDetails({ attachments: [] });
+    clickAttachmentAction("entries.detail.addAttachment");
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalled();
+    });
+    expect(addAttachment).not.toHaveBeenCalled();
+    expect(databaseSave).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("disables Add and ignores clicks while the entry is transitioning", () => {
+    state.isTransitioning = true;
+    renderDetails({ attachments: [] });
+
+    const button = screen.getByRole("button", {
+      name: "entries.detail.addAttachment",
+    });
+    expect(button).toBeDisabled();
+
+    fireEvent.click(button);
+    expect(open).not.toHaveBeenCalled();
+    expect(addAttachment).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an error toast when an add fails", async () => {
+    open.mockResolvedValue(["/home/user/huge.bin"]);
+    addAttachment.mockRejectedValue(new Error("too large"));
+
+    renderDetails({ attachments: [] });
+    clickAttachmentAction("entries.detail.addAttachment");
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalled();
+    });
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 });
