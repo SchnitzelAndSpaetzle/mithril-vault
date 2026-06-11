@@ -395,6 +395,7 @@
     "sort": {
       "sortBy": "Sort by",
       "sortEntries": "Sort entries",
+      "sortEntriesFiltered": "Sort entries (attachment filter active)",
       "order": "Order",
       "title": "Title",
       "username": "Username",

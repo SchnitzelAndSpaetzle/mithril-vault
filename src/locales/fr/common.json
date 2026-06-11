@@ -372,6 +372,7 @@
     "sort": {
       "sortBy": "Trier par",
       "sortEntries": "Trier les entrées",
+      "sortEntriesFiltered": "Trier les entrées (filtre de pièces jointes actif)",
       "order": "Ordre",
       "title": "Titre",
       "username": "Nom d'utilisateur",

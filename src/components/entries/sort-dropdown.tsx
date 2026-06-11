@@ -16,6 +16,7 @@ import { ArrowDownAZ, ArrowUpAZ } from "lucide-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useTransition } from "react";
 import { useActiveDatabase } from "@/hooks/use-active-database";
+import { cn } from "@/lib/utils";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 
 const SORT_FIELD_KEYS = {
@@ -87,7 +88,12 @@ export default function SortDropdown() {
         <Button
           variant="outline"
           size="icon-sm"
-          aria-label={t("entries.sort.sortEntries")}
+          aria-label={
+            hasAttachments
+              ? t("entries.sort.sortEntriesFiltered")
+              : t("entries.sort.sortEntries")
+          }
+          className={cn(hasAttachments && "border-primary text-primary")}
         >
           <SortIcon />
         </Button>

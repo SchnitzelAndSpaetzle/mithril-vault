@@ -372,6 +372,7 @@
     "sort": {
       "sortBy": "Sortiraj po",
       "sortEntries": "Sortiraj unose",
+      "sortEntriesFiltered": "Sortiraj unose (filter priloga aktivan)",
       "order": "Redosled",
       "title": "Naslov",
       "username": "Korisničko ime",

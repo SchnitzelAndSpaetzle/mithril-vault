@@ -372,6 +372,7 @@
     "sort": {
       "sortBy": "Sortieren nach",
       "sortEntries": "Einträge sortieren",
+      "sortEntriesFiltered": "Einträge sortieren (Anhangsfilter aktiv)",
       "order": "Reihenfolge",
       "title": "Titel",
       "username": "Benutzername",

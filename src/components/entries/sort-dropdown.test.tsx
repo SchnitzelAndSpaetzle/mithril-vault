@@ -32,7 +32,9 @@ beforeEach(() => {
 });
 
 function openMenu() {
-  const trigger = screen.getByLabelText("entries.sort.sortEntries");
+  // The trigger's label changes when the filter is active, so find it
+  // by role rather than by a fixed label.
+  const trigger = screen.getByRole("button");
   fireEvent.pointerDown(
     trigger,
     new MouseEvent("pointerdown", { bubbles: true, button: 0 })
@@ -80,6 +82,22 @@ describe("SortDropdown has-attachments filter", () => {
       sortBy: "title",
       hasAttachments: undefined,
     });
+  });
+
+  it("accents the trigger and updates its aria-label while the filter is active", () => {
+    mocks.search = { hasAttachments: true };
+    render(<SortDropdown />);
+
+    const trigger = screen.getByLabelText("entries.sort.sortEntriesFiltered");
+    expect(trigger.className).toContain("border-primary");
+  });
+
+  it("leaves the trigger unaccented with the plain label when inactive", () => {
+    mocks.search = {};
+    render(<SortDropdown />);
+
+    const trigger = screen.getByLabelText("entries.sort.sortEntries");
+    expect(trigger.className).not.toContain("border-primary");
   });
 
   it("reflects the active filter as a checked item", () => {
