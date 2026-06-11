@@ -270,6 +270,7 @@
     "noEntriesWithTag": "No entries with tag \"{{tag}}\".",
     "attachmentIndicator": "Has attachments",
     "noEntriesWithAttachments": "No entries with attachments.",
+    "noEntriesMatchFilters": "No entries match the active filters.",
     "filter": {
       "title": "Filter",
       "filterEntries": "Filter entries",

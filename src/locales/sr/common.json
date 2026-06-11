@@ -247,6 +247,7 @@
     "noEntriesWithTag": "Nema unosa sa oznakom \"{{tag}}\".",
     "attachmentIndicator": "Ima priloge",
     "noEntriesWithAttachments": "Nema unosa sa prilozima.",
+    "noEntriesMatchFilters": "Nijedan unos ne odgovara aktivnim filterima.",
     "filter": {
       "title": "Filter",
       "filterEntries": "Filtriraj unose",

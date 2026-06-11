@@ -247,6 +247,7 @@
     "noEntriesWithTag": "Keine Einträge mit Tag \"{{tag}}\".",
     "attachmentIndicator": "Hat Anhänge",
     "noEntriesWithAttachments": "Keine Einträge mit Anhängen.",
+    "noEntriesMatchFilters": "Keine Einträge entsprechen den aktiven Filtern.",
     "filter": {
       "title": "Filter",
       "filterEntries": "Einträge filtern",

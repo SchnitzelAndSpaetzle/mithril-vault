@@ -247,6 +247,7 @@
     "noEntriesWithTag": "Aucune entrée avec l'étiquette « {{tag}} ».",
     "attachmentIndicator": "Contient des pièces jointes",
     "noEntriesWithAttachments": "Aucune entrée avec des pièces jointes.",
+    "noEntriesMatchFilters": "Aucune entrée ne correspond aux filtres actifs.",
     "filter": {
       "title": "Filtrer",
       "filterEntries": "Filtrer les entrées",

@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
-import { filterEntries } from "@/lib/entry-filters";
+import { emptyEntryListReason, filterEntries } from "@/lib/entry-filters";
 
 const EMPTY_ICONS = {};
 const ESTIMATED_ITEM_HEIGHT = 65;
@@ -111,12 +111,23 @@ export default function EntryList({ onEntrySelect }: Readonly<EntryListProps>) {
   if (displayEntries.length === 0) {
     let noEntriesMessage;
 
-    if (tagFilter) {
-      noEntriesMessage = t("entries.noEntriesWithTag", { tag: tagFilter });
-    } else if (attachmentsFilter) {
-      noEntriesMessage = t("entries.noEntriesWithAttachments");
-    } else {
-      noEntriesMessage = t("entries.noEntries");
+    switch (
+      emptyEntryListReason({
+        tag: tagFilter,
+        hasAttachments: attachmentsFilter,
+      })
+    ) {
+      case "tag":
+        noEntriesMessage = t("entries.noEntriesWithTag", { tag: tagFilter });
+        break;
+      case "attachments":
+        noEntriesMessage = t("entries.noEntriesWithAttachments");
+        break;
+      case "filters":
+        noEntriesMessage = t("entries.noEntriesMatchFilters");
+        break;
+      default:
+        noEntriesMessage = t("entries.noEntries");
     }
 
     return (

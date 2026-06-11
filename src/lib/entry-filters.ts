@@ -26,3 +26,21 @@ export function filterEntries(
       (!hasAttachments || entryHasAttachments(entry))
   );
 }
+
+/// Why the (already-filtered) entry list is empty, so the UI can pick
+/// an accurate empty-state message. When more than one filter is active
+/// neither single-filter reason is truthful — a tag may have entries
+/// while none carry an attachment — so it reports the combined
+/// `"filters"` reason instead.
+export type EmptyEntryListReason = "none" | "tag" | "attachments" | "filters";
+
+export function emptyEntryListReason(
+  filters: EntryFilters
+): EmptyEntryListReason {
+  const hasTag = Boolean(filters.tag);
+  const hasAttachments = filters.hasAttachments === true;
+  if (hasTag && hasAttachments) return "filters";
+  if (hasTag) return "tag";
+  if (hasAttachments) return "attachments";
+  return "none";
+}

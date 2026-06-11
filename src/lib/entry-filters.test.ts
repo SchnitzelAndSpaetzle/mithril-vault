@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Entry } from "@/lib/types";
-import { filterEntries } from "./entry-filters";
+import { emptyEntryListReason, filterEntries } from "./entry-filters";
 
 function makeEntry(overrides: Partial<Entry> = {}): Entry {
   return {
@@ -69,5 +69,27 @@ describe("filterEntries", () => {
     expect(
       filterEntries([withFile, without], { hasAttachments: false })
     ).toEqual([withFile, without]);
+  });
+});
+
+describe("emptyEntryListReason", () => {
+  it("returns 'none' when no filter is active", () => {
+    expect(emptyEntryListReason({})).toBe("none");
+  });
+
+  it("returns 'tag' when only a tag filter is active", () => {
+    expect(emptyEntryListReason({ tag: "dev" })).toBe("tag");
+  });
+
+  it("returns 'attachments' when only the attachment filter is active", () => {
+    expect(emptyEntryListReason({ hasAttachments: true })).toBe("attachments");
+  });
+
+  it("returns 'filters' when tag and attachment filters are both active", () => {
+    // Avoids falsely claiming "no entries with tag X" when the tag does
+    // have entries but none carry an attachment.
+    expect(emptyEntryListReason({ tag: "dev", hasAttachments: true })).toBe(
+      "filters"
+    );
   });
 });

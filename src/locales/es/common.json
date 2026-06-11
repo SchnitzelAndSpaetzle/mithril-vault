@@ -247,6 +247,7 @@
     "noEntriesWithTag": "No hay entradas con la etiqueta \"{{tag}}\".",
     "attachmentIndicator": "Tiene adjuntos",
     "noEntriesWithAttachments": "No hay entradas con adjuntos.",
+    "noEntriesMatchFilters": "Ninguna entrada coincide con los filtros activos.",
     "filter": {
       "title": "Filtrar",
       "filterEntries": "Filtrar entradas",
