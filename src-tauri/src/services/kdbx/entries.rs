@@ -1497,6 +1497,40 @@ mod tests {
         );
     }
 
+    /// Asserts that feeding `paths` to the add feeder is a no-op: nothing is
+    /// added or fails, the Entry stays empty, and the Vault is unmodified.
+    /// Shared by the picker trust-boundary test (an empty pick while a secret
+    /// sits on disk) and the drop-commit no-op test (an empty buffer), since
+    /// both make the same "a path never handed in is never read" guarantee.
+    fn assert_empty_add_is_inert(service: &KdbxService, db_path: &str, entry_id: &str) {
+        let generation_before = service
+            .with_vault(db_path, |vault| Ok(vault.generation()))
+            .expect("generation before");
+
+        let outcome = service
+            .add_entry_attachments(db_path, entry_id, &[])
+            .expect("empty add");
+
+        assert!(outcome.added.is_empty(), "nothing is added");
+        assert!(outcome.failed.is_empty(), "and nothing fails");
+
+        let entry = service.get_entry(db_path, entry_id).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "a file never handed to the add path must not be readable through it"
+        );
+        service
+            .with_vault(db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "no read means no modification"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
     #[test]
     fn add_entry_attachments_reads_only_paths_handed_to_it() {
         // The trust boundary (issue #296): a file the user never selected
@@ -1511,35 +1545,7 @@ mod tests {
         let secret = dir.path().join("id_rsa");
         std::fs::write(&secret, b"-----BEGIN PRIVATE KEY-----").expect("seed secret");
 
-        let generation_before = service
-            .with_vault(&db_path, |vault| Ok(vault.generation()))
-            .expect("generation before");
-
-        let outcome = service
-            .add_entry_attachments(&db_path, &entry_a, &[])
-            .expect("empty batch");
-
-        assert!(
-            outcome.added.is_empty(),
-            "nothing is added from an empty pick"
-        );
-        assert!(outcome.failed.is_empty(), "and nothing fails either");
-
-        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
-        assert!(
-            entry.attachments.is_empty(),
-            "a file never handed to the add path must not be readable through it"
-        );
-        service
-            .with_vault(&db_path, |vault| {
-                assert_eq!(
-                    vault.generation(),
-                    generation_before,
-                    "no read means no modification"
-                );
-                Ok(())
-            })
-            .expect("vault scope");
+        assert_empty_add_is_inert(&service, &db_path, &entry_a);
     }
 
     #[test]
@@ -1587,38 +1593,14 @@ mod tests {
     fn commit_with_no_preceding_drop_is_a_noop() {
         // The drop event is window-global, so a commit can fire with nothing
         // buffered (e.g. a stale render). Draining an empty buffer hands the
-        // feeder no paths: nothing is read, nothing is stored, the Vault is
+        // feeder no paths, so nothing is read or stored and the Vault is
         // untouched — the same guarantee as a cancelled picker dialog.
         let (service, _dir, db_path, entry_a, _b) = create_test_database();
 
-        let generation_before = service
-            .with_vault(&db_path, |vault| Ok(vault.generation()))
-            .expect("generation before");
-
         let buffer = crate::services::drag_drop::DropPathsBuffer::default();
-        let paths = buffer.take();
-        let outcome = service
-            .add_entry_attachments(&db_path, &entry_a, &paths)
-            .expect("empty commit");
+        assert!(buffer.take().is_empty(), "no drop means no buffered paths");
 
-        assert!(outcome.added.is_empty(), "an empty drop adds nothing");
-        assert!(outcome.failed.is_empty(), "and fails nothing");
-
-        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
-        assert!(
-            entry.attachments.is_empty(),
-            "a commit with no buffered drop leaves the Entry untouched"
-        );
-        service
-            .with_vault(&db_path, |vault| {
-                assert_eq!(
-                    vault.generation(),
-                    generation_before,
-                    "no paths means no read and no modification"
-                );
-                Ok(())
-            })
-            .expect("vault scope");
+        assert_empty_add_is_inert(&service, &db_path, &entry_a);
     }
 
     #[test]

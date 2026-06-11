@@ -688,4 +688,35 @@ describe("EntryItemDetails attachment drop zone", () => {
 
     expect(dragDrop.handler).toBeNull();
   });
+
+  it("highlights the drop zone while a file is dragged over it", () => {
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    act(() => {
+      dragDrop.handler?.({
+        payload: { type: "over", position: { x: 50, y: 50 } },
+      });
+    });
+
+    expect(screen.getByText("entries.detail.dropToAttach").className).toContain(
+      "border-primary"
+    );
+    rect.mockRestore();
+  });
+
+  it("surfaces a batch error toast when a dropped commit rejects", async () => {
+    commitDroppedAttachments.mockRejectedValue(new Error("vault locked"));
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    await fireDrop({ x: 50, y: 50 });
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalled();
+    });
+    expect(databaseSave).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    rect.mockRestore();
+  });
 });
