@@ -39,7 +39,7 @@ import { isExpired } from "@/lib/entry-expiry";
 import { formatAttachmentSize } from "@/lib/entry-attachment";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ask, open, save } from "@tauri-apps/plugin-dialog";
+import { ask, save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import type { AttachmentMeta, CustomFieldMeta } from "@/lib/types";
 
@@ -627,45 +627,45 @@ function AttachmentsSection({
       }),
     ]);
 
-  // Add is the primary write path: a multi-select file dialog yields
-  // filesystem paths (never bytes), and the backend reads, size-caps, and
-  // auto-renames each one immediately. We add every picked path — a failure on
-  // one (e.g. over the hard cap) doesn't abort the rest — then persist once and
-  // refresh. A cancelled dialog is a no-op. The summary toast reports how many
-  // landed; each failure gets its own toast naming the file and the backend's
-  // reason (e.g. "exceeds the 25 MiB limit") so the user knows which file and
-  // whether retrying could ever work.
+  // Add is the primary write path. The multi-select file dialog is opened in
+  // Rust by the add command — the frontend passes no path, so a fabricated
+  // path can never reach the backend read (the trust boundary in ADR-0004).
+  // The backend reads, size-caps, and auto-renames each picked file; a failure
+  // on one (e.g. over the hard cap) doesn't abort the rest. We surface one
+  // toast per failure naming the file and the backend's reason (e.g. "exceeds
+  // the 25 MiB limit") so the user knows which file and whether retrying could
+  // ever work, then persist once and refresh only when something actually
+  // landed. A cancelled dialog comes back as an empty outcome — a no-op.
   const handleAdd = async () => {
     if (isDisabled) return;
-    const selected = await open({ multiple: true });
-    if (!selected) return;
-    const paths = Array.isArray(selected) ? selected : [selected];
-    if (paths.length === 0) return;
 
-    let added = 0;
-    for (const path of paths) {
-      try {
-        await entriesApi.addAttachment(dbId, entryId, path);
-        added += 1;
-      } catch (error) {
-        console.error("Failed to add attachment:", error);
-        // Backend errors (AttachmentTooLarge / InvalidInput) cross IPC as a
-        // string; surface it alongside the file's basename rather than
-        // collapsing every failure into one opaque message.
-        const filename = path.split(/[\\/]/).pop() || path;
-        const reason = error instanceof Error ? error.message : String(error);
-        toast.error(
-          t("entries.detail.attachmentAddFailed", { filename, reason })
-        );
-      }
+    let outcome: Awaited<ReturnType<typeof entriesApi.addAttachments>>;
+    try {
+      outcome = await entriesApi.addAttachments(dbId, entryId);
+    } catch (error) {
+      console.error("Failed to add attachments:", error);
+      toast.error(t("entries.detail.attachmentAddBatchFailed"));
+      return;
+    }
+
+    for (const failure of outcome.failed) {
+      toast.error(
+        t("entries.detail.attachmentAddFailed", {
+          filename: failure.sourceName,
+          reason: failure.reason,
+        })
+      );
     }
 
     // Persist and refresh only when at least one file actually landed in the
-    // in-memory Vault, so a wholly-failed batch leaves no phantom unsaved state.
-    if (added > 0) {
+    // in-memory Vault, so a wholly-failed or cancelled batch leaves no phantom
+    // unsaved state.
+    if (outcome.added.length > 0) {
       await saveWithErrorToast(dbId, t);
       await invalidateEntryQueries();
-      toast.success(t("entries.detail.attachmentsAdded", { count: added }));
+      toast.success(
+        t("entries.detail.attachmentsAdded", { count: outcome.added.length })
+      );
     }
   };
 

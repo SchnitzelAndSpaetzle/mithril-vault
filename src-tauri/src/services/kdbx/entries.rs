@@ -1,5 +1,8 @@
 use crate::domain::secure::SecureBytes;
-use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
+use crate::dto::entry::{
+    AddAttachmentsOutcome, AttachmentAddFailure, CreateEntryData, CustomFieldValue, Entry,
+    UpdateEntryData,
+};
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::db::{Entry as KeepassEntry, Times, Value};
@@ -236,6 +239,37 @@ impl KdbxService {
             vault.mark_modified();
             Ok(stored_name)
         })
+    }
+
+    /// Adds a batch of files to an Entry, one per path, returning the stored
+    /// names and per-file failures. This is the single feeder the trusted
+    /// add-attachment command uses: it is handed only OS-provided paths (the
+    /// native file dialog today, the `tauri://drag-drop` event for #286), never
+    /// a renderer-supplied string. A failure on one file (e.g. over the hard
+    /// cap) is collected and the batch continues, so one bad pick never aborts
+    /// the rest. Each successful add marks the Vault modified via the
+    /// underlying single add; the frontend persists once afterward.
+    pub fn add_entry_attachments(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        paths: &[std::path::PathBuf],
+    ) -> Result<AddAttachmentsOutcome, AppError> {
+        let mut outcome = AddAttachmentsOutcome::default();
+        for path in paths {
+            match self.add_entry_attachment(db_id, entry_id, path) {
+                Ok(stored_name) => outcome.added.push(stored_name),
+                Err(error) => outcome.failed.push(AttachmentAddFailure {
+                    source_name: path
+                        .file_name()
+                        .and_then(std::ffi::OsStr::to_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    reason: error.to_string(),
+                }),
+            }
+        }
+        Ok(outcome)
     }
 
     /// Fetches a protected custom field value.
@@ -1399,6 +1433,113 @@ mod tests {
             entry.attachments.is_empty(),
             "nothing is stored for a rejected add"
         );
+    }
+
+    #[test]
+    fn add_entry_attachments_adds_every_path_in_pick_order() {
+        // The batch add is the only feeder the trusted-source command uses: it
+        // takes the list of OS-provided paths and stores each, returning the
+        // stored names in pick order. The whole list lands and the Vault is
+        // marked modified once it has run.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let first = dir.path().join("codes.txt");
+        std::fs::write(&first, b"first").expect("seed first");
+        let second = dir.path().join("scan.pdf");
+        std::fs::write(&second, b"second").expect("seed second");
+
+        let outcome = service
+            .add_entry_attachments(&db_path, &entry_a, &[first, second])
+            .expect("batch add");
+
+        assert_eq!(
+            outcome.added,
+            vec!["codes.txt".to_string(), "scan.pdf".to_string()],
+            "every picked path is stored, in pick order"
+        );
+        assert!(outcome.failed.is_empty(), "no failures for valid files");
+    }
+
+    #[test]
+    fn add_entry_attachments_keeps_going_when_one_file_is_rejected() {
+        // A rejected file (here, one over the hard cap) must not abort the
+        // batch: the surviving files still land, and the failure is reported
+        // with its basename and the backend reason so the UI can surface a
+        // per-file toast. Mirrors the single-add resilience the UI relied on.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let ok_a = dir.path().join("ok-a.txt");
+        std::fs::write(&ok_a, b"a").expect("seed ok-a");
+        let huge = dir.path().join("huge.bin");
+        std::fs::write(
+            &huge,
+            vec![0u8; usize::try_from(HARD_CAP_BYTES + 1).expect("cap fits usize")],
+        )
+        .expect("seed huge");
+        let ok_b = dir.path().join("ok-b.txt");
+        std::fs::write(&ok_b, b"b").expect("seed ok-b");
+
+        let outcome = service
+            .add_entry_attachments(&db_path, &entry_a, &[ok_a, huge, ok_b])
+            .expect("batch add");
+
+        assert_eq!(
+            outcome.added,
+            vec!["ok-a.txt".to_string(), "ok-b.txt".to_string()],
+            "the surviving files still land despite the rejected one"
+        );
+        assert_eq!(outcome.failed.len(), 1, "exactly the over-cap file fails");
+        assert_eq!(outcome.failed[0].source_name, "huge.bin");
+        assert!(
+            outcome.failed[0].reason.contains("exceeding"),
+            "the failure carries the backend reason, got {:?}",
+            outcome.failed[0].reason
+        );
+    }
+
+    #[test]
+    fn add_entry_attachments_reads_only_paths_handed_to_it() {
+        // The trust boundary (issue #296): a file the user never selected
+        // through the OS picker must not be readable through the add path. The
+        // command no longer accepts a renderer-supplied `source_path` — the
+        // only paths that reach the read are the ones in this slice. So a
+        // sensitive file sitting on disk that is NOT in the handed-in list (the
+        // empty list models a cancelled dialog) is never read, nothing is
+        // stored, and the Vault is left untouched. There is structurally no
+        // parameter through which a fabricated path could be injected.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let secret = dir.path().join("id_rsa");
+        std::fs::write(&secret, b"-----BEGIN PRIVATE KEY-----").expect("seed secret");
+
+        let generation_before = service
+            .with_vault(&db_path, |vault| Ok(vault.generation()))
+            .expect("generation before");
+
+        let outcome = service
+            .add_entry_attachments(&db_path, &entry_a, &[])
+            .expect("empty batch");
+
+        assert!(
+            outcome.added.is_empty(),
+            "nothing is added from an empty pick"
+        );
+        assert!(outcome.failed.is_empty(), "and nothing fails either");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "a file never handed to the add path must not be readable through it"
+        );
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "no read means no modification"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
     }
 
     #[test]

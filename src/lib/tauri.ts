@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
+  AddAttachmentsOutcome,
   AppPreferences,
   AuditEventsResponse,
   AuditFilter,
@@ -28,6 +29,7 @@ import type {
   UpdateEntryData,
 } from "./types";
 import {
+  AddAttachmentsOutcomeSchema,
   AppPreferencesSchema,
   AuditEventsResponseSchema,
   AuditStatusSchema,
@@ -305,28 +307,24 @@ export const entries = {
   },
 
   /**
-   * Adds a file on disk to an Entry as a native KDBX binary. The file-picker
-   * dialog runs in the UI and yields a filesystem `sourcePath`; the backend
-   * reads the bytes, enforces the hard size cap, auto-renames on a filename
-   * collision within the Entry, and marks the Vault modified immediately. The
-   * frontend never loads file bytes into JS memory on add. Returns the
-   * filename the attachment was stored under (may differ from the source
-   * basename after an auto-rename). The caller persists via `database.save`
-   * and refreshes the entry.
+   * Adds files to an Entry as native KDBX binaries. The multi-select file
+   * dialog is opened *in Rust* by this command — the frontend passes no path,
+   * so a renderer-supplied or fabricated path can never reach the read (the
+   * trust boundary in ADR-0004). A cancelled dialog is a no-op (empty outcome).
+   * The backend reads each picked file, enforces the hard size cap, and
+   * auto-renames on a filename collision; one bad pick never aborts the rest.
+   * Returns the batch outcome — `added` stored names plus per-file `failed`
+   * entries (basename + backend reason). The caller persists via
+   * `database.save` and refreshes the entry when anything landed.
    */
-  async addAttachment(
+  async addAttachments(
     dbId: string,
-    id: string,
-    sourcePath: string
-  ): Promise<string> {
+    id: string
+  ): Promise<AddAttachmentsOutcome> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    const result = await invoke("add_entry_attachment", {
-      dbId,
-      id,
-      sourcePath,
-    });
-    return z.string().parse(result);
+    const result = await invoke("add_entry_attachments", { dbId, id });
+    return AddAttachmentsOutcomeSchema.parse(result);
   },
 
   /**
