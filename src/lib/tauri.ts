@@ -337,21 +337,29 @@ export const entries = {
   },
 
   /**
-   * Phase 2 (shared): drains the buffered paths and stores each as a native
-   * KDBX binary, enforcing the configured hard cap. Called after the frontend
-   * has resolved any soft-warning confirmation, for both the picker and the
-   * drop. The backend drains the buffer, so a commit with no preceding prepare
-   * returns an empty outcome. Returns the batch outcome — `added` stored names
-   * plus per-file `failed` entries (basename + backend reason). The caller
-   * persists via `database.save` and refreshes the entry when anything landed.
+   * Phase 2 (shared): drains the buffered paths for `batchId` and stores each as
+   * a native KDBX binary, enforcing the configured hard cap. Called after the
+   * frontend has resolved any soft-warning confirmation, for both the picker and
+   * the drop. `batchId` comes from the plan returned by the matching prepare; the
+   * backend stores the batch only if that id still matches the current buffer
+   * generation, so a later pick/drop that superseded the prepared batch (e.g. a
+   * stray drop while the confirmation prompt was open) makes this commit a no-op
+   * rather than attaching the wrong file. Returns the batch outcome — `added`
+   * stored names plus per-file `failed` entries. The caller persists via
+   * `database.save` and refreshes the entry when anything landed.
    */
   async commitPreparedAttachments(
     dbId: string,
-    id: string
+    id: string,
+    batchId: number
   ): Promise<AddAttachmentsOutcome> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    const result = await invoke("commit_prepared_attachments", { dbId, id });
+    const result = await invoke("commit_prepared_attachments", {
+      dbId,
+      id,
+      batchId,
+    });
     return AddAttachmentsOutcomeSchema.parse(result);
   },
 

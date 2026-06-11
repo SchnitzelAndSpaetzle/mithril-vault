@@ -387,6 +387,7 @@
       "attachments": "Attachments",
       "noAttachments": "No attachments",
       "addAttachment": "Add attachment",
+      "addingAttachments": "Adding…",
       "dropToAttach": "Drop files here to attach",
       "attachmentsAdded_one": "Added {{count}} attachment",
       "attachmentsAdded_other": "Added {{count}} attachments",

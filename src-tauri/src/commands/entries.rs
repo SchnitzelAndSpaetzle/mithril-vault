@@ -225,8 +225,13 @@ pub async fn prepare_picked_attachments<R: Runtime>(
         .into_iter()
         .filter_map(|file_path| file_path.into_path().ok())
         .collect();
-    pending.replace(paths.clone());
-    Ok(plan_attachment_adds(&paths, soft, hard))
+    // Buffering mints a fresh batch id; the frontend echoes it back at commit so
+    // a later pick/drop that supersedes this batch turns the stale commit into a
+    // no-op rather than a wrong-file attach.
+    let batch_id = pending.replace(paths.clone());
+    let mut plan = plan_attachment_adds(&paths, soft, hard);
+    plan.batch_id = batch_id;
+    Ok(plan)
 }
 
 /// Phase 1 (drag-drop): classifies the paths buffered from the most recent
@@ -241,29 +246,35 @@ pub async fn prepare_dropped_attachments(
     pending: State<'_, Arc<PendingAttachmentPaths>>,
 ) -> Result<AttachmentAddPlan, AppError> {
     let (soft, hard) = attachment_thresholds(&settings)?;
-    let paths = pending.peek();
-    Ok(plan_attachment_adds(&paths, soft, hard))
+    let (batch_id, paths) = pending.peek();
+    let mut plan = plan_attachment_adds(&paths, soft, hard);
+    plan.batch_id = batch_id;
+    Ok(plan)
 }
 
-/// Phase 2 (shared): drains the buffered paths and stores each as a native KDBX
-/// binary, enforcing the configured hard cap. Used by both the picker and the
-/// drop after the frontend has resolved any soft-warning confirmation. Draining
-/// means a stale batch cannot be replayed against a later entry, and a commit
-/// with no preceding prepare reads nothing (empty outcome). Each file is read,
-/// hard-size-capped, and auto-renamed on a filename collision; one bad file
-/// never aborts the rest. Returns the batch outcome (stored names + per-file
-/// failures); the frontend persists via `database.save` and refreshes when
-/// anything landed.
+/// Phase 2 (shared): drains the buffered paths for `batch_id` and stores each as
+/// a native KDBX binary, enforcing the configured hard cap. Used by both the
+/// picker and the drop after the frontend has resolved any soft-warning
+/// confirmation. The buffer drains *only* when `batch_id` still matches the
+/// current generation, so a later pick/drop that superseded the prepared batch
+/// (e.g. a stray drop while the confirmation prompt was open) makes this commit a
+/// no-op (empty outcome) instead of attaching the wrong file. Draining also means
+/// a stale batch cannot be replayed against a later entry, and a commit with no
+/// preceding prepare reads nothing. Each file is read, hard-size-capped, and
+/// auto-renamed on a filename collision; one bad file never aborts the rest.
+/// Returns the batch outcome (stored names + per-file failures); the frontend
+/// persists via `database.save` and refreshes when anything landed.
 #[tauri::command]
 pub async fn commit_prepared_attachments(
     db_id: String,
     id: String,
+    batch_id: u64,
     state: State<'_, Arc<KdbxService>>,
     settings: State<'_, Arc<SettingsService>>,
     pending: State<'_, Arc<PendingAttachmentPaths>>,
 ) -> Result<AddAttachmentsOutcome, AppError> {
     let (_soft, hard) = attachment_thresholds(&settings)?;
-    let paths = pending.take();
+    let paths = pending.take(batch_id);
     state.add_entry_attachments(&db_id, &id, &paths, hard)
 }
 

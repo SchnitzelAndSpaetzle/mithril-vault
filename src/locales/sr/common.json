@@ -364,6 +364,7 @@
       "attachments": "Prilozi",
       "noAttachments": "Nema priloga",
       "addAttachment": "Dodaj prilog",
+      "addingAttachments": "Dodavanje…",
       "dropToAttach": "Prevucite datoteke ovde da biste ih priložili",
       "attachmentsAdded_one": "Dodat {{count}} prilog",
       "attachmentsAdded_other": "Dodato {{count}} priloga",

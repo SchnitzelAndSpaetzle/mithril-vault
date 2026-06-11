@@ -364,6 +364,7 @@
       "attachments": "Adjuntos",
       "noAttachments": "Sin adjuntos",
       "addAttachment": "Añadir adjunto",
+      "addingAttachments": "Añadiendo…",
       "dropToAttach": "Suelta archivos aquí para adjuntarlos",
       "attachmentsAdded_one": "{{count}} adjunto añadido",
       "attachmentsAdded_other": "{{count}} adjuntos añadidos",

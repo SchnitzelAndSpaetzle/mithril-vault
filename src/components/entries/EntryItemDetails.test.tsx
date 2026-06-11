@@ -97,6 +97,9 @@ vi.mock("@/lib/tauri", () => ({
   database: { save: databaseSave },
 }));
 
+// The buffer generation a prepare returns and the commit must echo back.
+const BATCH_ID = 7;
+
 // A plan with no over-soft files: the add proceeds without a confirmation
 // prompt. `items` is non-empty so the flow reaches commit (an empty plan is a
 // no-op). Tests that don't care about the exact items reuse this.
@@ -104,6 +107,7 @@ function planWithoutConfirmation() {
   return {
     items: [{ sourceName: "file.txt", size: 10, status: "ok" as const }],
     requiresConfirmation: false,
+    batchId: BATCH_ID,
   };
 }
 
@@ -115,6 +119,7 @@ function planRequiringConfirmation() {
       { sourceName: "big.pdf", size: 8_000_000, status: "overSoft" as const },
     ],
     requiresConfirmation: true,
+    batchId: BATCH_ID,
   };
 }
 
@@ -610,19 +615,25 @@ describe("EntryItemDetails attachment add", () => {
     });
     // An under-soft batch is never prompted, and commit receives ids only.
     expect(ask).not.toHaveBeenCalled();
-    expect(commitPreparedAttachments).toHaveBeenCalledWith("db-1", "entry-1");
+    expect(commitPreparedAttachments).toHaveBeenCalledWith(
+      "db-1",
+      "entry-1",
+      BATCH_ID
+    );
     expect(toastSuccess).toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it("ignores a second Add click while the first gesture is still in flight", async () => {
+  it("shows a busy indicator and ignores a second Add click while in flight", async () => {
     // Both write paths buffer paths in one shared Rust-side buffer, so a
     // concurrent gesture started before the first commits would clobber the
-    // first's paths. The in-flight guard must reject the second prepare until
-    // the first flow finishes.
+    // first's paths. While a flow is in flight the Add button must show a busy
+    // state (so the user sees the work) and reject a second prepare (so it can't
+    // be re-triggered or interrupted).
     let resolvePrepare!: (plan: {
       items: { sourceName: string; size: number; status: "ok" }[];
       requiresConfirmation: boolean;
+      batchId: number;
     }) => void;
     preparePickedAttachments.mockReturnValue(
       new Promise((resolve) => {
@@ -631,18 +642,30 @@ describe("EntryItemDetails attachment add", () => {
     );
 
     renderDetails({ attachments: [] });
-    clickAttachmentAction("entries.detail.addAttachment");
-    // Second click lands while the first prepare is still pending.
-    clickAttachmentAction("entries.detail.addAttachment");
+    const button = screen.getByRole("button", {
+      name: "entries.detail.addAttachment",
+    });
+    fireEvent.click(button);
 
+    // The button reflects the in-flight state: busy + disabled.
+    await waitFor(() => {
+      expect(button).toBeDisabled();
+    });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.getByText("entries.detail.addingAttachments")
+    ).toBeInTheDocument();
+
+    // A second click while the first prepare is still pending is ignored.
+    fireEvent.click(button);
     expect(preparePickedAttachments).toHaveBeenCalledTimes(1);
 
-    // Let the first flow finish so the guard releases (and the test doesn't
-    // leak a pending promise).
-    resolvePrepare({ items: [], requiresConfirmation: false });
+    // Let the first flow finish so the guard releases and the busy state clears.
+    resolvePrepare({ items: [], requiresConfirmation: false, batchId: 0 });
     await waitFor(() => {
-      expect(preparePickedAttachments).toHaveBeenCalledTimes(1);
+      expect(button).not.toBeDisabled();
     });
+    expect(preparePickedAttachments).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing when the picker comes back empty (cancelled)", async () => {
@@ -650,6 +673,7 @@ describe("EntryItemDetails attachment add", () => {
     preparePickedAttachments.mockResolvedValue({
       items: [],
       requiresConfirmation: false,
+      batchId: 0,
     });
 
     renderDetails({ attachments: [] });
@@ -678,7 +702,11 @@ describe("EntryItemDetails attachment add", () => {
     clickAttachmentAction("entries.detail.addAttachment");
 
     await waitFor(() => {
-      expect(commitPreparedAttachments).toHaveBeenCalledWith("db-1", "entry-1");
+      expect(commitPreparedAttachments).toHaveBeenCalledWith(
+        "db-1",
+        "entry-1",
+        BATCH_ID
+      );
     });
     expect(ask).toHaveBeenCalledTimes(1);
     expect(databaseSave).toHaveBeenCalledWith("db-1");
@@ -856,7 +884,11 @@ describe("EntryItemDetails attachment drop zone", () => {
     await fireDrop({ x: 50, y: 50 });
 
     await waitFor(() => {
-      expect(commitPreparedAttachments).toHaveBeenCalledWith("db-1", "entry-1");
+      expect(commitPreparedAttachments).toHaveBeenCalledWith(
+        "db-1",
+        "entry-1",
+        BATCH_ID
+      );
     });
     expect(databaseSave).toHaveBeenCalledWith("db-1");
     expect(toastSuccess).toHaveBeenCalled();

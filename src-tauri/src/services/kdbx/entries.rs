@@ -71,9 +71,13 @@ pub(crate) fn plan_attachment_adds(
     let requires_confirmation = items
         .iter()
         .any(|item| item.status == AttachmentSizeStatus::OverSoft);
+    // `batch_id` is owned by the buffer generation, which this pure builder has
+    // no access to; the prepare command overwrites it with the real id before
+    // returning the plan over IPC.
     AttachmentAddPlan {
         items,
         requires_confirmation,
+        batch_id: 0,
     }
 }
 
@@ -1780,10 +1784,10 @@ mod tests {
         std::fs::write(&dropped, b"from a drag-drop").expect("seed dropped file");
 
         let buffer = crate::services::drag_drop::PendingAttachmentPaths::default();
-        buffer.replace(vec![dropped.clone()]);
+        let batch = buffer.replace(vec![dropped.clone()]);
 
         // The commit drains the buffer and hands only those paths to the feeder.
-        let paths = buffer.take();
+        let paths = buffer.take(batch);
         let outcome = service
             .add_entry_attachments(&db_path, &entry_a, &paths, TEST_HARD_CAP)
             .expect("commit drained drop");
@@ -1804,7 +1808,7 @@ mod tests {
         );
 
         assert!(
-            buffer.take().is_empty(),
+            buffer.take(batch).is_empty(),
             "the buffer is drained, so a second commit reads nothing"
         );
     }
@@ -1818,7 +1822,7 @@ mod tests {
         let (service, _dir, db_path, entry_a, _b) = create_test_database();
 
         let buffer = crate::services::drag_drop::PendingAttachmentPaths::default();
-        assert!(buffer.take().is_empty(), "no drop means no buffered paths");
+        assert!(buffer.take(0).is_empty(), "no drop means no buffered paths");
 
         assert_empty_add_is_inert(&service, &db_path, &entry_a);
     }

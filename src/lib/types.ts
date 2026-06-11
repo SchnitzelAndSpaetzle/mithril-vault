@@ -62,6 +62,9 @@ export type AttachmentPlanItem = z.infer<typeof AttachmentPlanItemSchema>;
 export const AttachmentAddPlanSchema = z.object({
   items: z.array(AttachmentPlanItemSchema),
   requiresConfirmation: z.boolean(),
+  // Generation of the buffered batch; echoed back to commit so a superseded
+  // batch (a later pick/drop) makes a stale commit a no-op.
+  batchId: z.number().int().nonnegative(),
 });
 export type AttachmentAddPlan = z.infer<typeof AttachmentAddPlanSchema>;
 

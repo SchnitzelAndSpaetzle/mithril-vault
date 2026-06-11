@@ -364,6 +364,7 @@
       "attachments": "Pièces jointes",
       "noAttachments": "Aucune pièce jointe",
       "addAttachment": "Ajouter une pièce jointe",
+      "addingAttachments": "Ajout…",
       "dropToAttach": "Déposez des fichiers ici pour les joindre",
       "attachmentsAdded_one": "{{count}} pièce jointe ajoutée",
       "attachmentsAdded_other": "{{count}} pièces jointes ajoutées",

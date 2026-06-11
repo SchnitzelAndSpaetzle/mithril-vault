@@ -596,9 +596,12 @@ function AttachmentsSection({
   // Guards against overlapping add gestures. Both write paths (picker, drop)
   // buffer their paths in one shared Rust-side buffer, so a second gesture
   // started while the first is still awaiting its confirmation prompt would
-  // overwrite the first's paths before it commits. This ref rejects a
-  // concurrent prepare so each gesture owns the buffer for its whole lifetime.
+  // overwrite the first's paths before it commits. The ref is the synchronous
+  // guard (a double-click can't slip through between renders); `isAdding` is the
+  // rendered mirror that drives the spinner and disables the controls so the
+  // user can see the work and can't accidentally re-trigger or interrupt it.
   const addInFlightRef = useRef(false);
+  const [isAdding, setIsAdding] = useState(false);
   // The Attachment the user opened the Preview modal on, or null when the
   // modal is closed. Kept at the section level so the modal sits outside the
   // row mapping (one modal, not one per row).
@@ -700,6 +703,7 @@ function AttachmentsSection({
     // commits or aborts, so a second prepare here would clobber its paths.
     if (addInFlightRef.current) return;
     addInFlightRef.current = true;
+    setIsAdding(true);
     try {
       let plan: Awaited<ReturnType<typeof entriesApi.preparePickedAttachments>>;
       try {
@@ -730,7 +734,13 @@ function AttachmentsSection({
         ReturnType<typeof entriesApi.commitPreparedAttachments>
       >;
       try {
-        outcome = await entriesApi.commitPreparedAttachments(dbId, entryId);
+        // Echo the prepared batch id so a superseded batch (a later pick/drop)
+        // commits nothing rather than the wrong file.
+        outcome = await entriesApi.commitPreparedAttachments(
+          dbId,
+          entryId,
+          plan.batchId
+        );
       } catch (error) {
         console.error("Failed to add attachments:", error);
         toast.error(t("entries.detail.attachmentAddBatchFailed"));
@@ -740,6 +750,7 @@ function AttachmentsSection({
       await applyAddOutcome(outcome);
     } finally {
       addInFlightRef.current = false;
+      setIsAdding(false);
     }
   };
 
@@ -761,8 +772,12 @@ function AttachmentsSection({
 
   // The native drag-drop event is window-global; the hook acts only on desktop
   // and only when a drop lands inside this panel (and not mid-transition).
+  // Ignore drops while an add is already in flight: the in-flight gesture owns
+  // the buffer, and accepting another drop would only supersede it (and be a
+  // no-op at commit anyway). Disabling here keeps the drop zone honest with the
+  // busy state the user sees.
   const { isDragOver } = useAttachmentDrop({
-    enabled: !isMobile && !isDisabled,
+    enabled: !isMobile && !isDisabled && !isAdding,
     panelRef,
     onDrop: handleDrop,
   });
@@ -812,11 +827,21 @@ function AttachmentsSection({
           size="sm"
           className="h-7 gap-1.5"
           aria-label={t("entries.detail.addAttachment")}
-          disabled={isDisabled}
+          aria-busy={isAdding}
+          disabled={isDisabled || isAdding}
           onClick={() => void handleAdd()}
         >
-          <Paperclip className="h-4 w-4" />
-          {t("entries.detail.addAttachment")}
+          {isAdding ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("entries.detail.addingAttachments")}
+            </>
+          ) : (
+            <>
+              <Paperclip className="h-4 w-4" />
+              {t("entries.detail.addAttachment")}
+            </>
+          )}
         </Button>
       </div>
       <Separator />

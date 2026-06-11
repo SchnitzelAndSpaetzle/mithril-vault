@@ -64,11 +64,18 @@ pub struct AttachmentPlanItem {
 /// decide whether to show the soft-warning prompt before committing. Files over
 /// the hard cap do not gate the prompt; they surface as per-file failures at
 /// commit time instead.
+///
+/// `batch_id` is the generation of the buffered batch this plan describes. The
+/// frontend echoes it back to `commit_prepared_attachments`, which only stores
+/// the batch when the id still matches — so a later pick/drop that supersedes the
+/// buffer turns a stale (e.g. post-confirmation) commit into a no-op rather than
+/// attaching the wrong file.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentAddPlan {
     pub items: Vec<AttachmentPlanItem>,
     pub requires_confirmation: bool,
+    pub batch_id: u64,
 }
 
 /// One file that failed to add in a batch, paired with the basename it was
