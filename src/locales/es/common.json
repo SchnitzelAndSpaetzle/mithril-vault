@@ -356,7 +356,10 @@
       "deleteAttachmentConfirmTitle": "Eliminar adjunto",
       "deleteAttachmentConfirm": "¿Quitar {{filename}} de esta entrada?",
       "attachmentDeleted": "{{filename}} eliminado",
-      "attachmentDeleteFailed": "No se pudo eliminar {{filename}}"
+      "attachmentDeleteFailed": "No se pudo eliminar {{filename}}",
+      "previewAttachment": "Previsualizar adjunto",
+      "attachmentPreviewLoading": "Cargando vista previa…",
+      "attachmentPreviewTooLarge": "Demasiado grande para previsualizar — descarga para verlo"
     },
     "sort": {
       "sortBy": "Ordenar por",

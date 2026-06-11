@@ -68,6 +68,7 @@ vi.mock("@/hooks/use-clipboard-timeout", () => ({
 const exportAttachment = vi.hoisted(() => vi.fn());
 const deleteAttachment = vi.hoisted(() => vi.fn());
 const addAttachments = vi.hoisted(() => vi.fn());
+const getAttachmentBytes = vi.hoisted(() => vi.fn());
 const databaseSave = vi.hoisted(() => vi.fn());
 const save = vi.hoisted(() => vi.fn());
 const ask = vi.hoisted(() => vi.fn());
@@ -81,6 +82,7 @@ vi.mock("@/lib/tauri", () => ({
     exportAttachment,
     deleteAttachment,
     addAttachments,
+    getAttachmentBytes,
   },
   database: { save: databaseSave },
 }));
@@ -281,6 +283,130 @@ describe("EntryItemDetails attachments section", () => {
     expect(filenames[0]).toContain("apple.png");
     expect(filenames[1]).toContain("Banana.gif");
     expect(filenames[2]).toContain("Zebra.txt");
+  });
+});
+
+describe("EntryItemDetails attachment preview", () => {
+  beforeEach(() => {
+    state.entry = null;
+    state.isTransitioning = false;
+    getAttachmentBytes.mockReset();
+  });
+
+  it("renders a Preview button for an image attachment", () => {
+    renderDetails({
+      attachments: [{ filename: "logo.png", size: 100, mimeType: "image/png" }],
+    });
+
+    expect(
+      screen.getByRole("button", { name: "entries.detail.previewAttachment" })
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Preview button for non-previewable types (PDF)", () => {
+    renderWithPdf();
+
+    expect(
+      screen.queryByRole("button", { name: "entries.detail.previewAttachment" })
+    ).not.toBeInTheDocument();
+    // Download remains available for non-previewable types — that's the
+    // whole point of the gating.
+    expect(
+      screen.getByRole("button", { name: "entries.detail.downloadAttachment" })
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Preview button for SVG (browser-renderable but not previewable per spec)", () => {
+    renderDetails({
+      attachments: [
+        { filename: "icon.svg", size: 200, mimeType: "image/svg+xml" },
+      ],
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "entries.detail.previewAttachment" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the Preview button for a text attachment (.txt)", () => {
+    renderDetails({
+      attachments: [
+        {
+          filename: "notes.txt",
+          size: 50,
+          mimeType: "application/octet-stream",
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole("button", { name: "entries.detail.previewAttachment" })
+    ).toBeInTheDocument();
+  });
+
+  it("opens the modal and fetches bytes when Preview is clicked on an image", async () => {
+    getAttachmentBytes.mockResolvedValue(
+      new Uint8Array([0x61, 0x62, 0x63]) // "abc" → base64 "YWJj"
+    );
+
+    renderDetails({
+      attachments: [{ filename: "logo.png", size: 3, mimeType: "image/png" }],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.previewAttachment" })
+    );
+
+    const img = await screen.findByRole("img", { name: "logo.png" });
+    expect(img.getAttribute("src")).toBe("data:image/png;base64,YWJj");
+    expect(getAttachmentBytes).toHaveBeenCalledWith(
+      "db-1",
+      "entry-1",
+      "logo.png"
+    );
+  });
+
+  it("opens the modal and fetches bytes when Preview is clicked on a text file", async () => {
+    const contents = "hello world";
+    getAttachmentBytes.mockResolvedValue(new TextEncoder().encode(contents));
+
+    renderDetails({
+      attachments: [
+        {
+          filename: "notes.txt",
+          size: contents.length,
+          mimeType: "application/octet-stream",
+        },
+      ],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.previewAttachment" })
+    );
+
+    await waitFor(() => {
+      expect(getAttachmentBytes).toHaveBeenCalledWith(
+        "db-1",
+        "entry-1",
+        "notes.txt"
+      );
+    });
+    expect(await screen.findByText(contents)).toBeInTheDocument();
+  });
+
+  it("shows the Preview button for a previewable file above the size cap (modal explains it)", () => {
+    // Per the answered spec question: Preview button is still offered; the
+    // modal carries the "too large to preview — download to view" message.
+    const TWO_MB_PLUS_ONE = 2 * 1024 * 1024 + 1;
+    renderDetails({
+      attachments: [
+        { filename: "huge.png", size: TWO_MB_PLUS_ONE, mimeType: "image/png" },
+      ],
+    });
+
+    expect(
+      screen.getByRole("button", { name: "entries.detail.previewAttachment" })
+    ).toBeInTheDocument();
   });
 });
 

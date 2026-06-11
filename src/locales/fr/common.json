@@ -356,7 +356,10 @@
       "deleteAttachmentConfirmTitle": "Supprimer la pièce jointe",
       "deleteAttachmentConfirm": "Retirer {{filename}} de cette entrée ?",
       "attachmentDeleted": "{{filename}} supprimé",
-      "attachmentDeleteFailed": "Échec de la suppression de {{filename}}"
+      "attachmentDeleteFailed": "Échec de la suppression de {{filename}}",
+      "previewAttachment": "Prévisualiser la pièce jointe",
+      "attachmentPreviewLoading": "Chargement de l'aperçu…",
+      "attachmentPreviewTooLarge": "Trop volumineux pour la prévisualisation — téléchargez pour consulter"
     },
     "sort": {
       "sortBy": "Trier par",

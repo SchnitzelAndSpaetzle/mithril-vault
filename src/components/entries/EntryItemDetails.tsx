@@ -37,6 +37,8 @@ import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import { getKeepassIcon } from "@/lib/keepass-icons";
 import { isExpired } from "@/lib/entry-expiry";
 import { formatAttachmentSize } from "@/lib/entry-attachment";
+import { classifyAttachment } from "@/lib/attachment-preview";
+import { AttachmentPreviewModal } from "@/components/entries/AttachmentPreviewModal";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ask, save } from "@tauri-apps/plugin-dialog";
@@ -585,11 +587,24 @@ function AttachmentsSection({
 }>) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  // The Attachment the user opened the Preview modal on, or null when the
+  // modal is closed. Kept at the section level so the modal sits outside the
+  // row mapping (one modal, not one per row).
+  const [previewing, setPreviewing] = useState<AttachmentMeta | null>(null);
 
   // Sorted by filename, case-insensitively, for a stable display order (the
   // KDBX binary pool is unordered). Copy first so we never mutate props.
   const sorted = [...attachments].sort((a, b) =>
     a.filename.localeCompare(b.filename, undefined, { sensitivity: "base" })
+  );
+
+  // Preview fetches the bytes on demand via the same lazy byte-fetch the
+  // download path uses (no audit event — Preview is a read inside the Vault,
+  // not an export to the host filesystem).
+  const fetchPreviewBytes = useCallback(
+    (filename: string) =>
+      entriesApi.getAttachmentBytes(dbId, entryId, filename),
+    [dbId, entryId]
   );
 
   // Download is the only export path (ADR-0003): pick a destination with the
@@ -730,6 +745,11 @@ function AttachmentsSection({
         <ul>
           {sorted.map((attachment, index) => {
             const Icon = attachmentIcon(attachment.mimeType);
+            // Non-previewable types (PDF, SVG, archives, opaque binaries)
+            // don't get a Preview affordance at all — the spec says no
+            // broken preview button.
+            const isPreviewable =
+              classifyAttachment(attachment).kind !== "none";
             return (
               <li key={attachment.filename}>
                 {index > 0 && <Separator />}
@@ -741,6 +761,18 @@ function AttachmentsSection({
                   <span className="shrink-0 text-sm text-muted-foreground">
                     {formatAttachmentSize(attachment.size)}
                   </span>
+                  {isPreviewable && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      aria-label={t("entries.detail.previewAttachment")}
+                      disabled={isDisabled}
+                      onClick={() => setPreviewing(attachment)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -766,6 +798,16 @@ function AttachmentsSection({
             );
           })}
         </ul>
+      )}
+      {previewing && (
+        <AttachmentPreviewModal
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setPreviewing(null);
+          }}
+          attachment={previewing}
+          fetchBytes={fetchPreviewBytes}
+        />
       )}
     </div>
   );

@@ -379,7 +379,10 @@
       "deleteAttachmentConfirmTitle": "Delete attachment",
       "deleteAttachmentConfirm": "Remove {{filename}} from this entry?",
       "attachmentDeleted": "Deleted {{filename}}",
-      "attachmentDeleteFailed": "Failed to delete {{filename}}"
+      "attachmentDeleteFailed": "Failed to delete {{filename}}",
+      "previewAttachment": "Preview attachment",
+      "attachmentPreviewLoading": "Loading preview…",
+      "attachmentPreviewTooLarge": "Too large to preview — download to view"
     },
     "sort": {
       "sortBy": "Sort by",
