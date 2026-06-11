@@ -615,6 +615,36 @@ describe("EntryItemDetails attachment add", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
+  it("ignores a second Add click while the first gesture is still in flight", async () => {
+    // Both write paths buffer paths in one shared Rust-side buffer, so a
+    // concurrent gesture started before the first commits would clobber the
+    // first's paths. The in-flight guard must reject the second prepare until
+    // the first flow finishes.
+    let resolvePrepare!: (plan: {
+      items: { sourceName: string; size: number; status: "ok" }[];
+      requiresConfirmation: boolean;
+    }) => void;
+    preparePickedAttachments.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePrepare = resolve;
+      })
+    );
+
+    renderDetails({ attachments: [] });
+    clickAttachmentAction("entries.detail.addAttachment");
+    // Second click lands while the first prepare is still pending.
+    clickAttachmentAction("entries.detail.addAttachment");
+
+    expect(preparePickedAttachments).toHaveBeenCalledTimes(1);
+
+    // Let the first flow finish so the guard releases (and the test doesn't
+    // leak a pending promise).
+    resolvePrepare({ items: [], requiresConfirmation: false });
+    await waitFor(() => {
+      expect(preparePickedAttachments).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("does nothing when the picker comes back empty (cancelled)", async () => {
     // A cancelled dialog yields an empty plan — the flow never reaches commit.
     preparePickedAttachments.mockResolvedValue({

@@ -593,6 +593,12 @@ function AttachmentsSection({
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const panelRef = useRef<HTMLDivElement>(null);
+  // Guards against overlapping add gestures. Both write paths (picker, drop)
+  // buffer their paths in one shared Rust-side buffer, so a second gesture
+  // started while the first is still awaiting its confirmation prompt would
+  // overwrite the first's paths before it commits. This ref rejects a
+  // concurrent prepare so each gesture owns the buffer for its whole lifetime.
+  const addInFlightRef = useRef(false);
   // The Attachment the user opened the Preview modal on, or null when the
   // modal is closed. Kept at the section level so the modal sits outside the
   // row mapping (one modal, not one per row).
@@ -690,43 +696,51 @@ function AttachmentsSection({
       Awaited<ReturnType<typeof entriesApi.preparePickedAttachments>>
     >
   ) => {
-    let plan: Awaited<ReturnType<typeof entriesApi.preparePickedAttachments>>;
+    // Reject a concurrent gesture: the first one owns the shared buffer until it
+    // commits or aborts, so a second prepare here would clobber its paths.
+    if (addInFlightRef.current) return;
+    addInFlightRef.current = true;
     try {
-      plan = await prepare();
-    } catch (error) {
-      console.error("Failed to prepare attachments:", error);
-      toast.error(t("entries.detail.attachmentAddBatchFailed"));
-      return;
+      let plan: Awaited<ReturnType<typeof entriesApi.preparePickedAttachments>>;
+      try {
+        plan = await prepare();
+      } catch (error) {
+        console.error("Failed to prepare attachments:", error);
+        toast.error(t("entries.detail.attachmentAddBatchFailed"));
+        return;
+      }
+
+      // Nothing picked/dropped: a true no-op, so we never reach commit.
+      if (plan.items.length === 0) return;
+
+      if (plan.requiresConfirmation) {
+        const confirmed = await ask(
+          t("entries.detail.attachmentSoftWarnConfirm"),
+          {
+            title: t("entries.detail.attachmentSoftWarnConfirmTitle"),
+            kind: "warning",
+          }
+        );
+        // Abort the whole batch on decline: the buffered paths stay until the
+        // next pick/drop overwrites them, but nothing is stored now.
+        if (!confirmed) return;
+      }
+
+      let outcome: Awaited<
+        ReturnType<typeof entriesApi.commitPreparedAttachments>
+      >;
+      try {
+        outcome = await entriesApi.commitPreparedAttachments(dbId, entryId);
+      } catch (error) {
+        console.error("Failed to add attachments:", error);
+        toast.error(t("entries.detail.attachmentAddBatchFailed"));
+        return;
+      }
+
+      await applyAddOutcome(outcome);
+    } finally {
+      addInFlightRef.current = false;
     }
-
-    // Nothing picked/dropped: a true no-op, so we never reach commit.
-    if (plan.items.length === 0) return;
-
-    if (plan.requiresConfirmation) {
-      const confirmed = await ask(
-        t("entries.detail.attachmentSoftWarnConfirm"),
-        {
-          title: t("entries.detail.attachmentSoftWarnConfirmTitle"),
-          kind: "warning",
-        }
-      );
-      // Abort the whole batch on decline: the buffered paths stay until the
-      // next pick/drop overwrites them, but nothing is stored now.
-      if (!confirmed) return;
-    }
-
-    let outcome: Awaited<
-      ReturnType<typeof entriesApi.commitPreparedAttachments>
-    >;
-    try {
-      outcome = await entriesApi.commitPreparedAttachments(dbId, entryId);
-    } catch (error) {
-      console.error("Failed to add attachments:", error);
-      toast.error(t("entries.detail.attachmentAddBatchFailed"));
-      return;
-    }
-
-    await applyAddOutcome(outcome);
   };
 
   // Add is the primary write path: the picker opens the multi-select dialog in

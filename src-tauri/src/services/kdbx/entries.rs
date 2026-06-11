@@ -276,8 +276,14 @@ impl KdbxService {
             )));
         }
 
+        // Read one byte past the cap to prove an over-cap file. `saturating_add`
+        // guards the edge where `hard_cap` is `u64::MAX` (a hand-edited
+        // settings.json the validator accepts): `hard_cap + 1` would overflow —
+        // panicking in overflow-checked builds, or wrapping to `take(0)` in
+        // release and silently storing an empty attachment. Saturating leaves
+        // the cap effectively unlimited, which is the intended meaning.
         let mut bytes = Vec::new();
-        file.take(hard_cap + 1)
+        file.take(hard_cap.saturating_add(1))
             .read_to_end(&mut bytes)
             .map_err(|e| AppError::Io(e.to_string()))?;
         if bytes.len() as u64 > hard_cap {
@@ -1547,6 +1553,35 @@ mod tests {
                 Ok(())
             })
             .expect("vault scope");
+    }
+
+    #[test]
+    fn add_entry_attachment_stores_the_real_bytes_when_the_cap_is_u64_max() {
+        // Regression: a hand-edited settings.json can set hardCapBytes to
+        // u64::MAX (the validator only rejects 0 and soft > hard). The read
+        // bound was `hard_cap + 1`, which overflows at u64::MAX — panicking in
+        // overflow-checked builds, or wrapping to take(0) in release and storing
+        // an empty attachment for any non-empty file. With saturating_add the
+        // file's real bytes round-trip and nothing is silently truncated.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let payload = b"real-contents-not-empty";
+        let source = dir.path().join("notes.txt");
+        std::fs::write(&source, payload).expect("seed file");
+
+        let stored = service
+            .add_entry_attachment(&db_path, &entry_a, &source, u64::MAX)
+            .expect("add under an effectively unlimited cap");
+        assert_eq!(stored, "notes.txt");
+
+        let bytes = service
+            .get_entry_attachment(&db_path, &entry_a, "notes.txt")
+            .expect("read back attachment");
+        assert_eq!(
+            bytes.as_bytes(),
+            payload,
+            "the full file bytes must round-trip, not a truncated/empty blob"
+        );
     }
 
     #[test]
