@@ -3,6 +3,7 @@
 import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -15,6 +16,7 @@ import { ArrowDownAZ, ArrowUpAZ } from "lucide-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useTransition } from "react";
 import { useActiveDatabase } from "@/hooks/use-active-database";
+import { cn } from "@/lib/utils";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 
 const SORT_FIELD_KEYS = {
@@ -40,6 +42,7 @@ export default function SortDropdown() {
 
   const sortBy = search.sortBy ?? "title";
   const sortOrder = search.sortOrder ?? "asc";
+  const hasAttachments = search.hasAttachments === true;
 
   const handleSortByChange = (value: string) => {
     if (!dbId) return;
@@ -63,6 +66,20 @@ export default function SortDropdown() {
     });
   };
 
+  const handleHasAttachmentsChange = (checked: boolean) => {
+    if (!dbId) return;
+    startTransition(() => {
+      void navigate({
+        to: "/dashboard/index/$dbId",
+        params: { dbId },
+        search: (prev) => ({
+          ...prev,
+          hasAttachments: checked ? true : undefined,
+        }),
+      });
+    });
+  };
+
   const SortIcon = sortOrder === "asc" ? ArrowDownAZ : ArrowUpAZ;
 
   return (
@@ -71,7 +88,12 @@ export default function SortDropdown() {
         <Button
           variant="outline"
           size="icon-sm"
-          aria-label={t("entries.sort.sortEntries")}
+          aria-label={
+            hasAttachments
+              ? t("entries.sort.sortEntriesFiltered")
+              : t("entries.sort.sortEntries")
+          }
+          className={cn(hasAttachments && "border-primary text-primary")}
         >
           <SortIcon />
         </Button>
@@ -110,6 +132,14 @@ export default function SortDropdown() {
               : t("entries.sort.zToA")}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t("entries.filter.title")}</DropdownMenuLabel>
+        <DropdownMenuCheckboxItem
+          checked={hasAttachments}
+          onCheckedChange={handleHasAttachmentsChange}
+        >
+          {t("entries.filter.hasAttachments")}
+        </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

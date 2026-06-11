@@ -28,7 +28,12 @@ function makeMockEntry(overrides: Partial<Entry> = {}): Entry {
 }
 
 const mockEntries = [
-  makeMockEntry({ title: "GitHub", username: "admin", tags: ["dev"] }),
+  makeMockEntry({
+    title: "GitHub",
+    username: "admin",
+    tags: ["dev"],
+    attachments: [{ filename: "key.pem", size: 10, mimeType: "text/plain" }],
+  }),
   makeMockEntry({ title: "Gmail", username: "user@gmail.com", tags: ["work"] }),
 ];
 
@@ -108,6 +113,60 @@ describe("useSearchEntries", () => {
     // Only GitHub has tag "dev", Gmail has "work"
     expect(result.current.results).toHaveLength(1);
     expect(result.current.results[0]!.entry.title).toBe("GitHub");
+  });
+
+  it("filters entries by attachments when hasAttachments is true", () => {
+    const { result } = renderHook(() =>
+      useSearchEntries("db-1", null, null, true)
+    );
+
+    act(() => {
+      result.current.setQuery("g");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    // Both GitHub and Gmail match "g", but only GitHub has an attachment.
+    expect(result.current.results).toHaveLength(1);
+    expect(result.current.results[0]!.entry.title).toBe("GitHub");
+  });
+
+  it("does not filter by attachments when hasAttachments is false", () => {
+    const { result } = renderHook(() =>
+      useSearchEntries("db-1", null, null, false)
+    );
+
+    act(() => {
+      result.current.setQuery("g");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    expect(result.current.results).toHaveLength(2);
+  });
+
+  it("clears query when hasAttachments changes", () => {
+    let hasAttachments = false;
+    const { result, rerender } = renderHook(() =>
+      useSearchEntries("db-1", null, null, hasAttachments)
+    );
+
+    act(() => {
+      result.current.setQuery("g");
+      vi.advanceTimersByTime(200);
+    });
+
+    expect(result.current.isSearchActive).toBe(true);
+
+    hasAttachments = true;
+    rerender();
+
+    expect(result.current.query).toBe("");
+    expect(result.current.isSearchActive).toBe(false);
   });
 
   it("clears query when groupId changes", () => {

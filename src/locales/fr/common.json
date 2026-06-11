@@ -257,6 +257,13 @@
     "loadError": "Échec du chargement des entrées : {{error}}",
     "noEntries": "Aucune entrée trouvée.",
     "noEntriesWithTag": "Aucune entrée avec l'étiquette « {{tag}} ».",
+    "attachmentIndicator": "Contient des pièces jointes",
+    "noEntriesWithAttachments": "Aucune entrée avec des pièces jointes.",
+    "noEntriesMatchFilters": "Aucune entrée ne correspond aux filtres actifs.",
+    "filter": {
+      "title": "Filtrer",
+      "hasAttachments": "Contient des pièces jointes"
+    },
     "newEntry": "nouvelle entrée",
     "editEntry": "modifier l'entrée",
     "deleteEntry": "supprimer l'entrée",
@@ -379,6 +386,7 @@
     "sort": {
       "sortBy": "Trier par",
       "sortEntries": "Trier les entrées",
+      "sortEntriesFiltered": "Trier les entrées (filtre de pièces jointes actif)",
       "order": "Ordre",
       "title": "Titre",
       "username": "Nom d'utilisateur",
