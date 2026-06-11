@@ -127,6 +127,7 @@ function makePreferences(): AppPreferences {
       enabled: true,
       retentionDays: 90,
     },
+    attachments: { softWarnBytes: 5_000_000, hardCapBytes: 25_000_000 },
   };
 }
 

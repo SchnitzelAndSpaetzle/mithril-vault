@@ -656,7 +656,7 @@ function AttachmentsSection({
   // at least one file actually landed in the in-memory Vault — so a
   // wholly-failed, cancelled, or empty batch leaves no phantom unsaved state.
   const applyAddOutcome = async (
-    outcome: Awaited<ReturnType<typeof entriesApi.addAttachments>>
+    outcome: Awaited<ReturnType<typeof entriesApi.commitPreparedAttachments>>
   ) => {
     for (const failure of outcome.failed) {
       toast.error(
@@ -676,17 +676,50 @@ function AttachmentsSection({
     }
   };
 
-  // Add is the primary write path. The multi-select file dialog is opened in
-  // Rust by the add command — the frontend passes no path, so a fabricated
-  // path can never reach the backend read (the trust boundary in ADR-0004).
-  // A failure on one file doesn't abort the rest; a cancelled dialog comes back
-  // as an empty outcome — a no-op handled by the shared tail below.
-  const handleAdd = async () => {
-    if (isDisabled) return;
-
-    let outcome: Awaited<ReturnType<typeof entriesApi.addAttachments>>;
+  // Shared two-phase add flow for both write paths. Phase 1 (`prepare`) buffers
+  // the picked/dropped paths in Rust and returns their size classification
+  // against the configured thresholds — no bytes read, no Vault mutation. If any
+  // file is over the soft threshold we prompt before committing; declining
+  // aborts the whole batch (nothing is stored). Phase 2 (`commit`) drains the
+  // buffer and stores the files, returning the batch outcome handled by the
+  // shared tail. An empty plan (cancelled dialog, or a drop with nothing
+  // buffered) is a no-op. The frontend never sees a path — the trust boundary in
+  // ADR-0004.
+  const runAddFlow = async (
+    prepare: () => Promise<
+      Awaited<ReturnType<typeof entriesApi.preparePickedAttachments>>
+    >
+  ) => {
+    let plan: Awaited<ReturnType<typeof entriesApi.preparePickedAttachments>>;
     try {
-      outcome = await entriesApi.addAttachments(dbId, entryId);
+      plan = await prepare();
+    } catch (error) {
+      console.error("Failed to prepare attachments:", error);
+      toast.error(t("entries.detail.attachmentAddBatchFailed"));
+      return;
+    }
+
+    // Nothing picked/dropped: a true no-op, so we never reach commit.
+    if (plan.items.length === 0) return;
+
+    if (plan.requiresConfirmation) {
+      const confirmed = await ask(
+        t("entries.detail.attachmentSoftWarnConfirm"),
+        {
+          title: t("entries.detail.attachmentSoftWarnConfirmTitle"),
+          kind: "warning",
+        }
+      );
+      // Abort the whole batch on decline: the buffered paths stay until the
+      // next pick/drop overwrites them, but nothing is stored now.
+      if (!confirmed) return;
+    }
+
+    let outcome: Awaited<
+      ReturnType<typeof entriesApi.commitPreparedAttachments>
+    >;
+    try {
+      outcome = await entriesApi.commitPreparedAttachments(dbId, entryId);
     } catch (error) {
       console.error("Failed to add attachments:", error);
       toast.error(t("entries.detail.attachmentAddBatchFailed"));
@@ -696,26 +729,20 @@ function AttachmentsSection({
     await applyAddOutcome(outcome);
   };
 
+  // Add is the primary write path: the picker opens the multi-select dialog in
+  // Rust (ADR-0004) and buffers the chosen paths for the shared flow.
+  const handleAdd = async () => {
+    if (isDisabled) return;
+    await runAddFlow(() => entriesApi.preparePickedAttachments());
+  };
+
   // Drag-and-drop is the second write path (desktop only). The dropped paths
-  // were captured in Rust from the native window event (ADR-0004) — this only
-  // tells the backend to drain that buffer onto the selected Entry. The drop
-  // hook has already scoped the drop to this panel; from here it's identical to
-  // the picker (same feeder, same outcome handling).
+  // were captured in Rust from the native window event (ADR-0004); the drop hook
+  // has already scoped the drop to this panel. From here it's identical to the
+  // picker — same classification, prompt, and commit.
   const handleDrop = () => {
     if (isDisabled) return;
-    void (async () => {
-      let outcome: Awaited<
-        ReturnType<typeof entriesApi.commitDroppedAttachments>
-      >;
-      try {
-        outcome = await entriesApi.commitDroppedAttachments(dbId, entryId);
-      } catch (error) {
-        console.error("Failed to add dropped attachments:", error);
-        toast.error(t("entries.detail.attachmentAddBatchFailed"));
-        return;
-      }
-      await applyAddOutcome(outcome);
-    })();
+    void runAddFlow(() => entriesApi.prepareDroppedAttachments());
   };
 
   // The native drag-drop event is window-global; the hook acts only on desktop

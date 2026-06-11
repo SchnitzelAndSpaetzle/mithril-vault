@@ -33,6 +33,44 @@ pub struct AttachmentMeta {
     pub mime_type: String,
 }
 
+/// Where a candidate attachment's size falls relative to the configured
+/// guardrails. `Ok` is under (or at) the soft threshold — add silently.
+/// `OverSoft` is above the soft threshold but within the hard cap — the add
+/// flow prompts for confirmation. `OverHard` is above the hard cap — rejected
+/// outright. Serialized in camelCase for the IPC plan the frontend reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AttachmentSizeStatus {
+    Ok,
+    OverSoft,
+    OverHard,
+}
+
+/// One candidate file in an attachment-add plan: the basename it was picked
+/// under, its on-disk size, and where that size falls relative to the
+/// thresholds. Returned by the prepare step so the frontend can decide whether
+/// to prompt before committing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentPlanItem {
+    pub source_name: String,
+    pub size: u64,
+    pub status: AttachmentSizeStatus,
+}
+
+/// The classification of a batch of candidate files against the configured
+/// guardrails, returned by the prepare step. `requires_confirmation` is `true`
+/// iff at least one item is `OverSoft` — the single signal the frontend uses to
+/// decide whether to show the soft-warning prompt before committing. Files over
+/// the hard cap do not gate the prompt; they surface as per-file failures at
+/// commit time instead.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentAddPlan {
+    pub items: Vec<AttachmentPlanItem>,
+    pub requires_confirmation: bool,
+}
+
 /// One file that failed to add in a batch, paired with the basename it was
 /// picked under and the backend's reason (the `AppError` display string, e.g.
 /// "…exceeds the 25-byte limit"). The frontend raises one toast per failure so

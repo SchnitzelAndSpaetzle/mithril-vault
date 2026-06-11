@@ -1,7 +1,7 @@
 use crate::domain::secure::SecureBytes;
 use crate::dto::entry::{
-    AddAttachmentsOutcome, AttachmentAddFailure, CreateEntryData, CustomFieldValue, Entry,
-    UpdateEntryData,
+    AddAttachmentsOutcome, AttachmentAddFailure, AttachmentAddPlan, AttachmentPlanItem,
+    AttachmentSizeStatus, CreateEntryData, CustomFieldValue, Entry, UpdateEntryData,
 };
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
@@ -15,11 +15,67 @@ use super::conversions::{
 use super::recycle::is_in_recycle_bin;
 use super::KdbxService;
 
-/// Hard per-file size cap for added attachments (25 MiB). A file larger than
-/// this is rejected outright to keep the Vault from bloating into something
-/// unusable. This is a fixed default for this slice; a later slice makes it a
-/// configurable App Preference (see issue #280 / ADR-0003).
-const HARD_CAP_BYTES: u64 = 25 * 1024 * 1024;
+/// Classifies a candidate attachment's size against the configured guardrails.
+/// At-threshold values are treated as within the lower band: a file exactly the
+/// size of the soft threshold is [`Ok`] (warning fires only *above* it), and a
+/// file exactly the size of the hard cap is [`OverSoft`] (rejection fires only
+/// *above* it — matching the `> hard_cap` check in the add path). Callers must
+/// pass a coherent pair (`soft <= hard`), which the settings boundary
+/// guarantees.
+///
+/// [`Ok`]: AttachmentSizeStatus::Ok
+/// [`OverSoft`]: AttachmentSizeStatus::OverSoft
+fn classify_attachment_size(size: u64, soft: u64, hard: u64) -> AttachmentSizeStatus {
+    if size > hard {
+        AttachmentSizeStatus::OverHard
+    } else if size > soft {
+        AttachmentSizeStatus::OverSoft
+    } else {
+        AttachmentSizeStatus::Ok
+    }
+}
+
+/// Builds the size-classification plan for a batch of candidate files without
+/// reading their bytes or touching the Vault. Each path is stat'd and
+/// classified against the configured `soft`/`hard` thresholds; the result drives
+/// the frontend's decision to prompt before committing. A path that cannot be
+/// stat'd (missing, permission-denied) is recorded with size `0` and status
+/// [`Ok`] — it is advisory only, and the authoritative read at commit time will
+/// surface the real I/O error as a per-file failure. `requires_confirmation` is
+/// `true` iff at least one file is [`OverSoft`]; files over the hard cap do not
+/// gate the prompt.
+///
+/// [`Ok`]: AttachmentSizeStatus::Ok
+/// [`OverSoft`]: AttachmentSizeStatus::OverSoft
+pub(crate) fn plan_attachment_adds(
+    paths: &[std::path::PathBuf],
+    soft: u64,
+    hard: u64,
+) -> AttachmentAddPlan {
+    let items: Vec<AttachmentPlanItem> = paths
+        .iter()
+        .map(|path| {
+            let source_name = path
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str)
+                .unwrap_or("")
+                .to_string();
+            let size = std::fs::metadata(path).map_or(0, |m| m.len());
+            AttachmentPlanItem {
+                source_name,
+                size,
+                status: classify_attachment_size(size, soft, hard),
+            }
+        })
+        .collect();
+    let requires_confirmation = items
+        .iter()
+        .any(|item| item.status == AttachmentSizeStatus::OverSoft);
+    AttachmentAddPlan {
+        items,
+        requires_confirmation,
+    }
+}
 
 impl KdbxService {
     /// Lists entries, optionally filtered by group.
@@ -162,12 +218,16 @@ impl KdbxService {
     /// immediately, independent of the Entry edit-form save cycle (mirroring
     /// `set_entry_custom_icon`). Returns the filename the attachment was
     /// actually stored under, which may differ from the source basename when a
-    /// collision triggered an auto-rename.
+    /// collision triggered an auto-rename. The `hard_cap` (in bytes) is the
+    /// per-file rejection threshold; it is injected by the caller from App
+    /// Preferences rather than hard-coded, so the user-configured cap governs
+    /// every add.
     pub fn add_entry_attachment(
         &self,
         db_id: &str,
         entry_id: &str,
         source_path: &std::path::Path,
+        hard_cap: u64,
     ) -> Result<String, AppError> {
         let filename = source_path
             .file_name()
@@ -190,11 +250,11 @@ impl KdbxService {
 
         // Fast path: reject an obviously oversized file from its stat'd size
         // before opening it at all.
-        if metadata.len() > HARD_CAP_BYTES {
+        if metadata.len() > hard_cap {
             return Err(AppError::AttachmentTooLarge {
                 filename,
                 size: metadata.len(),
-                cap: HARD_CAP_BYTES,
+                cap: hard_cap,
             });
         }
 
@@ -217,14 +277,14 @@ impl KdbxService {
         }
 
         let mut bytes = Vec::new();
-        file.take(HARD_CAP_BYTES + 1)
+        file.take(hard_cap + 1)
             .read_to_end(&mut bytes)
             .map_err(|e| AppError::Io(e.to_string()))?;
-        if bytes.len() as u64 > HARD_CAP_BYTES {
+        if bytes.len() as u64 > hard_cap {
             return Err(AppError::AttachmentTooLarge {
                 filename,
                 size: bytes.len() as u64,
-                cap: HARD_CAP_BYTES,
+                cap: hard_cap,
             });
         }
 
@@ -254,10 +314,11 @@ impl KdbxService {
         db_id: &str,
         entry_id: &str,
         paths: &[std::path::PathBuf],
+        hard_cap: u64,
     ) -> Result<AddAttachmentsOutcome, AppError> {
         let mut outcome = AddAttachmentsOutcome::default();
         for path in paths {
-            match self.add_entry_attachment(db_id, entry_id, path) {
+            match self.add_entry_attachment(db_id, entry_id, path, hard_cap) {
                 Ok(stored_name) => outcome.added.push(stored_name),
                 Err(error) => outcome.failed.push(AttachmentAddFailure {
                     source_name: path
@@ -716,10 +777,134 @@ fn unique_attachment_name(entry: &keepass::db::EntryRef<'_>, filename: &str) -> 
 mod tests {
     use super::*;
     use crate::domain::secure::SecureString;
-    use crate::dto::entry::AttachmentMeta;
+    use crate::dto::entry::{AttachmentMeta, AttachmentSizeStatus};
     use crate::services::kdbx::test_support::create_test_database;
     use keepass::db::Value;
     use std::collections::HashMap;
+
+    /// The hard cap the attachment add/round-trip tests inject. A generous
+    /// fixed value so the round-trip cases never trip the cap; the over-cap
+    /// cases seed a file one byte past it.
+    const TEST_HARD_CAP: u64 = 25 * 1024 * 1024;
+
+    #[test]
+    fn classify_attachment_size_walks_the_thresholds() {
+        // soft = 5, hard = 25. Every boundary is pinned because the soft/hard
+        // edges decide whether the user is warned, silently allowed, or
+        // rejected — an off-by-one here is a user-visible behavior change.
+        let soft = 5;
+        let hard = 25;
+        // At or below the soft threshold: silent add.
+        assert_eq!(
+            classify_attachment_size(0, soft, hard),
+            AttachmentSizeStatus::Ok
+        );
+        assert_eq!(
+            classify_attachment_size(5, soft, hard),
+            AttachmentSizeStatus::Ok
+        );
+        // Above soft, up to and including the hard cap: warn.
+        assert_eq!(
+            classify_attachment_size(6, soft, hard),
+            AttachmentSizeStatus::OverSoft
+        );
+        assert_eq!(
+            classify_attachment_size(25, soft, hard),
+            AttachmentSizeStatus::OverSoft
+        );
+        // Above the hard cap: reject.
+        assert_eq!(
+            classify_attachment_size(26, soft, hard),
+            AttachmentSizeStatus::OverHard
+        );
+    }
+
+    #[test]
+    fn classify_attachment_size_handles_soft_equal_to_hard() {
+        // A coherent edge config: soft == hard means the warning band is empty,
+        // so a file is either Ok (<= the shared threshold) or OverHard.
+        assert_eq!(
+            classify_attachment_size(10, 10, 10),
+            AttachmentSizeStatus::Ok
+        );
+        assert_eq!(
+            classify_attachment_size(11, 10, 10),
+            AttachmentSizeStatus::OverHard
+        );
+    }
+
+    #[test]
+    fn plan_attachment_adds_classifies_each_file_and_flags_confirmation() {
+        // A mixed batch: one file under the soft threshold, one above it (but
+        // under the hard cap). The plan must classify each by its on-disk size,
+        // preserve pick order, and flag that confirmation is required because at
+        // least one file is over the soft threshold — the single signal the
+        // frontend reads before showing the warning prompt.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let small = dir.path().join("notes.txt");
+        std::fs::write(&small, vec![0u8; 3]).expect("seed small");
+        let large = dir.path().join("scan.pdf");
+        std::fs::write(&large, vec![0u8; 50]).expect("seed large");
+
+        let plan = plan_attachment_adds(
+            &[small.clone(), large.clone()],
+            10,  // soft
+            100, // hard
+        );
+
+        assert!(
+            plan.requires_confirmation,
+            "a file over the soft threshold must require confirmation"
+        );
+        assert_eq!(plan.items.len(), 2, "one plan item per path, in pick order");
+        assert_eq!(plan.items[0].source_name, "notes.txt");
+        assert_eq!(plan.items[0].size, 3);
+        assert_eq!(plan.items[0].status, AttachmentSizeStatus::Ok);
+        assert_eq!(plan.items[1].source_name, "scan.pdf");
+        assert_eq!(plan.items[1].size, 50);
+        assert_eq!(plan.items[1].status, AttachmentSizeStatus::OverSoft);
+    }
+
+    #[test]
+    fn plan_attachment_adds_requires_no_confirmation_when_all_under_soft() {
+        // Every file under the soft threshold: the add proceeds silently, so
+        // the plan must not require confirmation.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let a = dir.path().join("a.txt");
+        std::fs::write(&a, vec![0u8; 2]).expect("seed a");
+        let b = dir.path().join("b.txt");
+        std::fs::write(&b, vec![0u8; 4]).expect("seed b");
+
+        let plan = plan_attachment_adds(&[a, b], 10, 100);
+
+        assert!(
+            !plan.requires_confirmation,
+            "all-small batch must not require confirmation"
+        );
+        assert!(plan
+            .items
+            .iter()
+            .all(|item| item.status == AttachmentSizeStatus::Ok));
+    }
+
+    #[test]
+    fn plan_attachment_adds_does_not_require_confirmation_for_over_hard_only() {
+        // A file over the hard cap is OverHard, not OverSoft. It will be
+        // rejected at commit as a per-file failure — it must NOT trigger the
+        // soft-warning prompt, so a batch whose only large file is over-hard
+        // requires no confirmation.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let huge = dir.path().join("huge.bin");
+        std::fs::write(&huge, vec![0u8; 200]).expect("seed huge");
+
+        let plan = plan_attachment_adds(&[huge], 10, 100);
+
+        assert!(
+            !plan.requires_confirmation,
+            "an over-hard-only batch must not require the soft prompt"
+        );
+        assert_eq!(plan.items[0].status, AttachmentSizeStatus::OverHard);
+    }
 
     fn create_entry_with_expiry(
         service: &KdbxService,
@@ -1293,7 +1478,7 @@ mod tests {
         std::fs::write(&source, &payload).expect("seed source file");
 
         let stored = service
-            .add_entry_attachment(&db_path, &entry_a, &source)
+            .add_entry_attachment(&db_path, &entry_a, &source, TEST_HARD_CAP)
             .expect("add attachment");
         assert_eq!(stored, "codes.txt", "the stored filename is the basename");
 
@@ -1337,11 +1522,11 @@ mod tests {
             .with_vault(&db_path, |vault| Ok(vault.generation()))
             .expect("generation before add");
 
-        let oversized = vec![0u8; usize::try_from(HARD_CAP_BYTES + 1).expect("cap fits usize")];
+        let oversized = vec![0u8; usize::try_from(TEST_HARD_CAP + 1).expect("cap fits usize")];
         let source = dir.path().join("huge.bin");
         std::fs::write(&source, &oversized).expect("seed oversized file");
 
-        let result = service.add_entry_attachment(&db_path, &entry_a, &source);
+        let result = service.add_entry_attachment(&db_path, &entry_a, &source, TEST_HARD_CAP);
         assert!(
             matches!(result, Err(AppError::AttachmentTooLarge { ref filename, .. }) if filename == "huge.bin"),
             "an over-cap file must be rejected with AttachmentTooLarge, got {result:?}"
@@ -1376,7 +1561,7 @@ mod tests {
         let first = dir.path().join("scan.pdf");
         std::fs::write(&first, b"first-bytes").expect("seed first file");
         let stored_first = service
-            .add_entry_attachment(&db_path, &entry_a, &first)
+            .add_entry_attachment(&db_path, &entry_a, &first, TEST_HARD_CAP)
             .expect("add first");
         assert_eq!(stored_first, "scan.pdf", "the first add keeps its name");
 
@@ -1386,7 +1571,7 @@ mod tests {
         let second_file = second.join("scan.pdf");
         std::fs::write(&second_file, b"second-bytes").expect("seed second file");
         let stored_second = service
-            .add_entry_attachment(&db_path, &entry_a, &second_file)
+            .add_entry_attachment(&db_path, &entry_a, &second_file, TEST_HARD_CAP)
             .expect("add second");
         assert_eq!(
             stored_second, "scan (1).pdf",
@@ -1422,7 +1607,7 @@ mod tests {
         let not_a_file = dir.path().join("a-directory");
         std::fs::create_dir(&not_a_file).expect("mk dir");
 
-        let result = service.add_entry_attachment(&db_path, &entry_a, &not_a_file);
+        let result = service.add_entry_attachment(&db_path, &entry_a, &not_a_file, TEST_HARD_CAP);
         assert!(
             matches!(result, Err(AppError::InvalidInput(_))),
             "a non-regular file must be rejected, got {result:?}"
@@ -1449,7 +1634,7 @@ mod tests {
         std::fs::write(&second, b"second").expect("seed second");
 
         let outcome = service
-            .add_entry_attachments(&db_path, &entry_a, &[first, second])
+            .add_entry_attachments(&db_path, &entry_a, &[first, second], TEST_HARD_CAP)
             .expect("batch add");
 
         assert_eq!(
@@ -1473,14 +1658,14 @@ mod tests {
         let huge = dir.path().join("huge.bin");
         std::fs::write(
             &huge,
-            vec![0u8; usize::try_from(HARD_CAP_BYTES + 1).expect("cap fits usize")],
+            vec![0u8; usize::try_from(TEST_HARD_CAP + 1).expect("cap fits usize")],
         )
         .expect("seed huge");
         let ok_b = dir.path().join("ok-b.txt");
         std::fs::write(&ok_b, b"b").expect("seed ok-b");
 
         let outcome = service
-            .add_entry_attachments(&db_path, &entry_a, &[ok_a, huge, ok_b])
+            .add_entry_attachments(&db_path, &entry_a, &[ok_a, huge, ok_b], TEST_HARD_CAP)
             .expect("batch add");
 
         assert_eq!(
@@ -1508,7 +1693,7 @@ mod tests {
             .expect("generation before");
 
         let outcome = service
-            .add_entry_attachments(db_path, entry_id, &[])
+            .add_entry_attachments(db_path, entry_id, &[], TEST_HARD_CAP)
             .expect("empty add");
 
         assert!(outcome.added.is_empty(), "nothing is added");
@@ -1559,13 +1744,13 @@ mod tests {
         let dropped = dir.path().join("dropped.txt");
         std::fs::write(&dropped, b"from a drag-drop").expect("seed dropped file");
 
-        let buffer = crate::services::drag_drop::DropPathsBuffer::default();
+        let buffer = crate::services::drag_drop::PendingAttachmentPaths::default();
         buffer.replace(vec![dropped.clone()]);
 
         // The commit drains the buffer and hands only those paths to the feeder.
         let paths = buffer.take();
         let outcome = service
-            .add_entry_attachments(&db_path, &entry_a, &paths)
+            .add_entry_attachments(&db_path, &entry_a, &paths, TEST_HARD_CAP)
             .expect("commit drained drop");
 
         assert_eq!(
@@ -1597,7 +1782,7 @@ mod tests {
         // untouched — the same guarantee as a cancelled picker dialog.
         let (service, _dir, db_path, entry_a, _b) = create_test_database();
 
-        let buffer = crate::services::drag_drop::DropPathsBuffer::default();
+        let buffer = crate::services::drag_drop::PendingAttachmentPaths::default();
         assert!(buffer.take().is_empty(), "no drop means no buffered paths");
 
         assert_empty_add_is_inert(&service, &db_path, &entry_a);

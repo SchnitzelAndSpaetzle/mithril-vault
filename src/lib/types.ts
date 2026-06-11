@@ -37,6 +37,34 @@ export const AddAttachmentsOutcomeSchema = z.object({
 });
 export type AddAttachmentsOutcome = z.infer<typeof AddAttachmentsOutcomeSchema>;
 
+/// Where a candidate attachment's size falls relative to the configured
+/// guardrails. Mirrors the Rust `AttachmentSizeStatus` (serde camelCase):
+/// `ok` adds silently, `overSoft` prompts for confirmation, `overHard` is
+/// rejected at commit.
+export const AttachmentSizeStatusSchema = z.enum([
+  "ok",
+  "overSoft",
+  "overHard",
+]);
+export type AttachmentSizeStatus = z.infer<typeof AttachmentSizeStatusSchema>;
+
+export const AttachmentPlanItemSchema = z.object({
+  sourceName: z.string(),
+  size: z.number().int().nonnegative(),
+  status: AttachmentSizeStatusSchema,
+});
+export type AttachmentPlanItem = z.infer<typeof AttachmentPlanItemSchema>;
+
+/// The size-classification plan returned by the prepare step.
+/// `requiresConfirmation` is the single signal the add flow reads before
+/// showing the soft-warning prompt: true iff at least one picked file is over
+/// the soft threshold (files over the hard cap do not gate the prompt).
+export const AttachmentAddPlanSchema = z.object({
+  items: z.array(AttachmentPlanItemSchema),
+  requiresConfirmation: z.boolean(),
+});
+export type AttachmentAddPlan = z.infer<typeof AttachmentAddPlanSchema>;
+
 export const EntrySchema = z.object({
   id: z.string(),
   groupId: z.string(),
@@ -318,6 +346,22 @@ export const AppPreferencesAuditSchema = z.object({
 export type AuditPreferences = z.infer<typeof AppPreferencesAuditSchema>;
 export const DEFAULT_AUDIT_RETENTION_DAYS = 90;
 
+/// Per-file attachment size guardrails, stored as raw bytes. `softWarnBytes`
+/// is the threshold above which the add flow prompts ("add anyway?");
+/// `hardCapBytes` is the rejection threshold. The backend validates the pair
+/// (`hardCapBytes >= 1`, `softWarnBytes <= hardCapBytes`); the UI surfaces them
+/// in decimal MB. There is no aggregate Vault cap.
+export const AttachmentSettingsSchema = z.object({
+  softWarnBytes: z.number().int().nonnegative(),
+  hardCapBytes: z.number().int().positive(),
+});
+export type AttachmentSettings = z.infer<typeof AttachmentSettingsSchema>;
+export const DEFAULT_ATTACHMENT_SOFT_WARN_BYTES = 5_000_000;
+export const DEFAULT_ATTACHMENT_HARD_CAP_BYTES = 25_000_000;
+/// Decimal-MB factor for converting the byte-valued thresholds to and from the
+/// MB inputs shown in the Settings UI.
+export const ATTACHMENT_BYTES_PER_MB = 1_000_000;
+
 export const AppPreferencesSchema = z.object({
   general: GeneralSettingsSchema,
   security: SecuritySettingsSchema,
@@ -326,6 +370,7 @@ export const AppPreferencesSchema = z.object({
   advanced: AdvancedSettingsSchema,
   backups: BackupSettingsSchema,
   audit: AppPreferencesAuditSchema,
+  attachments: AttachmentSettingsSchema,
 });
 export type AppPreferences = z.infer<typeof AppPreferencesSchema>;
 

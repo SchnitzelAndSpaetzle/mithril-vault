@@ -173,6 +173,18 @@
         "validation": "Die Aufbewahrung muss zwischen 1 und 365 Tagen liegen."
       }
     },
+    "attachments": {
+      "title": "Anhänge",
+      "description": "Größenbeschränkungen pro Datei für an Einträge angehängte Dateien.",
+      "softWarn": {
+        "label": "Warnen ab (MB)",
+        "description": "Beim Hinzufügen einer größeren Datei wird vor dem Speichern eine Bestätigung verlangt."
+      },
+      "hardCap": {
+        "label": "Ablehnen ab (MB)",
+        "description": "Größere Dateien werden abgelehnt. Muss mindestens dem Warnschwellenwert entsprechen."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -350,6 +362,8 @@
       "attachmentsAdded_other": "{{count}} Anhänge hinzugefügt",
       "attachmentAddFailed": "{{filename}} konnte nicht hinzugefügt werden: {{reason}}",
       "attachmentAddBatchFailed": "Anhänge konnten nicht hinzugefügt werden",
+      "attachmentSoftWarnConfirmTitle": "Großen Anhang hinzufügen?",
+      "attachmentSoftWarnConfirm": "Große Anhänge vergrößern den Tresor und verlangsamen das Speichern – trotzdem hinzufügen?",
       "downloadAttachment": "Anhang herunterladen",
       "attachmentDownloaded": "{{filename}} heruntergeladen",
       "attachmentDownloadFailed": "{{filename}} konnte nicht heruntergeladen werden",

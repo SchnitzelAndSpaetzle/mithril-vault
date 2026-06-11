@@ -64,6 +64,7 @@ function makeDraft(
     advanced: { debugMode: false, dataLocation: "/tmp" },
     backups: { enabled: true, maxVersions, directory, onOpen },
     audit: { enabled: true, retentionDays: 90 },
+    attachments: { softWarnBytes: 5_000_000, hardCapBytes: 25_000_000 },
   };
 }
 

@@ -73,9 +73,10 @@ vi.mock("@/hooks/use-clipboard-timeout", () => ({
 
 const exportAttachment = vi.hoisted(() => vi.fn());
 const deleteAttachment = vi.hoisted(() => vi.fn());
-const addAttachments = vi.hoisted(() => vi.fn());
+const preparePickedAttachments = vi.hoisted(() => vi.fn());
+const prepareDroppedAttachments = vi.hoisted(() => vi.fn());
+const commitPreparedAttachments = vi.hoisted(() => vi.fn());
 const getAttachmentBytes = vi.hoisted(() => vi.fn());
-const commitDroppedAttachments = vi.hoisted(() => vi.fn());
 const databaseSave = vi.hoisted(() => vi.fn());
 const save = vi.hoisted(() => vi.fn());
 const ask = vi.hoisted(() => vi.fn());
@@ -88,12 +89,34 @@ vi.mock("@/lib/tauri", () => ({
     getProtectedCustomField: vi.fn(),
     exportAttachment,
     deleteAttachment,
-    addAttachments,
+    preparePickedAttachments,
+    prepareDroppedAttachments,
+    commitPreparedAttachments,
     getAttachmentBytes,
-    commitDroppedAttachments,
   },
   database: { save: databaseSave },
 }));
+
+// A plan with no over-soft files: the add proceeds without a confirmation
+// prompt. `items` is non-empty so the flow reaches commit (an empty plan is a
+// no-op). Tests that don't care about the exact items reuse this.
+function planWithoutConfirmation() {
+  return {
+    items: [{ sourceName: "file.txt", size: 10, status: "ok" as const }],
+    requiresConfirmation: false,
+  };
+}
+
+// A plan flagged as requiring confirmation (at least one over-soft file), used
+// by the soft-warning tests.
+function planRequiringConfirmation() {
+  return {
+    items: [
+      { sourceName: "big.pdf", size: 8_000_000, status: "overSoft" as const },
+    ],
+    requiresConfirmation: true,
+  };
+}
 
 // Mutable holder for the responsive breakpoint so each test can render the
 // desktop (drop zone present) or mobile (drop zone hidden) layout.
@@ -558,18 +581,22 @@ describe("EntryItemDetails attachment add", () => {
   beforeEach(() => {
     state.entry = null;
     state.isTransitioning = false;
-    addAttachments.mockReset();
+    preparePickedAttachments.mockReset();
+    commitPreparedAttachments.mockReset();
+    ask.mockReset();
     databaseSave.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
   });
 
-  it("invokes the Rust-side picker command with no path, then persists", async () => {
-    // The dialog now lives in Rust: the frontend hands the command only the
-    // db/entry ids — never a path — so a fabricated path can't reach the read
-    // (ADR-0004 trust boundary). On a non-empty outcome it persists once and
-    // reports success.
-    addAttachments.mockResolvedValue({
+  it("prepares via the Rust-side picker, commits with no path, then persists", async () => {
+    // The two-phase flow: prepare opens the dialog and buffers paths in Rust,
+    // returning a size plan; commit stores them. The frontend hands the commit
+    // only db/entry ids — never a path — so a fabricated path can't reach the
+    // read (ADR-0004 trust boundary). With no over-soft file there is no prompt;
+    // on a non-empty outcome it persists once and reports success.
+    preparePickedAttachments.mockResolvedValue(planWithoutConfirmation());
+    commitPreparedAttachments.mockResolvedValue({
       added: ["codes.txt", "scan.pdf"],
       failed: [],
     });
@@ -581,21 +608,65 @@ describe("EntryItemDetails attachment add", () => {
     await waitFor(() => {
       expect(databaseSave).toHaveBeenCalledWith("db-1");
     });
-    // The command receives ids only — no caller-supplied path argument.
-    expect(addAttachments).toHaveBeenCalledWith("db-1", "entry-1");
+    // An under-soft batch is never prompted, and commit receives ids only.
+    expect(ask).not.toHaveBeenCalled();
+    expect(commitPreparedAttachments).toHaveBeenCalledWith("db-1", "entry-1");
     expect(toastSuccess).toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
   });
 
   it("does nothing when the picker comes back empty (cancelled)", async () => {
-    addAttachments.mockResolvedValue({ added: [], failed: [] });
+    // A cancelled dialog yields an empty plan — the flow never reaches commit.
+    preparePickedAttachments.mockResolvedValue({
+      items: [],
+      requiresConfirmation: false,
+    });
 
     renderDetails({ attachments: [] });
     clickAttachmentAction("entries.detail.addAttachment");
 
     await waitFor(() => {
-      expect(addAttachments).toHaveBeenCalled();
+      expect(preparePickedAttachments).toHaveBeenCalled();
     });
+    expect(commitPreparedAttachments).not.toHaveBeenCalled();
+    expect(databaseSave).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("prompts for confirmation when a file is over the soft threshold and commits on confirm", async () => {
+    // AC: adding a file above the soft threshold prompts; confirming proceeds.
+    preparePickedAttachments.mockResolvedValue(planRequiringConfirmation());
+    ask.mockResolvedValue(true);
+    commitPreparedAttachments.mockResolvedValue({
+      added: ["big.pdf"],
+      failed: [],
+    });
+    databaseSave.mockResolvedValue(undefined);
+
+    renderDetails({ attachments: [] });
+    clickAttachmentAction("entries.detail.addAttachment");
+
+    await waitFor(() => {
+      expect(commitPreparedAttachments).toHaveBeenCalledWith("db-1", "entry-1");
+    });
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(databaseSave).toHaveBeenCalledWith("db-1");
+    expect(toastSuccess).toHaveBeenCalled();
+  });
+
+  it("aborts the whole batch when the soft-warning is declined", async () => {
+    // AC: cancelling aborts. Nothing is committed, persisted, or reported.
+    preparePickedAttachments.mockResolvedValue(planRequiringConfirmation());
+    ask.mockResolvedValue(false);
+
+    renderDetails({ attachments: [] });
+    clickAttachmentAction("entries.detail.addAttachment");
+
+    await waitFor(() => {
+      expect(ask).toHaveBeenCalledTimes(1);
+    });
+    expect(commitPreparedAttachments).not.toHaveBeenCalled();
     expect(databaseSave).not.toHaveBeenCalled();
     expect(toastSuccess).not.toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
@@ -611,11 +682,12 @@ describe("EntryItemDetails attachment add", () => {
     expect(button).toBeDisabled();
 
     fireEvent.click(button);
-    expect(addAttachments).not.toHaveBeenCalled();
+    expect(preparePickedAttachments).not.toHaveBeenCalled();
   });
 
-  it("surfaces a batch error toast when the command itself rejects", async () => {
-    addAttachments.mockRejectedValue(new Error("vault locked"));
+  it("surfaces a batch error toast when the commit itself rejects", async () => {
+    preparePickedAttachments.mockResolvedValue(planWithoutConfirmation());
+    commitPreparedAttachments.mockRejectedValue(new Error("vault locked"));
 
     renderDetails({ attachments: [] });
     clickAttachmentAction("entries.detail.addAttachment");
@@ -631,7 +703,8 @@ describe("EntryItemDetails attachment add", () => {
     // Each per-file failure must get its own toast so the user can tell which
     // files failed (the string names the file + the backend reason); a single
     // collapsed toast would hide that.
-    addAttachments.mockResolvedValue({
+    preparePickedAttachments.mockResolvedValue(planWithoutConfirmation());
+    commitPreparedAttachments.mockResolvedValue({
       added: [],
       failed: [
         { sourceName: "huge-a.bin", reason: "too large" },
@@ -653,7 +726,8 @@ describe("EntryItemDetails attachment add", () => {
   it("persists the survivors when some files in the batch failed", async () => {
     // A mixed outcome: the survivors still persist and report success, with
     // one error toast for the failure and one success toast for what landed.
-    addAttachments.mockResolvedValue({
+    preparePickedAttachments.mockResolvedValue(planWithoutConfirmation());
+    commitPreparedAttachments.mockResolvedValue({
       added: ["ok-a.txt", "ok-b.txt"],
       failed: [{ sourceName: "huge.bin", reason: "too large" }],
     });
@@ -701,7 +775,9 @@ describe("EntryItemDetails attachment drop zone", () => {
     state.isTransitioning = false;
     mobile.isMobile = false;
     dragDrop.handler = null;
-    commitDroppedAttachments.mockReset();
+    prepareDroppedAttachments.mockReset();
+    commitPreparedAttachments.mockReset();
+    ask.mockReset();
     databaseSave.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -732,10 +808,12 @@ describe("EntryItemDetails attachment drop zone", () => {
   });
 
   it("commits a drop that lands inside the panel via the shared add path", async () => {
-    // A drop on the selected Entry's panel drains the Rust-side buffer (the
-    // command takes only ids — no path) and then goes through the exact same
-    // tail as the picker: persist once, refresh, success toast.
-    commitDroppedAttachments.mockResolvedValue({
+    // A drop on the selected Entry's panel prepares (peeks) the Rust-side buffer
+    // for its size plan, then commits (the command takes only ids — no path) and
+    // goes through the exact same tail as the picker: persist once, refresh,
+    // success toast.
+    prepareDroppedAttachments.mockResolvedValue(planWithoutConfirmation());
+    commitPreparedAttachments.mockResolvedValue({
       added: ["dropped.txt"],
       failed: [],
     });
@@ -748,7 +826,7 @@ describe("EntryItemDetails attachment drop zone", () => {
     await fireDrop({ x: 50, y: 50 });
 
     await waitFor(() => {
-      expect(commitDroppedAttachments).toHaveBeenCalledWith("db-1", "entry-1");
+      expect(commitPreparedAttachments).toHaveBeenCalledWith("db-1", "entry-1");
     });
     expect(databaseSave).toHaveBeenCalledWith("db-1");
     expect(toastSuccess).toHaveBeenCalled();
@@ -756,10 +834,29 @@ describe("EntryItemDetails attachment drop zone", () => {
     rect.mockRestore();
   });
 
+  it("aborts a dropped batch when the soft-warning is declined", async () => {
+    // The drop path shares the picker's prepare→confirm→commit flow: an
+    // over-soft file prompts, and declining aborts the whole batch.
+    prepareDroppedAttachments.mockResolvedValue(planRequiringConfirmation());
+    ask.mockResolvedValue(false);
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    await fireDrop({ x: 50, y: 50 });
+
+    await waitFor(() => {
+      expect(ask).toHaveBeenCalledTimes(1);
+    });
+    expect(commitPreparedAttachments).not.toHaveBeenCalled();
+    expect(databaseSave).not.toHaveBeenCalled();
+    rect.mockRestore();
+  });
+
   it("does not persist when a dropped batch wholly fails", async () => {
     // Same no-phantom-save guard as the picker: a fully-failed drop reports its
     // per-file failures but never persists or reports success.
-    commitDroppedAttachments.mockResolvedValue({
+    prepareDroppedAttachments.mockResolvedValue(planWithoutConfirmation());
+    commitPreparedAttachments.mockResolvedValue({
       added: [],
       failed: [{ sourceName: "huge.bin", reason: "too large" }],
     });
@@ -782,7 +879,7 @@ describe("EntryItemDetails attachment drop zone", () => {
     renderDetails({ attachments: [] });
     await fireDrop({ x: 500, y: 500 });
 
-    expect(commitDroppedAttachments).not.toHaveBeenCalled();
+    expect(prepareDroppedAttachments).not.toHaveBeenCalled();
     expect(databaseSave).not.toHaveBeenCalled();
     rect.mockRestore();
   });
@@ -795,7 +892,7 @@ describe("EntryItemDetails attachment drop zone", () => {
     renderDetails({ attachments: [] });
     await fireDrop({ x: 50, y: 50 });
 
-    expect(commitDroppedAttachments).not.toHaveBeenCalled();
+    expect(prepareDroppedAttachments).not.toHaveBeenCalled();
     rect.mockRestore();
   });
 
@@ -832,7 +929,8 @@ describe("EntryItemDetails attachment drop zone", () => {
   });
 
   it("surfaces a batch error toast when a dropped commit rejects", async () => {
-    commitDroppedAttachments.mockRejectedValue(new Error("vault locked"));
+    prepareDroppedAttachments.mockResolvedValue(planWithoutConfirmation());
+    commitPreparedAttachments.mockRejectedValue(new Error("vault locked"));
     const rect = mockPanelRect();
 
     renderDetails({ attachments: [] });

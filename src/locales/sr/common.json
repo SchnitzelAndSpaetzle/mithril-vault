@@ -173,6 +173,18 @@
         "validation": "Čuvanje mora biti između 1 i 365 dana."
       }
     },
+    "attachments": {
+      "title": "Prilozi",
+      "description": "Ograničenja veličine po datoteci za datoteke priložene unosima.",
+      "softWarn": {
+        "label": "Upozori iznad (MB)",
+        "description": "Dodavanje datoteke veće od ovoga traži potvrdu pre čuvanja."
+      },
+      "hardCap": {
+        "label": "Odbij iznad (MB)",
+        "description": "Datoteke veće od ovoga se odbijaju. Mora biti najmanje jednako pragu upozorenja."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -350,6 +362,8 @@
       "attachmentsAdded_other": "Dodato {{count}} priloga",
       "attachmentAddFailed": "Dodavanje priloga {{filename}} nije uspelo: {{reason}}",
       "attachmentAddBatchFailed": "Dodavanje priloga nije uspelo",
+      "attachmentSoftWarnConfirmTitle": "Dodati veliki prilog?",
+      "attachmentSoftWarnConfirm": "Veliki prilozi povećavaju veličinu sefa i usporavaju čuvanje — ipak dodati?",
       "downloadAttachment": "Preuzmi prilog",
       "attachmentDownloaded": "Preuzeto: {{filename}}",
       "attachmentDownloadFailed": "Preuzimanje nije uspelo: {{filename}}",

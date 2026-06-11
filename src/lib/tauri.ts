@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
   AddAttachmentsOutcome,
+  AttachmentAddPlan,
   AppPreferences,
   AuditEventsResponse,
   AuditFilter,
@@ -30,6 +31,7 @@ import type {
 } from "./types";
 import {
   AddAttachmentsOutcomeSchema,
+  AttachmentAddPlanSchema,
   AppPreferencesSchema,
   AuditEventsResponseSchema,
   AuditStatusSchema,
@@ -307,45 +309,49 @@ export const entries = {
   },
 
   /**
-   * Adds files to an Entry as native KDBX binaries. The multi-select file
-   * dialog is opened *in Rust* by this command — the frontend passes no path,
-   * so a renderer-supplied or fabricated path can never reach the read (the
-   * trust boundary in ADR-0004). A cancelled dialog is a no-op (empty outcome).
-   * The backend reads each picked file, enforces the hard size cap, and
-   * auto-renames on a filename collision; one bad pick never aborts the rest.
-   * Returns the batch outcome — `added` stored names plus per-file `failed`
-   * entries (basename + backend reason). The caller persists via
-   * `database.save` and refreshes the entry when anything landed.
+   * Phase 1 (picker): opens the multi-select file dialog *in Rust*, buffers the
+   * picked paths backend-side, and returns the size-classification plan against
+   * the configured thresholds — without reading bytes or mutating the Vault.
+   * The frontend passes no path, so a fabricated path can never reach the read
+   * (the trust boundary in ADR-0004). A cancelled dialog returns an empty plan
+   * (no-op). The caller inspects `requiresConfirmation`: if true it shows the
+   * soft-warning prompt before calling {@link commitPreparedAttachments};
+   * otherwise it commits directly.
    */
-  async addAttachments(
-    dbId: string,
-    id: string
-  ): Promise<AddAttachmentsOutcome> {
-    DbIdSchema.parse({ dbId });
-    IdSchema.parse({ id });
-    const result = await invoke("add_entry_attachments", { dbId, id });
-    return AddAttachmentsOutcomeSchema.parse(result);
+  async preparePickedAttachments(): Promise<AttachmentAddPlan> {
+    const result = await invoke("prepare_picked_attachments");
+    return AttachmentAddPlanSchema.parse(result);
   },
 
   /**
-   * Adds the files from the most recent native drag-drop event to an Entry.
-   * The paths were captured *in Rust* from the `tauri://drag-drop` window event
-   * and buffered backend-side — this call passes only the target ids, so a
-   * renderer-supplied path can never reach the read (the same trust boundary as
-   * the picker, ADR-0004). The caller is responsible for only invoking this
-   * when a drop lands on the selected Entry's panel; the backend drains the
-   * buffer, so a commit with no preceding drop returns an empty outcome. Files
-   * go through the same feeder as the picker (hard cap, auto-rename, per-file
-   * failures); the caller persists via `database.save` and refreshes when
-   * anything landed.
+   * Phase 1 (drag-drop): classifies the paths captured *in Rust* from the most
+   * recent native `tauri://drag-drop` event against the configured thresholds,
+   * without draining them (a peek) — so they survive for the commit that
+   * follows a confirmation. The renderer supplies no path (ADR-0004). A peek
+   * with no preceding drop returns an empty plan. The caller is responsible for
+   * only invoking this when a drop lands on the selected Entry's panel.
    */
-  async commitDroppedAttachments(
+  async prepareDroppedAttachments(): Promise<AttachmentAddPlan> {
+    const result = await invoke("prepare_dropped_attachments");
+    return AttachmentAddPlanSchema.parse(result);
+  },
+
+  /**
+   * Phase 2 (shared): drains the buffered paths and stores each as a native
+   * KDBX binary, enforcing the configured hard cap. Called after the frontend
+   * has resolved any soft-warning confirmation, for both the picker and the
+   * drop. The backend drains the buffer, so a commit with no preceding prepare
+   * returns an empty outcome. Returns the batch outcome — `added` stored names
+   * plus per-file `failed` entries (basename + backend reason). The caller
+   * persists via `database.save` and refreshes the entry when anything landed.
+   */
+  async commitPreparedAttachments(
     dbId: string,
     id: string
   ): Promise<AddAttachmentsOutcome> {
     DbIdSchema.parse({ dbId });
     IdSchema.parse({ id });
-    const result = await invoke("commit_dropped_attachments", { dbId, id });
+    const result = await invoke("commit_prepared_attachments", { dbId, id });
     return AddAttachmentsOutcomeSchema.parse(result);
   },
 
