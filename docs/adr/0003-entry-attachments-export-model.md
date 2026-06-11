@@ -11,5 +11,5 @@ Entry Attachments are stored as native KDBX binaries (via `keepass-rs`' Vault-le
 ## Consequences
 
 - Attachment bytes never ride along with `get_entry` / `list_entries`; only metadata (filename, size, derived type) does. Bytes are fetched per-file on explicit Preview or Download, mirroring the `get_entry_password` lazy-reveal pattern.
-- Per-file size guardrails (soft-warn + hard-cap, both configurable in App Preferences) protect save performance, because the entire Vault is re-encrypted and rewritten on every save.
+- Per-file size guardrails protect save performance, because the entire Vault is re-encrypted and rewritten on every save. The initial add slice (#283) enforces a fixed hard cap; a configurable hard cap plus a soft-warn confirmation, both surfaced in App Preferences, are tracked in #288.
 - Adding open-in-place, PDF preview, or surfacing pool-sharing are all forward-compatible additions that don't require revisiting this decision.
