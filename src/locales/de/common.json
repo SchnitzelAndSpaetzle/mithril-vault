@@ -345,6 +345,7 @@
       "attachments": "Anhänge",
       "noAttachments": "Keine Anhänge",
       "addAttachment": "Anhang hinzufügen",
+      "dropToAttach": "Dateien hier ablegen, um sie anzuhängen",
       "attachmentsAdded_one": "{{count}} Anhang hinzugefügt",
       "attachmentsAdded_other": "{{count}} Anhänge hinzugefügt",
       "attachmentAddFailed": "{{filename}} konnte nicht hinzugefügt werden: {{reason}}",

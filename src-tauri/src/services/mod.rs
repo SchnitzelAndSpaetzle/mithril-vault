@@ -4,6 +4,7 @@ pub mod audit;
 pub mod auto_lock;
 pub mod clipboard;
 pub mod crypto;
+pub mod drag_drop;
 pub mod generator;
 pub mod kdbx;
 pub mod password_health;

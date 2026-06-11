@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
@@ -69,6 +75,7 @@ const exportAttachment = vi.hoisted(() => vi.fn());
 const deleteAttachment = vi.hoisted(() => vi.fn());
 const addAttachments = vi.hoisted(() => vi.fn());
 const getAttachmentBytes = vi.hoisted(() => vi.fn());
+const commitDroppedAttachments = vi.hoisted(() => vi.fn());
 const databaseSave = vi.hoisted(() => vi.fn());
 const save = vi.hoisted(() => vi.fn());
 const ask = vi.hoisted(() => vi.fn());
@@ -83,8 +90,32 @@ vi.mock("@/lib/tauri", () => ({
     deleteAttachment,
     addAttachments,
     getAttachmentBytes,
+    commitDroppedAttachments,
   },
   database: { save: databaseSave },
+}));
+
+// Mutable holder for the responsive breakpoint so each test can render the
+// desktop (drop zone present) or mobile (drop zone hidden) layout.
+const mobile = vi.hoisted(() => ({ isMobile: false }));
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => mobile.isMobile,
+}));
+
+// Captures the handler the detail panel registers for the native
+// `tauri://drag-drop` event so tests can fire synthetic drop events at it.
+const dragDrop = vi.hoisted(() => ({
+  handler: null as ((event: { payload: unknown }) => void) | null,
+}));
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({
+    onDragDropEvent: (handler: (event: { payload: unknown }) => void) => {
+      dragDrop.handler = handler;
+      return Promise.resolve(() => {
+        dragDrop.handler = null;
+      });
+    },
+  }),
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
@@ -636,5 +667,182 @@ describe("EntryItemDetails attachment add", () => {
     });
     expect(toastError).toHaveBeenCalledTimes(1);
     expect(toastSuccess).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("EntryItemDetails attachment drop zone", () => {
+  beforeEach(() => {
+    state.entry = null;
+    state.isTransitioning = false;
+    mobile.isMobile = false;
+    dragDrop.handler = null;
+    commitDroppedAttachments.mockReset();
+    databaseSave.mockReset();
+    toastSuccess.mockReset();
+    toastError.mockReset();
+  });
+
+  it("shows the drop-zone affordance on desktop alongside the picker button", () => {
+    mobile.isMobile = false;
+    renderDetails({ attachments: [] });
+
+    expect(screen.getByText("entries.detail.dropToAttach")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "entries.detail.addAttachment" })
+    ).toBeInTheDocument();
+  });
+
+  it("hides the drop zone on mobile but keeps the picker button", () => {
+    // Mobile has no OS file-drop, so the affordance is gone; the picker button
+    // remains the only way to add an attachment there.
+    mobile.isMobile = true;
+    renderDetails({ attachments: [] });
+
+    expect(
+      screen.queryByText("entries.detail.dropToAttach")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "entries.detail.addAttachment" })
+    ).toBeInTheDocument();
+  });
+
+  // The native event reports a physical position; the panel is mocked to a
+  // 100x100 box at the origin so a position inside (50,50) vs. outside (500,500)
+  // exercises the scoping hit-test (devicePixelRatio defaults to 1 in jsdom).
+  function mockPanelRect() {
+    return vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue({
+        left: 0,
+        top: 0,
+        right: 100,
+        bottom: 100,
+        width: 100,
+        height: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+  }
+
+  async function fireDrop(position: { x: number; y: number }) {
+    await act(async () => {
+      dragDrop.handler?.({ payload: { type: "drop", position } });
+    });
+  }
+
+  it("commits a drop that lands inside the panel via the shared add path", async () => {
+    // A drop on the selected Entry's panel drains the Rust-side buffer (the
+    // command takes only ids — no path) and then goes through the exact same
+    // tail as the picker: persist once, refresh, success toast.
+    commitDroppedAttachments.mockResolvedValue({
+      added: ["dropped.txt"],
+      failed: [],
+    });
+    databaseSave.mockResolvedValue(undefined);
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    expect(dragDrop.handler).toBeTypeOf("function");
+
+    await fireDrop({ x: 50, y: 50 });
+
+    await waitFor(() => {
+      expect(commitDroppedAttachments).toHaveBeenCalledWith("db-1", "entry-1");
+    });
+    expect(databaseSave).toHaveBeenCalledWith("db-1");
+    expect(toastSuccess).toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+    rect.mockRestore();
+  });
+
+  it("does not persist when a dropped batch wholly fails", async () => {
+    // Same no-phantom-save guard as the picker: a fully-failed drop reports its
+    // per-file failures but never persists or reports success.
+    commitDroppedAttachments.mockResolvedValue({
+      added: [],
+      failed: [{ sourceName: "huge.bin", reason: "too large" }],
+    });
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    await fireDrop({ x: 50, y: 50 });
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledTimes(1);
+    });
+    expect(databaseSave).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    rect.mockRestore();
+  });
+
+  it("ignores a drop that lands outside the panel", async () => {
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    await fireDrop({ x: 500, y: 500 });
+
+    expect(commitDroppedAttachments).not.toHaveBeenCalled();
+    expect(databaseSave).not.toHaveBeenCalled();
+    rect.mockRestore();
+  });
+
+  it("ignores a drop while the entry is transitioning", async () => {
+    // A drop landing mid-transition could target a stale entry, so it no-ops.
+    state.isTransitioning = true;
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    await fireDrop({ x: 50, y: 50 });
+
+    expect(commitDroppedAttachments).not.toHaveBeenCalled();
+    rect.mockRestore();
+  });
+
+  it("registers no drop handler when no entry is selected", () => {
+    // With no entry the detail panel renders a skeleton, so nothing subscribes
+    // to the window-global drop event — drops are ignored structurally.
+    state.entry = null;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EntryItemDetails entryId="entry-1" dbId="db-1" />
+      </QueryClientProvider>
+    );
+
+    expect(dragDrop.handler).toBeNull();
+  });
+
+  it("highlights the drop zone while a file is dragged over it", () => {
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    act(() => {
+      dragDrop.handler?.({
+        payload: { type: "over", position: { x: 50, y: 50 } },
+      });
+    });
+
+    expect(screen.getByText("entries.detail.dropToAttach").className).toContain(
+      "border-primary"
+    );
+    rect.mockRestore();
+  });
+
+  it("surfaces a batch error toast when a dropped commit rejects", async () => {
+    commitDroppedAttachments.mockRejectedValue(new Error("vault locked"));
+    const rect = mockPanelRect();
+
+    renderDetails({ attachments: [] });
+    await fireDrop({ x: 50, y: 50 });
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalled();
+    });
+    expect(databaseSave).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    rect.mockRestore();
   });
 });

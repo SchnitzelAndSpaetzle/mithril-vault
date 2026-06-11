@@ -328,6 +328,28 @@ export const entries = {
   },
 
   /**
+   * Adds the files from the most recent native drag-drop event to an Entry.
+   * The paths were captured *in Rust* from the `tauri://drag-drop` window event
+   * and buffered backend-side — this call passes only the target ids, so a
+   * renderer-supplied path can never reach the read (the same trust boundary as
+   * the picker, ADR-0004). The caller is responsible for only invoking this
+   * when a drop lands on the selected Entry's panel; the backend drains the
+   * buffer, so a commit with no preceding drop returns an empty outcome. Files
+   * go through the same feeder as the picker (hard cap, auto-rename, per-file
+   * failures); the caller persists via `database.save` and refreshes when
+   * anything landed.
+   */
+  async commitDroppedAttachments(
+    dbId: string,
+    id: string
+  ): Promise<AddAttachmentsOutcome> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("commit_dropped_attachments", { dbId, id });
+    return AddAttachmentsOutcomeSchema.parse(result);
+  },
+
+  /**
    * Exports (downloads) a single Attachment by writing its bytes to a
    * user-chosen path. The save dialog runs in the UI; the resolved
    * `destPath` is handed to the backend, which fetches the bytes and writes
