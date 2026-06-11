@@ -357,7 +357,10 @@
       "deleteAttachmentConfirmTitle": "Anhang löschen",
       "deleteAttachmentConfirm": "{{filename}} aus diesem Eintrag entfernen?",
       "attachmentDeleted": "{{filename}} gelöscht",
-      "attachmentDeleteFailed": "{{filename}} konnte nicht gelöscht werden"
+      "attachmentDeleteFailed": "{{filename}} konnte nicht gelöscht werden",
+      "previewAttachment": "Anhang anzeigen",
+      "attachmentPreviewLoading": "Vorschau wird geladen…",
+      "attachmentPreviewTooLarge": "Zu groß für die Vorschau – zum Anzeigen herunterladen"
     },
     "sort": {
       "sortBy": "Sortieren nach",

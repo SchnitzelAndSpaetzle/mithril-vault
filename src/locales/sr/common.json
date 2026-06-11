@@ -357,7 +357,10 @@
       "deleteAttachmentConfirmTitle": "Obriši prilog",
       "deleteAttachmentConfirm": "Ukloniti {{filename}} iz ovog unosa?",
       "attachmentDeleted": "Obrisano: {{filename}}",
-      "attachmentDeleteFailed": "Brisanje nije uspelo: {{filename}}"
+      "attachmentDeleteFailed": "Brisanje nije uspelo: {{filename}}",
+      "previewAttachment": "Pregled priloga",
+      "attachmentPreviewLoading": "Učitavanje pregleda…",
+      "attachmentPreviewTooLarge": "Previše veliko za pregled — preuzmi da bi se videlo"
     },
     "sort": {
       "sortBy": "Sortiraj po",

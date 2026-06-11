@@ -368,6 +368,30 @@ export const entries = {
   },
 
   /**
+   * Fetches a single Attachment's bytes on demand, keyed by filename. Used by
+   * the in-app Preview modal to render image/text payloads inline without
+   * exporting to disk. Records no audit event — Preview is a read inside the
+   * Vault, not an export to the host filesystem. Returns the raw bytes as a
+   * `Uint8Array`; the backend serializes its `SecureBytes` as a JSON number
+   * array over IPC, which we widen to `Uint8Array` at the boundary so
+   * callers can construct `data:` URLs or decode UTF-8 directly.
+   */
+  async getAttachmentBytes(
+    dbId: string,
+    id: string,
+    filename: string
+  ): Promise<Uint8Array> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke<number[]>("get_entry_attachment", {
+      dbId,
+      id,
+      filename,
+    });
+    return Uint8Array.from(result);
+  },
+
+  /**
    * Removes a single Attachment from an Entry, keyed by filename. The backend
    * drops the Entry's reference and (when it was the last reference) the
    * orphaned blob from the Vault-level pool, then marks the Vault modified.
