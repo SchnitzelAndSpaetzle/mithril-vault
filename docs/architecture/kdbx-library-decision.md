@@ -1,7 +1,8 @@
 # KDBX Library Decision
 
-**Date**: January 2026
+**Date**: January 2026 (decision) · updated June 2026 (dependency refresh)
 **Status**: Accepted
+**Current dependency**: `keepass = { version = "0.13", features = ["save_kdbx4"] }` (0.13.8 at time of writing)
 **Issue**: [#6 - Add keepass-rs dependency and evaluate KDBX libraries](https://github.com/SchnitzelAndSpaetzle/mithril-vault/issues/6)
 
 ## Context
@@ -18,7 +19,7 @@ We chose **keepass-rs** (crate name: `keepass`) as our KDBX library.
 
 - **Repository**: https://github.com/sseemayer/keepass-rs
 - **Crate**: https://crates.io/crates/keepass
-- **Version**: 0.8.16
+- **Version evaluated**: 0.8.16 (Jan 2026) — **currently pinned**: 0.13.x with the `save_kdbx4` feature (see [Current status](#current-status-june-2026))
 - **License**: MIT
 
 ### 2. kdbx-rs
@@ -36,6 +37,8 @@ We chose **keepass-rs** (crate name: `keepass`) as our KDBX library.
 - **License**: MIT
 
 ## Evaluation Criteria
+
+_This table is the January 2026 evaluation snapshot (keepass-rs 0.8.16). It is kept as the historical basis for the decision; see [Current status](#current-status-june-2026) for what changed on the 0.13 line._
 
 | Criteria             | keepass-rs      | kdbx-rs  | keepass-db   |
 | -------------------- | --------------- | -------- | ------------ |
@@ -84,25 +87,33 @@ We chose **keepass-rs** (crate name: `keepass`) as our KDBX library.
 - Good documentation with examples
 - CLI utilities for debugging (kp-dump-json, kp-show-db)
 
+## Current status (June 2026)
+
+The decision to use keepass-rs is unchanged. The dependency has since moved from the evaluated `0.8.16` to **`0.13.x`** (bumped in #278 / #279; pinned as `keepass = { version = "0.13", features = ["save_kdbx4"] }`, currently 0.13.8). What changed relative to the table above:
+
+- **KDBX4 write is first-class, not experimental.** Database creation and saving (`create` / `save` / `save_as` in `KdbxService`) run in production behind the `save_kdbx4` cargo feature. The "Experimental" KDBX4-write rating in the snapshot table no longer applies.
+- **The 0.13 API shape is what the codebase relies on**: borrow-checked entry handles (`EntryRef` / `EntryMut`), the Vault-level **attachment binary pool** (`add_attachment` / `attachments_named` / `attachment_by_name` / `remove_attachment_by_name`), custom icons, and `UPPERCASE` config enums (e.g. `OuterCipherConfig::AES256`).
+- **KDF pairing**: `rust-argon2 = "3.0"` is pinned alongside to match keepass's transitive Argon2 dependency, so Argon2id KDF parameters line up. (See the "keepass-rs Crate Notes" in `CLAUDE.md`.)
+
 ## Known Limitations
 
-1. **Write support is functional but evolving**: Creating and saving databases (`create`, `save`, `save_as` in `KdbxService`) is implemented and covered by tests. The API may evolve as we add more features. Keyfile-authenticated databases currently cannot be saved with keyfile authentication preserved (see TODO in code).
+1. **No KDBX3 write support**: New databases are created in KDBX4 format. KDBX3 databases can be read but saving will convert them to KDBX4.
 
-2. **No KDBX3 write support**: New databases are created in KDBX4 format. KDBX3 databases can be read but saving will convert them to KDBX4.
+2. **Keyfile-preserving save**: Keyfile-authenticated databases may not round-trip keyfile authentication on save in all cases (see TODOs in the keyfile handling code).
 
 ## Migration Path
 
 If keepass-rs proves insufficient in the future:
 
-1. **kdbx-rs** offers full KDBX4 write support (consider if/when write becomes critical)
+1. **kdbx-rs** remains the main alternative. (Note the original write-support gap that motivated this fallback is now closed — keepass-rs 0.13 provides first-class KDBX4 write via `save_kdbx4` — so a migration would be driven by other factors.)
 2. Our `KdbxService` abstraction layer isolates the library choice, making migration straightforward
 
 ## Implementation Notes
 
-- Added `keepass = "0.8"` to `src-tauri/Cargo.toml`
-- Implemented `KdbxService` in `src-tauri/src/services/kdbx/`
-- Type conversions between keepass-rs types and our DTOs are in `src-tauri/src/services/kdbx/mapping.rs`
-- Integration tests in `src-tauri/tests/kdbx_open.rs`, `src-tauri/tests/kdbx_entries_groups.rs`, `src-tauri/tests/kdbx_save.rs`, `src-tauri/tests/kdbx_create.rs`
+- `keepass = { version = "0.13", features = ["save_kdbx4"] }` in `src-tauri/Cargo.toml`, with `rust-argon2 = "3.0"` pinned to match its KDF dependency
+- Implemented `KdbxService` in `src-tauri/src/services/kdbx/`, split across modules (`open.rs`, `save.rs`, `create.rs`, `entries.rs`, `groups.rs`, `custom_icons.rs`, `vault.rs`, …)
+- Type conversions between keepass-rs types and our DTOs are in `src-tauri/src/services/kdbx/conversions.rs`
+- Integration tests in `src-tauri/tests/kdbx_open.rs`, `src-tauri/tests/kdbx_entries_groups.rs`, `src-tauri/tests/kdbx_save.rs`, `src-tauri/tests/kdbx_create.rs`, `src-tauri/tests/kdbx_header.rs`
 
 ## References
 
