@@ -14,6 +14,7 @@ import { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
 import { entryHasTag } from "@/lib/tag-utils";
+import { entryHasAttachments } from "@/lib/attachment-utils";
 
 const EMPTY_ICONS = {};
 const ESTIMATED_ITEM_HEIGHT = 65;
@@ -57,12 +58,17 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   }, [healthReport]);
 
   const tagFilter = search.tag as string | undefined;
+  const attachmentsFilter = search.hasAttachments === true;
+  // Filters stack: the tag filter and the has-attachments filter are
+  // AND-combined on top of the group-scoped entries from `useEntries`.
   const displayEntries = useMemo(
     () =>
-      tagFilter
-        ? sortedEntries.filter((e) => entryHasTag(e, tagFilter))
-        : sortedEntries,
-    [sortedEntries, tagFilter]
+      sortedEntries.filter(
+        (e) =>
+          (!tagFilter || entryHasTag(e, tagFilter)) &&
+          (!attachmentsFilter || entryHasAttachments(e))
+      ),
+    [sortedEntries, tagFilter, attachmentsFilter]
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer is not passed to memoized components
@@ -110,7 +116,9 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
       <div className="px-3 py-2 text-sm text-muted-foreground">
         {tagFilter
           ? t("entries.noEntriesWithTag", { tag: tagFilter })
-          : t("entries.noEntries")}
+          : attachmentsFilter
+            ? t("entries.noEntriesWithAttachments")
+            : t("entries.noEntries")}
       </div>
     );
   }

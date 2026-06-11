@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator.tsx";
 import { Dices, EllipsisVertical, Loader2, Share, X } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import SortDropdown from "@/components/entries/sort-dropdown";
+import FilterDropdown from "@/components/entries/filter-dropdown";
 import { useEntryListHeader } from "@/hooks/use-entry-list-header";
 import { useEntryDetail } from "@/hooks/use-entry-detail";
 import { useActiveDatabase } from "@/hooks/use-active-database";
@@ -366,7 +367,12 @@ export default function DragRegion() {
               inputId={DESKTOP_SEARCH_INPUT_ID}
               autoFocus
             />
-            {!searchState.isSearchActive && <SortDropdown />}
+            {!searchState.isSearchActive && (
+              <>
+                <FilterDropdown />
+                <SortDropdown />
+              </>
+            )}
           </div>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">

@@ -91,6 +91,26 @@ describe("EntryListItem findings indicator", () => {
   });
 });
 
+describe("EntryListItem attachment indicator", () => {
+  // A paperclip glyph signals at a glance which Entries carry
+  // attachments, without opening the detail view.
+  it("shows the paperclip when the Entry has at least one attachment", () => {
+    renderItem({
+      attachments: [{ filename: "a.txt", size: 10, mimeType: "text/plain" }],
+    });
+    expect(
+      screen.getByLabelText("entries.attachmentIndicator")
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the paperclip when the Entry has no attachments", () => {
+    renderItem({ attachments: [] });
+    expect(
+      screen.queryByLabelText("entries.attachmentIndicator")
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("EntryListItem expired indicator", () => {
   // An Expired Entry's title is struck through and muted, driven purely
   // from the Entry's own expires flag + past expiry — independent of the

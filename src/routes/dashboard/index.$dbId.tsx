@@ -12,6 +12,7 @@ const DashboardSearchSchema = z.object({
   sortBy: EntrySortFieldSchema.optional().default("title"),
   sortOrder: SortOrderSchema.optional().default("asc"),
   tag: z.string().optional(),
+  hasAttachments: z.boolean().optional(),
 });
 
 export const Route = createFileRoute("/dashboard/index/$dbId")({

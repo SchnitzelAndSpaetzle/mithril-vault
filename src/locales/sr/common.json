@@ -245,6 +245,13 @@
     "loadError": "Greška pri učitavanju unosa: {{error}}",
     "noEntries": "Nema pronađenih unosa.",
     "noEntriesWithTag": "Nema unosa sa oznakom \"{{tag}}\".",
+    "attachmentIndicator": "Ima priloge",
+    "noEntriesWithAttachments": "Nema unosa sa prilozima.",
+    "filter": {
+      "title": "Filter",
+      "filterEntries": "Filtriraj unose",
+      "hasAttachments": "Ima priloge"
+    },
     "newEntry": "novi unos",
     "editEntry": "uredi unos",
     "deleteEntry": "obriši unos",

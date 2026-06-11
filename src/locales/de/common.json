@@ -245,6 +245,13 @@
     "loadError": "Einträge konnten nicht geladen werden: {{error}}",
     "noEntries": "Keine Einträge gefunden.",
     "noEntriesWithTag": "Keine Einträge mit Tag \"{{tag}}\".",
+    "attachmentIndicator": "Hat Anhänge",
+    "noEntriesWithAttachments": "Keine Einträge mit Anhängen.",
+    "filter": {
+      "title": "Filter",
+      "filterEntries": "Einträge filtern",
+      "hasAttachments": "Hat Anhänge"
+    },
     "newEntry": "Neuer Eintrag",
     "editEntry": "Eintrag bearbeiten",
     "deleteEntry": "Eintrag löschen",

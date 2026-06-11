@@ -7,6 +7,7 @@ import SearchResultsList from "@/components/search/SearchResultsList.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Plus } from "lucide-react";
 import SortDropdown from "@/components/entries/sort-dropdown";
+import FilterDropdown from "@/components/entries/filter-dropdown";
 import { useCreateEntryShortcut } from "@/hooks/use-create-entry-shortcut";
 import { useSearchEntries } from "@/hooks/use-search-entries";
 import { useSearchShortcut } from "@/hooks/use-search-shortcut";
@@ -161,7 +162,12 @@ export default function MobileContentArea() {
             inputId={MOBILE_SEARCH_INPUT_ID}
             autoFocus
           />
-          {!searchState.isSearchActive && <SortDropdown />}
+          {!searchState.isSearchActive && (
+            <>
+              <FilterDropdown />
+              <SortDropdown />
+            </>
+          )}
         </div>
       </div>
     </div>

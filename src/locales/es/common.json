@@ -245,6 +245,13 @@
     "loadError": "Error al cargar las entradas: {{error}}",
     "noEntries": "No se encontraron entradas.",
     "noEntriesWithTag": "No hay entradas con la etiqueta \"{{tag}}\".",
+    "attachmentIndicator": "Tiene adjuntos",
+    "noEntriesWithAttachments": "No hay entradas con adjuntos.",
+    "filter": {
+      "title": "Filtrar",
+      "filterEntries": "Filtrar entradas",
+      "hasAttachments": "Tiene adjuntos"
+    },
     "newEntry": "nueva entrada",
     "editEntry": "editar entrada",
     "deleteEntry": "eliminar entrada",
