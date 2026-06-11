@@ -33,6 +33,28 @@ pub struct AttachmentMeta {
     pub mime_type: String,
 }
 
+/// One file that failed to add in a batch, paired with the basename it was
+/// picked under and the backend's reason (the `AppError` display string, e.g.
+/// "…exceeds the 25-byte limit"). The frontend raises one toast per failure so
+/// the user can tell which file failed and whether a retry could ever work.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentAddFailure {
+    pub source_name: String,
+    pub reason: String,
+}
+
+/// Result of adding a batch of picked files to an Entry. `added` holds the
+/// stored filenames in pick order (which may differ from the source basename
+/// after an auto-rename); `failed` holds the per-file failures. A failure on
+/// one file never aborts the rest, mirroring the single-add resilience.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddAttachmentsOutcome {
+    pub added: Vec<String>,
+    pub failed: Vec<AttachmentAddFailure>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {

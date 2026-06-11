@@ -67,11 +67,10 @@ vi.mock("@/hooks/use-clipboard-timeout", () => ({
 
 const exportAttachment = vi.hoisted(() => vi.fn());
 const deleteAttachment = vi.hoisted(() => vi.fn());
-const addAttachment = vi.hoisted(() => vi.fn());
+const addAttachments = vi.hoisted(() => vi.fn());
 const databaseSave = vi.hoisted(() => vi.fn());
 const save = vi.hoisted(() => vi.fn());
 const ask = vi.hoisted(() => vi.fn());
-const open = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 
@@ -81,14 +80,14 @@ vi.mock("@/lib/tauri", () => ({
     getProtectedCustomField: vi.fn(),
     exportAttachment,
     deleteAttachment,
-    addAttachment,
+    addAttachments,
   },
   database: { save: databaseSave },
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ save, ask, open }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ save, ask }));
 
 vi.mock("sonner", () => ({
   toast: { success: toastSuccess, error: toastError },
@@ -402,56 +401,47 @@ describe("EntryItemDetails attachment add", () => {
   beforeEach(() => {
     state.entry = null;
     state.isTransitioning = false;
-    addAttachment.mockReset();
+    addAttachments.mockReset();
     databaseSave.mockReset();
-    open.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
   });
 
-  it("opens a multi-select file dialog, adds each picked path, then persists", async () => {
-    open.mockResolvedValue(["/home/user/codes.txt", "/home/user/scan.pdf"]);
-    addAttachment.mockResolvedValue(undefined);
+  it("invokes the Rust-side picker command with no path, then persists", async () => {
+    // The dialog now lives in Rust: the frontend hands the command only the
+    // db/entry ids — never a path — so a fabricated path can't reach the read
+    // (ADR-0004 trust boundary). On a non-empty outcome it persists once and
+    // reports success.
+    addAttachments.mockResolvedValue({
+      added: ["codes.txt", "scan.pdf"],
+      failed: [],
+    });
     databaseSave.mockResolvedValue(undefined);
 
     renderDetails({ attachments: [] });
     clickAttachmentAction("entries.detail.addAttachment");
 
     await waitFor(() => {
-      expect(open).toHaveBeenCalledWith(
-        expect.objectContaining({ multiple: true })
-      );
+      expect(databaseSave).toHaveBeenCalledWith("db-1");
     });
-    // One add per picked path, in the order the dialog returned them.
-    expect(addAttachment).toHaveBeenNthCalledWith(
-      1,
-      "db-1",
-      "entry-1",
-      "/home/user/codes.txt"
-    );
-    expect(addAttachment).toHaveBeenNthCalledWith(
-      2,
-      "db-1",
-      "entry-1",
-      "/home/user/scan.pdf"
-    );
-    expect(databaseSave).toHaveBeenCalledWith("db-1");
+    // The command receives ids only — no caller-supplied path argument.
+    expect(addAttachments).toHaveBeenCalledWith("db-1", "entry-1");
     expect(toastSuccess).toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it("does nothing when the file dialog is cancelled", async () => {
-    open.mockResolvedValue(null);
+  it("does nothing when the picker comes back empty (cancelled)", async () => {
+    addAttachments.mockResolvedValue({ added: [], failed: [] });
 
     renderDetails({ attachments: [] });
     clickAttachmentAction("entries.detail.addAttachment");
 
     await waitFor(() => {
-      expect(open).toHaveBeenCalled();
+      expect(addAttachments).toHaveBeenCalled();
     });
-    expect(addAttachment).not.toHaveBeenCalled();
     expect(databaseSave).not.toHaveBeenCalled();
     expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("disables Add and ignores clicks while the entry is transitioning", () => {
@@ -464,13 +454,11 @@ describe("EntryItemDetails attachment add", () => {
     expect(button).toBeDisabled();
 
     fireEvent.click(button);
-    expect(open).not.toHaveBeenCalled();
-    expect(addAttachment).not.toHaveBeenCalled();
+    expect(addAttachments).not.toHaveBeenCalled();
   });
 
-  it("surfaces an error toast when an add fails", async () => {
-    open.mockResolvedValue(["/home/user/huge.bin"]);
-    addAttachment.mockRejectedValue(new Error("too large"));
+  it("surfaces a batch error toast when the command itself rejects", async () => {
+    addAttachments.mockRejectedValue(new Error("vault locked"));
 
     renderDetails({ attachments: [] });
     clickAttachmentAction("entries.detail.addAttachment");
@@ -478,15 +466,21 @@ describe("EntryItemDetails attachment add", () => {
     await waitFor(() => {
       expect(toastError).toHaveBeenCalled();
     });
+    expect(databaseSave).not.toHaveBeenCalled();
     expect(toastSuccess).not.toHaveBeenCalled();
   });
 
-  it("raises one error toast per rejected file rather than one for the batch", async () => {
-    // Each failure must get its own toast so the user can tell which files
-    // failed (the real string names the file + the backend reason); a single
+  it("raises one error toast per failed file rather than one for the batch", async () => {
+    // Each per-file failure must get its own toast so the user can tell which
+    // files failed (the string names the file + the backend reason); a single
     // collapsed toast would hide that.
-    open.mockResolvedValue(["/home/user/huge-a.bin", "/home/user/huge-b.bin"]);
-    addAttachment.mockRejectedValue(new Error("too large"));
+    addAttachments.mockResolvedValue({
+      added: [],
+      failed: [
+        { sourceName: "huge-a.bin", reason: "too large" },
+        { sourceName: "huge-b.bin", reason: "too large" },
+      ],
+    });
 
     renderDetails({ attachments: [] });
     clickAttachmentAction("entries.detail.addAttachment");
@@ -494,22 +488,18 @@ describe("EntryItemDetails attachment add", () => {
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledTimes(2);
     });
+    // A wholly-failed batch leaves no unsaved state and reports no success.
+    expect(databaseSave).not.toHaveBeenCalled();
     expect(toastSuccess).not.toHaveBeenCalled();
   });
 
-  it("adds the surviving files when one in the batch is rejected", async () => {
-    // A rejected file (e.g. over the hard cap) must not abort the batch: the
-    // others still land, persist, and report success — with one error toast
-    // for the failure and one success toast for what was added.
-    open.mockResolvedValue([
-      "/home/user/ok-a.txt",
-      "/home/user/huge.bin",
-      "/home/user/ok-b.txt",
-    ]);
-    addAttachment
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("too large"))
-      .mockResolvedValueOnce(undefined);
+  it("persists the survivors when some files in the batch failed", async () => {
+    // A mixed outcome: the survivors still persist and report success, with
+    // one error toast for the failure and one success toast for what landed.
+    addAttachments.mockResolvedValue({
+      added: ["ok-a.txt", "ok-b.txt"],
+      failed: [{ sourceName: "huge.bin", reason: "too large" }],
+    });
     databaseSave.mockResolvedValue(undefined);
 
     renderDetails({ attachments: [] });
@@ -518,7 +508,6 @@ describe("EntryItemDetails attachment add", () => {
     await waitFor(() => {
       expect(databaseSave).toHaveBeenCalledWith("db-1");
     });
-    expect(addAttachment).toHaveBeenCalledTimes(3);
     expect(toastError).toHaveBeenCalledTimes(1);
     expect(toastSuccess).toHaveBeenCalledTimes(1);
   });

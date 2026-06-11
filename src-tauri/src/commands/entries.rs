@@ -1,13 +1,16 @@
 use crate::domain::secure::SecureBytes;
-use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
+use crate::dto::entry::{
+    AddAttachmentsOutcome, CreateEntryData, CustomFieldValue, Entry, UpdateEntryData,
+};
 use crate::dto::error::AppError;
 use crate::services::audit::AuditService;
 use crate::services::kdbx::favicons::FaviconFetchOutcome;
 use crate::services::kdbx::KdbxService;
 use crate::services::settings::SettingsService;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Runtime, State};
+use tauri_plugin_dialog::DialogExt;
 
 /// Maps a `get_entry_password` outcome through the audit subsystem: a
 /// successful read records exactly one `entry.password_revealed` event
@@ -177,22 +180,36 @@ pub async fn delete_entry_attachment(
     state.delete_entry_attachment(&db_id, &id, &filename)
 }
 
-/// Adds a file on disk to an Entry as a native KDBX binary. The frontend
-/// passes a filesystem `source_path` (from the file-picker dialog), never the
-/// file bytes; the backend reads it, enforces the hard size cap, auto-renames
-/// on a filename collision within the Entry, and marks the Vault modified
-/// immediately — independent of the Entry edit-form save cycle. Returns the
-/// filename the attachment was stored under (which may differ from the source
-/// basename after an auto-rename). The frontend persists via `database.save`
-/// and refreshes the entry.
+/// Adds files on disk to an Entry as native KDBX binaries. The file paths are
+/// acquired *here in Rust* from the native multi-select dialog — the frontend
+/// passes no path, so a renderer-supplied (or fabricated) path can never reach
+/// the read. This is the trust boundary recorded in ADR-0004: only an
+/// OS-provided source (this dialog today; the `tauri://drag-drop` event for
+/// #286) can name a file to import. A cancelled dialog yields no paths and is a
+/// no-op. Each picked file is read, hard-size-capped, and auto-renamed on a
+/// filename collision; one bad pick never aborts the rest. Returns the batch
+/// outcome (stored names + per-file failures); the frontend persists via
+/// `database.save` and refreshes the entry when anything landed.
 #[tauri::command]
-pub async fn add_entry_attachment(
+pub async fn add_entry_attachments<R: Runtime>(
     db_id: String,
     id: String,
-    source_path: String,
+    app: AppHandle<R>,
     state: State<'_, Arc<KdbxService>>,
-) -> Result<String, AppError> {
-    state.add_entry_attachment(&db_id, &id, Path::new(&source_path))
+) -> Result<AddAttachmentsOutcome, AppError> {
+    // `blocking_pick_files` runs off the main thread (this command runs on the
+    // async runtime), dispatching the dialog to the UI thread internally. It
+    // returns `None` on cancel. Each `FilePath` is converted to a real
+    // `PathBuf`; any that fail conversion are dropped rather than read.
+    let paths: Vec<PathBuf> = app
+        .dialog()
+        .file()
+        .blocking_pick_files()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|file_path| file_path.into_path().ok())
+        .collect();
+    state.add_entry_attachments(&db_id, &id, &paths)
 }
 
 /// Creates a new entry in a group.

@@ -371,6 +371,7 @@
       "attachmentsAdded_one": "Added {{count}} attachment",
       "attachmentsAdded_other": "Added {{count}} attachments",
       "attachmentAddFailed": "Failed to add {{filename}}: {{reason}}",
+      "attachmentAddBatchFailed": "Failed to add attachments",
       "downloadAttachment": "Download attachment",
       "attachmentDownloaded": "Downloaded {{filename}}",
       "attachmentDownloadFailed": "Failed to download {{filename}}",

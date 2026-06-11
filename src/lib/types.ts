@@ -25,6 +25,18 @@ export const AttachmentMetaSchema = z.object({
 });
 export type AttachmentMeta = z.infer<typeof AttachmentMetaSchema>;
 
+export const AttachmentAddFailureSchema = z.object({
+  sourceName: z.string(),
+  reason: z.string(),
+});
+export type AttachmentAddFailure = z.infer<typeof AttachmentAddFailureSchema>;
+
+export const AddAttachmentsOutcomeSchema = z.object({
+  added: z.array(z.string()),
+  failed: z.array(AttachmentAddFailureSchema),
+});
+export type AddAttachmentsOutcome = z.infer<typeof AddAttachmentsOutcomeSchema>;
+
 export const EntrySchema = z.object({
   id: z.string(),
   groupId: z.string(),
