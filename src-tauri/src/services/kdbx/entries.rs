@@ -199,6 +199,20 @@ impl KdbxService {
         // A regular file that grows after the stat (TOCTOU) can never push more
         // than the cap into memory — reading `cap + 1` bytes proves it's over.
         let file = std::fs::File::open(source_path).map_err(|e| AppError::Io(e.to_string()))?;
+
+        // Re-check on the opened handle, not the pre-open path: if the path was
+        // swapped (e.g. a symlink repointed to a FIFO/device) between the
+        // `metadata()` above and this `open`, the descriptor we actually hold
+        // could be a non-regular file that would block or hang `read_to_end`.
+        // Validating the fd's own metadata closes that race.
+        let opened = file.metadata().map_err(|e| AppError::Io(e.to_string()))?;
+        if !opened.is_file() {
+            return Err(AppError::InvalidInput(format!(
+                "not a regular file: {}",
+                source_path.to_string_lossy()
+            )));
+        }
+
         let mut bytes = Vec::new();
         file.take(HARD_CAP_BYTES + 1)
             .read_to_end(&mut bytes)

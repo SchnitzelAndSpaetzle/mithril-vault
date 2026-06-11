@@ -480,4 +480,46 @@ describe("EntryItemDetails attachment add", () => {
     });
     expect(toastSuccess).not.toHaveBeenCalled();
   });
+
+  it("raises one error toast per rejected file rather than one for the batch", async () => {
+    // Each failure must get its own toast so the user can tell which files
+    // failed (the real string names the file + the backend reason); a single
+    // collapsed toast would hide that.
+    open.mockResolvedValue(["/home/user/huge-a.bin", "/home/user/huge-b.bin"]);
+    addAttachment.mockRejectedValue(new Error("too large"));
+
+    renderDetails({ attachments: [] });
+    clickAttachmentAction("entries.detail.addAttachment");
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledTimes(2);
+    });
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("adds the surviving files when one in the batch is rejected", async () => {
+    // A rejected file (e.g. over the hard cap) must not abort the batch: the
+    // others still land, persist, and report success — with one error toast
+    // for the failure and one success toast for what was added.
+    open.mockResolvedValue([
+      "/home/user/ok-a.txt",
+      "/home/user/huge.bin",
+      "/home/user/ok-b.txt",
+    ]);
+    addAttachment
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("too large"))
+      .mockResolvedValueOnce(undefined);
+    databaseSave.mockResolvedValue(undefined);
+
+    renderDetails({ attachments: [] });
+    clickAttachmentAction("entries.detail.addAttachment");
+
+    await waitFor(() => {
+      expect(databaseSave).toHaveBeenCalledWith("db-1");
+    });
+    expect(addAttachment).toHaveBeenCalledTimes(3);
+    expect(toastError).toHaveBeenCalledTimes(1);
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
+  });
 });

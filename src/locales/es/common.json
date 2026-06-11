@@ -347,7 +347,7 @@
       "addAttachment": "Añadir adjunto",
       "attachmentsAdded_one": "{{count}} adjunto añadido",
       "attachmentsAdded_other": "{{count}} adjuntos añadidos",
-      "attachmentAddFailed": "No se pudo añadir el adjunto",
+      "attachmentAddFailed": "No se pudo añadir {{filename}}: {{reason}}",
       "downloadAttachment": "Descargar adjunto",
       "attachmentDownloaded": "{{filename}} descargado",
       "attachmentDownloadFailed": "No se pudo descargar {{filename}}",

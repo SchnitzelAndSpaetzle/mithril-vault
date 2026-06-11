@@ -347,7 +347,7 @@
       "addAttachment": "Dodaj prilog",
       "attachmentsAdded_one": "Dodat {{count}} prilog",
       "attachmentsAdded_other": "Dodato {{count}} priloga",
-      "attachmentAddFailed": "Dodavanje priloga nije uspelo",
+      "attachmentAddFailed": "Dodavanje priloga {{filename}} nije uspelo: {{reason}}",
       "downloadAttachment": "Preuzmi prilog",
       "attachmentDownloaded": "Preuzeto: {{filename}}",
       "attachmentDownloadFailed": "Preuzimanje nije uspelo: {{filename}}",

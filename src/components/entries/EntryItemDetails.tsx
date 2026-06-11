@@ -632,7 +632,9 @@ function AttachmentsSection({
   // auto-renames each one immediately. We add every picked path — a failure on
   // one (e.g. over the hard cap) doesn't abort the rest — then persist once and
   // refresh. A cancelled dialog is a no-op. The summary toast reports how many
-  // landed; any failures get their own error toast.
+  // landed; each failure gets its own toast naming the file and the backend's
+  // reason (e.g. "exceeds the 25 MiB limit") so the user knows which file and
+  // whether retrying could ever work.
   const handleAdd = async () => {
     if (isDisabled) return;
     const selected = await open({ multiple: true });
@@ -641,14 +643,20 @@ function AttachmentsSection({
     if (paths.length === 0) return;
 
     let added = 0;
-    let anyFailed = false;
     for (const path of paths) {
       try {
         await entriesApi.addAttachment(dbId, entryId, path);
         added += 1;
       } catch (error) {
         console.error("Failed to add attachment:", error);
-        anyFailed = true;
+        // Backend errors (AttachmentTooLarge / InvalidInput) cross IPC as a
+        // string; surface it alongside the file's basename rather than
+        // collapsing every failure into one opaque message.
+        const filename = path.split(/[\\/]/).pop() || path;
+        const reason = error instanceof Error ? error.message : String(error);
+        toast.error(
+          t("entries.detail.attachmentAddFailed", { filename, reason })
+        );
       }
     }
 
@@ -657,11 +665,6 @@ function AttachmentsSection({
     if (added > 0) {
       await saveWithErrorToast(dbId, t);
       await invalidateEntryQueries();
-    }
-    if (anyFailed) {
-      toast.error(t("entries.detail.attachmentAddFailed"));
-    }
-    if (added > 0) {
       toast.success(t("entries.detail.attachmentsAdded", { count: added }));
     }
   };

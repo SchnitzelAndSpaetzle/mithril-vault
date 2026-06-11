@@ -347,7 +347,7 @@
       "addAttachment": "Ajouter une pièce jointe",
       "attachmentsAdded_one": "{{count}} pièce jointe ajoutée",
       "attachmentsAdded_other": "{{count}} pièces jointes ajoutées",
-      "attachmentAddFailed": "Échec de l'ajout de la pièce jointe",
+      "attachmentAddFailed": "Échec de l'ajout de {{filename}} : {{reason}}",
       "downloadAttachment": "Télécharger la pièce jointe",
       "attachmentDownloaded": "{{filename}} téléchargé",
       "attachmentDownloadFailed": "Échec du téléchargement de {{filename}}",
