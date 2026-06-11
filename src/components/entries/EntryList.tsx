@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
-import { entryHasTag } from "@/lib/tag-utils";
+import { emptyEntryListReason, filterEntries } from "@/lib/entry-filters";
 
 const EMPTY_ICONS = {};
 const ESTIMATED_ITEM_HEIGHT = 65;
@@ -22,7 +22,7 @@ interface EntryListProps {
   onEntrySelect?: (id: string) => Promise<void> | void;
 }
 
-export default function EntryList({ onEntrySelect }: EntryListProps) {
+export default function EntryList({ onEntrySelect }: Readonly<EntryListProps>) {
   const { t } = useTranslation();
   const { dbId } = useActiveDatabase();
   const search = useSearch({ strict: false });
@@ -56,13 +56,16 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
     return map;
   }, [healthReport]);
 
-  const tagFilter = search.tag as string | undefined;
+  const tagFilter = search.tag;
+  const attachmentsFilter = search.hasAttachments === true;
+  // Filters stack on top of the group-scoped entries from `useEntries`.
   const displayEntries = useMemo(
     () =>
-      tagFilter
-        ? sortedEntries.filter((e) => entryHasTag(e, tagFilter))
-        : sortedEntries,
-    [sortedEntries, tagFilter]
+      filterEntries(sortedEntries, {
+        tag: tagFilter,
+        hasAttachments: attachmentsFilter,
+      }),
+    [sortedEntries, tagFilter, attachmentsFilter]
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer is not passed to memoized components
@@ -106,11 +109,30 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   }
 
   if (displayEntries.length === 0) {
+    let noEntriesMessage;
+
+    switch (
+      emptyEntryListReason({
+        tag: tagFilter,
+        hasAttachments: attachmentsFilter,
+      })
+    ) {
+      case "tag":
+        noEntriesMessage = t("entries.noEntriesWithTag", { tag: tagFilter });
+        break;
+      case "attachments":
+        noEntriesMessage = t("entries.noEntriesWithAttachments");
+        break;
+      case "filters":
+        noEntriesMessage = t("entries.noEntriesMatchFilters");
+        break;
+      default:
+        noEntriesMessage = t("entries.noEntries");
+    }
+
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
-        {tagFilter
-          ? t("entries.noEntriesWithTag", { tag: tagFilter })
-          : t("entries.noEntries")}
+        {noEntriesMessage}
       </div>
     );
   }

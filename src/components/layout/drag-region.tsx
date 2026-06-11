@@ -60,8 +60,14 @@ export default function DragRegion() {
   const search = useSearch({ strict: false });
   const searchGroupId = (search.groupId as string | undefined) ?? null;
   const searchTag = (search.tag as string | undefined) ?? null;
+  const searchHasAttachments = search.hasAttachments === true;
 
-  const searchState = useSearchEntries(dbId, searchGroupId, searchTag);
+  const searchState = useSearchEntries(
+    dbId,
+    searchGroupId,
+    searchTag,
+    searchHasAttachments
+  );
 
   const {
     entry: editEntry,

@@ -6,7 +6,7 @@ import { useGroups } from "@/hooks/use-groups";
 import { useSearch } from "@tanstack/react-router";
 import { useMemo } from "react";
 import type { Group } from "@/lib/types";
-import { entryHasTag } from "@/lib/tag-utils";
+import { filterEntries } from "@/lib/entry-filters";
 
 function findGroupById(groups: Group[], id: string): Group | null {
   for (const group of groups) {
@@ -23,15 +23,16 @@ export function useEntryListHeader() {
   const { data: entries } = useEntries(dbId, search.groupId);
   const { data: groups } = useGroups(dbId);
 
-  const activeTag = (search.tag as string | undefined) ?? null;
+  const activeTag = search.tag ?? null;
+  const hasAttachments = search.hasAttachments === true;
 
+  // Count what the list actually shows: reuse the shared filter so the
+  // header count stays in lockstep with the visible (tag + attachment)
+  // filtered entries.
   const entryCount = useMemo(() => {
     if (!entries) return 0;
-    if (activeTag) {
-      return entries.filter((e) => entryHasTag(e, activeTag)).length;
-    }
-    return entries.length;
-  }, [entries, activeTag]);
+    return filterEntries(entries, { tag: activeTag, hasAttachments }).length;
+  }, [entries, activeTag, hasAttachments]);
 
   let groupName = "All";
   if (search.groupId && groups) {
