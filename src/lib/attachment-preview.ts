@@ -74,13 +74,13 @@ export function classifyAttachment(meta: {
   mimeType: string;
   size: number;
 }): AttachmentPreviewKind {
-  const previewable: "image" | "text" | null = IMAGE_MIME_TYPES.has(
-    meta.mimeType
-  )
-    ? "image"
-    : TEXT_EXTENSIONS.has(extensionOf(meta.filename))
-      ? "text"
-      : null;
+  let previewable: "image" | "text" | null = null;
+  if (IMAGE_MIME_TYPES.has(meta.mimeType)) {
+    previewable = "image";
+  } else if (TEXT_EXTENSIONS.has(extensionOf(meta.filename))) {
+    previewable = "text";
+  }
+
   if (previewable === null) return { kind: "none" };
   if (meta.size > PREVIEW_MAX_BYTES) return { kind: "too-large" };
   return { kind: previewable };

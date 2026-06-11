@@ -291,13 +291,14 @@ function PasswordRow({
     }
   };
 
-  const displayValue = isLoading ? (
-    <Loader2 className="inline h-3 w-3 animate-spin" />
-  ) : isVisible ? (
-    password
-  ) : (
-    "••••••••"
-  );
+  let displayValue: React.ReactNode;
+  if (isLoading) {
+    displayValue = <Loader2 className="inline h-3 w-3 animate-spin" />;
+  } else if (isVisible) {
+    displayValue = password;
+  } else {
+    displayValue = "••••••••";
+  }
 
   return (
     <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
@@ -459,13 +460,14 @@ function ProtectedCustomFieldRow({
     }
   };
 
-  const displayValue = isLoading ? (
-    <Loader2 className="inline h-3 w-3 animate-spin" />
-  ) : isVisible ? (
-    value
-  ) : (
-    "••••••••"
-  );
+  let displayValue: React.ReactNode;
+  if (isLoading) {
+    displayValue = <Loader2 className="inline h-3 w-3 animate-spin" />;
+  } else if (isVisible) {
+    displayValue = value;
+  } else {
+    displayValue = "••••••••";
+  }
 
   return (
     <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">

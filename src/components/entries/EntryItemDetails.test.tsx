@@ -670,6 +670,31 @@ describe("EntryItemDetails attachment add", () => {
   });
 });
 
+// The native event reports a physical position; the panel is mocked to a
+// 100x100 box at the origin so a position inside (50,50) vs. outside (500,500)
+// exercises the scoping hit-test (devicePixelRatio defaults to 1 in jsdom).
+function mockPanelRect() {
+  return vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 100,
+      width: 100,
+      height: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+}
+
+async function fireDrop(position: { x: number; y: number }) {
+  await act(async () => {
+    dragDrop.handler?.({ payload: { type: "drop", position } });
+  });
+}
+
 describe("EntryItemDetails attachment drop zone", () => {
   beforeEach(() => {
     state.entry = null;
@@ -705,31 +730,6 @@ describe("EntryItemDetails attachment drop zone", () => {
       screen.getByRole("button", { name: "entries.detail.addAttachment" })
     ).toBeInTheDocument();
   });
-
-  // The native event reports a physical position; the panel is mocked to a
-  // 100x100 box at the origin so a position inside (50,50) vs. outside (500,500)
-  // exercises the scoping hit-test (devicePixelRatio defaults to 1 in jsdom).
-  function mockPanelRect() {
-    return vi
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockReturnValue({
-        left: 0,
-        top: 0,
-        right: 100,
-        bottom: 100,
-        width: 100,
-        height: 100,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      });
-  }
-
-  async function fireDrop(position: { x: number; y: number }) {
-    await act(async () => {
-      dragDrop.handler?.({ payload: { type: "drop", position } });
-    });
-  }
 
   it("commits a drop that lands inside the panel via the shared add path", async () => {
     // A drop on the selected Entry's panel drains the Rust-side buffer (the

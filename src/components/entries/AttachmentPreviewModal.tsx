@@ -25,7 +25,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   const CHUNK = 0x8000;
   let binary = "";
   for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(
+    binary += String.fromCodePoint(
       ...bytes.subarray(i, Math.min(i + CHUNK, bytes.length))
     );
   }
@@ -56,28 +56,42 @@ export function AttachmentPreviewModal({
     };
   }, [open, kind, attachment.filename, fetchBytes]);
 
+  const previewContent = (() => {
+    if (kind === "too-large") {
+      return (
+        <p className="text-sm text-muted-foreground">
+          {t("entries.detail.attachmentPreviewTooLarge")}
+        </p>
+      );
+    }
+
+    if (kind === "image" && bytes) {
+      return (
+        <img
+          alt={attachment.filename}
+          src={`data:${attachment.mimeType};base64,${bytesToBase64(bytes)}`}
+        />
+      );
+    }
+
+    if (kind === "text" && bytes) {
+      return (
+        <pre className="whitespace-pre-wrap break-words font-mono text-sm">
+          {new TextDecoder("utf-8").decode(bytes)}
+        </pre>
+      );
+    }
+
+    return <p>{t("entries.detail.attachmentPreviewLoading")}</p>;
+  })();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>{attachment.filename}</DialogTitle>
         </DialogHeader>
-        {kind === "too-large" ? (
-          <p className="text-sm text-muted-foreground">
-            {t("entries.detail.attachmentPreviewTooLarge")}
-          </p>
-        ) : kind === "image" && bytes ? (
-          <img
-            alt={attachment.filename}
-            src={`data:${attachment.mimeType};base64,${bytesToBase64(bytes)}`}
-          />
-        ) : kind === "text" && bytes ? (
-          <pre className="whitespace-pre-wrap break-words font-mono text-sm">
-            {new TextDecoder("utf-8").decode(bytes)}
-          </pre>
-        ) : (
-          <p>{t("entries.detail.attachmentPreviewLoading")}</p>
-        )}
+        {previewContent}
       </DialogContent>
     </Dialog>
   );
