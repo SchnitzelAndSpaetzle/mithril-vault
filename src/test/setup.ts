@@ -20,26 +20,25 @@ if (!globalThis.ResizeObserver) {
 // jsdom lacks matchMedia, which `useIsMobile` and the theme provider rely on.
 // Default to the desktop breakpoint (no match); tests that care about the
 // mobile layout mock `@/hooks/use-mobile` directly.
-if (!window.matchMedia) {
-  window.matchMedia = (query: string) =>
-    ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addEventListener: () => {
-        /* noop for tests */
-      },
-      removeEventListener: () => {
-        /* noop for tests */
-      },
-      addListener: () => {
-        /* noop for tests */
-      },
-      removeListener: () => {
-        /* noop for tests */
-      },
-      dispatchEvent: () => false,
-    }) as unknown as MediaQueryList;
+if (!globalThis.matchMedia) {
+  globalThis.matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {
+      /* noop for tests */
+    },
+    removeEventListener: () => {
+      /* noop for tests */
+    },
+    addListener: () => {
+      /* noop for tests */
+    },
+    removeListener: () => {
+      /* noop for tests */
+    },
+    dispatchEvent: () => false,
+  });
 }
 
 // The native drag-drop listener (`useAttachmentDrop`) subscribes through the

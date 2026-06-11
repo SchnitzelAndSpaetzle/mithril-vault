@@ -596,7 +596,7 @@ describe("EntryItemDetails attachment drop zone", () => {
         x: 0,
         y: 0,
         toJSON: () => ({}),
-      } as DOMRect);
+      });
   }
 
   async function fireDrop(position: { x: number; y: number }) {
