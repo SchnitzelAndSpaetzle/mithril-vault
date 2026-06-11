@@ -368,6 +368,7 @@
       "attachments": "Attachments",
       "noAttachments": "No attachments",
       "addAttachment": "Add attachment",
+      "dropToAttach": "Drop files here to attach",
       "attachmentsAdded_one": "Added {{count}} attachment",
       "attachmentsAdded_other": "Added {{count}} attachments",
       "attachmentAddFailed": "Failed to add {{filename}}: {{reason}}",

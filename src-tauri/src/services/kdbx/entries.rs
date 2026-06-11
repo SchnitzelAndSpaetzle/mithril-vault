@@ -1543,6 +1543,85 @@ mod tests {
     }
 
     #[test]
+    fn commit_drains_the_drop_buffer_into_the_add_feeder() {
+        // Drag-and-drop (#286) reuses the same trusted feeder as the picker: a
+        // native drop buffers its OS-provided paths, and the commit drains them
+        // into `add_entry_attachments`. This proves the drain+feed seam end to
+        // end — what the drop captured lands on the Entry, and the buffer is
+        // emptied so the same drop can't be replayed against a later entry.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let dropped = dir.path().join("dropped.txt");
+        std::fs::write(&dropped, b"from a drag-drop").expect("seed dropped file");
+
+        let buffer = crate::services::drag_drop::DropPathsBuffer::default();
+        buffer.replace(vec![dropped.clone()]);
+
+        // The commit drains the buffer and hands only those paths to the feeder.
+        let paths = buffer.take();
+        let outcome = service
+            .add_entry_attachments(&db_path, &entry_a, &paths)
+            .expect("commit drained drop");
+
+        assert_eq!(
+            outcome.added,
+            vec!["dropped.txt".to_string()],
+            "the dropped file lands on the Entry through the shared feeder"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry
+                .attachments
+                .iter()
+                .any(|a| a.filename == "dropped.txt"),
+            "the attachment is persisted on the Entry"
+        );
+
+        assert!(
+            buffer.take().is_empty(),
+            "the buffer is drained, so a second commit reads nothing"
+        );
+    }
+
+    #[test]
+    fn commit_with_no_preceding_drop_is_a_noop() {
+        // The drop event is window-global, so a commit can fire with nothing
+        // buffered (e.g. a stale render). Draining an empty buffer hands the
+        // feeder no paths: nothing is read, nothing is stored, the Vault is
+        // untouched — the same guarantee as a cancelled picker dialog.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let generation_before = service
+            .with_vault(&db_path, |vault| Ok(vault.generation()))
+            .expect("generation before");
+
+        let buffer = crate::services::drag_drop::DropPathsBuffer::default();
+        let paths = buffer.take();
+        let outcome = service
+            .add_entry_attachments(&db_path, &entry_a, &paths)
+            .expect("empty commit");
+
+        assert!(outcome.added.is_empty(), "an empty drop adds nothing");
+        assert!(outcome.failed.is_empty(), "and fails nothing");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "a commit with no buffered drop leaves the Entry untouched"
+        );
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "no paths means no read and no modification"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
     fn list_entries_without_group_filter_hides_recycle_bin_entries() {
         // Regression: deleting an entry moves it to the recycle bin, but the
         // unfiltered list view used to keep returning it (since

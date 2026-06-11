@@ -1,4 +1,4 @@
-import { createElement, useCallback, useState } from "react";
+import { createElement, useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import dayjs from "dayjs";
 import { Separator } from "@/components/ui/separator.tsx";
@@ -30,6 +30,8 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
 import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useAttachmentDrop } from "@/hooks/use-attachment-drop";
 import { useQueryClient } from "@tanstack/react-query";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
 import { queryKeys } from "@/lib/query-keys";
@@ -585,6 +587,8 @@ function AttachmentsSection({
 }>) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Sorted by filename, case-insensitively, for a stable display order (the
   // KDBX binary pool is unordered). Copy first so we never mutate props.
@@ -627,15 +631,39 @@ function AttachmentsSection({
       }),
     ]);
 
+  // Shared tail for both add paths (picker and drag-drop): the backend has
+  // already read, size-capped, and auto-renamed each file, returning a batch
+  // outcome. We surface one toast per failure naming the file and the backend's
+  // reason (e.g. "exceeds the 25 MiB limit") so the user knows which file and
+  // whether retrying could ever work, then persist once and refresh only when
+  // at least one file actually landed in the in-memory Vault — so a
+  // wholly-failed, cancelled, or empty batch leaves no phantom unsaved state.
+  const applyAddOutcome = async (
+    outcome: Awaited<ReturnType<typeof entriesApi.addAttachments>>
+  ) => {
+    for (const failure of outcome.failed) {
+      toast.error(
+        t("entries.detail.attachmentAddFailed", {
+          filename: failure.sourceName,
+          reason: failure.reason,
+        })
+      );
+    }
+
+    if (outcome.added.length > 0) {
+      await saveWithErrorToast(dbId, t);
+      await invalidateEntryQueries();
+      toast.success(
+        t("entries.detail.attachmentsAdded", { count: outcome.added.length })
+      );
+    }
+  };
+
   // Add is the primary write path. The multi-select file dialog is opened in
   // Rust by the add command — the frontend passes no path, so a fabricated
   // path can never reach the backend read (the trust boundary in ADR-0004).
-  // The backend reads, size-caps, and auto-renames each picked file; a failure
-  // on one (e.g. over the hard cap) doesn't abort the rest. We surface one
-  // toast per failure naming the file and the backend's reason (e.g. "exceeds
-  // the 25 MiB limit") so the user knows which file and whether retrying could
-  // ever work, then persist once and refresh only when something actually
-  // landed. A cancelled dialog comes back as an empty outcome — a no-op.
+  // A failure on one file doesn't abort the rest; a cancelled dialog comes back
+  // as an empty outcome — a no-op handled by the shared tail below.
   const handleAdd = async () => {
     if (isDisabled) return;
 
@@ -648,26 +676,38 @@ function AttachmentsSection({
       return;
     }
 
-    for (const failure of outcome.failed) {
-      toast.error(
-        t("entries.detail.attachmentAddFailed", {
-          filename: failure.sourceName,
-          reason: failure.reason,
-        })
-      );
-    }
-
-    // Persist and refresh only when at least one file actually landed in the
-    // in-memory Vault, so a wholly-failed or cancelled batch leaves no phantom
-    // unsaved state.
-    if (outcome.added.length > 0) {
-      await saveWithErrorToast(dbId, t);
-      await invalidateEntryQueries();
-      toast.success(
-        t("entries.detail.attachmentsAdded", { count: outcome.added.length })
-      );
-    }
+    await applyAddOutcome(outcome);
   };
+
+  // Drag-and-drop is the second write path (desktop only). The dropped paths
+  // were captured in Rust from the native window event (ADR-0004) — this only
+  // tells the backend to drain that buffer onto the selected Entry. The drop
+  // hook has already scoped the drop to this panel; from here it's identical to
+  // the picker (same feeder, same outcome handling).
+  const handleDrop = () => {
+    if (isDisabled) return;
+    void (async () => {
+      let outcome: Awaited<
+        ReturnType<typeof entriesApi.commitDroppedAttachments>
+      >;
+      try {
+        outcome = await entriesApi.commitDroppedAttachments(dbId, entryId);
+      } catch (error) {
+        console.error("Failed to add dropped attachments:", error);
+        toast.error(t("entries.detail.attachmentAddBatchFailed"));
+        return;
+      }
+      await applyAddOutcome(outcome);
+    })();
+  };
+
+  // The native drag-drop event is window-global; the hook acts only on desktop
+  // and only when a drop lands inside this panel (and not mid-transition).
+  const { isDragOver } = useAttachmentDrop({
+    enabled: !isMobile && !isDisabled,
+    panelRef,
+    onDrop: handleDrop,
+  });
 
   // Deleting an attachment is destructive and has no undo, so we confirm
   // first. On confirm the backend drops the Entry's reference (and the
@@ -704,7 +744,7 @@ function AttachmentsSection({
   };
 
   return (
-    <div className="border rounded-md">
+    <div ref={panelRef} className="border rounded-md">
       <div className="flex items-center justify-between px-4 py-2">
         <small className="text-sm font-medium">
           {t("entries.detail.attachments")}
@@ -766,6 +806,24 @@ function AttachmentsSection({
             );
           })}
         </ul>
+      )}
+      {/* Drop zone is desktop-only: mobile has no OS file-drop, so only the
+          picker button above is offered there (hidden via useIsMobile). */}
+      {!isMobile && (
+        <>
+          <Separator />
+          <div className="px-4 py-2">
+            <div
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground transition-colors",
+                isDragOver && "border-primary bg-primary/5 text-foreground"
+              )}
+            >
+              <Paperclip className="h-4 w-4" />
+              {t("entries.detail.dropToAttach")}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
