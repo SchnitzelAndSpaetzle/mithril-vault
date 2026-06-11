@@ -4,6 +4,7 @@ use crate::dto::entry::{
 };
 use crate::dto::error::AppError;
 use crate::services::audit::AuditService;
+use crate::services::drag_drop::DropPathsBuffer;
 use crate::services::kdbx::favicons::FaviconFetchOutcome;
 use crate::services::kdbx::KdbxService;
 use crate::services::settings::SettingsService;
@@ -209,6 +210,29 @@ pub async fn add_entry_attachments<R: Runtime>(
         .into_iter()
         .filter_map(|file_path| file_path.into_path().ok())
         .collect();
+    state.add_entry_attachments(&db_id, &id, &paths)
+}
+
+/// Adds the files from the most recent native `tauri://drag-drop` event to an
+/// Entry. The paths were captured *in Rust* from the window event (buffered in
+/// `DropPathsBuffer`) — the frontend passes only the target db/entry ids, so a
+/// renderer-supplied path can never reach the read. This is the same trust
+/// boundary as the picker (ADR-0004): the renderer decides *whether* to commit
+/// (the drop must land on the selected Entry's panel) but never names a file.
+/// Draining the buffer here means a stale drop cannot be replayed against a
+/// later entry, and a commit with no preceding drop reads nothing (empty
+/// outcome). The dropped files go through the same feeder as the picker — hard
+/// size cap, auto-rename on collision, one bad file never aborting the rest —
+/// and the frontend persists via `database.save` and refreshes when anything
+/// landed.
+#[tauri::command]
+pub async fn commit_dropped_attachments(
+    db_id: String,
+    id: String,
+    drops: State<'_, Arc<DropPathsBuffer>>,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<AddAttachmentsOutcome, AppError> {
+    let paths = drops.take();
     state.add_entry_attachments(&db_id, &id, &paths)
 }
 

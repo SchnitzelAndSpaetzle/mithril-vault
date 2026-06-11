@@ -1497,6 +1497,40 @@ mod tests {
         );
     }
 
+    /// Asserts that feeding `paths` to the add feeder is a no-op: nothing is
+    /// added or fails, the Entry stays empty, and the Vault is unmodified.
+    /// Shared by the picker trust-boundary test (an empty pick while a secret
+    /// sits on disk) and the drop-commit no-op test (an empty buffer), since
+    /// both make the same "a path never handed in is never read" guarantee.
+    fn assert_empty_add_is_inert(service: &KdbxService, db_path: &str, entry_id: &str) {
+        let generation_before = service
+            .with_vault(db_path, |vault| Ok(vault.generation()))
+            .expect("generation before");
+
+        let outcome = service
+            .add_entry_attachments(db_path, entry_id, &[])
+            .expect("empty add");
+
+        assert!(outcome.added.is_empty(), "nothing is added");
+        assert!(outcome.failed.is_empty(), "and nothing fails");
+
+        let entry = service.get_entry(db_path, entry_id).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "a file never handed to the add path must not be readable through it"
+        );
+        service
+            .with_vault(db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "no read means no modification"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
     #[test]
     fn add_entry_attachments_reads_only_paths_handed_to_it() {
         // The trust boundary (issue #296): a file the user never selected
@@ -1511,35 +1545,62 @@ mod tests {
         let secret = dir.path().join("id_rsa");
         std::fs::write(&secret, b"-----BEGIN PRIVATE KEY-----").expect("seed secret");
 
-        let generation_before = service
-            .with_vault(&db_path, |vault| Ok(vault.generation()))
-            .expect("generation before");
+        assert_empty_add_is_inert(&service, &db_path, &entry_a);
+    }
 
+    #[test]
+    fn commit_drains_the_drop_buffer_into_the_add_feeder() {
+        // Drag-and-drop (#286) reuses the same trusted feeder as the picker: a
+        // native drop buffers its OS-provided paths, and the commit drains them
+        // into `add_entry_attachments`. This proves the drain+feed seam end to
+        // end — what the drop captured lands on the Entry, and the buffer is
+        // emptied so the same drop can't be replayed against a later entry.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let dropped = dir.path().join("dropped.txt");
+        std::fs::write(&dropped, b"from a drag-drop").expect("seed dropped file");
+
+        let buffer = crate::services::drag_drop::DropPathsBuffer::default();
+        buffer.replace(vec![dropped.clone()]);
+
+        // The commit drains the buffer and hands only those paths to the feeder.
+        let paths = buffer.take();
         let outcome = service
-            .add_entry_attachments(&db_path, &entry_a, &[])
-            .expect("empty batch");
+            .add_entry_attachments(&db_path, &entry_a, &paths)
+            .expect("commit drained drop");
 
-        assert!(
-            outcome.added.is_empty(),
-            "nothing is added from an empty pick"
+        assert_eq!(
+            outcome.added,
+            vec!["dropped.txt".to_string()],
+            "the dropped file lands on the Entry through the shared feeder"
         );
-        assert!(outcome.failed.is_empty(), "and nothing fails either");
 
         let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
         assert!(
-            entry.attachments.is_empty(),
-            "a file never handed to the add path must not be readable through it"
+            entry
+                .attachments
+                .iter()
+                .any(|a| a.filename == "dropped.txt"),
+            "the attachment is persisted on the Entry"
         );
-        service
-            .with_vault(&db_path, |vault| {
-                assert_eq!(
-                    vault.generation(),
-                    generation_before,
-                    "no read means no modification"
-                );
-                Ok(())
-            })
-            .expect("vault scope");
+
+        assert!(
+            buffer.take().is_empty(),
+            "the buffer is drained, so a second commit reads nothing"
+        );
+    }
+
+    #[test]
+    fn commit_with_no_preceding_drop_is_a_noop() {
+        // The drop event is window-global, so a commit can fire with nothing
+        // buffered (e.g. a stale render). Draining an empty buffer hands the
+        // feeder no paths, so nothing is read or stored and the Vault is
+        // untouched — the same guarantee as a cancelled picker dialog.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let buffer = crate::services::drag_drop::DropPathsBuffer::default();
+        assert!(buffer.take().is_empty(), "no drop means no buffered paths");
+
+        assert_empty_add_is_inert(&service, &db_path, &entry_a);
     }
 
     #[test]
