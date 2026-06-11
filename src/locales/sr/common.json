@@ -250,7 +250,6 @@
     "noEntriesMatchFilters": "Nijedan unos ne odgovara aktivnim filterima.",
     "filter": {
       "title": "Filter",
-      "filterEntries": "Filtriraj unose",
       "hasAttachments": "Ima priloge"
     },
     "newEntry": "novi unos",

@@ -2,11 +2,11 @@
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import FilterDropdown from "./filter-dropdown";
+import SortDropdown from "./sort-dropdown";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  search: {},
+  search: {} as { hasAttachments?: boolean },
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -31,69 +31,68 @@ beforeEach(() => {
   mocks.search = {};
 });
 
-function openMenuAndToggle() {
-  const trigger = screen.getByLabelText("entries.filter.filterEntries");
+function openMenu() {
+  const trigger = screen.getByLabelText("entries.sort.sortEntries");
   fireEvent.pointerDown(
     trigger,
     new MouseEvent("pointerdown", { bubbles: true, button: 0 })
   );
   fireEvent.click(trigger);
-  const item = screen.getByRole("menuitemcheckbox", {
-    name: "entries.filter.hasAttachments",
-  });
-  fireEvent.click(item);
 }
 
-describe("FilterDropdown", () => {
-  it("renders the trigger with an accessible label", () => {
-    render(<FilterDropdown />);
-    expect(
-      screen.getByLabelText("entries.filter.filterEntries")
-    ).toBeInTheDocument();
-  });
-
-  it("accents the trigger while the has-attachments filter is active", () => {
-    mocks.search = { hasAttachments: true };
-    render(<FilterDropdown />);
-    const trigger = screen.getByLabelText("entries.filter.filterEntries");
-    expect(trigger.className).toContain("border-primary");
-  });
-
-  it("does not accent the trigger when no filter is active", () => {
-    mocks.search = {};
-    render(<FilterDropdown />);
-    const trigger = screen.getByLabelText("entries.filter.filterEntries");
-    expect(trigger.className).not.toContain("border-primary");
-  });
-
+describe("SortDropdown has-attachments filter", () => {
   it("enables the filter via the URL search param when toggled on", () => {
     mocks.search = {};
-    render(<FilterDropdown />);
+    render(<SortDropdown />);
 
-    openMenuAndToggle();
+    openMenu();
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", {
+        name: "entries.filter.hasAttachments",
+      })
+    );
 
     expect(mocks.navigate).toHaveBeenCalledTimes(1);
     const updater = mocks.navigate.mock.calls[0]![0].search as (
       prev: Record<string, unknown>
     ) => Record<string, unknown>;
-    expect(updater({ tag: "dev" })).toEqual({
-      tag: "dev",
+    expect(updater({ sortBy: "title" })).toEqual({
+      sortBy: "title",
       hasAttachments: true,
     });
   });
 
   it("clears the filter param when toggled off", () => {
     mocks.search = { hasAttachments: true };
-    render(<FilterDropdown />);
+    render(<SortDropdown />);
 
-    openMenuAndToggle();
+    openMenu();
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", {
+        name: "entries.filter.hasAttachments",
+      })
+    );
 
     const updater = mocks.navigate.mock.calls[0]![0].search as (
       prev: Record<string, unknown>
     ) => Record<string, unknown>;
-    expect(updater({ tag: "dev", hasAttachments: true })).toEqual({
-      tag: "dev",
+    expect(updater({ sortBy: "title", hasAttachments: true })).toEqual({
+      sortBy: "title",
       hasAttachments: undefined,
     });
+  });
+
+  it("reflects the active filter as a checked item", () => {
+    mocks.search = { hasAttachments: true };
+    render(<SortDropdown />);
+
+    openMenu();
+    expect(
+      screen
+        .getByRole("menuitemcheckbox", {
+          name: "entries.filter.hasAttachments",
+        })
+        .getAttribute("aria-checked")
+    ).toBe("true");
   });
 });

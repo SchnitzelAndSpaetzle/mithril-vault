@@ -273,7 +273,6 @@
     "noEntriesMatchFilters": "No entries match the active filters.",
     "filter": {
       "title": "Filter",
-      "filterEntries": "Filter entries",
       "hasAttachments": "Has attachments"
     },
     "newEntry": "new entry",

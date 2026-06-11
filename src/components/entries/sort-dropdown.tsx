@@ -3,6 +3,7 @@
 import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -40,6 +41,7 @@ export default function SortDropdown() {
 
   const sortBy = search.sortBy ?? "title";
   const sortOrder = search.sortOrder ?? "asc";
+  const hasAttachments = search.hasAttachments === true;
 
   const handleSortByChange = (value: string) => {
     if (!dbId) return;
@@ -59,6 +61,20 @@ export default function SortDropdown() {
         to: "/dashboard/index/$dbId",
         params: { dbId },
         search: (prev) => ({ ...prev, sortOrder: value as SortOrder }),
+      });
+    });
+  };
+
+  const handleHasAttachmentsChange = (checked: boolean) => {
+    if (!dbId) return;
+    startTransition(() => {
+      void navigate({
+        to: "/dashboard/index/$dbId",
+        params: { dbId },
+        search: (prev) => ({
+          ...prev,
+          hasAttachments: checked ? true : undefined,
+        }),
       });
     });
   };
@@ -110,6 +126,14 @@ export default function SortDropdown() {
               : t("entries.sort.zToA")}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t("entries.filter.title")}</DropdownMenuLabel>
+        <DropdownMenuCheckboxItem
+          checked={hasAttachments}
+          onCheckedChange={handleHasAttachmentsChange}
+        >
+          {t("entries.filter.hasAttachments")}
+        </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

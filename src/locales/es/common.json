@@ -250,7 +250,6 @@
     "noEntriesMatchFilters": "Ninguna entrada coincide con los filtros activos.",
     "filter": {
       "title": "Filtrar",
-      "filterEntries": "Filtrar entradas",
       "hasAttachments": "Tiene adjuntos"
     },
     "newEntry": "nueva entrada",
