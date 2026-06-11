@@ -14,6 +14,7 @@ import {
   Image,
   Keyboard,
   Loader2,
+  Paperclip,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ import { isExpired } from "@/lib/entry-expiry";
 import { formatAttachmentSize } from "@/lib/entry-attachment";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ask, save } from "@tauri-apps/plugin-dialog";
+import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import type { AttachmentMeta, CustomFieldMeta } from "@/lib/types";
 
@@ -612,6 +613,62 @@ function AttachmentsSection({
     }
   };
 
+  // Refreshes the entry detail and any list views after the in-memory Vault
+  // changed, so added/removed attachment rows reflect backend state.
+  const invalidateEntryQueries = () =>
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.entries.detail(dbId, entryId),
+      }),
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === queryKeys.entries.all[0] &&
+          query.queryKey[1] === dbId,
+      }),
+    ]);
+
+  // Add is the primary write path: a multi-select file dialog yields
+  // filesystem paths (never bytes), and the backend reads, size-caps, and
+  // auto-renames each one immediately. We add every picked path — a failure on
+  // one (e.g. over the hard cap) doesn't abort the rest — then persist once and
+  // refresh. A cancelled dialog is a no-op. The summary toast reports how many
+  // landed; each failure gets its own toast naming the file and the backend's
+  // reason (e.g. "exceeds the 25 MiB limit") so the user knows which file and
+  // whether retrying could ever work.
+  const handleAdd = async () => {
+    if (isDisabled) return;
+    const selected = await open({ multiple: true });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    if (paths.length === 0) return;
+
+    let added = 0;
+    for (const path of paths) {
+      try {
+        await entriesApi.addAttachment(dbId, entryId, path);
+        added += 1;
+      } catch (error) {
+        console.error("Failed to add attachment:", error);
+        // Backend errors (AttachmentTooLarge / InvalidInput) cross IPC as a
+        // string; surface it alongside the file's basename rather than
+        // collapsing every failure into one opaque message.
+        const filename = path.split(/[\\/]/).pop() || path;
+        const reason = error instanceof Error ? error.message : String(error);
+        toast.error(
+          t("entries.detail.attachmentAddFailed", { filename, reason })
+        );
+      }
+    }
+
+    // Persist and refresh only when at least one file actually landed in the
+    // in-memory Vault, so a wholly-failed batch leaves no phantom unsaved state.
+    if (added > 0) {
+      await saveWithErrorToast(dbId, t);
+      await invalidateEntryQueries();
+      toast.success(t("entries.detail.attachmentsAdded", { count: added }));
+    }
+  };
+
   // Deleting an attachment is destructive and has no undo, so we confirm
   // first. On confirm the backend drops the Entry's reference (and the
   // orphaned blob), then we persist and invalidate the entry queries so the
@@ -642,25 +699,27 @@ function AttachmentsSection({
     // disappears); skipping it on save failure would leave a stale row whose
     // later actions target an attachment that no longer exists.
     await saveWithErrorToast(dbId, t);
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.entries.detail(dbId, entryId),
-      }),
-      queryClient.invalidateQueries({
-        predicate: (query) =>
-          query.queryKey[0] === queryKeys.entries.all[0] &&
-          query.queryKey[1] === dbId,
-      }),
-    ]);
+    await invalidateEntryQueries();
     toast.success(t("entries.detail.attachmentDeleted", { filename }));
   };
 
   return (
     <div className="border rounded-md">
-      <div className="px-4 py-2">
+      <div className="flex items-center justify-between px-4 py-2">
         <small className="text-sm font-medium">
           {t("entries.detail.attachments")}
         </small>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5"
+          aria-label={t("entries.detail.addAttachment")}
+          disabled={isDisabled}
+          onClick={() => void handleAdd()}
+        >
+          <Paperclip className="h-4 w-4" />
+          {t("entries.detail.addAttachment")}
+        </Button>
       </div>
       <Separator />
       {sorted.length === 0 ? (

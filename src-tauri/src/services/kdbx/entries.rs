@@ -3,7 +3,7 @@ use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryDat
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::db::{Entry as KeepassEntry, Times, Value};
-use std::io::Write;
+use std::io::{Read, Write};
 
 use super::conversions::{
     apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
@@ -11,6 +11,12 @@ use super::conversions::{
 };
 use super::recycle::is_in_recycle_bin;
 use super::KdbxService;
+
+/// Hard per-file size cap for added attachments (25 MiB). A file larger than
+/// this is rejected outright to keep the Vault from bloating into something
+/// unusable. This is a fixed default for this slice; a later slice makes it a
+/// configurable App Preference (see issue #280 / ADR-0003).
+const HARD_CAP_BYTES: u64 = 25 * 1024 * 1024;
 
 impl KdbxService {
     /// Lists entries, optionally filtered by group.
@@ -142,6 +148,93 @@ impl KdbxService {
             }
             vault.mark_modified();
             Ok(())
+        })
+    }
+
+    /// Adds a file on disk to an Entry as a native KDBX binary, keyed by its
+    /// filename. The bytes are read in Rust from `source_path` — the frontend
+    /// passes filesystem paths, never file bytes — and stored unprotected (the
+    /// Vault's at-rest encryption already covers them). The Entry's
+    /// modification time is bumped and the Vault is marked modified
+    /// immediately, independent of the Entry edit-form save cycle (mirroring
+    /// `set_entry_custom_icon`). Returns the filename the attachment was
+    /// actually stored under, which may differ from the source basename when a
+    /// collision triggered an auto-rename.
+    pub fn add_entry_attachment(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        source_path: &std::path::Path,
+    ) -> Result<String, AppError> {
+        let filename = source_path
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .ok_or_else(|| AppError::InvalidPath(source_path.to_string_lossy().into_owned()))?
+            .to_string();
+
+        let metadata = std::fs::metadata(source_path).map_err(|e| AppError::Io(e.to_string()))?;
+
+        // Reject anything that isn't a regular file. A directory, FIFO, or
+        // device like `/dev/zero` reports a meaningless metadata length, so the
+        // stat-based cap below can't be trusted for it and an unbounded read
+        // could hang or exhaust memory.
+        if !metadata.is_file() {
+            return Err(AppError::InvalidInput(format!(
+                "not a regular file: {}",
+                source_path.to_string_lossy()
+            )));
+        }
+
+        // Fast path: reject an obviously oversized file from its stat'd size
+        // before opening it at all.
+        if metadata.len() > HARD_CAP_BYTES {
+            return Err(AppError::AttachmentTooLarge {
+                filename,
+                size: metadata.len(),
+                cap: HARD_CAP_BYTES,
+            });
+        }
+
+        // Authoritative guard: bound the read itself to one byte past the cap.
+        // A regular file that grows after the stat (TOCTOU) can never push more
+        // than the cap into memory — reading `cap + 1` bytes proves it's over.
+        let file = std::fs::File::open(source_path).map_err(|e| AppError::Io(e.to_string()))?;
+
+        // Re-check on the opened handle, not the pre-open path: if the path was
+        // swapped (e.g. a symlink repointed to a FIFO/device) between the
+        // `metadata()` above and this `open`, the descriptor we actually hold
+        // could be a non-regular file that would block or hang `read_to_end`.
+        // Validating the fd's own metadata closes that race.
+        let opened = file.metadata().map_err(|e| AppError::Io(e.to_string()))?;
+        if !opened.is_file() {
+            return Err(AppError::InvalidInput(format!(
+                "not a regular file: {}",
+                source_path.to_string_lossy()
+            )));
+        }
+
+        let mut bytes = Vec::new();
+        file.take(HARD_CAP_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| AppError::Io(e.to_string()))?;
+        if bytes.len() as u64 > HARD_CAP_BYTES {
+            return Err(AppError::AttachmentTooLarge {
+                filename,
+                size: bytes.len() as u64,
+                cap: HARD_CAP_BYTES,
+            });
+        }
+
+        self.with_vault_mut(db_id, |vault| {
+            let stored_name = {
+                let mut entry = vault.entry_mut(entry_id)?;
+                let stored_name = unique_attachment_name(&entry.as_ref(), &filename);
+                entry.add_attachment(stored_name.clone(), Value::unprotected(bytes));
+                entry.times.last_modification = Some(Times::now());
+                stored_name
+            };
+            vault.mark_modified();
+            Ok(stored_name)
         })
     }
 
@@ -552,6 +645,36 @@ fn dedupe_preserving_order(tags: &mut Vec<String>) {
         }
     }
     *tags = deduped;
+}
+
+/// Resolves a collision-free attachment filename within an Entry. If `filename`
+/// is unused on the Entry it is returned as-is; otherwise the stem gains a
+/// ` (n)` suffix (`scan (1).pdf`, `scan (2).pdf`, …), counting up until a free
+/// name is found. The extension is preserved; names without one (or dotfiles
+/// like `.gitignore`, whose whole name is the stem) just gain the suffix.
+fn unique_attachment_name(entry: &keepass::db::EntryRef<'_>, filename: &str) -> String {
+    if entry.attachment_by_name(filename).is_none() {
+        return filename.to_string();
+    }
+
+    let path = std::path::Path::new(filename);
+    let stem = path
+        .file_stem()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or(filename);
+    let ext = path.extension().and_then(std::ffi::OsStr::to_str);
+
+    let mut n: u32 = 1;
+    loop {
+        let candidate = match ext {
+            Some(ext) => format!("{stem} ({n}).{ext}"),
+            None => format!("{stem} ({n})"),
+        };
+        if entry.attachment_by_name(&candidate).is_none() {
+            return candidate;
+        }
+        n += 1;
+    }
 }
 
 #[cfg(test)]
@@ -1116,6 +1239,166 @@ mod tests {
                 Ok(())
             })
             .expect("vault scope");
+    }
+
+    #[test]
+    fn add_entry_attachment_stores_bytes_from_a_path_and_marks_modified() {
+        // The primary write path: the backend reads a file off disk by path
+        // (the frontend never sends bytes), stores it as a native KDBX binary,
+        // and marks the Vault modified immediately — independent of the Entry
+        // edit-form save cycle. The stored bytes must round-trip verbatim
+        // through the on-demand fetch, and the metadata must surface on the
+        // Entry. Prior art for the binary-in-vault shape: custom_icons.rs.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let generation_before = service
+            .with_vault(&db_path, |vault| Ok(vault.generation()))
+            .expect("generation before add");
+
+        let payload = b"recovery-codes-12345\nsecond-line".to_vec();
+        let source = dir.path().join("codes.txt");
+        std::fs::write(&source, &payload).expect("seed source file");
+
+        let stored = service
+            .add_entry_attachment(&db_path, &entry_a, &source)
+            .expect("add attachment");
+        assert_eq!(stored, "codes.txt", "the stored filename is the basename");
+
+        let fetched = service
+            .get_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("fetch added attachment");
+        assert_eq!(
+            fetched.as_bytes(),
+            payload.as_slice(),
+            "the added attachment must round-trip the on-disk bytes verbatim"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        let meta = entry
+            .attachments
+            .iter()
+            .find(|a| a.filename == "codes.txt")
+            .expect("codes.txt metadata");
+        assert_eq!(meta.size, payload.len() as u64);
+        assert_eq!(meta.mime_type, "text/plain");
+
+        service
+            .with_vault(&db_path, |vault| {
+                assert!(
+                    vault.generation() > generation_before,
+                    "a successful add must mark the Vault modified"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn add_entry_attachment_rejects_a_file_over_the_hard_cap() {
+        // A file larger than the hard per-file cap must be rejected with a
+        // clear error and must leave the Vault completely untouched — no
+        // partial binary, no modified flag — so an oversized pick never bloats
+        // the database into something unusable.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let generation_before = service
+            .with_vault(&db_path, |vault| Ok(vault.generation()))
+            .expect("generation before add");
+
+        let oversized = vec![0u8; usize::try_from(HARD_CAP_BYTES + 1).expect("cap fits usize")];
+        let source = dir.path().join("huge.bin");
+        std::fs::write(&source, &oversized).expect("seed oversized file");
+
+        let result = service.add_entry_attachment(&db_path, &entry_a, &source);
+        assert!(
+            matches!(result, Err(AppError::AttachmentTooLarge { ref filename, .. }) if filename == "huge.bin"),
+            "an over-cap file must be rejected with AttachmentTooLarge, got {result:?}"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "a rejected add must not store any binary"
+        );
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "a rejected add must not mark the Vault modified"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn add_entry_attachment_auto_renames_on_filename_collision() {
+        // Adding a file whose name already exists on the Entry must auto-rename
+        // the newcomer (`name (1).ext`, `name (2).ext`, …) rather than
+        // overwrite — so a multi-file batch never silently clobbers an existing
+        // attachment or fails mid-way on a collision. Both originals stay
+        // intact with their own bytes.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let first = dir.path().join("scan.pdf");
+        std::fs::write(&first, b"first-bytes").expect("seed first file");
+        let stored_first = service
+            .add_entry_attachment(&db_path, &entry_a, &first)
+            .expect("add first");
+        assert_eq!(stored_first, "scan.pdf", "the first add keeps its name");
+
+        // A different file that happens to share the basename.
+        let second = dir.path().join("subdir-stand-in");
+        std::fs::create_dir_all(&second).expect("mk subdir");
+        let second_file = second.join("scan.pdf");
+        std::fs::write(&second_file, b"second-bytes").expect("seed second file");
+        let stored_second = service
+            .add_entry_attachment(&db_path, &entry_a, &second_file)
+            .expect("add second");
+        assert_eq!(
+            stored_second, "scan (1).pdf",
+            "a colliding name auto-renames the newcomer"
+        );
+
+        // The original must be untouched, and the renamed copy carries its own
+        // distinct bytes — nothing was overwritten.
+        let original = service
+            .get_entry_attachment(&db_path, &entry_a, "scan.pdf")
+            .expect("fetch original");
+        assert_eq!(original.as_bytes(), b"first-bytes");
+        let renamed = service
+            .get_entry_attachment(&db_path, &entry_a, "scan (1).pdf")
+            .expect("fetch renamed");
+        assert_eq!(renamed.as_bytes(), b"second-bytes");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert_eq!(
+            entry.attachments.len(),
+            2,
+            "both attachments coexist after the auto-rename"
+        );
+    }
+
+    #[test]
+    fn add_entry_attachment_rejects_a_non_regular_file() {
+        // A path that isn't a regular file (a directory here; on Unix also
+        // FIFOs, /dev/zero, …) has a meaningless metadata length and an
+        // unbounded read could hang or OOM, so it must be rejected before any
+        // bytes are pulled in. Defends the hard cap against special files.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let not_a_file = dir.path().join("a-directory");
+        std::fs::create_dir(&not_a_file).expect("mk dir");
+
+        let result = service.add_entry_attachment(&db_path, &entry_a, &not_a_file);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "a non-regular file must be rejected, got {result:?}"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "nothing is stored for a rejected add"
+        );
     }
 
     #[test]
