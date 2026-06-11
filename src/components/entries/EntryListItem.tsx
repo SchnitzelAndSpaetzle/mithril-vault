@@ -75,7 +75,11 @@ const EntryListItem = memo(function EntryListItem({
         isSelected && "bg-accent"
       )}
     >
-      <a className="w-full min-w-0 overflow-hidden" onClick={handleClick}>
+      <button
+        type="button"
+        className="w-full min-w-0 overflow-hidden text-left"
+        onClick={handleClick}
+      >
         <ItemMedia>
           <Avatar className="size-10">
             <AvatarImage src={customIconSrc} alt="" />
@@ -111,7 +115,7 @@ const EntryListItem = memo(function EntryListItem({
             />
           )}
         </ItemActions>
-      </a>
+      </button>
     </Item>
   );
 });

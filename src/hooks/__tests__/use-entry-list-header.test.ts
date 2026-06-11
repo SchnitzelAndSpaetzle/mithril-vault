@@ -8,7 +8,7 @@ import type { Entry } from "@/lib/types";
 const mocks = vi.hoisted(() => ({
   entries: [] as Entry[],
   groups: [] as unknown[],
-  search: {} as { groupId?: string; tag?: string; hasAttachments?: boolean },
+  search: {},
 }));
 
 vi.mock("@/hooks/use-active-database", () => ({

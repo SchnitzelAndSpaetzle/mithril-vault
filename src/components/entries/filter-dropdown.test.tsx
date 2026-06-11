@@ -6,7 +6,7 @@ import FilterDropdown from "./filter-dropdown";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  search: {} as { hasAttachments?: boolean },
+  search: {},
 }));
 
 vi.mock("@tanstack/react-router", () => ({

@@ -23,7 +23,7 @@ export function useEntryListHeader() {
   const { data: entries } = useEntries(dbId, search.groupId);
   const { data: groups } = useGroups(dbId);
 
-  const activeTag = (search.tag as string | undefined) ?? null;
+  const activeTag = search.tag ?? null;
   const hasAttachments = search.hasAttachments === true;
 
   // Count what the list actually shows: reuse the shared filter so the
