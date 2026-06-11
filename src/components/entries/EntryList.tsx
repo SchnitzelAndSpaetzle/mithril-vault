@@ -22,7 +22,7 @@ interface EntryListProps {
   onEntrySelect?: (id: string) => Promise<void> | void;
 }
 
-export default function EntryList({ onEntrySelect }: EntryListProps) {
+export default function EntryList({ onEntrySelect }: Readonly<EntryListProps>) {
   const { t } = useTranslation();
   const { dbId } = useActiveDatabase();
   const search = useSearch({ strict: false });
@@ -56,7 +56,7 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
     return map;
   }, [healthReport]);
 
-  const tagFilter = search.tag as string | undefined;
+  const tagFilter = search.tag;
   const attachmentsFilter = search.hasAttachments === true;
   // Filters stack on top of the group-scoped entries from `useEntries`.
   const displayEntries = useMemo(
@@ -109,13 +109,19 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
   }
 
   if (displayEntries.length === 0) {
+    let noEntriesMessage;
+
+    if (tagFilter) {
+      noEntriesMessage = t("entries.noEntriesWithTag", { tag: tagFilter });
+    } else if (attachmentsFilter) {
+      noEntriesMessage = t("entries.noEntriesWithAttachments");
+    } else {
+      noEntriesMessage = t("entries.noEntries");
+    }
+
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
-        {tagFilter
-          ? t("entries.noEntriesWithTag", { tag: tagFilter })
-          : attachmentsFilter
-            ? t("entries.noEntriesWithAttachments")
-            : t("entries.noEntries")}
+        {noEntriesMessage}
       </div>
     );
   }
