@@ -173,6 +173,18 @@
         "validation": "Retention must be between 1 and 365 days."
       }
     },
+    "attachments": {
+      "title": "Attachments",
+      "description": "Per-file size guardrails for files attached to entries.",
+      "softWarn": {
+        "label": "Warn above (MB)",
+        "description": "Adding a file larger than this prompts for confirmation before it is stored."
+      },
+      "hardCap": {
+        "label": "Reject above (MB)",
+        "description": "Files larger than this are rejected. Must be at least the warning threshold."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -375,11 +387,14 @@
       "attachments": "Attachments",
       "noAttachments": "No attachments",
       "addAttachment": "Add attachment",
+      "addingAttachments": "Adding…",
       "dropToAttach": "Drop files here to attach",
       "attachmentsAdded_one": "Added {{count}} attachment",
       "attachmentsAdded_other": "Added {{count}} attachments",
       "attachmentAddFailed": "Failed to add {{filename}}: {{reason}}",
       "attachmentAddBatchFailed": "Failed to add attachments",
+      "attachmentSoftWarnConfirmTitle": "Add large attachment?",
+      "attachmentSoftWarnConfirm": "Large attachments increase vault size and slow saving — add anyway?",
       "downloadAttachment": "Download attachment",
       "attachmentDownloaded": "Downloaded {{filename}}",
       "attachmentDownloadFailed": "Failed to download {{filename}}",

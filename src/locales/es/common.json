@@ -173,6 +173,18 @@
         "validation": "La retención debe estar entre 1 y 365 días."
       }
     },
+    "attachments": {
+      "title": "Adjuntos",
+      "description": "Límites de tamaño por archivo para los archivos adjuntos a las entradas.",
+      "softWarn": {
+        "label": "Advertir a partir de (MB)",
+        "description": "Añadir un archivo mayor que esto pide confirmación antes de guardarlo."
+      },
+      "hardCap": {
+        "label": "Rechazar a partir de (MB)",
+        "description": "Los archivos mayores que esto se rechazan. Debe ser al menos el umbral de advertencia."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -352,11 +364,14 @@
       "attachments": "Adjuntos",
       "noAttachments": "Sin adjuntos",
       "addAttachment": "Añadir adjunto",
+      "addingAttachments": "Añadiendo…",
       "dropToAttach": "Suelta archivos aquí para adjuntarlos",
       "attachmentsAdded_one": "{{count}} adjunto añadido",
       "attachmentsAdded_other": "{{count}} adjuntos añadidos",
       "attachmentAddFailed": "No se pudo añadir {{filename}}: {{reason}}",
       "attachmentAddBatchFailed": "No se pudieron añadir los adjuntos",
+      "attachmentSoftWarnConfirmTitle": "¿Añadir un adjunto grande?",
+      "attachmentSoftWarnConfirm": "Los adjuntos grandes aumentan el tamaño del baúl y ralentizan el guardado: ¿añadir de todos modos?",
       "downloadAttachment": "Descargar adjunto",
       "attachmentDownloaded": "{{filename}} descargado",
       "attachmentDownloadFailed": "No se pudo descargar {{filename}}",

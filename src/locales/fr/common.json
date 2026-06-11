@@ -173,6 +173,18 @@
         "validation": "La conservation doit être comprise entre 1 et 365 jours."
       }
     },
+    "attachments": {
+      "title": "Pièces jointes",
+      "description": "Limites de taille par fichier pour les fichiers joints aux entrées.",
+      "softWarn": {
+        "label": "Avertir au-delà de (Mo)",
+        "description": "Ajouter un fichier plus grand que cela demande une confirmation avant l'enregistrement."
+      },
+      "hardCap": {
+        "label": "Refuser au-delà de (Mo)",
+        "description": "Les fichiers plus grands que cela sont refusés. Doit être au moins égal au seuil d'avertissement."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -352,11 +364,14 @@
       "attachments": "Pièces jointes",
       "noAttachments": "Aucune pièce jointe",
       "addAttachment": "Ajouter une pièce jointe",
+      "addingAttachments": "Ajout…",
       "dropToAttach": "Déposez des fichiers ici pour les joindre",
       "attachmentsAdded_one": "{{count}} pièce jointe ajoutée",
       "attachmentsAdded_other": "{{count}} pièces jointes ajoutées",
       "attachmentAddFailed": "Échec de l'ajout de {{filename}} : {{reason}}",
       "attachmentAddBatchFailed": "Échec de l'ajout des pièces jointes",
+      "attachmentSoftWarnConfirmTitle": "Ajouter une pièce jointe volumineuse ?",
+      "attachmentSoftWarnConfirm": "Les pièces jointes volumineuses augmentent la taille du coffre et ralentissent l'enregistrement — ajouter quand même ?",
       "downloadAttachment": "Télécharger la pièce jointe",
       "attachmentDownloaded": "{{filename}} téléchargé",
       "attachmentDownloadFailed": "Échec du téléchargement de {{filename}}",

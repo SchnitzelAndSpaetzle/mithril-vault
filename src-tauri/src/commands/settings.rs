@@ -366,6 +366,87 @@ mod audit_settings_tests {
     }
 }
 
+/// Per-file size guardrails for Entry attachments. `soft_warn_bytes` is the
+/// threshold above which the add flow prompts for confirmation ("large
+/// attachments grow the Vault and slow saving — add anyway?"); `hard_cap_bytes`
+/// is the threshold above which a file is rejected outright. Both are stored as
+/// raw bytes; the Settings UI surfaces them in decimal MB. Validated at the
+/// settings boundary (`hard_cap_bytes >= 1`, `soft_warn_bytes <= hard_cap_bytes`,
+/// `hard_cap_bytes <= MAX`) so a hand-edited file can't push a nonsensical pair
+/// (e.g. soft above hard) into the add flow. There is no aggregate Vault cap.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub struct AttachmentSettings {
+    #[serde(default = "default_attachment_soft_warn_bytes")]
+    pub soft_warn_bytes: u64,
+    #[serde(default = "default_attachment_hard_cap_bytes")]
+    pub hard_cap_bytes: u64,
+}
+
+/// Default per-file soft-warning threshold: 5 MB (decimal).
+pub(crate) const DEFAULT_ATTACHMENT_SOFT_WARN_BYTES: u64 = 5_000_000;
+/// Default per-file hard cap: 25 MB (decimal).
+pub(crate) const DEFAULT_ATTACHMENT_HARD_CAP_BYTES: u64 = 25_000_000;
+
+fn default_attachment_soft_warn_bytes() -> u64 {
+    DEFAULT_ATTACHMENT_SOFT_WARN_BYTES
+}
+
+fn default_attachment_hard_cap_bytes() -> u64 {
+    DEFAULT_ATTACHMENT_HARD_CAP_BYTES
+}
+
+impl Default for AttachmentSettings {
+    fn default() -> Self {
+        Self {
+            soft_warn_bytes: DEFAULT_ATTACHMENT_SOFT_WARN_BYTES,
+            hard_cap_bytes: DEFAULT_ATTACHMENT_HARD_CAP_BYTES,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod attachment_settings_tests {
+    use super::AttachmentSettings;
+
+    #[test]
+    fn defaults_are_five_and_twenty_five_megabytes() {
+        // PRD AC: soft-warn defaults to ~5 MB and the hard cap to ~25 MB
+        // (decimal). Pinning the documented user contract here means changing
+        // a default is a deliberate behavior change, not a silent edit.
+        let s = AttachmentSettings::default();
+        assert_eq!(s.soft_warn_bytes, 5_000_000);
+        assert_eq!(s.hard_cap_bytes, 25_000_000);
+    }
+
+    #[test]
+    fn absent_attachments_section_deserializes_to_defaults() {
+        // Users whose settings.json predates this slice have no attachments
+        // section. serde defaults must fill it in (no migration required) so
+        // the add flow has thresholds immediately.
+        let from_empty: AttachmentSettings = serde_json::from_str("{}").expect("parse {}");
+        assert_eq!(from_empty.soft_warn_bytes, 5_000_000);
+        assert_eq!(from_empty.hard_cap_bytes, 25_000_000);
+    }
+
+    #[test]
+    fn explicit_values_round_trip_in_camel_case() {
+        let json = r#"{"softWarnBytes": 1000000, "hardCapBytes": 2000000}"#;
+        let parsed: AttachmentSettings = serde_json::from_str(json).expect("parse explicit");
+        assert_eq!(parsed.soft_warn_bytes, 1_000_000);
+        assert_eq!(parsed.hard_cap_bytes, 2_000_000);
+
+        let serialized = serde_json::to_string(&parsed).expect("serialize");
+        assert!(
+            serialized.contains(r#""softWarnBytes":1000000"#)
+                && serialized.contains(r#""hardCapBytes":2000000"#),
+            "serialized json should carry camelCase byte fields: {serialized}"
+        );
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
@@ -377,6 +458,7 @@ pub struct AppPreferences {
     pub advanced: AdvancedSettings,
     pub backups: BackupSettings,
     pub audit: AuditSettings,
+    pub attachments: AttachmentSettings,
 }
 
 /// Persisted shape written to `settings.json`. Combines the editable

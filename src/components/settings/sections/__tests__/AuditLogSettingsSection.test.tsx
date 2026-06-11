@@ -45,6 +45,7 @@ function makeDraft(
     advanced: { debugMode: false, dataLocation: "/tmp" },
     backups: { enabled: true, maxVersions: 10, onOpen: false },
     audit,
+    attachments: { softWarnBytes: 5_000_000, hardCapBytes: 25_000_000 },
   };
 }
 

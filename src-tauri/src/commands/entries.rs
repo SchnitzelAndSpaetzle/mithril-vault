@@ -1,10 +1,12 @@
 use crate::domain::secure::SecureBytes;
 use crate::dto::entry::{
-    AddAttachmentsOutcome, CreateEntryData, CustomFieldValue, Entry, UpdateEntryData,
+    AddAttachmentsOutcome, AttachmentAddPlan, CreateEntryData, CustomFieldValue, Entry,
+    UpdateEntryData,
 };
 use crate::dto::error::AppError;
 use crate::services::audit::AuditService;
-use crate::services::drag_drop::DropPathsBuffer;
+use crate::services::drag_drop::PendingAttachmentPaths;
+use crate::services::kdbx::entries::plan_attachment_adds;
 use crate::services::kdbx::favicons::FaviconFetchOutcome;
 use crate::services::kdbx::KdbxService;
 use crate::services::settings::SettingsService;
@@ -181,23 +183,36 @@ pub async fn delete_entry_attachment(
     state.delete_entry_attachment(&db_id, &id, &filename)
 }
 
-/// Adds files on disk to an Entry as native KDBX binaries. The file paths are
-/// acquired *here in Rust* from the native multi-select dialog — the frontend
-/// passes no path, so a renderer-supplied (or fabricated) path can never reach
-/// the read. This is the trust boundary recorded in ADR-0004: only an
-/// OS-provided source (this dialog today; the `tauri://drag-drop` event for
-/// #286) can name a file to import. A cancelled dialog yields no paths and is a
-/// no-op. Each picked file is read, hard-size-capped, and auto-renamed on a
-/// filename collision; one bad pick never aborts the rest. Returns the batch
-/// outcome (stored names + per-file failures); the frontend persists via
-/// `database.save` and refreshes the entry when anything landed.
+/// Reads the configured attachment size guardrails from App Preferences as a
+/// `(soft_warn_bytes, hard_cap_bytes)` pair. Both prepare commands and the
+/// commit command resolve the thresholds through here so the user-configured
+/// values — not a hard-coded constant — govern every add.
+fn attachment_thresholds(settings: &SettingsService) -> Result<(u64, u64), AppError> {
+    let prefs = settings.get_app_preferences()?;
+    Ok((
+        prefs.attachments.soft_warn_bytes,
+        prefs.attachments.hard_cap_bytes,
+    ))
+}
+
+/// Phase 1 (picker): opens the native multi-select dialog *in Rust*, buffers the
+/// picked paths, and returns the size-classification plan against the configured
+/// thresholds — without reading any bytes or mutating the Vault. The frontend
+/// inspects the plan: if it requires confirmation (a file over the soft
+/// threshold) it shows the warning prompt before calling
+/// `commit_prepared_attachments`; otherwise it commits directly. A cancelled
+/// dialog buffers nothing and returns an empty plan (a no-op).
+///
+/// The paths are acquired here, never supplied by the renderer — the trust
+/// boundary in ADR-0004. They stay buffered until the commit drains them (or the
+/// next pick/drop overwrites them).
 #[tauri::command]
-pub async fn add_entry_attachments<R: Runtime>(
-    db_id: String,
-    id: String,
+pub async fn prepare_picked_attachments<R: Runtime>(
     app: AppHandle<R>,
-    state: State<'_, Arc<KdbxService>>,
-) -> Result<AddAttachmentsOutcome, AppError> {
+    settings: State<'_, Arc<SettingsService>>,
+    pending: State<'_, Arc<PendingAttachmentPaths>>,
+) -> Result<AttachmentAddPlan, AppError> {
+    let (soft, hard) = attachment_thresholds(&settings)?;
     // `blocking_pick_files` runs off the main thread (this command runs on the
     // async runtime), dispatching the dialog to the UI thread internally. It
     // returns `None` on cancel. Each `FilePath` is converted to a real
@@ -210,30 +225,57 @@ pub async fn add_entry_attachments<R: Runtime>(
         .into_iter()
         .filter_map(|file_path| file_path.into_path().ok())
         .collect();
-    state.add_entry_attachments(&db_id, &id, &paths)
+    // Buffering mints a fresh batch id; the frontend echoes it back at commit so
+    // a later pick/drop that supersedes this batch turns the stale commit into a
+    // no-op rather than a wrong-file attach.
+    let batch_id = pending.replace(paths.clone());
+    let mut plan = plan_attachment_adds(&paths, soft, hard);
+    plan.batch_id = batch_id;
+    Ok(plan)
 }
 
-/// Adds the files from the most recent native `tauri://drag-drop` event to an
-/// Entry. The paths were captured *in Rust* from the window event (buffered in
-/// `DropPathsBuffer`) — the frontend passes only the target db/entry ids, so a
-/// renderer-supplied path can never reach the read. This is the same trust
-/// boundary as the picker (ADR-0004): the renderer decides *whether* to commit
-/// (the drop must land on the selected Entry's panel) but never names a file.
-/// Draining the buffer here means a stale drop cannot be replayed against a
-/// later entry, and a commit with no preceding drop reads nothing (empty
-/// outcome). The dropped files go through the same feeder as the picker — hard
-/// size cap, auto-rename on collision, one bad file never aborting the rest —
-/// and the frontend persists via `database.save` and refreshes when anything
-/// landed.
+/// Phase 1 (drag-drop): classifies the paths buffered from the most recent
+/// native `tauri://drag-drop` event against the configured thresholds, without
+/// draining them — a peek, so the buffer survives for the commit that follows a
+/// confirmation. The paths were captured *in Rust* from the window event
+/// (ADR-0004); the renderer supplies none. A peek with no preceding drop returns
+/// an empty plan.
 #[tauri::command]
-pub async fn commit_dropped_attachments(
+pub async fn prepare_dropped_attachments(
+    settings: State<'_, Arc<SettingsService>>,
+    pending: State<'_, Arc<PendingAttachmentPaths>>,
+) -> Result<AttachmentAddPlan, AppError> {
+    let (soft, hard) = attachment_thresholds(&settings)?;
+    let (batch_id, paths) = pending.peek();
+    let mut plan = plan_attachment_adds(&paths, soft, hard);
+    plan.batch_id = batch_id;
+    Ok(plan)
+}
+
+/// Phase 2 (shared): drains the buffered paths for `batch_id` and stores each as
+/// a native KDBX binary, enforcing the configured hard cap. Used by both the
+/// picker and the drop after the frontend has resolved any soft-warning
+/// confirmation. The buffer drains *only* when `batch_id` still matches the
+/// current generation, so a later pick/drop that superseded the prepared batch
+/// (e.g. a stray drop while the confirmation prompt was open) makes this commit a
+/// no-op (empty outcome) instead of attaching the wrong file. Draining also means
+/// a stale batch cannot be replayed against a later entry, and a commit with no
+/// preceding prepare reads nothing. Each file is read, hard-size-capped, and
+/// auto-renamed on a filename collision; one bad file never aborts the rest.
+/// Returns the batch outcome (stored names + per-file failures); the frontend
+/// persists via `database.save` and refreshes when anything landed.
+#[tauri::command]
+pub async fn commit_prepared_attachments(
     db_id: String,
     id: String,
-    drops: State<'_, Arc<DropPathsBuffer>>,
+    batch_id: u64,
     state: State<'_, Arc<KdbxService>>,
+    settings: State<'_, Arc<SettingsService>>,
+    pending: State<'_, Arc<PendingAttachmentPaths>>,
 ) -> Result<AddAttachmentsOutcome, AppError> {
-    let paths = drops.take();
-    state.add_entry_attachments(&db_id, &id, &paths)
+    let (_soft, hard) = attachment_thresholds(&settings)?;
+    let paths = pending.take(batch_id);
+    state.add_entry_attachments(&db_id, &id, &paths, hard)
 }
 
 /// Creates a new entry in a group.
