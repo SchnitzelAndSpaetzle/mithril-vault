@@ -13,8 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { EntrySortField, SortOrder } from "@/lib/types";
-import { entryHasTag } from "@/lib/tag-utils";
-import { entryHasAttachments } from "@/lib/attachment-utils";
+import { filterEntries } from "@/lib/entry-filters";
 
 const EMPTY_ICONS = {};
 const ESTIMATED_ITEM_HEIGHT = 65;
@@ -59,15 +58,13 @@ export default function EntryList({ onEntrySelect }: EntryListProps) {
 
   const tagFilter = search.tag as string | undefined;
   const attachmentsFilter = search.hasAttachments === true;
-  // Filters stack: the tag filter and the has-attachments filter are
-  // AND-combined on top of the group-scoped entries from `useEntries`.
+  // Filters stack on top of the group-scoped entries from `useEntries`.
   const displayEntries = useMemo(
     () =>
-      sortedEntries.filter(
-        (e) =>
-          (!tagFilter || entryHasTag(e, tagFilter)) &&
-          (!attachmentsFilter || entryHasAttachments(e))
-      ),
+      filterEntries(sortedEntries, {
+        tag: tagFilter,
+        hasAttachments: attachmentsFilter,
+      }),
     [sortedEntries, tagFilter, attachmentsFilter]
   );
 
