@@ -268,6 +268,13 @@
     "loadError": "Failed to load entries: {{error}}",
     "noEntries": "No entries found.",
     "noEntriesWithTag": "No entries with tag \"{{tag}}\".",
+    "attachmentIndicator": "Has attachments",
+    "noEntriesWithAttachments": "No entries with attachments.",
+    "noEntriesMatchFilters": "No entries match the active filters.",
+    "filter": {
+      "title": "Filter",
+      "hasAttachments": "Has attachments"
+    },
     "newEntry": "new entry",
     "editEntry": "edit entry",
     "deleteEntry": "delete entry",
@@ -388,6 +395,7 @@
     "sort": {
       "sortBy": "Sort by",
       "sortEntries": "Sort entries",
+      "sortEntriesFiltered": "Sort entries (attachment filter active)",
       "order": "Order",
       "title": "Title",
       "username": "Username",

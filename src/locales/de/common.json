@@ -245,6 +245,13 @@
     "loadError": "Einträge konnten nicht geladen werden: {{error}}",
     "noEntries": "Keine Einträge gefunden.",
     "noEntriesWithTag": "Keine Einträge mit Tag \"{{tag}}\".",
+    "attachmentIndicator": "Hat Anhänge",
+    "noEntriesWithAttachments": "Keine Einträge mit Anhängen.",
+    "noEntriesMatchFilters": "Keine Einträge entsprechen den aktiven Filtern.",
+    "filter": {
+      "title": "Filter",
+      "hasAttachments": "Hat Anhänge"
+    },
     "newEntry": "Neuer Eintrag",
     "editEntry": "Eintrag bearbeiten",
     "deleteEntry": "Eintrag löschen",
@@ -365,6 +372,7 @@
     "sort": {
       "sortBy": "Sortieren nach",
       "sortEntries": "Einträge sortieren",
+      "sortEntriesFiltered": "Einträge sortieren (Anhangsfilter aktiv)",
       "order": "Reihenfolge",
       "title": "Titel",
       "username": "Benutzername",

@@ -245,6 +245,13 @@
     "loadError": "Error al cargar las entradas: {{error}}",
     "noEntries": "No se encontraron entradas.",
     "noEntriesWithTag": "No hay entradas con la etiqueta \"{{tag}}\".",
+    "attachmentIndicator": "Tiene adjuntos",
+    "noEntriesWithAttachments": "No hay entradas con adjuntos.",
+    "noEntriesMatchFilters": "Ninguna entrada coincide con los filtros activos.",
+    "filter": {
+      "title": "Filtrar",
+      "hasAttachments": "Tiene adjuntos"
+    },
     "newEntry": "nueva entrada",
     "editEntry": "editar entrada",
     "deleteEntry": "eliminar entrada",
@@ -365,6 +372,7 @@
     "sort": {
       "sortBy": "Ordenar por",
       "sortEntries": "Ordenar entradas",
+      "sortEntriesFiltered": "Ordenar entradas (filtro de adjuntos activo)",
       "order": "Orden",
       "title": "Título",
       "username": "Nombre de usuario",
