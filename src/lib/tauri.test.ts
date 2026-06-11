@@ -178,6 +178,7 @@ describe("tauri wrappers validation", () => {
         enabled: true,
         retentionDays: 90,
       },
+      attachments: { softWarnBytes: 5_000_000, hardCapBytes: 25_000_000 },
     } as const;
 
     vi.mocked(invoke)
@@ -247,6 +248,7 @@ describe("tauri wrappers validation", () => {
           enabled: true,
           retentionDays: 90,
         },
+        attachments: { softWarnBytes: 5_000_000, hardCapBytes: 25_000_000 },
       })
     ).rejects.toThrow();
 

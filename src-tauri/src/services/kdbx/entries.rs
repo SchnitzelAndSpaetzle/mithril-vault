@@ -1,6 +1,12 @@
-use crate::dto::entry::{CreateEntryData, CustomFieldValue, Entry, UpdateEntryData};
+use crate::domain::secure::SecureBytes;
+use crate::dto::entry::{
+    AddAttachmentsOutcome, AttachmentAddFailure, AttachmentAddPlan, AttachmentPlanItem,
+    AttachmentSizeStatus, CreateEntryData, CustomFieldValue, Entry, UpdateEntryData,
+};
 use crate::dto::error::AppError;
+use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::db::{Entry as KeepassEntry, Times, Value};
+use std::io::{Read, Write};
 
 use super::conversions::{
     apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
@@ -8,6 +14,72 @@ use super::conversions::{
 };
 use super::recycle::is_in_recycle_bin;
 use super::KdbxService;
+
+/// Classifies a candidate attachment's size against the configured guardrails.
+/// At-threshold values are treated as within the lower band: a file exactly the
+/// size of the soft threshold is [`Ok`] (warning fires only *above* it), and a
+/// file exactly the size of the hard cap is [`OverSoft`] (rejection fires only
+/// *above* it — matching the `> hard_cap` check in the add path). Callers must
+/// pass a coherent pair (`soft <= hard`), which the settings boundary
+/// guarantees.
+///
+/// [`Ok`]: AttachmentSizeStatus::Ok
+/// [`OverSoft`]: AttachmentSizeStatus::OverSoft
+fn classify_attachment_size(size: u64, soft: u64, hard: u64) -> AttachmentSizeStatus {
+    if size > hard {
+        AttachmentSizeStatus::OverHard
+    } else if size > soft {
+        AttachmentSizeStatus::OverSoft
+    } else {
+        AttachmentSizeStatus::Ok
+    }
+}
+
+/// Builds the size-classification plan for a batch of candidate files without
+/// reading their bytes or touching the Vault. Each path is stat'd and
+/// classified against the configured `soft`/`hard` thresholds; the result drives
+/// the frontend's decision to prompt before committing. A path that cannot be
+/// stat'd (missing, permission-denied) is recorded with size `0` and status
+/// [`Ok`] — it is advisory only, and the authoritative read at commit time will
+/// surface the real I/O error as a per-file failure. `requires_confirmation` is
+/// `true` iff at least one file is [`OverSoft`]; files over the hard cap do not
+/// gate the prompt.
+///
+/// [`Ok`]: AttachmentSizeStatus::Ok
+/// [`OverSoft`]: AttachmentSizeStatus::OverSoft
+pub(crate) fn plan_attachment_adds(
+    paths: &[std::path::PathBuf],
+    soft: u64,
+    hard: u64,
+) -> AttachmentAddPlan {
+    let items: Vec<AttachmentPlanItem> = paths
+        .iter()
+        .map(|path| {
+            let source_name = path
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str)
+                .unwrap_or("")
+                .to_string();
+            let size = std::fs::metadata(path).map_or(0, |m| m.len());
+            AttachmentPlanItem {
+                source_name,
+                size,
+                status: classify_attachment_size(size, soft, hard),
+            }
+        })
+        .collect();
+    let requires_confirmation = items
+        .iter()
+        .any(|item| item.status == AttachmentSizeStatus::OverSoft);
+    // `batch_id` is owned by the buffer generation, which this pure builder has
+    // no access to; the prepare command overwrites it with the real id before
+    // returning the plan over IPC.
+    AttachmentAddPlan {
+        items,
+        requires_confirmation,
+        batch_id: 0,
+    }
+}
 
 impl KdbxService {
     /// Lists entries, optionally filtered by group.
@@ -64,6 +136,211 @@ impl KdbxService {
                 .map(std::string::ToString::to_string)
                 .unwrap_or_default())
         })
+    }
+
+    /// Fetches a single Attachment's bytes on demand, keyed by its filename
+    /// (the per-Entry Attachment identifier). Bytes are returned as
+    /// [`SecureBytes`] so they zeroize promptly after the caller is done —
+    /// mirroring the `get_entry_password` lazy-reveal pattern. This is the
+    /// reusable byte-fetch path; it never records an audit event (only the
+    /// export/download path does), so in-app preview can reuse it freely.
+    pub fn get_entry_attachment(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        filename: &str,
+    ) -> Result<SecureBytes, AppError> {
+        self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(entry_id)?;
+            let attachment = entry
+                .attachment_by_name(filename)
+                .ok_or_else(|| AppError::AttachmentNotFound(filename.to_string()))?;
+            Ok(SecureBytes::new(attachment.data.get().clone()))
+        })
+    }
+
+    /// Exports a single Attachment by writing its bytes to `dest` on disk —
+    /// the only path by which Attachment bytes leave the Vault's encryption
+    /// boundary. Bytes are fetched via [`get_entry_attachment`] and written
+    /// from Rust so they never cross IPC into JS. The caller (command layer)
+    /// records the `entry.attachment_exported` audit event only when this
+    /// succeeds; a failed read or write records nothing.
+    ///
+    /// [`get_entry_attachment`]: Self::get_entry_attachment
+    pub fn export_entry_attachment(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        filename: &str,
+        dest: &std::path::Path,
+    ) -> Result<(), AppError> {
+        let bytes = self.get_entry_attachment(db_id, entry_id, filename)?;
+        let dest_str = dest
+            .to_str()
+            .ok_or_else(|| AppError::InvalidPath(dest.to_string_lossy().into_owned()))?;
+        // Atomic temp-file + rename (secure 0600 perms by default): a failed
+        // write — disk full, interrupted I/O — leaves any pre-existing file at
+        // the chosen destination untouched rather than truncated or partial.
+        atomic_write(dest_str, &AtomicWriteOptions::default(), |file| {
+            file.write_all(bytes.as_bytes())
+                .map_err(|e| AppError::Io(e.to_string()))
+        })
+    }
+
+    /// Removes a single Attachment from an Entry, keyed by its filename. The
+    /// `keepass` crate drops the Entry's reference and — when it was the last
+    /// reference — the now-orphaned blob from the Vault-level binary pool, so
+    /// no separate pool cleanup is needed. The Entry's modification time is
+    /// bumped and the Vault is marked modified (the caller persists). Deleting
+    /// an unknown filename is an [`AppError::AttachmentNotFound`] that leaves
+    /// the Vault untouched.
+    pub fn delete_entry_attachment(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        filename: &str,
+    ) -> Result<(), AppError> {
+        self.with_vault_mut(db_id, |vault| {
+            {
+                let mut entry = vault.entry_mut(entry_id)?;
+                if entry.attachment_by_name_mut(filename).is_none() {
+                    return Err(AppError::AttachmentNotFound(filename.to_string()));
+                }
+                entry.remove_attachment_by_name(filename);
+                entry.times.last_modification = Some(Times::now());
+            }
+            vault.mark_modified();
+            Ok(())
+        })
+    }
+
+    /// Adds a file on disk to an Entry as a native KDBX binary, keyed by its
+    /// filename. The bytes are read in Rust from `source_path` — the frontend
+    /// passes filesystem paths, never file bytes — and stored unprotected (the
+    /// Vault's at-rest encryption already covers them). The Entry's
+    /// modification time is bumped and the Vault is marked modified
+    /// immediately, independent of the Entry edit-form save cycle (mirroring
+    /// `set_entry_custom_icon`). Returns the filename the attachment was
+    /// actually stored under, which may differ from the source basename when a
+    /// collision triggered an auto-rename. The `hard_cap` (in bytes) is the
+    /// per-file rejection threshold; it is injected by the caller from App
+    /// Preferences rather than hard-coded, so the user-configured cap governs
+    /// every add.
+    pub fn add_entry_attachment(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        source_path: &std::path::Path,
+        hard_cap: u64,
+    ) -> Result<String, AppError> {
+        let filename = source_path
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .ok_or_else(|| AppError::InvalidPath(source_path.to_string_lossy().into_owned()))?
+            .to_string();
+
+        let metadata = std::fs::metadata(source_path).map_err(|e| AppError::Io(e.to_string()))?;
+
+        // Reject anything that isn't a regular file. A directory, FIFO, or
+        // device like `/dev/zero` reports a meaningless metadata length, so the
+        // stat-based cap below can't be trusted for it and an unbounded read
+        // could hang or exhaust memory.
+        if !metadata.is_file() {
+            return Err(AppError::InvalidInput(format!(
+                "not a regular file: {}",
+                source_path.to_string_lossy()
+            )));
+        }
+
+        // Fast path: reject an obviously oversized file from its stat'd size
+        // before opening it at all.
+        if metadata.len() > hard_cap {
+            return Err(AppError::AttachmentTooLarge {
+                filename,
+                size: metadata.len(),
+                cap: hard_cap,
+            });
+        }
+
+        // Authoritative guard: bound the read itself to one byte past the cap.
+        // A regular file that grows after the stat (TOCTOU) can never push more
+        // than the cap into memory — reading `cap + 1` bytes proves it's over.
+        let file = std::fs::File::open(source_path).map_err(|e| AppError::Io(e.to_string()))?;
+
+        // Re-check on the opened handle, not the pre-open path: if the path was
+        // swapped (e.g. a symlink repointed to a FIFO/device) between the
+        // `metadata()` above and this `open`, the descriptor we actually hold
+        // could be a non-regular file that would block or hang `read_to_end`.
+        // Validating the fd's own metadata closes that race.
+        let opened = file.metadata().map_err(|e| AppError::Io(e.to_string()))?;
+        if !opened.is_file() {
+            return Err(AppError::InvalidInput(format!(
+                "not a regular file: {}",
+                source_path.to_string_lossy()
+            )));
+        }
+
+        // Read one byte past the cap to prove an over-cap file. `saturating_add`
+        // guards the edge where `hard_cap` is `u64::MAX` (a hand-edited
+        // settings.json the validator accepts): `hard_cap + 1` would overflow —
+        // panicking in overflow-checked builds, or wrapping to `take(0)` in
+        // release and silently storing an empty attachment. Saturating leaves
+        // the cap effectively unlimited, which is the intended meaning.
+        let mut bytes = Vec::new();
+        file.take(hard_cap.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(|e| AppError::Io(e.to_string()))?;
+        if bytes.len() as u64 > hard_cap {
+            return Err(AppError::AttachmentTooLarge {
+                filename,
+                size: bytes.len() as u64,
+                cap: hard_cap,
+            });
+        }
+
+        self.with_vault_mut(db_id, |vault| {
+            let stored_name = {
+                let mut entry = vault.entry_mut(entry_id)?;
+                let stored_name = unique_attachment_name(&entry.as_ref(), &filename);
+                entry.add_attachment(stored_name.clone(), Value::unprotected(bytes));
+                entry.times.last_modification = Some(Times::now());
+                stored_name
+            };
+            vault.mark_modified();
+            Ok(stored_name)
+        })
+    }
+
+    /// Adds a batch of files to an Entry, one per path, returning the stored
+    /// names and per-file failures. This is the single feeder the trusted
+    /// add-attachment command uses: it is handed only OS-provided paths (the
+    /// native file dialog today, the `tauri://drag-drop` event for #286), never
+    /// a renderer-supplied string. A failure on one file (e.g. over the hard
+    /// cap) is collected and the batch continues, so one bad pick never aborts
+    /// the rest. Each successful add marks the Vault modified via the
+    /// underlying single add; the frontend persists once afterward.
+    pub fn add_entry_attachments(
+        &self,
+        db_id: &str,
+        entry_id: &str,
+        paths: &[std::path::PathBuf],
+        hard_cap: u64,
+    ) -> Result<AddAttachmentsOutcome, AppError> {
+        let mut outcome = AddAttachmentsOutcome::default();
+        for path in paths {
+            match self.add_entry_attachment(db_id, entry_id, path, hard_cap) {
+                Ok(stored_name) => outcome.added.push(stored_name),
+                Err(error) => outcome.failed.push(AttachmentAddFailure {
+                    source_name: path
+                        .file_name()
+                        .and_then(std::ffi::OsStr::to_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    reason: error.to_string(),
+                }),
+            }
+        }
+        Ok(outcome)
     }
 
     /// Fetches a protected custom field value.
@@ -475,15 +752,169 @@ fn dedupe_preserving_order(tags: &mut Vec<String>) {
     *tags = deduped;
 }
 
+/// Resolves a collision-free attachment filename within an Entry. If `filename`
+/// is unused on the Entry it is returned as-is; otherwise the stem gains a
+/// ` (n)` suffix (`scan (1).pdf`, `scan (2).pdf`, …), counting up until a free
+/// name is found. The extension is preserved; names without one (or dotfiles
+/// like `.gitignore`, whose whole name is the stem) just gain the suffix.
+fn unique_attachment_name(entry: &keepass::db::EntryRef<'_>, filename: &str) -> String {
+    if entry.attachment_by_name(filename).is_none() {
+        return filename.to_string();
+    }
+
+    let path = std::path::Path::new(filename);
+    let stem = path
+        .file_stem()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or(filename);
+    let ext = path.extension().and_then(std::ffi::OsStr::to_str);
+
+    let mut n: u32 = 1;
+    loop {
+        let candidate = match ext {
+            Some(ext) => format!("{stem} ({n}).{ext}"),
+            None => format!("{stem} ({n})"),
+        };
+        if entry.attachment_by_name(&candidate).is_none() {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::domain::secure::SecureString;
-    use crate::dto::entry::AttachmentMeta;
+    use crate::dto::entry::{AttachmentMeta, AttachmentSizeStatus};
     use crate::services::kdbx::test_support::create_test_database;
     use keepass::db::Value;
     use std::collections::HashMap;
+
+    /// The hard cap the attachment add/round-trip tests inject. A generous
+    /// fixed value so the round-trip cases never trip the cap; the over-cap
+    /// cases seed a file one byte past it.
+    const TEST_HARD_CAP: u64 = 25 * 1024 * 1024;
+
+    #[test]
+    fn classify_attachment_size_walks_the_thresholds() {
+        // soft = 5, hard = 25. Every boundary is pinned because the soft/hard
+        // edges decide whether the user is warned, silently allowed, or
+        // rejected — an off-by-one here is a user-visible behavior change.
+        let soft = 5;
+        let hard = 25;
+        // At or below the soft threshold: silent add.
+        assert_eq!(
+            classify_attachment_size(0, soft, hard),
+            AttachmentSizeStatus::Ok
+        );
+        assert_eq!(
+            classify_attachment_size(5, soft, hard),
+            AttachmentSizeStatus::Ok
+        );
+        // Above soft, up to and including the hard cap: warn.
+        assert_eq!(
+            classify_attachment_size(6, soft, hard),
+            AttachmentSizeStatus::OverSoft
+        );
+        assert_eq!(
+            classify_attachment_size(25, soft, hard),
+            AttachmentSizeStatus::OverSoft
+        );
+        // Above the hard cap: reject.
+        assert_eq!(
+            classify_attachment_size(26, soft, hard),
+            AttachmentSizeStatus::OverHard
+        );
+    }
+
+    #[test]
+    fn classify_attachment_size_handles_soft_equal_to_hard() {
+        // A coherent edge config: soft == hard means the warning band is empty,
+        // so a file is either Ok (<= the shared threshold) or OverHard.
+        assert_eq!(
+            classify_attachment_size(10, 10, 10),
+            AttachmentSizeStatus::Ok
+        );
+        assert_eq!(
+            classify_attachment_size(11, 10, 10),
+            AttachmentSizeStatus::OverHard
+        );
+    }
+
+    #[test]
+    fn plan_attachment_adds_classifies_each_file_and_flags_confirmation() {
+        // A mixed batch: one file under the soft threshold, one above it (but
+        // under the hard cap). The plan must classify each by its on-disk size,
+        // preserve pick order, and flag that confirmation is required because at
+        // least one file is over the soft threshold — the single signal the
+        // frontend reads before showing the warning prompt.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let small = dir.path().join("notes.txt");
+        std::fs::write(&small, vec![0u8; 3]).expect("seed small");
+        let large = dir.path().join("scan.pdf");
+        std::fs::write(&large, vec![0u8; 50]).expect("seed large");
+
+        let plan = plan_attachment_adds(
+            &[small.clone(), large.clone()],
+            10,  // soft
+            100, // hard
+        );
+
+        assert!(
+            plan.requires_confirmation,
+            "a file over the soft threshold must require confirmation"
+        );
+        assert_eq!(plan.items.len(), 2, "one plan item per path, in pick order");
+        assert_eq!(plan.items[0].source_name, "notes.txt");
+        assert_eq!(plan.items[0].size, 3);
+        assert_eq!(plan.items[0].status, AttachmentSizeStatus::Ok);
+        assert_eq!(plan.items[1].source_name, "scan.pdf");
+        assert_eq!(plan.items[1].size, 50);
+        assert_eq!(plan.items[1].status, AttachmentSizeStatus::OverSoft);
+    }
+
+    #[test]
+    fn plan_attachment_adds_requires_no_confirmation_when_all_under_soft() {
+        // Every file under the soft threshold: the add proceeds silently, so
+        // the plan must not require confirmation.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let a = dir.path().join("a.txt");
+        std::fs::write(&a, vec![0u8; 2]).expect("seed a");
+        let b = dir.path().join("b.txt");
+        std::fs::write(&b, vec![0u8; 4]).expect("seed b");
+
+        let plan = plan_attachment_adds(&[a, b], 10, 100);
+
+        assert!(
+            !plan.requires_confirmation,
+            "all-small batch must not require confirmation"
+        );
+        assert!(plan
+            .items
+            .iter()
+            .all(|item| item.status == AttachmentSizeStatus::Ok));
+    }
+
+    #[test]
+    fn plan_attachment_adds_does_not_require_confirmation_for_over_hard_only() {
+        // A file over the hard cap is OverHard, not OverSoft. It will be
+        // rejected at commit as a per-file failure — it must NOT trigger the
+        // soft-warning prompt, so a batch whose only large file is over-hard
+        // requires no confirmation.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let huge = dir.path().join("huge.bin");
+        std::fs::write(&huge, vec![0u8; 200]).expect("seed huge");
+
+        let plan = plan_attachment_adds(&[huge], 10, 100);
+
+        assert!(
+            !plan.requires_confirmation,
+            "an over-hard-only batch must not require the soft prompt"
+        );
+        assert_eq!(plan.items[0].status, AttachmentSizeStatus::OverHard);
+    }
 
     fn create_entry_with_expiry(
         service: &KdbxService,
@@ -509,6 +940,29 @@ mod tests {
                 expiry_time,
             },
         )
+    }
+
+    /// Seeds a single unprotected attachment on `entry_id` and returns the
+    /// Vault's generation immediately after, so a delete test can assert the
+    /// generation moved (a successful delete marks the Vault modified) or
+    /// stayed put (a rejected delete leaves it untouched).
+    fn seed_attachment(
+        service: &KdbxService,
+        db_path: &str,
+        entry_id: &str,
+        filename: &str,
+        bytes: &[u8],
+    ) -> u64 {
+        service
+            .with_vault_mut(db_path, |vault| {
+                let mut entry = vault.entry_mut(entry_id)?;
+                entry.add_attachment(filename, Value::unprotected(bytes.to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+        service
+            .with_vault(db_path, |vault| Ok(vault.generation()))
+            .expect("generation after seed")
     }
 
     /// An `UpdateEntryData` that touches nothing; tests override single fields
@@ -847,6 +1301,101 @@ mod tests {
     }
 
     #[test]
+    fn get_entry_attachment_round_trips_exact_stored_bytes() {
+        // The on-demand byte fetch must return the attachment's bytes verbatim,
+        // for both unprotected and protected (memory-protected) binaries — the
+        // download path writes exactly these bytes to disk. Prior art for the
+        // binary-in-vault round-trip shape: services/kdbx/custom_icons.rs.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let plain = b"recovery-code-12345".to_vec();
+        let secret = vec![0xAB_u8; 4096];
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("codes.txt", Value::unprotected(plain.clone()));
+                entry.add_attachment("blob.bin", Value::protected(secret.clone()));
+                Ok(())
+            })
+            .expect("seed attachments");
+
+        let fetched_plain = service
+            .get_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("fetch unprotected attachment");
+        assert_eq!(fetched_plain.as_bytes(), plain.as_slice());
+
+        let fetched_secret = service
+            .get_entry_attachment(&db_path, &entry_a, "blob.bin")
+            .expect("fetch protected attachment");
+        assert_eq!(fetched_secret.as_bytes(), secret.as_slice());
+    }
+
+    #[test]
+    fn export_entry_attachment_writes_exact_bytes_to_destination() {
+        // The download path resolves to a Rust-side write so decrypted bytes
+        // never cross into JS. The file on disk must be byte-identical to the
+        // stored Attachment.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let payload = vec![0x01, 0x02, 0x03, 0xFF, 0x00, 0x42];
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("export-me.bin", Value::unprotected(payload.clone()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let dest = dir.path().join("downloaded.bin");
+        service
+            .export_entry_attachment(&db_path, &entry_a, "export-me.bin", &dest)
+            .expect("export attachment");
+
+        let written = std::fs::read(&dest).expect("read written file");
+        assert_eq!(written, payload);
+    }
+
+    #[test]
+    fn export_entry_attachment_replaces_an_existing_destination_file() {
+        // Downloading over an existing file must end with exactly the
+        // Attachment's bytes — the atomic temp-file + rename replaces the
+        // target wholesale rather than appending or leaving stale bytes.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("note.txt", Value::unprotected(b"new".to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let dest = dir.path().join("note.txt");
+        std::fs::write(&dest, b"older longer contents").expect("seed existing file");
+
+        service
+            .export_entry_attachment(&db_path, &entry_a, "note.txt", &dest)
+            .expect("export over existing file");
+
+        assert_eq!(std::fs::read(&dest).expect("read"), b"new");
+    }
+
+    #[test]
+    fn get_entry_attachment_errors_on_unknown_filename() {
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("present.txt", Value::unprotected(b"x".to_vec()));
+                Ok(())
+            })
+            .expect("seed attachment");
+
+        let result = service.get_entry_attachment(&db_path, &entry_a, "missing.txt");
+        assert!(matches!(result, Err(AppError::AttachmentNotFound(name)) if name == "missing.txt"));
+    }
+
+    #[test]
     fn entry_without_attachments_reports_an_empty_list() {
         let (service, _dir, db_path, entry_a, _b) = create_test_database();
         let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
@@ -854,6 +1403,428 @@ mod tests {
             entry.attachments.is_empty(),
             "an entry with no binaries has no attachment metadata"
         );
+    }
+
+    #[test]
+    fn delete_entry_attachment_removes_reference_and_orphaned_blob() {
+        // Deleting the only Attachment referencing a pooled blob must drop both
+        // the Entry's reference and the now-orphaned blob from the Vault-level
+        // pool, and mark the Vault modified. Prior art for the binary-in-vault
+        // round-trip shape: services/kdbx/custom_icons.rs.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let generation_before =
+            seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
+
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "the Entry's attachment reference must be gone after delete"
+        );
+
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(
+                    vault.db().num_attachments(),
+                    0,
+                    "the orphaned blob must be cleaned from the Vault pool"
+                );
+                assert!(
+                    vault.generation() > generation_before,
+                    "a successful delete must mark the Vault modified"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn delete_entry_attachment_errors_on_unknown_filename_and_leaves_vault_untouched() {
+        // Deleting a filename the Entry doesn't carry must be a clean
+        // AttachmentNotFound error and must not mark the Vault modified, so a
+        // stale or mistargeted click never produces a phantom unsaved change.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let generation_before = seed_attachment(&service, &db_path, &entry_a, "present.txt", b"x");
+
+        let result = service.delete_entry_attachment(&db_path, &entry_a, "missing.txt");
+        assert!(matches!(result, Err(AppError::AttachmentNotFound(name)) if name == "missing.txt"));
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert_eq!(
+            entry.attachments.len(),
+            1,
+            "the existing attachment must survive a failed delete"
+        );
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "a failed delete must not mark the Vault modified"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn add_entry_attachment_stores_bytes_from_a_path_and_marks_modified() {
+        // The primary write path: the backend reads a file off disk by path
+        // (the frontend never sends bytes), stores it as a native KDBX binary,
+        // and marks the Vault modified immediately — independent of the Entry
+        // edit-form save cycle. The stored bytes must round-trip verbatim
+        // through the on-demand fetch, and the metadata must surface on the
+        // Entry. Prior art for the binary-in-vault shape: custom_icons.rs.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let generation_before = service
+            .with_vault(&db_path, |vault| Ok(vault.generation()))
+            .expect("generation before add");
+
+        let payload = b"recovery-codes-12345\nsecond-line".to_vec();
+        let source = dir.path().join("codes.txt");
+        std::fs::write(&source, &payload).expect("seed source file");
+
+        let stored = service
+            .add_entry_attachment(&db_path, &entry_a, &source, TEST_HARD_CAP)
+            .expect("add attachment");
+        assert_eq!(stored, "codes.txt", "the stored filename is the basename");
+
+        let fetched = service
+            .get_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("fetch added attachment");
+        assert_eq!(
+            fetched.as_bytes(),
+            payload.as_slice(),
+            "the added attachment must round-trip the on-disk bytes verbatim"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        let meta = entry
+            .attachments
+            .iter()
+            .find(|a| a.filename == "codes.txt")
+            .expect("codes.txt metadata");
+        assert_eq!(meta.size, payload.len() as u64);
+        assert_eq!(meta.mime_type, "text/plain");
+
+        service
+            .with_vault(&db_path, |vault| {
+                assert!(
+                    vault.generation() > generation_before,
+                    "a successful add must mark the Vault modified"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn add_entry_attachment_rejects_a_file_over_the_hard_cap() {
+        // A file larger than the hard per-file cap must be rejected with a
+        // clear error and must leave the Vault completely untouched — no
+        // partial binary, no modified flag — so an oversized pick never bloats
+        // the database into something unusable.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let generation_before = service
+            .with_vault(&db_path, |vault| Ok(vault.generation()))
+            .expect("generation before add");
+
+        let oversized = vec![0u8; usize::try_from(TEST_HARD_CAP + 1).expect("cap fits usize")];
+        let source = dir.path().join("huge.bin");
+        std::fs::write(&source, &oversized).expect("seed oversized file");
+
+        let result = service.add_entry_attachment(&db_path, &entry_a, &source, TEST_HARD_CAP);
+        assert!(
+            matches!(result, Err(AppError::AttachmentTooLarge { ref filename, .. }) if filename == "huge.bin"),
+            "an over-cap file must be rejected with AttachmentTooLarge, got {result:?}"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "a rejected add must not store any binary"
+        );
+        service
+            .with_vault(&db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "a rejected add must not mark the Vault modified"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn add_entry_attachment_stores_the_real_bytes_when_the_cap_is_u64_max() {
+        // Regression: a hand-edited settings.json can set hardCapBytes to
+        // u64::MAX (the validator only rejects 0 and soft > hard). The read
+        // bound was `hard_cap + 1`, which overflows at u64::MAX — panicking in
+        // overflow-checked builds, or wrapping to take(0) in release and storing
+        // an empty attachment for any non-empty file. With saturating_add the
+        // file's real bytes round-trip and nothing is silently truncated.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let payload = b"real-contents-not-empty";
+        let source = dir.path().join("notes.txt");
+        std::fs::write(&source, payload).expect("seed file");
+
+        let stored = service
+            .add_entry_attachment(&db_path, &entry_a, &source, u64::MAX)
+            .expect("add under an effectively unlimited cap");
+        assert_eq!(stored, "notes.txt");
+
+        let bytes = service
+            .get_entry_attachment(&db_path, &entry_a, "notes.txt")
+            .expect("read back attachment");
+        assert_eq!(
+            bytes.as_bytes(),
+            payload,
+            "the full file bytes must round-trip, not a truncated/empty blob"
+        );
+    }
+
+    #[test]
+    fn add_entry_attachment_auto_renames_on_filename_collision() {
+        // Adding a file whose name already exists on the Entry must auto-rename
+        // the newcomer (`name (1).ext`, `name (2).ext`, …) rather than
+        // overwrite — so a multi-file batch never silently clobbers an existing
+        // attachment or fails mid-way on a collision. Both originals stay
+        // intact with their own bytes.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let first = dir.path().join("scan.pdf");
+        std::fs::write(&first, b"first-bytes").expect("seed first file");
+        let stored_first = service
+            .add_entry_attachment(&db_path, &entry_a, &first, TEST_HARD_CAP)
+            .expect("add first");
+        assert_eq!(stored_first, "scan.pdf", "the first add keeps its name");
+
+        // A different file that happens to share the basename.
+        let second = dir.path().join("subdir-stand-in");
+        std::fs::create_dir_all(&second).expect("mk subdir");
+        let second_file = second.join("scan.pdf");
+        std::fs::write(&second_file, b"second-bytes").expect("seed second file");
+        let stored_second = service
+            .add_entry_attachment(&db_path, &entry_a, &second_file, TEST_HARD_CAP)
+            .expect("add second");
+        assert_eq!(
+            stored_second, "scan (1).pdf",
+            "a colliding name auto-renames the newcomer"
+        );
+
+        // The original must be untouched, and the renamed copy carries its own
+        // distinct bytes — nothing was overwritten.
+        let original = service
+            .get_entry_attachment(&db_path, &entry_a, "scan.pdf")
+            .expect("fetch original");
+        assert_eq!(original.as_bytes(), b"first-bytes");
+        let renamed = service
+            .get_entry_attachment(&db_path, &entry_a, "scan (1).pdf")
+            .expect("fetch renamed");
+        assert_eq!(renamed.as_bytes(), b"second-bytes");
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert_eq!(
+            entry.attachments.len(),
+            2,
+            "both attachments coexist after the auto-rename"
+        );
+    }
+
+    #[test]
+    fn add_entry_attachment_rejects_a_non_regular_file() {
+        // A path that isn't a regular file (a directory here; on Unix also
+        // FIFOs, /dev/zero, …) has a meaningless metadata length and an
+        // unbounded read could hang or OOM, so it must be rejected before any
+        // bytes are pulled in. Defends the hard cap against special files.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let not_a_file = dir.path().join("a-directory");
+        std::fs::create_dir(&not_a_file).expect("mk dir");
+
+        let result = service.add_entry_attachment(&db_path, &entry_a, &not_a_file, TEST_HARD_CAP);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "a non-regular file must be rejected, got {result:?}"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "nothing is stored for a rejected add"
+        );
+    }
+
+    #[test]
+    fn add_entry_attachments_adds_every_path_in_pick_order() {
+        // The batch add is the only feeder the trusted-source command uses: it
+        // takes the list of OS-provided paths and stores each, returning the
+        // stored names in pick order. The whole list lands and the Vault is
+        // marked modified once it has run.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let first = dir.path().join("codes.txt");
+        std::fs::write(&first, b"first").expect("seed first");
+        let second = dir.path().join("scan.pdf");
+        std::fs::write(&second, b"second").expect("seed second");
+
+        let outcome = service
+            .add_entry_attachments(&db_path, &entry_a, &[first, second], TEST_HARD_CAP)
+            .expect("batch add");
+
+        assert_eq!(
+            outcome.added,
+            vec!["codes.txt".to_string(), "scan.pdf".to_string()],
+            "every picked path is stored, in pick order"
+        );
+        assert!(outcome.failed.is_empty(), "no failures for valid files");
+    }
+
+    #[test]
+    fn add_entry_attachments_keeps_going_when_one_file_is_rejected() {
+        // A rejected file (here, one over the hard cap) must not abort the
+        // batch: the surviving files still land, and the failure is reported
+        // with its basename and the backend reason so the UI can surface a
+        // per-file toast. Mirrors the single-add resilience the UI relied on.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let ok_a = dir.path().join("ok-a.txt");
+        std::fs::write(&ok_a, b"a").expect("seed ok-a");
+        let huge = dir.path().join("huge.bin");
+        std::fs::write(
+            &huge,
+            vec![0u8; usize::try_from(TEST_HARD_CAP + 1).expect("cap fits usize")],
+        )
+        .expect("seed huge");
+        let ok_b = dir.path().join("ok-b.txt");
+        std::fs::write(&ok_b, b"b").expect("seed ok-b");
+
+        let outcome = service
+            .add_entry_attachments(&db_path, &entry_a, &[ok_a, huge, ok_b], TEST_HARD_CAP)
+            .expect("batch add");
+
+        assert_eq!(
+            outcome.added,
+            vec!["ok-a.txt".to_string(), "ok-b.txt".to_string()],
+            "the surviving files still land despite the rejected one"
+        );
+        assert_eq!(outcome.failed.len(), 1, "exactly the over-cap file fails");
+        assert_eq!(outcome.failed[0].source_name, "huge.bin");
+        assert!(
+            outcome.failed[0].reason.contains("exceeding"),
+            "the failure carries the backend reason, got {:?}",
+            outcome.failed[0].reason
+        );
+    }
+
+    /// Asserts that feeding `paths` to the add feeder is a no-op: nothing is
+    /// added or fails, the Entry stays empty, and the Vault is unmodified.
+    /// Shared by the picker trust-boundary test (an empty pick while a secret
+    /// sits on disk) and the drop-commit no-op test (an empty buffer), since
+    /// both make the same "a path never handed in is never read" guarantee.
+    fn assert_empty_add_is_inert(service: &KdbxService, db_path: &str, entry_id: &str) {
+        let generation_before = service
+            .with_vault(db_path, |vault| Ok(vault.generation()))
+            .expect("generation before");
+
+        let outcome = service
+            .add_entry_attachments(db_path, entry_id, &[], TEST_HARD_CAP)
+            .expect("empty add");
+
+        assert!(outcome.added.is_empty(), "nothing is added");
+        assert!(outcome.failed.is_empty(), "and nothing fails");
+
+        let entry = service.get_entry(db_path, entry_id).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "a file never handed to the add path must not be readable through it"
+        );
+        service
+            .with_vault(db_path, |vault| {
+                assert_eq!(
+                    vault.generation(),
+                    generation_before,
+                    "no read means no modification"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn add_entry_attachments_reads_only_paths_handed_to_it() {
+        // The trust boundary (issue #296): a file the user never selected
+        // through the OS picker must not be readable through the add path. The
+        // command no longer accepts a renderer-supplied `source_path` — the
+        // only paths that reach the read are the ones in this slice. So a
+        // sensitive file sitting on disk that is NOT in the handed-in list (the
+        // empty list models a cancelled dialog) is never read, nothing is
+        // stored, and the Vault is left untouched. There is structurally no
+        // parameter through which a fabricated path could be injected.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let secret = dir.path().join("id_rsa");
+        std::fs::write(&secret, b"-----BEGIN PRIVATE KEY-----").expect("seed secret");
+
+        assert_empty_add_is_inert(&service, &db_path, &entry_a);
+    }
+
+    #[test]
+    fn commit_drains_the_drop_buffer_into_the_add_feeder() {
+        // Drag-and-drop (#286) reuses the same trusted feeder as the picker: a
+        // native drop buffers its OS-provided paths, and the commit drains them
+        // into `add_entry_attachments`. This proves the drain+feed seam end to
+        // end — what the drop captured lands on the Entry, and the buffer is
+        // emptied so the same drop can't be replayed against a later entry.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+        let dropped = dir.path().join("dropped.txt");
+        std::fs::write(&dropped, b"from a drag-drop").expect("seed dropped file");
+
+        let buffer = crate::services::drag_drop::PendingAttachmentPaths::default();
+        let batch = buffer.replace(vec![dropped.clone()]);
+
+        // The commit drains the buffer and hands only those paths to the feeder.
+        let paths = buffer.take(batch);
+        let outcome = service
+            .add_entry_attachments(&db_path, &entry_a, &paths, TEST_HARD_CAP)
+            .expect("commit drained drop");
+
+        assert_eq!(
+            outcome.added,
+            vec!["dropped.txt".to_string()],
+            "the dropped file lands on the Entry through the shared feeder"
+        );
+
+        let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry
+                .attachments
+                .iter()
+                .any(|a| a.filename == "dropped.txt"),
+            "the attachment is persisted on the Entry"
+        );
+
+        assert!(
+            buffer.take(batch).is_empty(),
+            "the buffer is drained, so a second commit reads nothing"
+        );
+    }
+
+    #[test]
+    fn commit_with_no_preceding_drop_is_a_noop() {
+        // The drop event is window-global, so a commit can fire with nothing
+        // buffered (e.g. a stale render). Draining an empty buffer hands the
+        // feeder no paths, so nothing is read or stored and the Vault is
+        // untouched — the same guarantee as a cancelled picker dialog.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let buffer = crate::services::drag_drop::PendingAttachmentPaths::default();
+        assert!(buffer.take(0).is_empty(), "no drop means no buffered paths");
+
+        assert_empty_add_is_inert(&service, &db_path, &entry_a);
     }
 
     #[test]

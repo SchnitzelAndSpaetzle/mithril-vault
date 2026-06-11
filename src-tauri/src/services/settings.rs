@@ -214,6 +214,22 @@ impl SettingsService {
                 "audit.retentionDays must be in 1..=365, got {r}"
             )));
         }
+        // Attachment guardrails: a coherent pair has a non-zero hard cap with
+        // the soft warning at or below it. Inverting them (or zeroing the cap)
+        // would either disable the warning step or reject every file, so reject
+        // at the boundary before the add flow ever reads the values.
+        let soft = prefs.attachments.soft_warn_bytes;
+        let hard = prefs.attachments.hard_cap_bytes;
+        if hard < 1 {
+            return Err(AppError::InvalidInput(format!(
+                "attachments.hardCapBytes must be at least 1, got {hard}"
+            )));
+        }
+        if soft > hard {
+            return Err(AppError::InvalidInput(format!(
+                "attachments.softWarnBytes ({soft}) must not exceed attachments.hardCapBytes ({hard})"
+            )));
+        }
         Ok(())
     }
 
@@ -275,8 +291,69 @@ pub fn diff_security_changes(old: &AppPreferences, new: &AppPreferences) -> Vec<
 #[allow(clippy::expect_used, clippy::panic)]
 mod validate_preferences_tests {
     use super::SettingsService;
-    use crate::commands::settings::{AppPreferences, AuditSettings, BackupSettings};
+    use crate::commands::settings::{
+        AppPreferences, AttachmentSettings, AuditSettings, BackupSettings,
+    };
     use crate::dto::error::AppError;
+
+    fn prefs_with_attachments(soft: u64, hard: u64) -> AppPreferences {
+        AppPreferences {
+            attachments: AttachmentSettings {
+                soft_warn_bytes: soft,
+                hard_cap_bytes: hard,
+            },
+            ..AppPreferences::default()
+        }
+    }
+
+    #[test]
+    fn attachment_soft_above_hard_is_rejected() {
+        // A soft warning that sits above the hard cap is nonsensical: every
+        // file the user could add is either rejected (over hard) or silent
+        // (under soft) — the warning step can never fire. Reject at the
+        // boundary so a hand-edited settings.json can't disable the warning by
+        // inverting the pair.
+        let prefs = prefs_with_attachments(30_000_000, 25_000_000);
+        match SettingsService::validate_preferences(&prefs) {
+            Err(AppError::InvalidInput(msg)) => {
+                assert!(
+                    msg.contains("softWarnBytes") && msg.contains("hardCapBytes"),
+                    "error should name both fields, got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn attachment_hard_cap_zero_is_rejected() {
+        // A zero hard cap would reject every possible file. Reject at the
+        // boundary rather than letting the add flow become a no-op.
+        let prefs = prefs_with_attachments(0, 0);
+        match SettingsService::validate_preferences(&prefs) {
+            Err(AppError::InvalidInput(msg)) => {
+                assert!(
+                    msg.contains("hardCapBytes"),
+                    "error should name hardCapBytes, got: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn attachment_soft_equal_to_hard_is_accepted() {
+        // soft == hard is a valid boundary: every over-soft file is also over
+        // hard, so the warning never fires but the config is coherent.
+        let prefs = prefs_with_attachments(25_000_000, 25_000_000);
+        SettingsService::validate_preferences(&prefs).expect("soft == hard should validate");
+    }
+
+    #[test]
+    fn attachment_defaults_validate() {
+        let prefs = prefs_with_attachments(5_000_000, 25_000_000);
+        SettingsService::validate_preferences(&prefs).expect("documented defaults should validate");
+    }
 
     fn prefs_with_directory(dir: Option<&str>) -> AppPreferences {
         AppPreferences {

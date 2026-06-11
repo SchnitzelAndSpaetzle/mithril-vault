@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Contraseña revelada",
       "entryPasswordCopied": "Contraseña copiada",
       "entryProtectedFieldRevealed": "Campo protegido revelado",
+      "entryAttachmentExported": "Adjunto descargado",
       "preferencesSecurityChanged": "Preferencia de seguridad modificada",
       "auditCleared": "Registro de auditoría borrado"
     },
@@ -172,6 +173,18 @@
         "validation": "La retención debe estar entre 1 y 365 días."
       }
     },
+    "attachments": {
+      "title": "Adjuntos",
+      "description": "Límites de tamaño por archivo para los archivos adjuntos a las entradas.",
+      "softWarn": {
+        "label": "Advertir a partir de (MB)",
+        "description": "Añadir un archivo mayor que esto pide confirmación antes de guardarlo."
+      },
+      "hardCap": {
+        "label": "Rechazar a partir de (MB)",
+        "description": "Los archivos mayores que esto se rechazan. Debe ser al menos el umbral de advertencia."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -244,6 +257,13 @@
     "loadError": "Error al cargar las entradas: {{error}}",
     "noEntries": "No se encontraron entradas.",
     "noEntriesWithTag": "No hay entradas con la etiqueta \"{{tag}}\".",
+    "attachmentIndicator": "Tiene adjuntos",
+    "noEntriesWithAttachments": "No hay entradas con adjuntos.",
+    "noEntriesMatchFilters": "Ninguna entrada coincide con los filtros activos.",
+    "filter": {
+      "title": "Filtrar",
+      "hasAttachments": "Tiene adjuntos"
+    },
     "newEntry": "nueva entrada",
     "editEntry": "editar entrada",
     "deleteEntry": "eliminar entrada",
@@ -342,11 +362,32 @@
       "revealField": "revelar {{field}}",
       "hideField": "ocultar {{field}}",
       "attachments": "Adjuntos",
-      "noAttachments": "Sin adjuntos"
+      "noAttachments": "Sin adjuntos",
+      "addAttachment": "Añadir adjunto",
+      "addingAttachments": "Añadiendo…",
+      "dropToAttach": "Suelta archivos aquí para adjuntarlos",
+      "attachmentsAdded_one": "{{count}} adjunto añadido",
+      "attachmentsAdded_other": "{{count}} adjuntos añadidos",
+      "attachmentAddFailed": "No se pudo añadir {{filename}}: {{reason}}",
+      "attachmentAddBatchFailed": "No se pudieron añadir los adjuntos",
+      "attachmentSoftWarnConfirmTitle": "¿Añadir un adjunto grande?",
+      "attachmentSoftWarnConfirm": "Los adjuntos grandes aumentan el tamaño del baúl y ralentizan el guardado: ¿añadir de todos modos?",
+      "downloadAttachment": "Descargar adjunto",
+      "attachmentDownloaded": "{{filename}} descargado",
+      "attachmentDownloadFailed": "No se pudo descargar {{filename}}",
+      "deleteAttachment": "Eliminar adjunto",
+      "deleteAttachmentConfirmTitle": "Eliminar adjunto",
+      "deleteAttachmentConfirm": "¿Quitar {{filename}} de esta entrada?",
+      "attachmentDeleted": "{{filename}} eliminado",
+      "attachmentDeleteFailed": "No se pudo eliminar {{filename}}",
+      "previewAttachment": "Previsualizar adjunto",
+      "attachmentPreviewLoading": "Cargando vista previa…",
+      "attachmentPreviewTooLarge": "Demasiado grande para previsualizar — descarga para verlo"
     },
     "sort": {
       "sortBy": "Ordenar por",
       "sortEntries": "Ordenar entradas",
+      "sortEntriesFiltered": "Ordenar entradas (filtro de adjuntos activo)",
       "order": "Orden",
       "title": "Título",
       "username": "Nombre de usuario",

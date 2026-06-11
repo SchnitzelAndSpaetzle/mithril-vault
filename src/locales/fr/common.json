@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Mot de passe affiché",
       "entryPasswordCopied": "Mot de passe copié",
       "entryProtectedFieldRevealed": "Champ protégé affiché",
+      "entryAttachmentExported": "Pièce jointe téléchargée",
       "preferencesSecurityChanged": "Préférence de sécurité modifiée",
       "auditCleared": "Journal d'audit effacé"
     },
@@ -172,6 +173,18 @@
         "validation": "La conservation doit être comprise entre 1 et 365 jours."
       }
     },
+    "attachments": {
+      "title": "Pièces jointes",
+      "description": "Limites de taille par fichier pour les fichiers joints aux entrées.",
+      "softWarn": {
+        "label": "Avertir au-delà de (Mo)",
+        "description": "Ajouter un fichier plus grand que cela demande une confirmation avant l'enregistrement."
+      },
+      "hardCap": {
+        "label": "Refuser au-delà de (Mo)",
+        "description": "Les fichiers plus grands que cela sont refusés. Doit être au moins égal au seuil d'avertissement."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -244,6 +257,13 @@
     "loadError": "Échec du chargement des entrées : {{error}}",
     "noEntries": "Aucune entrée trouvée.",
     "noEntriesWithTag": "Aucune entrée avec l'étiquette « {{tag}} ».",
+    "attachmentIndicator": "Contient des pièces jointes",
+    "noEntriesWithAttachments": "Aucune entrée avec des pièces jointes.",
+    "noEntriesMatchFilters": "Aucune entrée ne correspond aux filtres actifs.",
+    "filter": {
+      "title": "Filtrer",
+      "hasAttachments": "Contient des pièces jointes"
+    },
     "newEntry": "nouvelle entrée",
     "editEntry": "modifier l'entrée",
     "deleteEntry": "supprimer l'entrée",
@@ -342,11 +362,32 @@
       "revealField": "révéler {{field}}",
       "hideField": "masquer {{field}}",
       "attachments": "Pièces jointes",
-      "noAttachments": "Aucune pièce jointe"
+      "noAttachments": "Aucune pièce jointe",
+      "addAttachment": "Ajouter une pièce jointe",
+      "addingAttachments": "Ajout…",
+      "dropToAttach": "Déposez des fichiers ici pour les joindre",
+      "attachmentsAdded_one": "{{count}} pièce jointe ajoutée",
+      "attachmentsAdded_other": "{{count}} pièces jointes ajoutées",
+      "attachmentAddFailed": "Échec de l'ajout de {{filename}} : {{reason}}",
+      "attachmentAddBatchFailed": "Échec de l'ajout des pièces jointes",
+      "attachmentSoftWarnConfirmTitle": "Ajouter une pièce jointe volumineuse ?",
+      "attachmentSoftWarnConfirm": "Les pièces jointes volumineuses augmentent la taille du coffre et ralentissent l'enregistrement — ajouter quand même ?",
+      "downloadAttachment": "Télécharger la pièce jointe",
+      "attachmentDownloaded": "{{filename}} téléchargé",
+      "attachmentDownloadFailed": "Échec du téléchargement de {{filename}}",
+      "deleteAttachment": "Supprimer la pièce jointe",
+      "deleteAttachmentConfirmTitle": "Supprimer la pièce jointe",
+      "deleteAttachmentConfirm": "Retirer {{filename}} de cette entrée ?",
+      "attachmentDeleted": "{{filename}} supprimé",
+      "attachmentDeleteFailed": "Échec de la suppression de {{filename}}",
+      "previewAttachment": "Prévisualiser la pièce jointe",
+      "attachmentPreviewLoading": "Chargement de l'aperçu…",
+      "attachmentPreviewTooLarge": "Trop volumineux pour la prévisualisation — téléchargez pour consulter"
     },
     "sort": {
       "sortBy": "Trier par",
       "sortEntries": "Trier les entrées",
+      "sortEntriesFiltered": "Trier les entrées (filtre de pièces jointes actif)",
       "order": "Ordre",
       "title": "Titre",
       "username": "Nom d'utilisateur",

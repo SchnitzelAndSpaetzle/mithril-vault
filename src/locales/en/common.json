@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Password revealed",
       "entryPasswordCopied": "Password copied",
       "entryProtectedFieldRevealed": "Protected field revealed",
+      "entryAttachmentExported": "Attachment downloaded",
       "preferencesSecurityChanged": "Security preference changed",
       "auditCleared": "Audit log cleared"
     },
@@ -172,6 +173,18 @@
         "validation": "Retention must be between 1 and 365 days."
       }
     },
+    "attachments": {
+      "title": "Attachments",
+      "description": "Per-file size guardrails for files attached to entries.",
+      "softWarn": {
+        "label": "Warn above (MB)",
+        "description": "Adding a file larger than this prompts for confirmation before it is stored."
+      },
+      "hardCap": {
+        "label": "Reject above (MB)",
+        "description": "Files larger than this are rejected. Must be at least the warning threshold."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -267,6 +280,13 @@
     "loadError": "Failed to load entries: {{error}}",
     "noEntries": "No entries found.",
     "noEntriesWithTag": "No entries with tag \"{{tag}}\".",
+    "attachmentIndicator": "Has attachments",
+    "noEntriesWithAttachments": "No entries with attachments.",
+    "noEntriesMatchFilters": "No entries match the active filters.",
+    "filter": {
+      "title": "Filter",
+      "hasAttachments": "Has attachments"
+    },
     "newEntry": "new entry",
     "editEntry": "edit entry",
     "deleteEntry": "delete entry",
@@ -365,11 +385,32 @@
       "revealField": "reveal {{field}}",
       "hideField": "hide {{field}}",
       "attachments": "Attachments",
-      "noAttachments": "No attachments"
+      "noAttachments": "No attachments",
+      "addAttachment": "Add attachment",
+      "addingAttachments": "Adding…",
+      "dropToAttach": "Drop files here to attach",
+      "attachmentsAdded_one": "Added {{count}} attachment",
+      "attachmentsAdded_other": "Added {{count}} attachments",
+      "attachmentAddFailed": "Failed to add {{filename}}: {{reason}}",
+      "attachmentAddBatchFailed": "Failed to add attachments",
+      "attachmentSoftWarnConfirmTitle": "Add large attachment?",
+      "attachmentSoftWarnConfirm": "Large attachments increase vault size and slow saving — add anyway?",
+      "downloadAttachment": "Download attachment",
+      "attachmentDownloaded": "Downloaded {{filename}}",
+      "attachmentDownloadFailed": "Failed to download {{filename}}",
+      "deleteAttachment": "Delete attachment",
+      "deleteAttachmentConfirmTitle": "Delete attachment",
+      "deleteAttachmentConfirm": "Remove {{filename}} from this entry?",
+      "attachmentDeleted": "Deleted {{filename}}",
+      "attachmentDeleteFailed": "Failed to delete {{filename}}",
+      "previewAttachment": "Preview attachment",
+      "attachmentPreviewLoading": "Loading preview…",
+      "attachmentPreviewTooLarge": "Too large to preview — download to view"
     },
     "sort": {
       "sortBy": "Sort by",
       "sortEntries": "Sort entries",
+      "sortEntriesFiltered": "Sort entries (attachment filter active)",
       "order": "Order",
       "title": "Title",
       "username": "Username",

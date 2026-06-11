@@ -1,5 +1,5 @@
 import type { CustomIconMap, Entry, Finding } from "@/lib/types";
-import { OctagonAlert, TriangleAlert } from "lucide-react";
+import { OctagonAlert, Paperclip, TriangleAlert } from "lucide-react";
 import { createElement, memo } from "react";
 import { useTranslation } from "react-i18next";
 import { severityOf } from "@/lib/password-health";
@@ -51,7 +51,9 @@ const EntryListItem = memo(function EntryListItem({
   reusedGroupSize,
   expires,
   expiryTime,
+  attachments,
 }: EntryListItemProps) {
+  const { t } = useTranslation();
   const iconComponent = getKeepassIcon(iconId ?? 0);
   const expired = isExpired({ expires, expiryTime }, new Date());
   const customIcon = customIconUuid ? customIcons[customIconUuid] : null;
@@ -73,7 +75,11 @@ const EntryListItem = memo(function EntryListItem({
         isSelected && "bg-accent"
       )}
     >
-      <a className="w-full min-w-0 overflow-hidden" onClick={handleClick}>
+      <button
+        type="button"
+        className="w-full min-w-0 overflow-hidden text-left"
+        onClick={handleClick}
+      >
         <ItemMedia>
           <Avatar className="size-10">
             <AvatarImage src={customIconSrc} alt="" />
@@ -96,6 +102,12 @@ const EntryListItem = memo(function EntryListItem({
           </ItemDescription>
         </ItemContent>
         <ItemActions className="shrink-0">
+          {attachments.length > 0 && (
+            <Paperclip
+              className="size-4 text-muted-foreground"
+              aria-label={t("entries.attachmentIndicator")}
+            />
+          )}
           {findings && findings.length > 0 && (
             <FindingsIndicator
               findings={findings}
@@ -103,7 +115,7 @@ const EntryListItem = memo(function EntryListItem({
             />
           )}
         </ItemActions>
-      </a>
+      </button>
     </Item>
   );
 });

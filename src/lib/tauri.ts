@@ -3,6 +3,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod/v4";
 import type {
+  AddAttachmentsOutcome,
+  AttachmentAddPlan,
   AppPreferences,
   AuditEventsResponse,
   AuditFilter,
@@ -28,6 +30,8 @@ import type {
   UpdateEntryData,
 } from "./types";
 import {
+  AddAttachmentsOutcomeSchema,
+  AttachmentAddPlanSchema,
   AppPreferencesSchema,
   AuditEventsResponseSchema,
   AuditStatusSchema,
@@ -302,6 +306,120 @@ export const entries = {
     IdSchema.parse({ id });
     const result = await invoke("get_entry_password", { dbId, id });
     return z.string().parse(result);
+  },
+
+  /**
+   * Phase 1 (picker): opens the multi-select file dialog *in Rust*, buffers the
+   * picked paths backend-side, and returns the size-classification plan against
+   * the configured thresholds — without reading bytes or mutating the Vault.
+   * The frontend passes no path, so a fabricated path can never reach the read
+   * (the trust boundary in ADR-0004). A cancelled dialog returns an empty plan
+   * (no-op). The caller inspects `requiresConfirmation`: if true it shows the
+   * soft-warning prompt before calling {@link commitPreparedAttachments};
+   * otherwise it commits directly.
+   */
+  async preparePickedAttachments(): Promise<AttachmentAddPlan> {
+    const result = await invoke("prepare_picked_attachments");
+    return AttachmentAddPlanSchema.parse(result);
+  },
+
+  /**
+   * Phase 1 (drag-drop): classifies the paths captured *in Rust* from the most
+   * recent native `tauri://drag-drop` event against the configured thresholds,
+   * without draining them (a peek) — so they survive for the commit that
+   * follows a confirmation. The renderer supplies no path (ADR-0004). A peek
+   * with no preceding drop returns an empty plan. The caller is responsible for
+   * only invoking this when a drop lands on the selected Entry's panel.
+   */
+  async prepareDroppedAttachments(): Promise<AttachmentAddPlan> {
+    const result = await invoke("prepare_dropped_attachments");
+    return AttachmentAddPlanSchema.parse(result);
+  },
+
+  /**
+   * Phase 2 (shared): drains the buffered paths for `batchId` and stores each as
+   * a native KDBX binary, enforcing the configured hard cap. Called after the
+   * frontend has resolved any soft-warning confirmation, for both the picker and
+   * the drop. `batchId` comes from the plan returned by the matching prepare; the
+   * backend stores the batch only if that id still matches the current buffer
+   * generation, so a later pick/drop that superseded the prepared batch (e.g. a
+   * stray drop while the confirmation prompt was open) makes this commit a no-op
+   * rather than attaching the wrong file. Returns the batch outcome — `added`
+   * stored names plus per-file `failed` entries. The caller persists via
+   * `database.save` and refreshes the entry when anything landed.
+   */
+  async commitPreparedAttachments(
+    dbId: string,
+    id: string,
+    batchId: number
+  ): Promise<AddAttachmentsOutcome> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("commit_prepared_attachments", {
+      dbId,
+      id,
+      batchId,
+    });
+    return AddAttachmentsOutcomeSchema.parse(result);
+  },
+
+  /**
+   * Exports (downloads) a single Attachment by writing its bytes to a
+   * user-chosen path. The save dialog runs in the UI; the resolved
+   * `destPath` is handed to the backend, which fetches the bytes and writes
+   * them in Rust so decrypted data never crosses into JS. A successful write
+   * records an `entry.attachment_exported` audit event.
+   */
+  async exportAttachment(
+    dbId: string,
+    id: string,
+    filename: string,
+    destPath: string
+  ): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    await invoke("export_entry_attachment", { dbId, id, filename, destPath });
+  },
+
+  /**
+   * Fetches a single Attachment's bytes on demand, keyed by filename. Used by
+   * the in-app Preview modal to render image/text payloads inline without
+   * exporting to disk. Records no audit event — Preview is a read inside the
+   * Vault, not an export to the host filesystem. Returns the raw bytes as a
+   * `Uint8Array`; the backend serializes its `SecureBytes` as a JSON number
+   * array over IPC, which we widen to `Uint8Array` at the boundary so
+   * callers can construct `data:` URLs or decode UTF-8 directly.
+   */
+  async getAttachmentBytes(
+    dbId: string,
+    id: string,
+    filename: string
+  ): Promise<Uint8Array> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke<number[]>("get_entry_attachment", {
+      dbId,
+      id,
+      filename,
+    });
+    return Uint8Array.from(result);
+  },
+
+  /**
+   * Removes a single Attachment from an Entry, keyed by filename. The backend
+   * drops the Entry's reference and (when it was the last reference) the
+   * orphaned blob from the Vault-level pool, then marks the Vault modified.
+   * The caller persists via `database.save` and refreshes the entry. There is
+   * no undo, so the UI confirms before invoking this.
+   */
+  async deleteAttachment(
+    dbId: string,
+    id: string,
+    filename: string
+  ): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    await invoke("delete_entry_attachment", { dbId, id, filename });
   },
 
   async getProtectedCustomField(

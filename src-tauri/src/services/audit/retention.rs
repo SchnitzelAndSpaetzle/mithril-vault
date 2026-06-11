@@ -88,6 +88,7 @@ fn event_timestamp(event: &AuditEvent) -> DateTime<Utc> {
         | AuditEvent::EntryPasswordRevealed { timestamp, .. }
         | AuditEvent::EntryPasswordCopied { timestamp, .. }
         | AuditEvent::EntryProtectedFieldRevealed { timestamp, .. }
+        | AuditEvent::EntryAttachmentExported { timestamp, .. }
         | AuditEvent::PreferencesSecurityChanged { timestamp, .. }
         | AuditEvent::AuditCleared { timestamp } => *timestamp,
     }

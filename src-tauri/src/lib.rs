@@ -9,26 +9,29 @@ pub mod utils;
 use crate::dto::error::AppError;
 use commands::{
     add_recent_database, clear_audit_log, clear_clipboard, clear_entry_custom_icon,
-    clear_recent_databases, clear_session_key, close_database, copy_password_to_clipboard,
-    copy_protected_field_to_clipboard, copy_text_to_clipboard, create_database, create_entry,
-    create_group, create_manual_backup, delete_backup, delete_entry, delete_group, delete_tag,
+    clear_recent_databases, clear_session_key, close_database, commit_prepared_attachments,
+    copy_password_to_clipboard, copy_protected_field_to_clipboard, copy_text_to_clipboard,
+    create_database, create_entry, create_group, create_manual_backup, delete_backup, delete_entry,
+    delete_entry_attachment, delete_group, delete_tag, export_entry_attachment,
     fetch_entry_favicon, generate_keyfile, generate_passphrase, generate_password,
     get_app_preferences, get_audit_events, get_audit_status, get_custom_icons, get_database_config,
-    get_database_info, get_entry, get_entry_password, get_entry_protected_custom_field, get_group,
-    get_group_entry_counts, get_keyfile_for_database, get_password_health_report,
-    get_recent_databases, get_recycle_bin_id, get_window_content_protection_supported,
-    has_session_key, inspect_database, list_backups, list_entries, list_groups,
-    list_open_databases, lock_database, move_entry, move_group, open_database,
-    open_database_with_keyfile, open_database_with_keyfile_only, remove_recent_database,
-    rename_group, rename_tag, report_activity, reset_app_preferences, restore_backup,
-    save_database, set_entry_custom_icon, set_window_content_protected, store_session_key,
-    unlock_database, update_app_preferences, update_entry, update_group,
+    get_database_info, get_entry, get_entry_attachment, get_entry_password,
+    get_entry_protected_custom_field, get_group, get_group_entry_counts, get_keyfile_for_database,
+    get_password_health_report, get_recent_databases, get_recycle_bin_id,
+    get_window_content_protection_supported, has_session_key, inspect_database, list_backups,
+    list_entries, list_groups, list_open_databases, lock_database, move_entry, move_group,
+    open_database, open_database_with_keyfile, open_database_with_keyfile_only,
+    prepare_dropped_attachments, prepare_picked_attachments, remove_recent_database, rename_group,
+    rename_tag, report_activity, reset_app_preferences, restore_backup, save_database,
+    set_entry_custom_icon, set_window_content_protected, store_session_key, unlock_database,
+    update_app_preferences, update_entry, update_group,
 };
 use services::audit::format::Reason;
 use services::audit::key::FileBackedAuditKey;
 use services::audit::AuditService;
 use services::auto_lock::AutoLockService;
 use services::clipboard::ClipboardService;
+use services::drag_drop::PendingAttachmentPaths;
 use services::kdbx::KdbxService;
 use services::password_health::service::PasswordHealthService;
 use services::secure_storage::SecureStorageService;
@@ -42,6 +45,19 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Capture dropped file paths from the native window event *in Rust* so
+        // the renderer never names a file for the add (#286, ADR-0004). The
+        // paths are buffered here; the renderer inspects their sizes via
+        // `prepare_dropped_attachments` (a peek) and, after resolving any
+        // soft-warning confirmation, commits them via
+        // `commit_prepared_attachments`, which drains the buffer.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                if let Some(buffer) = window.try_state::<Arc<PendingAttachmentPaths>>() {
+                    buffer.replace(paths.clone());
+                }
+            }
+        })
         .setup(|app| {
             let handle = app.handle();
             register_services(handle)?;
@@ -70,6 +86,12 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
             generate_keyfile,
             list_entries,
             get_entry,
+            get_entry_attachment,
+            prepare_picked_attachments,
+            prepare_dropped_attachments,
+            commit_prepared_attachments,
+            export_entry_attachment,
+            delete_entry_attachment,
             get_entry_password,
             get_entry_protected_custom_field,
             create_entry,
@@ -137,6 +159,13 @@ pub fn register_services<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Ap
     let kdbx_service = KdbxService::new();
     let kdbx_arc = Arc::new(kdbx_service);
     app.manage(Arc::clone(&kdbx_arc));
+
+    // Holds the paths of an in-flight attachment-add gesture (a native
+    // drag-drop or a file-picker pick) so the trusted add path can read them
+    // without the renderer naming a file (#286, ADR-0004). Filled by the
+    // `on_window_event` handler or `prepare_picked_attachments`, peeked by the
+    // prepare step, drained by `commit_prepared_attachments`.
+    app.manage(Arc::new(PendingAttachmentPaths::default()));
 
     let clipboard_service = ClipboardService::new();
     app.manage(Arc::new(clipboard_service));

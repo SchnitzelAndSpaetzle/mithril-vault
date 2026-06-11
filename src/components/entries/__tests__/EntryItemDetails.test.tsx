@@ -13,6 +13,7 @@ import { useEntryDetail } from "@/hooks/use-entry-detail";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
+import type * as ReactQuery from "@tanstack/react-query";
 import type { Entry } from "@/lib/types";
 
 const mockEntry: Entry = {
@@ -62,8 +63,17 @@ vi.mock("@/hooks/use-clipboard-countdown", () => ({
 
 vi.mock("@/lib/tauri", () => ({
   clipboard: { copyPassword: vi.fn(), copyProtectedField: vi.fn() },
-  entries: { getProtectedCustomField: vi.fn() },
+  entries: { getProtectedCustomField: vi.fn(), deleteAttachment: vi.fn() },
+  database: { save: vi.fn() },
 }));
+
+// The attachments section reaches for a QueryClient to invalidate after a
+// delete; these tests render without a provider and never trigger a delete,
+// so a stub client keeps the component mountable.
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof ReactQuery>();
+  return { ...actual, useQueryClient: () => ({ invalidateQueries: vi.fn() }) };
+});
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),

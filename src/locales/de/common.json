@@ -34,6 +34,7 @@
       "entryPasswordRevealed": "Passwort angezeigt",
       "entryPasswordCopied": "Passwort kopiert",
       "entryProtectedFieldRevealed": "Geschütztes Feld angezeigt",
+      "entryAttachmentExported": "Anhang heruntergeladen",
       "preferencesSecurityChanged": "Sicherheitseinstellung geändert",
       "auditCleared": "Audit-Protokoll geleert"
     },
@@ -172,6 +173,18 @@
         "validation": "Die Aufbewahrung muss zwischen 1 und 365 Tagen liegen."
       }
     },
+    "attachments": {
+      "title": "Anhänge",
+      "description": "Größenbeschränkungen pro Datei für an Einträge angehängte Dateien.",
+      "softWarn": {
+        "label": "Warnen ab (MB)",
+        "description": "Beim Hinzufügen einer größeren Datei wird vor dem Speichern eine Bestätigung verlangt."
+      },
+      "hardCap": {
+        "label": "Ablehnen ab (MB)",
+        "description": "Größere Dateien werden abgelehnt. Muss mindestens dem Warnschwellenwert entsprechen."
+      }
+    },
     "backups": {
       "title": "Backups",
       "description": "Automatic snapshots of your vault file before every save.",
@@ -244,6 +257,13 @@
     "loadError": "Einträge konnten nicht geladen werden: {{error}}",
     "noEntries": "Keine Einträge gefunden.",
     "noEntriesWithTag": "Keine Einträge mit Tag \"{{tag}}\".",
+    "attachmentIndicator": "Hat Anhänge",
+    "noEntriesWithAttachments": "Keine Einträge mit Anhängen.",
+    "noEntriesMatchFilters": "Keine Einträge entsprechen den aktiven Filtern.",
+    "filter": {
+      "title": "Filter",
+      "hasAttachments": "Hat Anhänge"
+    },
     "newEntry": "Neuer Eintrag",
     "editEntry": "Eintrag bearbeiten",
     "deleteEntry": "Eintrag löschen",
@@ -342,11 +362,32 @@
       "revealField": "{{field}} anzeigen",
       "hideField": "{{field}} verbergen",
       "attachments": "Anhänge",
-      "noAttachments": "Keine Anhänge"
+      "noAttachments": "Keine Anhänge",
+      "addAttachment": "Anhang hinzufügen",
+      "addingAttachments": "Wird hinzugefügt…",
+      "dropToAttach": "Dateien hier ablegen, um sie anzuhängen",
+      "attachmentsAdded_one": "{{count}} Anhang hinzugefügt",
+      "attachmentsAdded_other": "{{count}} Anhänge hinzugefügt",
+      "attachmentAddFailed": "{{filename}} konnte nicht hinzugefügt werden: {{reason}}",
+      "attachmentAddBatchFailed": "Anhänge konnten nicht hinzugefügt werden",
+      "attachmentSoftWarnConfirmTitle": "Großen Anhang hinzufügen?",
+      "attachmentSoftWarnConfirm": "Große Anhänge vergrößern den Tresor und verlangsamen das Speichern – trotzdem hinzufügen?",
+      "downloadAttachment": "Anhang herunterladen",
+      "attachmentDownloaded": "{{filename}} heruntergeladen",
+      "attachmentDownloadFailed": "{{filename}} konnte nicht heruntergeladen werden",
+      "deleteAttachment": "Anhang löschen",
+      "deleteAttachmentConfirmTitle": "Anhang löschen",
+      "deleteAttachmentConfirm": "{{filename}} aus diesem Eintrag entfernen?",
+      "attachmentDeleted": "{{filename}} gelöscht",
+      "attachmentDeleteFailed": "{{filename}} konnte nicht gelöscht werden",
+      "previewAttachment": "Anhang anzeigen",
+      "attachmentPreviewLoading": "Vorschau wird geladen…",
+      "attachmentPreviewTooLarge": "Zu groß für die Vorschau – zum Anzeigen herunterladen"
     },
     "sort": {
       "sortBy": "Sortieren nach",
       "sortEntries": "Einträge sortieren",
+      "sortEntriesFiltered": "Einträge sortieren (Anhangsfilter aktiv)",
       "order": "Reihenfolge",
       "title": "Titel",
       "username": "Benutzername",

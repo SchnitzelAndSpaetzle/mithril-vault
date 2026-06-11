@@ -306,6 +306,39 @@ describe("AuditLogSection", () => {
     );
   });
 
+  it("renders an entry.attachment_exported row showing the filename and resolved title", async () => {
+    listMock.mockResolvedValueOnce({
+      events: [
+        {
+          kind: "entryAttachmentExported",
+          timestamp: "2026-06-09T10:00:00.000Z",
+          entryId: "uuid-att-1234567890",
+          attachmentId: "recovery-codes.txt",
+        },
+      ],
+      degraded: false,
+    });
+
+    const dbId = TEST_DB_ID;
+    const Wrapper = createWrapper((qc) => {
+      qc.setQueryData(queryKeys.entries.list(dbId, null), [
+        { id: "uuid-att-1234567890", title: "GitHub" },
+      ]);
+    });
+    render(
+      <Wrapper>
+        <AuditLogSection dbId={dbId} />
+      </Wrapper>
+    );
+
+    const row = await screen.findByRole("listitem");
+    expect(row.dataset["kind"]).toBe("entryAttachmentExported");
+    // The exported Attachment's filename is the distinguishing detail.
+    expect(row.textContent).toContain("recovery-codes.txt");
+    // Entry title still resolves from the cache, like other entry rows.
+    expect(row.textContent).toContain("GitHub");
+  });
+
   it("renders an entry.password_copied row with the resolved title", async () => {
     listMock.mockResolvedValueOnce({
       events: [

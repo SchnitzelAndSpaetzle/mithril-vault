@@ -1,10 +1,11 @@
-import { createElement, useCallback, useState } from "react";
+import { createElement, useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import dayjs from "dayjs";
 import { Separator } from "@/components/ui/separator.tsx";
 import {
   Check,
   Copy,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
@@ -13,6 +14,8 @@ import {
   Image,
   Keyboard,
   Loader2,
+  Paperclip,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,12 +30,20 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useCustomIcons } from "@/hooks/use-custom-icons";
 import { useClipboardCountdown } from "@/hooks/use-clipboard-countdown";
 import { useClipboardTimeout } from "@/hooks/use-clipboard-timeout";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useAttachmentDrop } from "@/hooks/use-attachment-drop";
+import { useQueryClient } from "@tanstack/react-query";
 import { clipboard, entries as entriesApi } from "@/lib/tauri";
+import { queryKeys } from "@/lib/query-keys";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import { getKeepassIcon } from "@/lib/keepass-icons";
 import { isExpired } from "@/lib/entry-expiry";
 import { formatAttachmentSize } from "@/lib/entry-attachment";
+import { classifyAttachment } from "@/lib/attachment-preview";
+import { AttachmentPreviewModal } from "@/components/entries/AttachmentPreviewModal";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { ask, save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import type { AttachmentMeta, CustomFieldMeta } from "@/lib/types";
 
@@ -184,7 +195,12 @@ export default function EntryItemDetails({
       )}
 
       {/* Attachments */}
-      <AttachmentsSection attachments={entry.attachments} />
+      <AttachmentsSection
+        attachments={entry.attachments}
+        dbId={dbId}
+        entryId={entryId}
+        isDisabled={isTransitioning}
+      />
 
       {/* Metadata */}
       <div className="border rounded-md">
@@ -275,13 +291,14 @@ function PasswordRow({
     }
   };
 
-  const displayValue = isLoading ? (
-    <Loader2 className="inline h-3 w-3 animate-spin" />
-  ) : isVisible ? (
-    password
-  ) : (
-    "••••••••"
-  );
+  let displayValue: React.ReactNode;
+  if (isLoading) {
+    displayValue = <Loader2 className="inline h-3 w-3 animate-spin" />;
+  } else if (isVisible) {
+    displayValue = password;
+  } else {
+    displayValue = "••••••••";
+  }
 
   return (
     <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
@@ -443,13 +460,14 @@ function ProtectedCustomFieldRow({
     }
   };
 
-  const displayValue = isLoading ? (
-    <Loader2 className="inline h-3 w-3 animate-spin" />
-  ) : isVisible ? (
-    value
-  ) : (
-    "••••••••"
-  );
+  let displayValue: React.ReactNode;
+  if (isLoading) {
+    displayValue = <Loader2 className="inline h-3 w-3 animate-spin" />;
+  } else if (isVisible) {
+    displayValue = value;
+  } else {
+    displayValue = "••••••••";
+  }
 
   return (
     <div className="flex min-w-0 justify-between items-center px-4 py-2 gap-2">
@@ -562,10 +580,32 @@ function attachmentIcon(mimeType: string) {
 
 function AttachmentsSection({
   attachments,
+  dbId,
+  entryId,
+  isDisabled,
 }: Readonly<{
   attachments: AttachmentMeta[];
+  dbId: string;
+  entryId: string;
+  isDisabled: boolean;
 }>) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Guards against overlapping add gestures. Both write paths (picker, drop)
+  // buffer their paths in one shared Rust-side buffer, so a second gesture
+  // started while the first is still awaiting its confirmation prompt would
+  // overwrite the first's paths before it commits. The ref is the synchronous
+  // guard (a double-click can't slip through between renders); `isAdding` is the
+  // rendered mirror that drives the spinner and disables the controls so the
+  // user can see the work and can't accidentally re-trigger or interrupt it.
+  const addInFlightRef = useRef(false);
+  const [isAdding, setIsAdding] = useState(false);
+  // The Attachment the user opened the Preview modal on, or null when the
+  // modal is closed. Kept at the section level so the modal sits outside the
+  // row mapping (one modal, not one per row).
+  const [previewing, setPreviewing] = useState<AttachmentMeta | null>(null);
 
   // Sorted by filename, case-insensitively, for a stable display order (the
   // KDBX binary pool is unordered). Copy first so we never mutate props.
@@ -573,12 +613,236 @@ function AttachmentsSection({
     a.filename.localeCompare(b.filename, undefined, { sensitivity: "base" })
   );
 
+  // Preview fetches the bytes on demand via the same lazy byte-fetch the
+  // download path uses (no audit event — Preview is a read inside the Vault,
+  // not an export to the host filesystem).
+  const fetchPreviewBytes = useCallback(
+    (filename: string) =>
+      entriesApi.getAttachmentBytes(dbId, entryId, filename),
+    [dbId, entryId]
+  );
+
+  // Download is the only export path (ADR-0003): pick a destination with the
+  // original filename pre-filled, then let the backend fetch the bytes and
+  // write them in Rust so decrypted data never crosses into JS. A cancelled
+  // dialog (null path) is a no-op; the audit event fires backend-side only on
+  // a successful write.
+  const handleDownload = async (filename: string) => {
+    // Guard against a click landing mid-transition: useEntryDetail serves the
+    // previous entry as placeholder data while switching, so the displayed
+    // filename could belong to a different entry than the current entryId.
+    if (isDisabled) return;
+    try {
+      const destPath = await save({ defaultPath: filename });
+      if (!destPath) return;
+      await entriesApi.exportAttachment(dbId, entryId, filename, destPath);
+      toast.success(t("entries.detail.attachmentDownloaded", { filename }));
+    } catch (error) {
+      console.error("Failed to download attachment:", error);
+      toast.error(t("entries.detail.attachmentDownloadFailed", { filename }));
+    }
+  };
+
+  // Refreshes the entry detail and any list views after the in-memory Vault
+  // changed, so added/removed attachment rows reflect backend state.
+  const invalidateEntryQueries = () =>
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.entries.detail(dbId, entryId),
+      }),
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === queryKeys.entries.all[0] &&
+          query.queryKey[1] === dbId,
+      }),
+    ]);
+
+  // Shared tail for both add paths (picker and drag-drop): the backend has
+  // already read, size-capped, and auto-renamed each file, returning a batch
+  // outcome. We surface one toast per failure naming the file and the backend's
+  // reason (e.g. "exceeds the 25 MiB limit") so the user knows which file and
+  // whether retrying could ever work, then persist once and refresh only when
+  // at least one file actually landed in the in-memory Vault — so a
+  // wholly-failed, cancelled, or empty batch leaves no phantom unsaved state.
+  const applyAddOutcome = async (
+    outcome: Awaited<ReturnType<typeof entriesApi.commitPreparedAttachments>>
+  ) => {
+    for (const failure of outcome.failed) {
+      toast.error(
+        t("entries.detail.attachmentAddFailed", {
+          filename: failure.sourceName,
+          reason: failure.reason,
+        })
+      );
+    }
+
+    if (outcome.added.length > 0) {
+      await saveWithErrorToast(dbId, t);
+      await invalidateEntryQueries();
+      toast.success(
+        t("entries.detail.attachmentsAdded", { count: outcome.added.length })
+      );
+    }
+  };
+
+  // Shared two-phase add flow for both write paths. Phase 1 (`prepare`) buffers
+  // the picked/dropped paths in Rust and returns their size classification
+  // against the configured thresholds — no bytes read, no Vault mutation. If any
+  // file is over the soft threshold we prompt before committing; declining
+  // aborts the whole batch (nothing is stored). Phase 2 (`commit`) drains the
+  // buffer and stores the files, returning the batch outcome handled by the
+  // shared tail. An empty plan (cancelled dialog, or a drop with nothing
+  // buffered) is a no-op. The frontend never sees a path — the trust boundary in
+  // ADR-0004.
+  const runAddFlow = async (
+    prepare: () => Promise<
+      Awaited<ReturnType<typeof entriesApi.preparePickedAttachments>>
+    >
+  ) => {
+    // Reject a concurrent gesture: the first one owns the shared buffer until it
+    // commits or aborts, so a second prepare here would clobber its paths.
+    if (addInFlightRef.current) return;
+    addInFlightRef.current = true;
+    setIsAdding(true);
+    try {
+      let plan: Awaited<ReturnType<typeof entriesApi.preparePickedAttachments>>;
+      try {
+        plan = await prepare();
+      } catch (error) {
+        console.error("Failed to prepare attachments:", error);
+        toast.error(t("entries.detail.attachmentAddBatchFailed"));
+        return;
+      }
+
+      // Nothing picked/dropped: a true no-op, so we never reach commit.
+      if (plan.items.length === 0) return;
+
+      if (plan.requiresConfirmation) {
+        const confirmed = await ask(
+          t("entries.detail.attachmentSoftWarnConfirm"),
+          {
+            title: t("entries.detail.attachmentSoftWarnConfirmTitle"),
+            kind: "warning",
+          }
+        );
+        // Abort the whole batch on decline: the buffered paths stay until the
+        // next pick/drop overwrites them, but nothing is stored now.
+        if (!confirmed) return;
+      }
+
+      let outcome: Awaited<
+        ReturnType<typeof entriesApi.commitPreparedAttachments>
+      >;
+      try {
+        // Echo the prepared batch id so a superseded batch (a later pick/drop)
+        // commits nothing rather than the wrong file.
+        outcome = await entriesApi.commitPreparedAttachments(
+          dbId,
+          entryId,
+          plan.batchId
+        );
+      } catch (error) {
+        console.error("Failed to add attachments:", error);
+        toast.error(t("entries.detail.attachmentAddBatchFailed"));
+        return;
+      }
+
+      await applyAddOutcome(outcome);
+    } finally {
+      addInFlightRef.current = false;
+      setIsAdding(false);
+    }
+  };
+
+  // Add is the primary write path: the picker opens the multi-select dialog in
+  // Rust (ADR-0004) and buffers the chosen paths for the shared flow.
+  const handleAdd = async () => {
+    if (isDisabled) return;
+    await runAddFlow(() => entriesApi.preparePickedAttachments());
+  };
+
+  // Drag-and-drop is the second write path (desktop only). The dropped paths
+  // were captured in Rust from the native window event (ADR-0004); the drop hook
+  // has already scoped the drop to this panel. From here it's identical to the
+  // picker — same classification, prompt, and commit.
+  const handleDrop = () => {
+    if (isDisabled) return;
+    void runAddFlow(() => entriesApi.prepareDroppedAttachments());
+  };
+
+  // The native drag-drop event is window-global; the hook acts only on desktop
+  // and only when a drop lands inside this panel (and not mid-transition).
+  // Ignore drops while an add is already in flight: the in-flight gesture owns
+  // the buffer, and accepting another drop would only supersede it (and be a
+  // no-op at commit anyway). Disabling here keeps the drop zone honest with the
+  // busy state the user sees.
+  const { isDragOver } = useAttachmentDrop({
+    enabled: !isMobile && !isDisabled && !isAdding,
+    panelRef,
+    onDrop: handleDrop,
+  });
+
+  // Deleting an attachment is destructive and has no undo, so we confirm
+  // first. On confirm the backend drops the Entry's reference (and the
+  // orphaned blob), then we persist and invalidate the entry queries so the
+  // row disappears. A cancelled prompt leaves the attachment intact.
+  const handleDelete = async (filename: string) => {
+    // Same mid-transition guard as download: the displayed filename could
+    // belong to the previous entry while useEntryDetail swaps placeholders.
+    if (isDisabled) return;
+    const confirmed = await ask(
+      t("entries.detail.deleteAttachmentConfirm", { filename }),
+      {
+        title: t("entries.detail.deleteAttachmentConfirmTitle"),
+        kind: "warning",
+      }
+    );
+    if (!confirmed) return;
+    try {
+      await entriesApi.deleteAttachment(dbId, entryId, filename);
+    } catch (error) {
+      console.error("Failed to delete attachment:", error);
+      toast.error(t("entries.detail.attachmentDeleteFailed", { filename }));
+      return;
+    }
+    // The reference is now gone from the in-memory Vault. Persist via the
+    // shared helper, which surfaces its own toast on a disk/backup failure
+    // without rejecting — mirroring the entry-mutation convention. We must
+    // still invalidate either way so the UI reflects backend memory (the row
+    // disappears); skipping it on save failure would leave a stale row whose
+    // later actions target an attachment that no longer exists.
+    await saveWithErrorToast(dbId, t);
+    await invalidateEntryQueries();
+    toast.success(t("entries.detail.attachmentDeleted", { filename }));
+  };
+
   return (
-    <div className="border rounded-md">
-      <div className="px-4 py-2">
+    <div ref={panelRef} className="border rounded-md">
+      <div className="flex items-center justify-between px-4 py-2">
         <small className="text-sm font-medium">
           {t("entries.detail.attachments")}
         </small>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5"
+          aria-label={t("entries.detail.addAttachment")}
+          aria-busy={isAdding}
+          disabled={isDisabled || isAdding}
+          onClick={() => void handleAdd()}
+        >
+          {isAdding ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("entries.detail.addingAttachments")}
+            </>
+          ) : (
+            <>
+              <Paperclip className="h-4 w-4" />
+              {t("entries.detail.addAttachment")}
+            </>
+          )}
+        </Button>
       </div>
       <Separator />
       {sorted.length === 0 ? (
@@ -589,6 +853,11 @@ function AttachmentsSection({
         <ul>
           {sorted.map((attachment, index) => {
             const Icon = attachmentIcon(attachment.mimeType);
+            // Non-previewable types (PDF, SVG, archives, opaque binaries)
+            // don't get a Preview affordance at all — the spec says no
+            // broken preview button.
+            const isPreviewable =
+              classifyAttachment(attachment).kind !== "none";
             return (
               <li key={attachment.filename}>
                 {index > 0 && <Separator />}
@@ -600,11 +869,71 @@ function AttachmentsSection({
                   <span className="shrink-0 text-sm text-muted-foreground">
                     {formatAttachmentSize(attachment.size)}
                   </span>
+                  {isPreviewable && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      aria-label={t("entries.detail.previewAttachment")}
+                      disabled={isDisabled}
+                      onClick={() => setPreviewing(attachment)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    aria-label={t("entries.detail.downloadAttachment")}
+                    disabled={isDisabled}
+                    onClick={() => void handleDownload(attachment.filename)}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                    aria-label={t("entries.detail.deleteAttachment")}
+                    disabled={isDisabled}
+                    onClick={() => void handleDelete(attachment.filename)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </li>
             );
           })}
         </ul>
+      )}
+      {/* Drop zone is desktop-only: mobile has no OS file-drop, so only the
+          picker button above is offered there (hidden via useIsMobile). */}
+      {!isMobile && (
+        <>
+          <Separator />
+          <div className="px-4 py-2">
+            <div
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground transition-colors",
+                isDragOver && "border-primary bg-primary/5 text-foreground"
+              )}
+            >
+              <Paperclip className="h-4 w-4" />
+              {t("entries.detail.dropToAttach")}
+            </div>
+          </div>
+        </>
+      )}
+      {previewing && (
+        <AttachmentPreviewModal
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setPreviewing(null);
+          }}
+          attachment={previewing}
+          fetchBytes={fetchPreviewBytes}
+        />
       )}
     </div>
   );
