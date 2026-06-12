@@ -6,6 +6,7 @@ The trade-off: KDBX stores no per-field change record, so the `changed_fields` l
 
 Consequences:
 - A history snapshot is pushed *before* mutating, on any change to the Entry's stored content or location, matching KeePassXC: field edits, tags (including bulk tag rename/delete — one snapshot per touched Entry), color (when added), Entry move between Groups, attachment add/delete, and custom-icon/favicon. Only pure access-time bumps are excluded. All such paths funnel through one snapshot chokepoint so coverage stays uniform as fields are added.
-- Historical secrets are fetched per-version on demand (`get_history_entry_password`), mirroring the live-entry rule; the history listing carries no passwords.
-- The History Limit is writable through its own vault-meta surface; the read-only Database Config snapshot is unaffected.
+- Historical secrets are fetched per-version on demand (`get_history_entry_password`), mirroring the live-entry rule; the history listing carries no passwords. A version is addressed by index guarded by a content fingerprint — *not* `modified_at`, which `keepass::Times` stores at second precision and so cannot disambiguate two snapshots made within the same second.
+- The History Limit is writable through its own vault-meta surface; the read-only Database Config snapshot is unaffected. `Meta.history_max_items` resolves as: absent → default 10 (new vaults never set the field, so absence must not mean unbounded), explicit negative → unlimited, `0` → disabled, positive N → keep newest N.
 - `Meta.history_max_size` (byte cap) is preserved on save but not enforced in v1; items-only pruning is enforced.
+- The snapshot chokepoint explicitly retains attachment blobs referenced only by history: a pre-mutation entry clone is not a binary-pool back-reference, so the live attachment-delete path would otherwise GC a blob a history version still needs.
