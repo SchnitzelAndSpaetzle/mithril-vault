@@ -19,6 +19,16 @@ A single credential record inside a Vault. Has a title, URL, username, password,
 ### Entry Expiry
 A user-chosen flag + timestamp on an Entry (KDBX `Times.expires` + `Times.expiry`) marking when the Entry is considered stale. It is a property of the **Entry**, not of the password field — editing the password does not reset or clear it; only the user changes the date. It is explicit and one-shot, not periodic rotation (periodic rotation stays deliberately absent per NIST, see Password Health). An Entry whose `expires` flag is set and whose `expiry` is in the past is **Expired**; this is the same condition that drives the `password.expired` Password Health Finding.
 
+### Entry History
+The ordered list of past full snapshots of an Entry, stored **natively** in the KDBX format (`keepass::Entry.history`, a `Vec<Entry>` newest-first) — *not* a parallel MithrilVault store. The same substrate that Merge writes losing versions into (see Merge), so edit-history and merge-preservation share one mechanism and stay visible in any KeePass app. A snapshot is pushed *before* mutating, on **any change to the Entry's stored content or location**, matching KeePassXC — field edits (`update_entry`), tag changes (including bulk tag rename/delete, which therefore writes one snapshot per touched Entry), color (when added), Entry move between Groups, attachment add/delete, and custom-icon/Favicon changes. Only pure access-time bumps (reads) and Recycle-Bin transitions (send-to-trash and restore-from-trash, already reversible on their own) are excluded — the move rule covers user-initiated moves between real Groups only. Every Entry-mutating path funnels through a single snapshot chokepoint so coverage stays uniform as new mutable fields are added. Historical passwords and protected fields are never embedded in the history listing — they are fetched per-version on demand, mirroring `get_entry_password`. A version is addressed by its index in the newest-first list, guarded by its `modified_at` so a concurrent edit can't silently retarget.
+_Avoid_: revision, audit trail (Audit is a separate concept).
+
+### History Limit
+The per-Entry cap on retained Entry Versions, configured **once per Vault** and stored in KDBX `Meta.history_max_items` (default 10) — a property of the Vault file that travels with it, not an App Preference. Negative/absent = unlimited, `0` = disabled (no new snapshots; existing history pruned lazily on each Entry's next edit), positive N = keep newest N (oldest pruned on append). The byte cap (`Meta.history_max_size`) is preserved but **not** enforced in v1. Distinct from the read-only Database Config snapshot: History Limit is writable through its own vault-meta write surface.
+
+### Restore From History
+Reverting a live Entry to an Entry Version: the current state is first snapshotted into history (so restore is itself undoable), then the Entry's content (all fields incl. password, attachments, icon, expiry) is overwritten from the chosen Version and `last_modification` bumped to now. The Entry's UUID and parent Group are untouched — a Version carries content, not location. Audited as `entry.history_restored`.
+
 ### Attachment
 A file stored inside a Vault and presented as belonging to a single Entry — a named binary blob (filename + bytes) the user attached to that Entry. An Entry may have many Attachments.
 
@@ -154,6 +164,7 @@ The namespaced enum of recordable events:
 - `entry.password_copied` — clipboard write of an Entry's password
 - `entry.protected_field_revealed` — reveal on a protected custom field
 - `entry.attachment_exported` — an Attachment's bytes were written to a file on disk (download); carries `entry_id` + `attachment_id` only. In-app preview, add, and delete are not audited — only leaving the Vault's encryption boundary is.
+- `entry.history_restored` — a live Entry was reverted to one of its Entry Versions (see Restore From History); carries `entry_id` only. Viewing a historical password reuses `entry.password_revealed`; clearing history is not audited.
 - `preferences.security_changed` — change to an allowlisted security-relevant App Preference, with `setting_name` only (no old/new values)
 - `audit.cleared` — user emptied the Audit Log; the record itself survives the clear
 - `vault.sync_applied` — a sync arrival changed the Vault file, with `method` (`fast_forward | merge`) and `source` (the peer Device's label, or `cloud_folder` for watcher-delivered arrivals)
