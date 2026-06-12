@@ -516,7 +516,8 @@
     "openAnother": "Abrir otra base de datos",
     "openDatabase": "Abrir base de datos",
     "settings": "Configuración",
-    "lockDatabase": "Bloquear base de datos"
+    "lockDatabase": "Bloquear base de datos",
+    "mergeFromFile": "Combinar desde archivo…"
   },
   "createDatabase": {
     "title": "Crear nueva base de datos",
@@ -662,6 +663,22 @@
   "database": {
     "save": {
       "failed": "Error al guardar la base de datos: {{error}}. Tu último cambio está en memoria pero no en disco."
+    },
+    "merge": {
+      "toast": {
+        "added_one": "{{count}} entrada añadida",
+        "added_other": "{{count}} entradas añadidas",
+        "updated_one": "{{count}} entrada actualizada",
+        "updated_other": "{{count}} entradas actualizadas",
+        "deleted_one": "{{count}} entrada eliminada",
+        "deleted_other": "{{count}} entradas eliminadas",
+        "conflicts_one": "{{count}} conflicto",
+        "conflicts_other": "{{count}} conflictos",
+        "conflictDetail": "{{title}}: se conservó la versión más reciente, la otra está en el historial",
+        "noChanges": "Ya está actualizado — nada que combinar",
+        "securityPosture": "El archivo seleccionado usa una configuración de seguridad diferente (p. ej., derivación de claves). No se aplicó — revísala en Configuración.",
+        "failed": "Error al combinar: {{error}}"
+      }
     }
   },
   "shortcuts": {

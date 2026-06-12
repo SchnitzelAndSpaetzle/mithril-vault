@@ -4,6 +4,7 @@ use crate::dto::database::{
     CustomIconData, DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
 };
 use crate::dto::error::AppError;
+use crate::dto::merge::MergeSummary;
 use crate::services::audit::format::Reason;
 use crate::services::audit::AuditService;
 use crate::services::auto_lock::AutoLockService;
@@ -14,6 +15,7 @@ use serde::Serialize;
 use std::path::Path;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri_plugin_dialog::DialogExt;
 
 /// Maps an `open_database*` result through the audit subsystem.
 ///
@@ -447,6 +449,44 @@ pub async fn list_open_databases(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<Vec<DatabaseInfo>, AppError> {
     state.list_open_databases()
+}
+
+/// "Merge from file…": merges a second KDBX file — a diverged copy of the
+/// open Vault, unlockable with the same credentials — into the open Vault.
+///
+/// The file is picked through the native dialog *in Rust* (the ADR-0004
+/// provenance rule: the renderer never supplies a filesystem path), the
+/// merge and save are delegated to `KdbxService::merge_from_file`, and the
+/// pre-merge snapshot taken by the pre-save backup machinery is announced
+/// via `backup-created` like every other save.
+///
+/// Returns `None` when the user cancels the dialog.
+#[tauri::command]
+pub async fn merge_database_from_file<R: Runtime>(
+    db_id: String,
+    app: AppHandle<R>,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<Option<MergeSummary>, AppError> {
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("KeePass Database", &["kdbx"])
+        .blocking_pick_file()
+        .and_then(|file_path| file_path.into_path().ok());
+    let Some(source_path) = picked else {
+        return Ok(None);
+    };
+
+    let (summary, backup) = state.merge_from_file(&db_id, &source_path.to_string_lossy())?;
+    if let Some(info) = backup {
+        let _ = app.emit(
+            "backup-created",
+            BackupEventPayload {
+                path: info.path.to_string_lossy().into_owned(),
+            },
+        );
+    }
+    Ok(Some(summary))
 }
 
 /// Generates a new `KeePass` 2.x compatible keyfile (.keyx format).

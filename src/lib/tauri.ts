@@ -23,6 +23,7 @@ import type {
   GeneratedPassphrase,
   GeneratedPassword,
   Group,
+  MergeSummary,
   PassphraseGeneratorOptions,
   PasswordGeneratorOptions,
   PasswordHealthReport,
@@ -49,6 +50,7 @@ import {
   GeneratedPassphraseSchema,
   GeneratedPasswordSchema,
   GroupSchema,
+  MergeSummarySchema,
   PassphraseGeneratorOptionsSchema,
   PasswordGeneratorOptionsSchema,
   PasswordHealthReportSchema,
@@ -157,6 +159,22 @@ export const database = {
   async save(dbId: string): Promise<void> {
     DbIdSchema.parse({ dbId });
     return invoke("save_database", { dbId });
+  },
+
+  /**
+   * "Merge from file…": the backend opens the native file dialog (the
+   * renderer never supplies the path — ADR-0004), merges the picked KDBX
+   * file into the open vault with the same credentials, and saves.
+   *
+   * @returns the merge summary, or `null` when the user cancelled the pick
+   */
+  async mergeFromFile(dbId: string): Promise<MergeSummary | null> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("merge_database_from_file", { dbId });
+    if (result === null || result === undefined) {
+      return null;
+    }
+    return MergeSummarySchema.parse(result);
   },
 
   /**

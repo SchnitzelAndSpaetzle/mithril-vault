@@ -38,7 +38,7 @@ uuid = { version = "1", features = ["v4"] }
 
 # KDBX (KeePass) database support
 # save_kdbx4 enables database creation and saving functionality
-keepass = { version = "0.13", features = ["save_kdbx4"] }
+keepass = { version = "0.13", features = ["save_kdbx4", "_merge"] }
 # Required for KDF configuration (Argon2id version parameter) - must match keepass's dependency
 rust-argon2 = "3.0"
 

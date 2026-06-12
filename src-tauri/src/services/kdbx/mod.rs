@@ -8,6 +8,7 @@ pub mod groups;
 pub mod header;
 pub mod key;
 pub mod keyfile;
+pub mod merge;
 pub mod open;
 pub mod recycle;
 pub mod restore;

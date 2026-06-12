@@ -516,7 +516,8 @@
     "openAnother": "Ouvrir une autre base de données",
     "openDatabase": "Ouvrir la base de données",
     "settings": "Paramètres",
-    "lockDatabase": "Verrouiller la base de données"
+    "lockDatabase": "Verrouiller la base de données",
+    "mergeFromFile": "Fusionner depuis un fichier…"
   },
   "createDatabase": {
     "title": "Créer une nouvelle base de données",
@@ -662,6 +663,22 @@
   "database": {
     "save": {
       "failed": "Échec de l'enregistrement de la base de données : {{error}}. Votre dernière modification est en mémoire mais pas sur le disque."
+    },
+    "merge": {
+      "toast": {
+        "added_one": "{{count}} entrée ajoutée",
+        "added_other": "{{count}} entrées ajoutées",
+        "updated_one": "{{count}} entrée mise à jour",
+        "updated_other": "{{count}} entrées mises à jour",
+        "deleted_one": "{{count}} entrée supprimée",
+        "deleted_other": "{{count}} entrées supprimées",
+        "conflicts_one": "{{count}} conflit",
+        "conflicts_other": "{{count}} conflits",
+        "conflictDetail": "{{title}} : version la plus récente conservée, l'autre dans l'historique",
+        "noChanges": "Déjà à jour — rien à fusionner",
+        "securityPosture": "Le fichier sélectionné utilise des paramètres de sécurité différents (p. ex. dérivation de clé). Ils n'ont pas été appliqués — vérifiez-les dans les Paramètres.",
+        "failed": "Échec de la fusion : {{error}}"
+      }
     }
   },
   "shortcuts": {

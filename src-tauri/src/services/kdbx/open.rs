@@ -354,7 +354,7 @@ impl KdbxService {
     }
 }
 
-fn map_open_error(err: DatabaseOpenError) -> AppError {
+pub(crate) fn map_open_error(err: DatabaseOpenError) -> AppError {
     match err {
         // Authentication errors - incorrect credentials
         DatabaseOpenError::Key(DatabaseKeyError::IncorrectKey)
