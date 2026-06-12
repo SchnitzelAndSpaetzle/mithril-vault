@@ -7,7 +7,7 @@ Architecture vocabulary (Module, Interface, Seam, Adapter, Depth) is separate an
 ## Storage
 
 ### Vault
-A KDBX-format password database (KDBX3 or KDBX4) that MithrilVault has opened. Identified by its filesystem path. May be **locked** (encrypted, no decrypted state in memory) or **unlocked** (decrypted KDBX tree is live in memory and editable). Multiple Vaults can be open at once, keyed by path.
+A KDBX-format password database (KDBX3 or KDBX4) that MithrilVault has opened. Identified by its filesystem path *within one device's open-vaults map*; a Sync-Enabled Vault additionally carries a device-independent Sync ID (see Sync). May be **locked** (encrypted, no decrypted state in memory) or **unlocked** (decrypted KDBX tree is live in memory and editable). Multiple Vaults can be open at once, keyed by path.
 
 Access to an unlocked Vault always happens inside a scoped callback: `KdbxService::with_vault` (read) or `with_vault_mut` (write). The callback receives a `Vault<'_>` / `VaultMut<'_>` handle that owns the databases-map lock for the duration of the call and exposes the tree-query and mutation API (`find_entry`, `find_group_id`, `entry_mut`, `ensure_recycle_bin`, …). After a successful mutation, callers explicitly call `vault.mark_modified()` to flip the Vault's dirty flag.
 
@@ -51,6 +51,61 @@ The public output of the Favicon pipeline. Either `Found { bytes, mime_type, coo
 
 ### Favicon Fetch Outcome
 The Entry-level outcome of `fetch_entry_favicon`: `Updated`, `Unchanged`, or `NotFound`. Distinct from Favicon Fetch Result — this is what the IPC layer surfaces to the UI after the pipeline result has been reconciled with the Entry's existing icon state.
+
+## Sync
+
+Cross-device synchronization of Vaults (issues #138, #302). The unit of sync is the KDBX file itself — see ADR-0005.
+
+Sync moves **ciphertext only**. A Vault's master password (and keyfile, if any) never travels through sync — it is exchanged human-to-human, out-of-band. Receiving a Shared Vault makes a Device hold the encrypted file; unlocking it still requires the secret obtained outside the app.
+
+Two transports exist, sharing one merge engine:
+- **LAN Sync** — paired Devices on the same local network discover each other and exchange the Vault file directly. No infrastructure of any kind. Devices not on the same network simply stay divergent until they next meet; the entry-level merge makes that safe.
+- **Cloud-Folder Sync** — the Vault file lives in a folder synced by a cloud provider's own client (iCloud, Dropbox, Google Drive, OneDrive). Sharing with another person uses the provider's folder-sharing; MithrilVault never talks to the cloud — it watches the local file, reloads, and merges when the provider's client changes it. The provider sees only ciphertext.
+
+Internet P2P (relay-assisted) is explicitly out of scope for v1.
+
+Sync is alive exactly while the app is: **no daemon, no tray service** on desktop — the app's network surface exists only when the user can see the app running. Two Devices sync when both have the app open on the same LAN; otherwise they stay divergent until they next overlap, which the merge model makes safe.
+
+Platform scope: LAN Sync ships desktop-first (macOS, Linux, Windows); mobile participates via Cloud-Folder Sync until LAN Sync is ported. On mobile, sync is **foreground-only by design** — no background tasks, ever. This is a deliberate stance (battery, simplicity, platform-restriction immunity), not a temporary gap: a mobile Device syncs when the app is open, and stays divergent otherwise, which the merge model makes safe.
+
+### Device
+One installation of MithrilVault, holding its own identity keypair. The unit of trust in sync: Vaults are shared with Devices, never with people. A person ("Dad") is at most a display label on a Device — the protocol has no concept of accounts, contacts, or persons.
+
+### Pairing
+The one-time act of establishing mutual trust between two Devices, verified by **compare-and-confirm**: both screens display a short authentication string derived from the cryptographic handshake, and both users confirm it matches (a man-in-the-middle cannot make both sides show the same code). On mobile the same material renders as a QR code instead. Pairing is mutual, and produces nothing but trust: each side persists the other's public key plus a user-editable label. It does not by itself share any Vault.
+
+An **unpaired Device is invisible at the protocol level**: discovery reveals only "a MithrilVault instance named X is here" — never vault names, Sync IDs, or any hint of what Vaults exist. Vault metadata flows only after mutual Pairing. Device identity private keys live in the OS keychain, never in a Vault file and never on the wire.
+
+### Sync ID
+The device-independent identity of a Sync-Enabled Vault: an explicit identifier stamped into the file's KDBX4 `Meta/CustomData` when the user enables sync. Because it lives in the file, it survives every transport — LAN, cloud folder, USB stick — and other KeePass apps preserve it untouched. Filesystem path remains the *per-device* identity of an open Vault; the Sync ID is what two Devices compare to recognize "the same Vault." Deliberately forking a Vault means regenerating its Sync ID.
+
+### Sync-Enabled Vault
+A Vault the user has opted into sync, thereby stamping its Sync ID. Requires KDBX4 (`CustomData` does not exist in KDBX3); enabling sync on a KDBX3 Vault prompts a guided, explicit format upgrade first. Vaults never opted in carry no sync metadata at all.
+
+### Sync Application
+How an arriving Vault version lands on a Device. Two cases, decided by whether the local file changed since the last sync point with that peer:
+- **Fast-Forward** — local copy is unchanged; the incoming file strictly supersedes it and replaces it on disk. Needs no decryption, so it applies even while the Vault is locked (always preceded by a pre-replace backup). This is what makes sync feel seamless.
+- **Pending Merge** — both sides diverged; reconciling requires decrypting both copies, which requires unlock. The incoming file is stored as a pending copy beside the Vault with a "changes waiting — unlock to merge" indicator, and merges on next unlock. Sync never prompts for a master password on its own — users must not be trained to type it at unexpected moments.
+
+Sync triggers are **on save** (push to reachable paired Devices) and **on encounter** (a paired Device appears on the network; version markers are compared and divergence reconciled). No polling, no schedules. Cloud-Folder Sync flows through the identical state machine, with the file watcher playing the role of the network arrival.
+
+### Merge
+Reconciling two diverged copies of a Sync-Enabled Vault, KeePassXC-style: a two-way, entry-level combine driven by per-entry modification times and the KDBX `DeletedObjects` list (no stored ancestor needed). Entries touched on only one side are combined trivially; an Entry edited on both sides resolves **newest-wins**, with the losing version preserved in that Entry's KDBX history — nothing is destroyed, and the history is visible in any KeePass app. Merge is automatic and non-blocking; afterwards a **Merge Summary** (non-blocking review surface) reports what combined and what conflicted, with restore-from-history as the undo path. One carve-out: changes to a Vault's security posture (KDF parameters, master-key-affecting metadata) are never auto-applied by Merge — they are surfaced explicitly.
+
+### Shared Vault
+A Sync-Enabled Vault that more than one Device syncs. There is **no owner and no access list**: each Device keeps its own local list of "peers I sync this Vault with," and that pairwise topology is the entire sharing model. Changes propagate **transitively** — if you sync with Dad and Dad syncs with Mom, Mom's edits reach you through Dad even though you never paired with her. Sharing is per-Vault, all-or-nothing (a peer receives the whole Vault, never selected Entries — selective sharing is done by organizing Entries into Vaults), and it is **irreversible delegation**: once another Device holds the file and the master password, taking it back is social, not technical. The share UX states this plainly rather than implying an enforceable boundary that whole-file sync cannot provide.
+
+### Vault Offer
+The one unsolicited message a paired Device may send: "I want to share Vault *X* (Sync ID, display name) with you." Requires an explicit, one-time accept on the receiving Device before anything is written to disk — on accept, the file lands in an app-managed sync directory by default (user-overridable, e.g. into a cloud-synced folder), and the Vault appears in the list, locked, awaiting its out-of-band master password. Decline or ignore writes nothing. After the accept, updates to that Vault flow with no further prompts, ever (see Sync Application). Everything that is not a Vault Offer is sync of an already-accepted Vault.
+
+### Stop Sharing
+Removing a peer Device from *this* Device's local peer list for one Vault. Ends direct sync of that Vault with that peer — nothing more. The peer keeps its copy, and may still receive updates **transitively** through any other peer that hasn't also dropped it.
+
+### Unpair
+Deleting a Device's identity key from this Device's trusted set. Ends all sync with it, for every Vault, until re-paired. The complement of Pairing.
+
+### Revocation
+Not a protocol primitive — there is none in the whole-file model; once a Device holds the file and the master password, access cannot be technically clawed back. "Revoking access" is a **guided remediation flow** built from the honest verbs: Stop Sharing / Unpair locally, a warning that every other peer must unpair the revoked Device too (gossip routes around a single removal — and a lost device's trusted identity key keeps receiving updates until peers drop it), a prompt to change the Vault's master password (redistributed out-of-band to remaining members), and a pointer to the Entries whose credentials the departed party saw, recommending rotation of those actual secrets.
 
 ## Settings
 
