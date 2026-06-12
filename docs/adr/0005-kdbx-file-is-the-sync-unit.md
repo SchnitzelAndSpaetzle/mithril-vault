@@ -6,7 +6,7 @@ The research in issue #302 recommends the change-log model: per-device append-on
 
 ## Decision
 
-The **KDBX file is canonical and is the unit of sync**. Devices exchange whole encrypted `.kdbx` files. When both sides have diverged, the receiving side performs an **entry-level three-way merge** in the KeePassXC style, using the causal metadata KDBX already carries (per-entry modification times, location-changed times, per-entry history). There is no second source of truth — no event log, no operation journal — beside the file.
+The **KDBX file is canonical and is the unit of sync**. Devices exchange whole encrypted `.kdbx` files. When both sides have diverged, the receiving side performs an **entry-level two-way merge** in the KeePassXC style — no stored ancestor —, using the causal metadata KDBX already carries (per-entry modification times, location-changed times, per-entry history). There is no second source of truth — no event log, no operation journal — beside the file.
 
 Issue #302's transport, discovery, and device-identity research (mDNS/DNS-SD, LAN-first ladder, per-device identity keys, authenticated pairing) remains applicable and is **not** rejected; only its data-model recommendation is.
 

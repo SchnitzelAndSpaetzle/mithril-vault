@@ -9,7 +9,7 @@ Issue #302's research recommends the Noise Protocol Framework (Noise XX for firs
 The LAN Sync channel is **TLS 1.3 via `rustls`, over plain TCP**, with **self-signed certificates pinned to device identity**:
 
 - Each Device's identity keypair backs a self-signed certificate; the certificate is a container for the public key, nothing more. No CAs, no chains, no expiry semantics — peer verification is exact-match pinning against the paired Devices' keys.
-- Connections are mutual TLS; an unpaired peer fails the handshake and learns nothing beyond what discovery already announces.
+- Connections are mutual TLS; an unpaired peer fails the handshake and learns nothing beyond what discovery already announces — **except in pairing mode**. The first-time Pairing ceremony is necessarily a handshake with a not-yet-pinned peer: when (and only when) the user has explicitly initiated or accepted a Pairing on this Device, the verifier provisionally admits an unpinned peer so the session can complete and the SAS can be derived and displayed. Nothing is persisted at that point; trust is pinned only after both sides confirm the SAS, and an abort or mismatch discards the provisional peer entirely. Outside an active, user-initiated ceremony, unpinned peers are rejected outright.
 - The Pairing SAS is derived from the TLS exporter / channel binding, so the code both users compare is cryptographically bound to the very session being established — a MITM cannot present matching codes on both screens.
 - TLS 1.3 0-RTT is not used (replayable early data has no place in state-changing sync, as #302 itself notes).
 

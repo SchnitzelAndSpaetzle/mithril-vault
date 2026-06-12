@@ -84,7 +84,7 @@ A Vault the user has opted into sync, thereby stamping its Sync ID. Requires KDB
 
 ### Sync Application
 How an arriving Vault version lands on a Device. Two cases, decided by whether the local file changed since the last sync point with that peer:
-- **Fast-Forward** — local copy is unchanged; the incoming file strictly supersedes it and replaces it on disk. Needs no decryption, so it applies even while the Vault is locked (always preceded by a pre-replace backup). This is what makes sync feel seamless.
+- **Fast-Forward** — local copy is unchanged *and* the incoming version descends from it (on the LAN path the sender proves descent via its last-sync record; a stale sibling — e.g. a peer restored from an old backup — is demoted to Pending Merge rather than allowed to roll the Vault back). The incoming file then strictly supersedes the local one and replaces it on disk. Needs no decryption, so it applies even while the Vault is locked (always preceded by a pre-replace backup, and by a plaintext outer-header comparison so a changed security posture is never applied silently — see ADR-0006). This is what makes sync feel seamless.
 - **Pending Merge** — both sides diverged; reconciling requires decrypting both copies, which requires unlock. The incoming file is stored as a pending copy beside the Vault with a "changes waiting — unlock to merge" indicator, and merges on next unlock. Sync never prompts for a master password on its own — users must not be trained to type it at unexpected moments.
 
 Sync triggers are **on save** (push to reachable paired Devices) and **on encounter** (a paired Device appears on the network; version markers are compared and divergence reconciled). No polling, no schedules. Cloud-Folder Sync flows through the identical state machine, with the file watcher playing the role of the network arrival.
@@ -156,6 +156,7 @@ The namespaced enum of recordable events:
 - `entry.attachment_exported` — an Attachment's bytes were written to a file on disk (download); carries `entry_id` + `attachment_id` only. In-app preview, add, and delete are not audited — only leaving the Vault's encryption boundary is.
 - `preferences.security_changed` — change to an allowlisted security-relevant App Preference, with `setting_name` only (no old/new values)
 - `audit.cleared` — user emptied the Audit Log; the record itself survives the clear
+- `vault.sync_applied` — a sync arrival changed the Vault file, with `method` (`fast_forward | merge`) and `source` (the peer Device's label, or `cloud_folder` for watcher-delivered arrivals)
 
 Entry selection, group navigation, search, theme/language changes, and other non-security-relevant interactions are explicitly **not** Audit Event Kinds.
 
