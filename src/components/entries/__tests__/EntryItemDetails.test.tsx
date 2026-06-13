@@ -53,6 +53,13 @@ vi.mock("@/hooks/use-custom-icons", () => ({
   useCustomIcons: vi.fn(() => ({ data: {} })),
 }));
 
+// The Entry History section fetches via react-query; these tests render
+// without a QueryClient and don't exercise history, so stub it out. Its own
+// behavior is covered by EntryHistorySection.test.tsx.
+vi.mock("@/components/entries/EntryHistorySection", () => ({
+  EntryHistorySection: () => null,
+}));
+
 vi.mock("@/hooks/use-clipboard-timeout", () => ({
   useClipboardTimeout: vi.fn(() => 45),
 }));

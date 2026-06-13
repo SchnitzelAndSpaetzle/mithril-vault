@@ -363,6 +363,8 @@
       "hideField": "{{field}} verbergen",
       "attachments": "Anhänge",
       "noAttachments": "Keine Anhänge",
+      "history": "Verlauf",
+      "noHistory": "Noch kein Verlauf",
       "addAttachment": "Anhang hinzufügen",
       "addingAttachments": "Wird hinzugefügt…",
       "dropToAttach": "Dateien hier ablegen, um sie anzuhängen",

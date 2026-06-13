@@ -1,7 +1,8 @@
 use crate::domain::secure::SecureBytes;
 use crate::dto::entry::{
     AddAttachmentsOutcome, AttachmentAddFailure, AttachmentAddPlan, AttachmentPlanItem,
-    AttachmentSizeStatus, CreateEntryData, CustomFieldValue, Entry, UpdateEntryData,
+    AttachmentSizeStatus, CreateEntryData, CustomFieldValue, Entry, EntryHistoryItem,
+    UpdateEntryData,
 };
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
@@ -81,6 +82,24 @@ pub(crate) fn plan_attachment_adds(
     }
 }
 
+/// Pushes the Entry's current state into its native KDBX history *before* a
+/// mutation overwrites it — the single snapshot chokepoint (ADR-0008). The
+/// snapshot is a full clone of the live Entry with its own nested history
+/// stripped (KDBX never nests history, and keeping it would grow each version
+/// exponentially), inserted newest-first by [`keepass::db::History::add_entry`].
+///
+/// S1 wires this only into `update_entry`; later slices route the remaining
+/// content/location mutators (tags, move, attachments, icon) through the same
+/// helper so coverage stays uniform. Retention pruning is intentionally not
+/// enforced here yet (S6) — history may grow unbounded for now.
+fn snapshot_entry_history(entry: &mut keepass::db::EntryMut<'_>) {
+    let mut snapshot: KeepassEntry = (*entry.as_ref()).clone();
+    // `History::add_entry` also strips nested history, but clearing it here
+    // makes the intent explicit and keeps the pushed clone minimal.
+    snapshot.history = None;
+    entry.history.get_or_insert_default().add_entry(snapshot);
+}
+
 impl KdbxService {
     /// Lists entries, optionally filtered by group.
     pub fn list_entries(
@@ -124,6 +143,41 @@ impl KdbxService {
             let entry = vault.find_entry(id)?;
             let group_uuid = entry.parent().id().uuid().to_string();
             Ok(convert_entry(&entry, &group_uuid))
+        })
+    }
+
+    /// Lists an Entry's history — its past versions, newest-first — read from
+    /// native KDBX `Entry.history` (ADR-0008). Each item carries its `index`
+    /// in the newest-first list, the snapshot's `modified_at` timestamp, and
+    /// non-secret display fields only; passwords and protected values never
+    /// cross this boundary. An Entry with `history: None` (imported or
+    /// malformed) yields an empty list rather than an error.
+    pub fn list_entry_history(
+        &self,
+        db_id: &str,
+        id: &str,
+    ) -> Result<Vec<EntryHistoryItem>, AppError> {
+        self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(id)?;
+            let items = entry.history.as_ref().map_or_else(Vec::new, |history| {
+                history
+                    .get_entries()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, snapshot)| EntryHistoryItem {
+                        index,
+                        modified_at: snapshot
+                            .times
+                            .last_modification
+                            .map(|t| t.to_string())
+                            .unwrap_or_default(),
+                        title: snapshot.get_title().unwrap_or_default().to_string(),
+                        username: snapshot.get_username().unwrap_or_default().to_string(),
+                        url: snapshot.get_url().map(std::string::ToString::to_string),
+                    })
+                    .collect()
+            });
+            Ok(items)
         })
     }
 
@@ -429,6 +483,12 @@ impl KdbxService {
                 // an invalid request. Re-enabling an entry that already has a
                 // stored timestamp is allowed.
                 validate_expiry_enabled(data.expires, expiry, entry.times.expiry)?;
+
+                // Snapshot the prior state into native KDBX history before any
+                // field is overwritten, so the user can recover what an edit
+                // replaces (ADR-0008). This is the single chokepoint; S1 wires
+                // it here, S2 widens it to the other mutators.
+                snapshot_entry_history(&mut entry);
 
                 if let Some(title) = data.title {
                     entry
@@ -1872,6 +1932,159 @@ mod tests {
         assert!(
             recycle_ids.contains(&entry_a.as_str()),
             "deleted entry should be visible inside the recycle bin group"
+        );
+    }
+
+    #[test]
+    fn list_entry_history_is_empty_for_a_freshly_created_entry() {
+        // A brand-new Entry has never been edited, so its native KDBX history
+        // (a fresh, empty `History`) yields no versions. The listing must report
+        // that as an empty list, not an error.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history for a fresh entry");
+
+        assert!(
+            history.is_empty(),
+            "a never-edited entry has no history versions"
+        );
+    }
+
+    #[test]
+    fn editing_a_field_snapshots_the_prior_state_into_history() {
+        // The core chokepoint: an edit pushes the Entry's *prior* state into
+        // its KDBX history before the mutation lands. Entry A starts as
+        // username "alice"; after renaming it to "bob" the live entry reads
+        // "bob" while the single history version preserves "alice".
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let updated = service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("bob".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename username");
+        assert_eq!(updated.username, "bob", "live entry reflects the new value");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after edit");
+
+        assert_eq!(history.len(), 1, "one edit captures exactly one version");
+        assert_eq!(
+            history[0].username, "alice",
+            "the version preserves the prior username, not the new one"
+        );
+        assert_eq!(history[0].index, 0, "the sole version sits at index 0");
+    }
+
+    #[test]
+    fn successive_edits_stack_history_newest_first() {
+        // Each edit prepends the just-replaced state, so the list reads
+        // newest-first: alice → bob → carol leaves the live entry as "carol",
+        // with version[0] holding "bob" (the most recent prior state) and
+        // version[1] holding "alice" (the original).
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        for name in ["bob", "carol"] {
+            service
+                .update_entry(
+                    &db_path,
+                    &entry_a,
+                    UpdateEntryData {
+                        username: Some(name.to_string()),
+                        ..empty_update()
+                    },
+                )
+                .expect("rename username");
+        }
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after two edits");
+
+        assert_eq!(history.len(), 2, "two edits capture two versions");
+        assert_eq!(history[0].index, 0);
+        assert_eq!(
+            history[0].username, "bob",
+            "newest version holds the most recent prior state"
+        );
+        assert_eq!(history[1].index, 1);
+        assert_eq!(
+            history[1].username, "alice",
+            "oldest version holds the original state"
+        );
+    }
+
+    #[test]
+    fn entry_with_no_history_node_lists_empty_not_error() {
+        // KeePass entries imported from some apps (or malformed ones) carry
+        // `history: None` rather than an empty `History`. Reading their history
+        // must degrade to an empty list, never an error — the listing goes
+        // through `History::get_entries()` only when the node exists.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        // Drop the history node entirely to mimic an imported/malformed entry.
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.history = None;
+                Ok(())
+            })
+            .expect("clear history node");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("listing a None-history entry must not error");
+
+        assert!(
+            history.is_empty(),
+            "a None history node lists as empty, not an error"
+        );
+    }
+
+    #[test]
+    fn history_survives_a_save_then_reopen_round_trip() {
+        // The interop proof point (ADR-0008): a captured version is real native
+        // KDBX history, so it must survive being written to disk and read back.
+        // Edit the entry, persist, then reopen the file with a *fresh* service
+        // (nothing cached in memory) and assert the version is still there.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("bob".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename username");
+        service.save(&db_path).expect("save vault");
+        service.close(&db_path).expect("close vault");
+
+        let reopened = KdbxService::new();
+        reopened.open(&db_path, "testpass").expect("reopen vault");
+
+        let history = reopened
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after reopen");
+
+        assert_eq!(
+            history.len(),
+            1,
+            "the captured version must survive the on-disk round-trip"
+        );
+        assert_eq!(
+            history[0].username, "alice",
+            "the reopened version preserves the prior username"
         );
     }
 }

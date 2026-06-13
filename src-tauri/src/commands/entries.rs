@@ -1,7 +1,7 @@
 use crate::domain::secure::SecureBytes;
 use crate::dto::entry::{
     AddAttachmentsOutcome, AttachmentAddPlan, CreateEntryData, CustomFieldValue, Entry,
-    UpdateEntryData,
+    EntryHistoryItem, UpdateEntryData,
 };
 use crate::dto::error::AppError;
 use crate::services::audit::AuditService;
@@ -92,6 +92,19 @@ pub async fn get_entry(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<Entry, AppError> {
     state.get_entry(&db_id, &id)
+}
+
+/// Lists an Entry's history — its past versions, newest-first. Each item
+/// carries its `index`, the snapshot's `modified_at`, and non-secret display
+/// fields only; no password or protected value crosses IPC. A read-only
+/// command, so it records no audit event.
+#[tauri::command]
+pub async fn list_entry_history(
+    db_id: String,
+    id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<Vec<EntryHistoryItem>, AppError> {
+    state.list_entry_history(&db_id, &id)
 }
 
 /// Fetches an entry password. A successful read also appends one
