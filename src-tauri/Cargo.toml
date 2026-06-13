@@ -79,3 +79,12 @@ must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 cargo_common_metadata = "allow"
+
+# Temporary fork of keepass 0.13.10 that retains attachment binaries referenced
+# by historical entry versions instead of garbage-collecting them on the last
+# *live* reference (which corrupts Entry History on attachment delete; see #332).
+# The only diff vs upstream v0.13.10 is in remove_attachment_by_name/_by_id,
+# mirroring set_icon_none. To be dropped once the fix is released upstream
+# (PR pending against sseemayer/keepass-rs).
+[patch.crates-io]
+keepass = { git = "https://github.com/SchnitzelAndSpaetzle/keepass-rs", rev = "1ebb51275b678ce4c7f545b33dd8e743bf6b8ee8" }
