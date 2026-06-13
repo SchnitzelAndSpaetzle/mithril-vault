@@ -223,6 +223,23 @@ mod tests {
     use super::*;
     use crate::services::kdbx::test_support::create_test_database;
 
+    /// Returns the UUID of the first Custom Icon in the pool — the shape tests
+    /// use to address an icon they just seeded via `assign_entry_custom_icon`.
+    fn first_custom_icon_uuid(service: &KdbxService, db_path: &str) -> String {
+        service
+            .with_vault(db_path, |vault| {
+                Ok(vault
+                    .db()
+                    .iter_all_custom_icons()
+                    .next()
+                    .expect("custom icon exists")
+                    .id()
+                    .uuid()
+                    .to_string())
+            })
+            .expect("vault scope")
+    }
+
     #[test]
     fn detect_icon_mime_recognizes_supported_signatures() {
         assert_eq!(
@@ -247,18 +264,7 @@ mod tests {
             .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
             .expect("seed icon");
 
-        let icon_uuid = service
-            .with_vault(&db_path, |vault| {
-                Ok(vault
-                    .db()
-                    .iter_all_custom_icons()
-                    .next()
-                    .expect("custom icon exists")
-                    .id()
-                    .uuid()
-                    .to_string())
-            })
-            .expect("vault scope");
+        let icon_uuid = first_custom_icon_uuid(&service, &db_path);
 
         let changed = service
             .set_entry_custom_icon(&db_path, &entry_b, &icon_uuid)
@@ -530,18 +536,7 @@ mod tests {
         service
             .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
             .expect("seed icon in pool");
-        let icon_uuid = service
-            .with_vault(&db_path, |vault| {
-                Ok(vault
-                    .db()
-                    .iter_all_custom_icons()
-                    .next()
-                    .expect("custom icon exists")
-                    .id()
-                    .uuid()
-                    .to_string())
-            })
-            .expect("vault scope");
+        let icon_uuid = first_custom_icon_uuid(&service, &db_path);
 
         assert!(service
             .set_entry_custom_icon(&db_path, &entry_b, &icon_uuid)
@@ -587,18 +582,7 @@ mod tests {
         service
             .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
             .expect("assign icon");
-        let icon_uuid = service
-            .with_vault(&db_path, |vault| {
-                Ok(vault
-                    .db()
-                    .iter_all_custom_icons()
-                    .next()
-                    .expect("custom icon exists")
-                    .id()
-                    .uuid()
-                    .to_string())
-            })
-            .expect("vault scope");
+        let icon_uuid = first_custom_icon_uuid(&service, &db_path);
         let before = service
             .list_entry_history(&db_path, &entry_a)
             .expect("history after assign")

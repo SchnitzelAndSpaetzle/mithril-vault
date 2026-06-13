@@ -111,6 +111,23 @@ pub(crate) fn snapshot_entry_history(entry: &mut KeepassEntry, mut pre_image: Ke
     entry.history.get_or_insert_default().add_entry(pre_image);
 }
 
+/// Runs `mutate` against a clone-guarded `entry`, pushing a pre-mutation
+/// history snapshot through the chokepoint only when the closure reports a
+/// real change. The shared shape behind the bulk tag mutators (rename/delete),
+/// where one snapshot must land per touched Entry and nothing on the rest.
+fn snapshot_on_change(
+    entry: &mut KeepassEntry,
+    mutate: impl FnOnce(&mut KeepassEntry) -> bool,
+) -> bool {
+    let before = entry.clone();
+    if mutate(entry) {
+        snapshot_entry_history(entry, before);
+        true
+    } else {
+        false
+    }
+}
+
 /// Whether an edit changed any *stored content* of the Entry, ignoring the
 /// volatile `last_modification` bump and the history list itself. Gates the
 /// history snapshot so content-preserving updates don't accrue junk versions:
@@ -627,16 +644,9 @@ impl KdbxService {
             }
 
             // One snapshot per touched Entry, captured before its tags are
-            // rewritten (#323). The pre-image is cloned eagerly and only kept
-            // when the rename actually changed this Entry.
+            // rewritten (#323), kept only when the rename actually changed it.
             let count = vault.modify_all_entries(&|entry| {
-                let before = entry.clone();
-                if rename_tag_in_entry(entry, old_name, new_name) {
-                    snapshot_entry_history(entry, before);
-                    true
-                } else {
-                    false
-                }
+                snapshot_on_change(entry, |e| rename_tag_in_entry(e, old_name, new_name))
             });
 
             if count > 0 {
@@ -652,13 +662,7 @@ impl KdbxService {
     pub fn delete_tag(&self, db_id: &str, tag_name: &str) -> Result<u32, AppError> {
         self.with_vault_mut(db_id, |vault| {
             let count = vault.modify_all_entries(&|entry| {
-                let before = entry.clone();
-                if delete_tag_in_entry(entry, tag_name) {
-                    snapshot_entry_history(entry, before);
-                    true
-                } else {
-                    false
-                }
+                snapshot_on_change(entry, |e| delete_tag_in_entry(e, tag_name))
             });
 
             if count > 0 {
