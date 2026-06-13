@@ -89,8 +89,8 @@ pub(crate) fn plan_attachment_adds(
 /// exponentially), inserted newest-first by [`keepass::db::History::add_entry`].
 ///
 /// S1 wired this only into `update_entry`; S2 routes the remaining
-/// content/location mutators (bulk tags, move between real Groups, attachment
-/// add, custom-icon/Favicon) through the same helper so coverage stays uniform.
+/// content/location mutators (bulk tags, move between real Groups,
+/// custom-icon/Favicon) through the same helper so coverage stays uniform.
 /// Retention pruning is intentionally not enforced here yet (S6) — history may
 /// grow unbounded for now.
 ///
@@ -98,12 +98,12 @@ pub(crate) fn plan_attachment_adds(
 /// call sites (via deref coercion) and the raw-`Entry` closures handed to
 /// [`Vault::modify_all_entries`] can funnel through the one chokepoint.
 ///
-/// NOTE (#323): attachment **deletion** is deliberately *not* yet routed here.
-/// A pre-image clone shares the live Entry's binary-pool `AttachmentId` but is
-/// not registered as a pool back-reference, and the crate's delete path GCs a
-/// blob keyed only by `entry_id` — so snapshotting a delete would leave the
-/// history version pointing at a reclaimed (and later possibly reused) blob.
-/// Snapshot-on-delete plus blob retention land together in a follow-up.
+/// NOTE (#335): attachment **add** and **delete** are deliberately *not* routed
+/// here. A history version that shares an attachment's binary-pool `AttachmentId`
+/// is unsafe under the stock `keepass` crate (its delete path GCs the blob keyed
+/// only by `entry_id`, ignoring history, and reuses the freed id). Keeping
+/// attachment binaries recoverable through history needs pool retention the crate
+/// can't provide, so attachment snapshotting is deferred to #335.
 pub(crate) fn snapshot_entry_history(entry: &mut KeepassEntry, mut pre_image: KeepassEntry) {
     // `History::add_entry` also strips nested history, but clearing it here
     // makes the intent explicit and keeps the pushed snapshot minimal.
@@ -293,11 +293,11 @@ impl KdbxService {
     /// an unknown filename is an [`AppError::AttachmentNotFound`] that leaves
     /// the Vault untouched.
     ///
-    /// NOTE (#323): this path deliberately does **not** route through the
-    /// snapshot chokepoint yet. The pool GC above reclaims (and later reuses)
-    /// the blob keyed only by `entry_id`, so a snapshot taken here would point
-    /// the history version at a freed/reused blob. Snapshot-on-delete plus the
-    /// required binary-pool blob retention land together in a follow-up.
+    /// NOTE (#335): this path deliberately does **not** route through the
+    /// snapshot chokepoint. The pool GC above reclaims (and later reuses) the
+    /// blob keyed only by `entry_id`, so a snapshot taken here would point the
+    /// history version at a freed/reused blob. Attachment snapshotting (add and
+    /// delete) plus the required binary-pool blob retention are deferred to #335.
     pub fn delete_entry_attachment(
         &self,
         db_id: &str,
@@ -405,14 +405,13 @@ impl KdbxService {
         self.with_vault_mut(db_id, |vault| {
             let stored_name = {
                 let mut entry = vault.entry_mut(entry_id)?;
-                // Snapshot the pre-add state before the new binary lands (#323).
-                // The pre-image predates the add, so it never references the new
-                // blob — the deferred delete-path retention concern doesn't apply.
-                let before: KeepassEntry = (*entry.as_ref()).clone();
+                // Attachment add/delete is intentionally NOT snapshotted into
+                // Entry History — see #335. Keeping attachment binaries
+                // recoverable through history requires binary-pool retention the
+                // stock `keepass` crate can't provide, so it is deferred.
                 let stored_name = unique_attachment_name(&entry.as_ref(), &filename);
                 entry.add_attachment(stored_name.clone(), Value::unprotected(bytes));
                 entry.times.last_modification = Some(Times::now());
-                snapshot_entry_history(&mut entry, before);
                 stored_name
             };
             vault.mark_modified();
@@ -2280,10 +2279,11 @@ mod tests {
     }
 
     #[test]
-    fn adding_an_attachment_snapshots_the_prior_state() {
-        // Adding an Attachment changes the Entry's stored content, so the
-        // chokepoint captures the prior state first. The history version
-        // predates the add, so it carries none of the new attachment.
+    fn adding_an_attachment_records_no_history_version() {
+        // Attachment add/delete is deliberately not snapshotted into Entry
+        // History (#335): doing so safely needs binary-pool retention the stock
+        // `keepass` crate can't provide. Adding an Attachment must therefore
+        // leave the history empty.
         let (service, dir, db_path, entry_a, _b) = create_test_database();
 
         let source = dir.path().join("codes.txt");
@@ -2296,25 +2296,9 @@ mod tests {
         let history = service
             .list_entry_history(&db_path, &entry_a)
             .expect("list history after add");
-        assert_eq!(
-            history.len(),
-            1,
-            "adding an attachment captures one version"
-        );
-
-        let prior_attachments = service
-            .with_vault(&db_path, |vault| {
-                let entry = vault.find_entry(&entry_a)?;
-                Ok(entry
-                    .historical(0)
-                    .expect("history version exists")
-                    .attachments()
-                    .count())
-            })
-            .expect("inspect historical attachments");
-        assert_eq!(
-            prior_attachments, 0,
-            "the snapshot predates the add, so it holds no attachment"
+        assert!(
+            history.is_empty(),
+            "adding an attachment must not capture a history version (#335)"
         );
     }
 
