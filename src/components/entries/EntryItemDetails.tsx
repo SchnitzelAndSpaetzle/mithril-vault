@@ -41,6 +41,7 @@ import { isExpired } from "@/lib/entry-expiry";
 import { formatAttachmentSize } from "@/lib/entry-attachment";
 import { classifyAttachment } from "@/lib/attachment-preview";
 import { AttachmentPreviewModal } from "@/components/entries/AttachmentPreviewModal";
+import { EntryHistorySection } from "@/components/entries/EntryHistorySection";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ask, save } from "@tauri-apps/plugin-dialog";
@@ -223,6 +224,12 @@ export default function EntryItemDetails({
           </>
         )}
       </div>
+
+      {/* Entry History. Keyed on the *displayed* entry's id (not the entryId
+          prop): useEntryDetail serves the previous entry as placeholder data
+          while switching, so binding to entry.id keeps the history list
+          consistent with the metadata shown above it during a transition. */}
+      <EntryHistorySection dbId={dbId} entryId={entry.id} />
     </>
   );
 }

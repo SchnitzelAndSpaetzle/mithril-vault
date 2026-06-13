@@ -386,6 +386,8 @@
       "hideField": "hide {{field}}",
       "attachments": "Attachments",
       "noAttachments": "No attachments",
+      "history": "History",
+      "noHistory": "No history yet",
       "addAttachment": "Add attachment",
       "addingAttachments": "Adding…",
       "dropToAttach": "Drop files here to attach",

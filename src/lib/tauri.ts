@@ -19,6 +19,7 @@ import type {
   DatabaseHeaderInfo,
   DatabaseInfo,
   Entry,
+  EntryHistoryItem,
   FaviconFetchOutcome,
   GeneratedPassphrase,
   GeneratedPassword,
@@ -44,6 +45,7 @@ import {
   DatabaseCreationOptionsSchema,
   DatabaseHeaderInfoSchema,
   DatabaseInfoSchema,
+  EntryHistoryItemSchema,
   EntrySchema,
   FaviconFetchOutcomeSchema,
   GeneratedPassphraseSchema,
@@ -306,6 +308,19 @@ export const entries = {
     IdSchema.parse({ id });
     const result = await invoke("get_entry_password", { dbId, id });
     return z.string().parse(result);
+  },
+
+  /**
+   * Lists an Entry's history — its past versions, newest-first — from native
+   * KDBX history (ADR-0008). Each item carries its `index`, the snapshot's
+   * `modifiedAt`, and non-secret display fields only; no password or protected
+   * value crosses IPC. An Entry with no recorded history returns an empty list.
+   */
+  async listHistory(dbId: string, id: string): Promise<EntryHistoryItem[]> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("list_entry_history", { dbId, id });
+    return z.array(EntryHistoryItemSchema).parse(result);
   },
 
   /**

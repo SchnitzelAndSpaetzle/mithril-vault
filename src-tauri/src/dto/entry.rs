@@ -132,6 +132,21 @@ pub struct EntryListItem {
     pub url: Option<String>,
 }
 
+/// One past version of an Entry, surfaced from native KDBX `Entry.history`
+/// (ADR-0008). Carries only non-secret display fields — **never** the
+/// password or any protected value — alongside the version's `index` in the
+/// newest-first history list and the timestamp of that snapshot. Secrets are
+/// fetched per-version on demand (a later slice), mirroring `get_entry_password`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryHistoryItem {
+    pub index: usize,
+    pub modified_at: String,
+    pub title: String,
+    pub username: String,
+    pub url: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateEntryData {

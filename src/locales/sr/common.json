@@ -363,6 +363,8 @@
       "hideField": "sakrij {{field}}",
       "attachments": "Prilozi",
       "noAttachments": "Nema priloga",
+      "history": "Istorija",
+      "noHistory": "Još nema istorije",
       "addAttachment": "Dodaj prilog",
       "addingAttachments": "Dodavanje…",
       "dropToAttach": "Prevucite datoteke ovde da biste ih priložili",

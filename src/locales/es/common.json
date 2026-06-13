@@ -363,6 +363,8 @@
       "hideField": "ocultar {{field}}",
       "attachments": "Adjuntos",
       "noAttachments": "Sin adjuntos",
+      "history": "Historial",
+      "noHistory": "Aún no hay historial",
       "addAttachment": "Añadir adjunto",
       "addingAttachments": "Añadiendo…",
       "dropToAttach": "Suelta archivos aquí para adjuntarlos",

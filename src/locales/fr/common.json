@@ -363,6 +363,8 @@
       "hideField": "masquer {{field}}",
       "attachments": "Pièces jointes",
       "noAttachments": "Aucune pièce jointe",
+      "history": "Historique",
+      "noHistory": "Aucun historique pour l’instant",
       "addAttachment": "Ajouter une pièce jointe",
       "addingAttachments": "Ajout…",
       "dropToAttach": "Déposez des fichiers ici pour les joindre",

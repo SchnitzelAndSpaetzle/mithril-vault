@@ -21,6 +21,8 @@ export const queryKeys = {
       [...queryKeys.entries.all, dbId, "list", groupId ?? null] as const,
     detail: (dbId: string, id: string) =>
       [...queryKeys.entries.all, dbId, "detail", id] as const,
+    history: (dbId: string, id: string) =>
+      [...queryKeys.entries.all, dbId, "history", id] as const,
     tags: (dbId: string) => [...queryKeys.entries.all, dbId, "tags"] as const,
   },
   backups: {
