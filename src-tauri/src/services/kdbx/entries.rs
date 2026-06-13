@@ -82,9 +82,9 @@ pub(crate) fn plan_attachment_adds(
     }
 }
 
-/// Pushes the Entry's current state into its native KDBX history *before* a
-/// mutation overwrites it — the single snapshot chokepoint (ADR-0008). The
-/// snapshot is a full clone of the live Entry with its own nested history
+/// Pushes a captured pre-image of the Entry into its native KDBX history — the
+/// single snapshot chokepoint (ADR-0008). The pre-image is a clone of the
+/// Entry's state from *before* the mutation, with its own nested history
 /// stripped (KDBX never nests history, and keeping it would grow each version
 /// exponentially), inserted newest-first by [`keepass::db::History::add_entry`].
 ///
@@ -92,12 +92,27 @@ pub(crate) fn plan_attachment_adds(
 /// content/location mutators (tags, move, attachments, icon) through the same
 /// helper so coverage stays uniform. Retention pruning is intentionally not
 /// enforced here yet (S6) — history may grow unbounded for now.
-fn snapshot_entry_history(entry: &mut keepass::db::EntryMut<'_>) {
-    let mut snapshot: KeepassEntry = (*entry.as_ref()).clone();
+fn snapshot_entry_history(entry: &mut keepass::db::EntryMut<'_>, mut pre_image: KeepassEntry) {
     // `History::add_entry` also strips nested history, but clearing it here
-    // makes the intent explicit and keeps the pushed clone minimal.
-    snapshot.history = None;
-    entry.history.get_or_insert_default().add_entry(snapshot);
+    // makes the intent explicit and keeps the pushed snapshot minimal.
+    pre_image.history = None;
+    entry.history.get_or_insert_default().add_entry(pre_image);
+}
+
+/// Whether an edit changed any *stored content* of the Entry, ignoring the
+/// volatile `last_modification` bump and the history list itself. Gates the
+/// history snapshot so content-preserving updates don't accrue junk versions:
+/// the edit form submits a full payload on every Save even when nothing is
+/// dirty, and emits a no-op update before a group move. Compares normalized
+/// clones so real differences in fields, tags, icon, expiry, or attachments
+/// register while the always-bumped mtime does not.
+fn entry_content_changed(before: &KeepassEntry, after: &KeepassEntry) -> bool {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    a.history = None;
+    b.history = None;
+    b.times.last_modification = a.times.last_modification;
+    a != b
 }
 
 impl KdbxService {
@@ -484,11 +499,11 @@ impl KdbxService {
                 // stored timestamp is allowed.
                 validate_expiry_enabled(data.expires, expiry, entry.times.expiry)?;
 
-                // Snapshot the prior state into native KDBX history before any
-                // field is overwritten, so the user can recover what an edit
-                // replaces (ADR-0008). This is the single chokepoint; S1 wires
-                // it here, S2 widens it to the other mutators.
-                snapshot_entry_history(&mut entry);
+                // Capture the pre-image before any field is overwritten, so a
+                // snapshot can preserve exactly what the edit replaces
+                // (ADR-0008). Whether it is actually kept is decided after the
+                // mutation, gated on a real content change.
+                let before: KeepassEntry = (*entry.as_ref()).clone();
 
                 if let Some(title) = data.title {
                     entry
@@ -532,6 +547,15 @@ impl KdbxService {
                 apply_expiry(&mut entry, data.expires, expiry);
 
                 entry.times.last_modification = Some(Times::now());
+
+                // Single snapshot chokepoint, gated on a real content change so
+                // no-op saves and the no-op pre-move update don't accrue junk
+                // versions. S1 wires the chokepoint here; S2 widens it to the
+                // other mutators.
+                if entry_content_changed(&before, &entry.as_ref()) {
+                    snapshot_entry_history(&mut entry, before);
+                }
+
                 entry.as_ref().parent().id().uuid().to_string()
             };
 
@@ -1982,6 +2006,45 @@ mod tests {
             "the version preserves the prior username, not the new one"
         );
         assert_eq!(history[0].index, 0, "the sole version sits at index 0");
+    }
+
+    #[test]
+    fn a_no_op_update_does_not_snapshot_history() {
+        // The edit form submits a full update payload on every Save — even when
+        // nothing is dirty — and emits a no-op update before a group move. Such
+        // content-preserving updates must NOT accrue a junk history version; the
+        // snapshot is gated on an actual change to stored content.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        let current = service.get_entry(&db_path, &entry_a).expect("get entry");
+        let password = service
+            .get_entry_password(&db_path, &entry_a)
+            .expect("get password");
+
+        // Re-send the entry's current values unchanged.
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    title: Some(current.title.clone()),
+                    username: Some(current.username.clone()),
+                    password: Some(SecureString::from(password)),
+                    url: current.url.clone(),
+                    notes: current.notes.clone(),
+                    ..empty_update()
+                },
+            )
+            .expect("no-op update");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after no-op update");
+
+        assert!(
+            history.is_empty(),
+            "a content-preserving update must not create a history version"
+        );
     }
 
     #[test]
