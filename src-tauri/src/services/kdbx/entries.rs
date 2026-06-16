@@ -293,8 +293,8 @@ impl KdbxService {
                 // when its timestamp still matches the Entry's creation time; if
                 // retention pruned the original away, the oldest survivor is an
                 // "Earliest kept version" instead.
-                let is_creation = index + 1 == count
-                    && snapshot.times.last_modification == entry.times.creation;
+                let is_creation =
+                    index + 1 == count && snapshot.times.last_modification == entry.times.creation;
                 items.push(EntryHistoryItem {
                     index,
                     modified_at: snapshot
@@ -2566,10 +2566,9 @@ mod tests {
                 if let Some(history) = entry.history.as_mut() {
                     let mut newest = history.get_entries().first().cloned();
                     if let Some(snapshot) = newest.as_mut() {
-                        snapshot.times.last_modification = chrono::NaiveDate::from_ymd_opt(
-                            2099, 1, 1,
-                        )
-                        .and_then(|d| d.and_hms_opt(0, 0, 0));
+                        snapshot.times.last_modification =
+                            chrono::NaiveDate::from_ymd_opt(2099, 1, 1)
+                                .and_then(|d| d.and_hms_opt(0, 0, 0));
                     }
                     let mut rebuilt = keepass::db::History::default();
                     if let Some(snapshot) = newest {
