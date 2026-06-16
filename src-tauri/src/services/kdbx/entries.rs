@@ -13,7 +13,7 @@ use super::conversions::{
     apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
     replace_custom_fields, validate_expiry_enabled,
 };
-use super::recycle::is_in_recycle_bin;
+use super::recycle::{is_group_in_recycle_bin, is_in_recycle_bin};
 use super::KdbxService;
 
 /// Classifies a candidate attachment's size against the configured guardrails.
@@ -88,15 +88,45 @@ pub(crate) fn plan_attachment_adds(
 /// stripped (KDBX never nests history, and keeping it would grow each version
 /// exponentially), inserted newest-first by [`keepass::db::History::add_entry`].
 ///
-/// S1 wires this only into `update_entry`; later slices route the remaining
-/// content/location mutators (tags, move, attachments, icon) through the same
-/// helper so coverage stays uniform. Retention pruning is intentionally not
-/// enforced here yet (S6) — history may grow unbounded for now.
-fn snapshot_entry_history(entry: &mut keepass::db::EntryMut<'_>, mut pre_image: KeepassEntry) {
+/// S1 wired this only into `update_entry`; S2 routes the remaining
+/// content/location mutators (bulk tags, move between real Groups, attachment
+/// add, custom-icon/Favicon) through the same helper so coverage stays uniform.
+/// Retention pruning is intentionally not enforced here yet (S6) — history may
+/// grow unbounded for now.
+///
+/// Takes `&mut KeepassEntry` rather than an `EntryMut` so both the `EntryMut`
+/// call sites (via deref coercion) and the raw-`Entry` closures handed to
+/// [`Vault::modify_all_entries`] can funnel through the one chokepoint.
+///
+/// Attachment retention (#332): a pushed pre-image clones the live Entry's
+/// `attachments` map, sharing the same binary-pool `AttachmentId`s. The patched
+/// `keepass` fork never garbage-collects a binary on attachment removal (it
+/// drops only the exact live back-reference, mirroring `set_icon_none`), so a
+/// blob referenced by *any* snapshot survives a later `delete_entry_attachment`
+/// and a save/reopen round-trip, and its id is never reused. The fork also
+/// prunes genuinely-orphaned binaries and re-indexes the pool at save time.
+pub(crate) fn snapshot_entry_history(entry: &mut KeepassEntry, mut pre_image: KeepassEntry) {
     // `History::add_entry` also strips nested history, but clearing it here
     // makes the intent explicit and keeps the pushed snapshot minimal.
     pre_image.history = None;
     entry.history.get_or_insert_default().add_entry(pre_image);
+}
+
+/// Runs `mutate` against a clone-guarded `entry`, pushing a pre-mutation
+/// history snapshot through the chokepoint only when the closure reports a
+/// real change. The shared shape behind the bulk tag mutators (rename/delete),
+/// where one snapshot must land per touched Entry and nothing on the rest.
+fn snapshot_on_change(
+    entry: &mut KeepassEntry,
+    mutate: impl FnOnce(&mut KeepassEntry) -> bool,
+) -> bool {
+    let before = entry.clone();
+    if mutate(entry) {
+        snapshot_entry_history(entry, before);
+        true
+    } else {
+        false
+    }
 }
 
 /// Whether an edit changed any *stored content* of the Entry, ignoring the
@@ -256,13 +286,17 @@ impl KdbxService {
         })
     }
 
-    /// Removes a single Attachment from an Entry, keyed by its filename. The
-    /// `keepass` crate drops the Entry's reference and — when it was the last
-    /// reference — the now-orphaned blob from the Vault-level binary pool, so
-    /// no separate pool cleanup is needed. The Entry's modification time is
-    /// bumped and the Vault is marked modified (the caller persists). Deleting
-    /// an unknown filename is an [`AppError::AttachmentNotFound`] that leaves
-    /// the Vault untouched.
+    /// Removes a single Attachment from an Entry, keyed by its filename, after
+    /// snapshotting the pre-delete state into Entry History so the removed file
+    /// stays recoverable (#332). The patched `keepass` fork drops only the live
+    /// reference and retains the binary in the Vault pool for as long as any
+    /// history Version references it (mirroring the custom-icon path), so the
+    /// snapshot — and any earlier snapshot referencing the same blob — survives
+    /// a save/reopen round-trip without the freed id being reused. The Entry's
+    /// modification time is bumped and the Vault is marked modified (the caller
+    /// persists). Deleting an unknown filename is an
+    /// [`AppError::AttachmentNotFound`] that leaves the Vault untouched and
+    /// snapshots nothing.
     pub fn delete_entry_attachment(
         &self,
         db_id: &str,
@@ -275,8 +309,12 @@ impl KdbxService {
                 if entry.attachment_by_name_mut(filename).is_none() {
                     return Err(AppError::AttachmentNotFound(filename.to_string()));
                 }
+                // Snapshot the pre-delete state (still referencing the blob)
+                // before dropping the live reference, mirroring the add path.
+                let before: KeepassEntry = (*entry.as_ref()).clone();
                 entry.remove_attachment_by_name(filename);
                 entry.times.last_modification = Some(Times::now());
+                snapshot_entry_history(&mut entry, before);
             }
             vault.mark_modified();
             Ok(())
@@ -370,9 +408,14 @@ impl KdbxService {
         self.with_vault_mut(db_id, |vault| {
             let stored_name = {
                 let mut entry = vault.entry_mut(entry_id)?;
+                // Snapshot the pre-add state before the new binary lands (#323).
+                // The pre-image predates the add, so it never references the new
+                // blob.
+                let before: KeepassEntry = (*entry.as_ref()).clone();
                 let stored_name = unique_attachment_name(&entry.as_ref(), &filename);
                 entry.add_attachment(stored_name.clone(), Value::unprotected(bytes));
                 entry.times.last_modification = Some(Times::now());
+                snapshot_entry_history(&mut entry, before);
                 stored_name
             };
             vault.mark_modified();
@@ -603,8 +646,11 @@ impl KdbxService {
                 return Ok(0);
             }
 
-            let count =
-                vault.modify_all_entries(&|entry| rename_tag_in_entry(entry, old_name, new_name));
+            // One snapshot per touched Entry, captured before its tags are
+            // rewritten (#323), kept only when the rename actually changed it.
+            let count = vault.modify_all_entries(&|entry| {
+                snapshot_on_change(entry, |e| rename_tag_in_entry(e, old_name, new_name))
+            });
 
             if count > 0 {
                 vault.mark_modified();
@@ -618,7 +664,9 @@ impl KdbxService {
     /// Returns the number of entries that were modified.
     pub fn delete_tag(&self, db_id: &str, tag_name: &str) -> Result<u32, AppError> {
         self.with_vault_mut(db_id, |vault| {
-            let count = vault.modify_all_entries(&|entry| delete_tag_in_entry(entry, tag_name));
+            let count = vault.modify_all_entries(&|entry| {
+                snapshot_on_change(entry, |e| delete_tag_in_entry(e, tag_name))
+            });
 
             if count > 0 {
                 vault.mark_modified();
@@ -639,17 +687,39 @@ impl KdbxService {
             let eid = vault.find_entry_id(id)?;
             let target_gid = vault.find_group_id(target_group_id)?;
 
+            // Snapshot a real relocation, but exclude Recycle-Bin transitions
+            // (trashing or restoring) and a no-op same-Group move — those carry
+            // no content change worth a history version (#323). Resolved while
+            // the borrow is immutable, before the move mutates the tree.
+            let should_snapshot = {
+                let entry = vault
+                    .db()
+                    .entry(eid)
+                    .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+                let current_parent = entry.parent().id();
+                let recycle_uuid = vault.db().meta.recyclebin_uuid;
+                let touches_recycle = recycle_uuid.is_some_and(|rid| {
+                    is_in_recycle_bin(vault.db(), &entry, rid)
+                        || is_group_in_recycle_bin(vault.db(), Some(target_gid), rid)
+                });
+                current_parent != target_gid && !touches_recycle
+            };
+
             let now = Times::now();
             {
                 let mut entry = vault
                     .db_mut()
                     .entry_mut(eid)
                     .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+                let before: KeepassEntry = (*entry.as_ref()).clone();
                 entry.times.last_modification = Some(now);
                 entry.times.location_changed = Some(now);
                 entry
                     .move_to(target_gid)
                     .map_err(|e| AppError::Kdbx(e.to_string()))?;
+                if should_snapshot {
+                    snapshot_entry_history(&mut entry, before);
+                }
             }
 
             let entry_ref = vault
@@ -1490,11 +1560,11 @@ mod tests {
     }
 
     #[test]
-    fn delete_entry_attachment_removes_reference_and_orphaned_blob() {
-        // Deleting the only Attachment referencing a pooled blob must drop both
-        // the Entry's reference and the now-orphaned blob from the Vault-level
-        // pool, and mark the Vault modified. Prior art for the binary-in-vault
-        // round-trip shape: services/kdbx/custom_icons.rs.
+    fn delete_entry_attachment_snapshots_and_retains_blob_for_history() {
+        // Deleting an Attachment captures a pre-delete history version and
+        // retains the binary in the Vault pool for as long as that version
+        // references it (#332) — it is NOT GC'd on the last *live* reference,
+        // mirroring how custom icons are kept. The Vault is marked modified.
         let (service, _dir, db_path, entry_a, _b) = create_test_database();
         let generation_before =
             seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
@@ -1503,19 +1573,39 @@ mod tests {
             .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
             .expect("delete attachment");
 
+        // The live Entry no longer references the attachment...
         let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
         assert!(
             entry.attachments.is_empty(),
-            "the Entry's attachment reference must be gone after delete"
+            "the live Entry's attachment reference must be gone after delete"
         );
 
+        // ...exactly one pre-delete version was captured...
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history");
+        assert_eq!(
+            history.len(),
+            1,
+            "deleting an attachment captures one history version"
+        );
+
+        let expected: &[u8] = b"secret";
         service
             .with_vault(&db_path, |vault| {
+                // ...the blob is retained, referenced only by that version...
                 assert_eq!(
                     vault.db().num_attachments(),
-                    0,
-                    "the orphaned blob must be cleaned from the Vault pool"
+                    1,
+                    "the blob must be retained while a history version references it"
                 );
+                // ...and that version still resolves the original bytes.
+                let entry = vault.find_entry(&entry_a)?;
+                let hist = entry.historical(0).expect("history version exists");
+                let att = hist
+                    .attachment_by_name("codes.txt")
+                    .expect("history retains the attachment binary");
+                assert_eq!(att.data.get().as_slice(), expected);
                 assert!(
                     vault.generation() > generation_before,
                     "a successful delete must mark the Vault modified"
@@ -2148,6 +2238,416 @@ mod tests {
         assert_eq!(
             history[0].username, "alice",
             "the reopened version preserves the prior username"
+        );
+    }
+
+    /// Sets an Entry's tags directly through the vault, bypassing
+    /// `update_entry` so the seeding itself records no history version.
+    fn seed_tags(service: &KdbxService, db_path: &str, entry_id: &str, tags: &[&str]) {
+        service
+            .with_vault_mut(db_path, |vault| {
+                let mut entry = vault.entry_mut(entry_id)?;
+                entry.tags = tags.iter().map(|t| (*t).to_string()).collect();
+                Ok(())
+            })
+            .expect("seed tags");
+    }
+
+    /// Reads a historical version's tags by reaching through the live Entry's
+    /// native KDBX history — the listing DTO carries no tags, so structural
+    /// assertions inspect the version directly.
+    fn historical_tags(
+        service: &KdbxService,
+        db_path: &str,
+        entry_id: &str,
+        index: usize,
+    ) -> Vec<String> {
+        service
+            .with_vault(db_path, |vault| {
+                let entry = vault.find_entry(entry_id)?;
+                Ok(entry
+                    .historical(index)
+                    .expect("history version exists")
+                    .tags
+                    .clone())
+            })
+            .expect("read historical tags")
+    }
+
+    /// Reads a historical version's attachment bytes by reaching through the
+    /// live Entry's native KDBX history. Returns `None` when that version does
+    /// not carry the named attachment. The listing DTO carries no attachment
+    /// bytes, so retention assertions inspect the version directly.
+    fn historical_attachment_bytes(
+        service: &KdbxService,
+        db_path: &str,
+        entry_id: &str,
+        index: usize,
+        filename: &str,
+    ) -> Option<Vec<u8>> {
+        service
+            .with_vault(db_path, |vault| {
+                let entry = vault.find_entry(entry_id)?;
+                Ok(entry
+                    .historical(index)
+                    .and_then(|h| h.attachment_by_name(filename).map(|a| a.data.get().clone())))
+            })
+            .expect("read historical attachment")
+    }
+
+    #[test]
+    fn attachment_blob_is_retrievable_from_history_after_delete_and_reopen() {
+        // The interop proof point (#332): after deleting an Attachment, the
+        // captured version's binary must survive being written to disk and read
+        // back with a *fresh* service — the blob is not GC'd at delete time and
+        // the on-disk pool round-trips it.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
+
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+        service.save(&db_path).expect("save vault");
+        service.close(&db_path).expect("close vault");
+
+        let reopened = KdbxService::new();
+        reopened.open(&db_path, "testpass").expect("reopen vault");
+
+        // The live Entry still has no attachment after the round-trip...
+        let entry = reopened.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "the live Entry must not regain the deleted attachment on reopen"
+        );
+
+        // ...the version is still listed...
+        let history = reopened
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after reopen");
+        assert_eq!(
+            history.len(),
+            1,
+            "the pre-delete version must survive the on-disk round-trip"
+        );
+
+        // ...and its blob is still retrievable verbatim.
+        let bytes = historical_attachment_bytes(&reopened, &db_path, &entry_a, 0, "codes.txt");
+        assert_eq!(
+            bytes.as_deref(),
+            Some(b"secret".as_slice()),
+            "the deleted attachment's bytes must round-trip through history"
+        );
+    }
+
+    #[test]
+    fn a_blob_from_an_earlier_snapshot_survives_a_later_attachment_delete() {
+        // Broadened retention (#332): the stock binary-pool GC was keyed by entry
+        // id only, so deleting an attachment could reclaim a blob that an
+        // *earlier* snapshot (from any trigger) still referenced. Here a
+        // field-edit snapshot captures the attachment-bearing state; a subsequent
+        // delete must not strip that earlier version's blob, across save/reopen.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
+
+        // Field edit snapshots the attachment-bearing state at index 0.
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    title: Some("renamed".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("field edit");
+
+        // Deleting the attachment pushes a second snapshot (now at index 0) and
+        // drops the live reference; the earlier field-edit version (index 1)
+        // still references the blob.
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+
+        service.save(&db_path).expect("save vault");
+        service.close(&db_path).expect("close vault");
+
+        let reopened = KdbxService::new();
+        reopened.open(&db_path, "testpass").expect("reopen vault");
+
+        let history = reopened
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after reopen");
+        assert_eq!(
+            history.len(),
+            2,
+            "both the field-edit and the delete snapshots must survive reopen"
+        );
+
+        // Both the delete snapshot (index 0) and the earlier field-edit snapshot
+        // (index 1) must still resolve the original bytes — neither was aliased
+        // or GC'd by the delete.
+        for index in [0, 1] {
+            let bytes =
+                historical_attachment_bytes(&reopened, &db_path, &entry_a, index, "codes.txt");
+            assert_eq!(
+                bytes.as_deref(),
+                Some(b"secret".as_slice()),
+                "history version {index} must retain the original attachment bytes"
+            );
+        }
+    }
+
+    #[test]
+    fn reading_an_entry_snapshots_nothing() {
+        // Access-only paths — fetching the Entry, its password, an attachment,
+        // or listing its history — are not edits and must never accrue a
+        // history version (#323).
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"data");
+
+        service.get_entry(&db_path, &entry_a).expect("get entry");
+        service
+            .get_entry_password(&db_path, &entry_a)
+            .expect("get password");
+        service
+            .get_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("get attachment");
+        service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after reads");
+        assert!(
+            history.is_empty(),
+            "reading or accessing an Entry must not create a history version"
+        );
+    }
+
+    #[test]
+    fn adding_an_attachment_snapshots_the_prior_state() {
+        // Adding an Attachment changes the Entry's stored content, so the
+        // chokepoint captures the prior state first. The history version
+        // predates the add, so it carries none of the new attachment.
+        let (service, dir, db_path, entry_a, _b) = create_test_database();
+
+        let source = dir.path().join("codes.txt");
+        std::fs::write(&source, b"recovery-codes").expect("seed source file");
+
+        service
+            .add_entry_attachment(&db_path, &entry_a, &source, TEST_HARD_CAP)
+            .expect("add attachment");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after add");
+        assert_eq!(
+            history.len(),
+            1,
+            "adding an attachment captures one version"
+        );
+
+        let prior_attachments = service
+            .with_vault(&db_path, |vault| {
+                let entry = vault.find_entry(&entry_a)?;
+                Ok(entry
+                    .historical(0)
+                    .expect("history version exists")
+                    .attachments()
+                    .count())
+            })
+            .expect("inspect historical attachments");
+        assert_eq!(
+            prior_attachments, 0,
+            "the snapshot predates the add, so it holds no attachment"
+        );
+    }
+
+    #[test]
+    fn bulk_rename_tag_snapshots_each_affected_entry() {
+        // A vault-wide tag rename must capture a per-Entry snapshot before
+        // rewriting the tag, matching KeePassXC — and only on Entries that
+        // actually carried the tag.
+        let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
+        seed_tags(&service, &db_path, &entry_a, &["work", "urgent"]);
+        // entry_b never carries the tag, so it must stay untouched.
+
+        let count = service
+            .rename_tag(&db_path, "work", "office")
+            .expect("rename tag across vault");
+        assert_eq!(count, 1, "only the one tagged Entry is modified");
+
+        let history_a = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history for affected entry");
+        assert_eq!(history_a.len(), 1, "the affected Entry gets one snapshot");
+        assert_eq!(
+            historical_tags(&service, &db_path, &entry_a, 0),
+            vec!["work".to_string(), "urgent".to_string()],
+            "the snapshot preserves the tags as they were before the rename"
+        );
+
+        let live = service.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            live.tags.contains(&"office".to_string()),
+            "the live Entry reflects the renamed tag"
+        );
+
+        let history_b = service
+            .list_entry_history(&db_path, &entry_b)
+            .expect("list history for untouched entry");
+        assert!(
+            history_b.is_empty(),
+            "an Entry without the tag accrues no snapshot"
+        );
+    }
+
+    #[test]
+    fn bulk_delete_tag_snapshots_each_affected_entry() {
+        // Deleting a tag vault-wide likewise snapshots each Entry that loses it.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_tags(&service, &db_path, &entry_a, &["work", "urgent"]);
+
+        let count = service
+            .delete_tag(&db_path, "urgent")
+            .expect("delete tag across vault");
+        assert_eq!(count, 1, "the one tagged Entry is modified");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after tag delete");
+        assert_eq!(history.len(), 1, "the affected Entry gets one snapshot");
+        assert_eq!(
+            historical_tags(&service, &db_path, &entry_a, 0),
+            vec!["work".to_string(), "urgent".to_string()],
+            "the snapshot preserves the deleted tag"
+        );
+    }
+
+    #[test]
+    fn a_no_op_tag_rename_snapshots_nothing() {
+        // Renaming a tag no Entry carries (or renaming a tag to itself) changes
+        // no stored content, so it must not accrue history versions.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_tags(&service, &db_path, &entry_a, &["work"]);
+
+        let missing = service
+            .rename_tag(&db_path, "nonexistent", "office")
+            .expect("rename a tag nobody has");
+        assert_eq!(missing, 0, "no Entry carries the tag");
+
+        let identity = service
+            .rename_tag(&db_path, "work", "work")
+            .expect("rename a tag to itself");
+        assert_eq!(identity, 0, "renaming a tag to itself is a no-op");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after no-op renames");
+        assert!(
+            history.is_empty(),
+            "no-op tag renames must not create history versions"
+        );
+    }
+
+    #[test]
+    fn moving_between_real_groups_snapshots_prior_state() {
+        // Moving an Entry between two real Groups changes its stored location,
+        // so the chokepoint captures the prior state before the move lands.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let target = service
+            .create_group(&db_path, None, "Target", None)
+            .expect("create target group");
+
+        service
+            .move_entry(&db_path, &entry_a, &target.id)
+            .expect("move entry to a real group");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after move");
+        assert_eq!(
+            history.len(),
+            1,
+            "a move between real Groups captures exactly one version"
+        );
+    }
+
+    #[test]
+    fn sending_to_recycle_bin_does_not_snapshot() {
+        // Deletion is a Recycle-Bin transition, not a content edit: it is
+        // already reversible, so it must not accrue history noise.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .delete_entry(&db_path, &entry_a)
+            .expect("send entry to recycle bin");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after delete");
+        assert!(
+            history.is_empty(),
+            "sending to the Recycle Bin must not create a history version"
+        );
+    }
+
+    #[test]
+    fn restoring_from_recycle_bin_does_not_snapshot() {
+        // Restoring a trashed Entry (a move *out* of the Recycle Bin) is the
+        // mirror of deletion and is likewise excluded from history.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let root = service.get_info(&db_path).expect("info").root_group_id;
+
+        service
+            .delete_entry(&db_path, &entry_a)
+            .expect("send entry to recycle bin");
+        service
+            .move_entry(&db_path, &entry_a, &root)
+            .expect("restore entry to a real group");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after restore");
+        assert!(
+            history.is_empty(),
+            "restoring from the Recycle Bin must not create a history version"
+        );
+    }
+
+    #[test]
+    fn moving_into_recycle_bin_via_move_does_not_snapshot() {
+        // A move whose *target* is the Recycle Bin is a trash transition, not a
+        // relocation, and shares the deletion exclusion.
+        let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
+
+        // Materialise the Recycle Bin by trashing a throwaway entry, then read
+        // its group id back from vault meta.
+        service
+            .delete_entry(&db_path, &entry_b)
+            .expect("trash throwaway to create recycle bin");
+        let recycle_gid = service
+            .with_vault(&db_path, |vault| {
+                Ok(vault
+                    .db()
+                    .meta
+                    .recyclebin_uuid
+                    .map(|u| u.to_string())
+                    .expect("recycle bin exists"))
+            })
+            .expect("read recycle uuid");
+
+        service
+            .move_entry(&db_path, &entry_a, &recycle_gid)
+            .expect("move entry into the recycle bin");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after move into recycle bin");
+        assert!(
+            history.is_empty(),
+            "moving into the Recycle Bin must not create a history version"
         );
     }
 }

@@ -88,3 +88,7 @@ ignore = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Temporary fork of keepass 0.13.11 pinned via [patch.crates-io] for
+# attachment-history blob retention (#332). Remove once the fix is released
+# upstream and the patch is dropped. See src-tauri/Cargo.toml.
+allow-git = ["https://github.com/SchnitzelAndSpaetzle/keepass-rs"]
