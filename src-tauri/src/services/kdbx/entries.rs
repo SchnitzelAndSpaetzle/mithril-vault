@@ -98,12 +98,13 @@ pub(crate) fn plan_attachment_adds(
 /// call sites (via deref coercion) and the raw-`Entry` closures handed to
 /// [`Vault::modify_all_entries`] can funnel through the one chokepoint.
 ///
-/// NOTE (#323): attachment **deletion** is deliberately *not* yet routed here.
-/// A pre-image clone shares the live Entry's binary-pool `AttachmentId` but is
-/// not registered as a pool back-reference, and the crate's delete path GCs a
-/// blob keyed only by `entry_id` — so snapshotting a delete would leave the
-/// history version pointing at a reclaimed (and later possibly reused) blob.
-/// Snapshot-on-delete plus blob retention land together in a follow-up.
+/// Attachment retention (#332): a pushed pre-image clones the live Entry's
+/// `attachments` map, sharing the same binary-pool `AttachmentId`s. The patched
+/// `keepass` fork never garbage-collects a binary on attachment removal (it
+/// drops only the exact live back-reference, mirroring `set_icon_none`), so a
+/// blob referenced by *any* snapshot survives a later `delete_entry_attachment`
+/// and a save/reopen round-trip, and its id is never reused. The fork also
+/// prunes genuinely-orphaned binaries and re-indexes the pool at save time.
 pub(crate) fn snapshot_entry_history(entry: &mut KeepassEntry, mut pre_image: KeepassEntry) {
     // `History::add_entry` also strips nested history, but clearing it here
     // makes the intent explicit and keeps the pushed snapshot minimal.
@@ -285,19 +286,17 @@ impl KdbxService {
         })
     }
 
-    /// Removes a single Attachment from an Entry, keyed by its filename. The
-    /// `keepass` crate drops the Entry's reference and — when it was the last
-    /// reference — the now-orphaned blob from the Vault-level binary pool, so
-    /// no separate pool cleanup is needed. The Entry's modification time is
-    /// bumped and the Vault is marked modified (the caller persists). Deleting
-    /// an unknown filename is an [`AppError::AttachmentNotFound`] that leaves
-    /// the Vault untouched.
-    ///
-    /// NOTE (#323): this path deliberately does **not** route through the
-    /// snapshot chokepoint yet. The pool GC above reclaims (and later reuses)
-    /// the blob keyed only by `entry_id`, so a snapshot taken here would point
-    /// the history version at a freed/reused blob. Snapshot-on-delete plus the
-    /// required binary-pool blob retention land together in a follow-up.
+    /// Removes a single Attachment from an Entry, keyed by its filename, after
+    /// snapshotting the pre-delete state into Entry History so the removed file
+    /// stays recoverable (#332). The patched `keepass` fork drops only the live
+    /// reference and retains the binary in the Vault pool for as long as any
+    /// history Version references it (mirroring the custom-icon path), so the
+    /// snapshot — and any earlier snapshot referencing the same blob — survives
+    /// a save/reopen round-trip without the freed id being reused. The Entry's
+    /// modification time is bumped and the Vault is marked modified (the caller
+    /// persists). Deleting an unknown filename is an
+    /// [`AppError::AttachmentNotFound`] that leaves the Vault untouched and
+    /// snapshots nothing.
     pub fn delete_entry_attachment(
         &self,
         db_id: &str,
@@ -310,8 +309,12 @@ impl KdbxService {
                 if entry.attachment_by_name_mut(filename).is_none() {
                     return Err(AppError::AttachmentNotFound(filename.to_string()));
                 }
+                // Snapshot the pre-delete state (still referencing the blob)
+                // before dropping the live reference, mirroring the add path.
+                let before: KeepassEntry = (*entry.as_ref()).clone();
                 entry.remove_attachment_by_name(filename);
                 entry.times.last_modification = Some(Times::now());
+                snapshot_entry_history(&mut entry, before);
             }
             vault.mark_modified();
             Ok(())
@@ -407,7 +410,7 @@ impl KdbxService {
                 let mut entry = vault.entry_mut(entry_id)?;
                 // Snapshot the pre-add state before the new binary lands (#323).
                 // The pre-image predates the add, so it never references the new
-                // blob — the deferred delete-path retention concern doesn't apply.
+                // blob.
                 let before: KeepassEntry = (*entry.as_ref()).clone();
                 let stored_name = unique_attachment_name(&entry.as_ref(), &filename);
                 entry.add_attachment(stored_name.clone(), Value::unprotected(bytes));
@@ -1557,11 +1560,11 @@ mod tests {
     }
 
     #[test]
-    fn delete_entry_attachment_removes_reference_and_orphaned_blob() {
-        // Deleting the only Attachment referencing a pooled blob must drop both
-        // the Entry's reference and the now-orphaned blob from the Vault-level
-        // pool, and mark the Vault modified. Prior art for the binary-in-vault
-        // round-trip shape: services/kdbx/custom_icons.rs.
+    fn delete_entry_attachment_snapshots_and_retains_blob_for_history() {
+        // Deleting an Attachment captures a pre-delete history version and
+        // retains the binary in the Vault pool for as long as that version
+        // references it (#332) — it is NOT GC'd on the last *live* reference,
+        // mirroring how custom icons are kept. The Vault is marked modified.
         let (service, _dir, db_path, entry_a, _b) = create_test_database();
         let generation_before =
             seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
@@ -1570,19 +1573,39 @@ mod tests {
             .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
             .expect("delete attachment");
 
+        // The live Entry no longer references the attachment...
         let entry = service.get_entry(&db_path, &entry_a).expect("get entry");
         assert!(
             entry.attachments.is_empty(),
-            "the Entry's attachment reference must be gone after delete"
+            "the live Entry's attachment reference must be gone after delete"
         );
 
+        // ...exactly one pre-delete version was captured...
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history");
+        assert_eq!(
+            history.len(),
+            1,
+            "deleting an attachment captures one history version"
+        );
+
+        let expected: &[u8] = b"secret";
         service
             .with_vault(&db_path, |vault| {
+                // ...the blob is retained, referenced only by that version...
                 assert_eq!(
                     vault.db().num_attachments(),
-                    0,
-                    "the orphaned blob must be cleaned from the Vault pool"
+                    1,
+                    "the blob must be retained while a history version references it"
                 );
+                // ...and that version still resolves the original bytes.
+                let entry = vault.find_entry(&entry_a)?;
+                let hist = entry.historical(0).expect("history version exists");
+                let att = hist
+                    .attachment_by_name("codes.txt")
+                    .expect("history retains the attachment binary");
+                assert_eq!(att.data.get().as_slice(), expected);
                 assert!(
                     vault.generation() > generation_before,
                     "a successful delete must mark the Vault modified"
@@ -2249,6 +2272,129 @@ mod tests {
                     .clone())
             })
             .expect("read historical tags")
+    }
+
+    /// Reads a historical version's attachment bytes by reaching through the
+    /// live Entry's native KDBX history. Returns `None` when that version does
+    /// not carry the named attachment. The listing DTO carries no attachment
+    /// bytes, so retention assertions inspect the version directly.
+    fn historical_attachment_bytes(
+        service: &KdbxService,
+        db_path: &str,
+        entry_id: &str,
+        index: usize,
+        filename: &str,
+    ) -> Option<Vec<u8>> {
+        service
+            .with_vault(db_path, |vault| {
+                let entry = vault.find_entry(entry_id)?;
+                Ok(entry
+                    .historical(index)
+                    .and_then(|h| h.attachment_by_name(filename).map(|a| a.data.get().clone())))
+            })
+            .expect("read historical attachment")
+    }
+
+    #[test]
+    fn attachment_blob_is_retrievable_from_history_after_delete_and_reopen() {
+        // The interop proof point (#332): after deleting an Attachment, the
+        // captured version's binary must survive being written to disk and read
+        // back with a *fresh* service — the blob is not GC'd at delete time and
+        // the on-disk pool round-trips it.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
+
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+        service.save(&db_path).expect("save vault");
+        service.close(&db_path).expect("close vault");
+
+        let reopened = KdbxService::new();
+        reopened.open(&db_path, "testpass").expect("reopen vault");
+
+        // The live Entry still has no attachment after the round-trip...
+        let entry = reopened.get_entry(&db_path, &entry_a).expect("get entry");
+        assert!(
+            entry.attachments.is_empty(),
+            "the live Entry must not regain the deleted attachment on reopen"
+        );
+
+        // ...the version is still listed...
+        let history = reopened
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after reopen");
+        assert_eq!(
+            history.len(),
+            1,
+            "the pre-delete version must survive the on-disk round-trip"
+        );
+
+        // ...and its blob is still retrievable verbatim.
+        let bytes = historical_attachment_bytes(&reopened, &db_path, &entry_a, 0, "codes.txt");
+        assert_eq!(
+            bytes.as_deref(),
+            Some(b"secret".as_slice()),
+            "the deleted attachment's bytes must round-trip through history"
+        );
+    }
+
+    #[test]
+    fn a_blob_from_an_earlier_snapshot_survives_a_later_attachment_delete() {
+        // Broadened retention (#332): the stock binary-pool GC was keyed by entry
+        // id only, so deleting an attachment could reclaim a blob that an
+        // *earlier* snapshot (from any trigger) still referenced. Here a
+        // field-edit snapshot captures the attachment-bearing state; a subsequent
+        // delete must not strip that earlier version's blob, across save/reopen.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
+
+        // Field edit snapshots the attachment-bearing state at index 0.
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    title: Some("renamed".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("field edit");
+
+        // Deleting the attachment pushes a second snapshot (now at index 0) and
+        // drops the live reference; the earlier field-edit version (index 1)
+        // still references the blob.
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+
+        service.save(&db_path).expect("save vault");
+        service.close(&db_path).expect("close vault");
+
+        let reopened = KdbxService::new();
+        reopened.open(&db_path, "testpass").expect("reopen vault");
+
+        let history = reopened
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after reopen");
+        assert_eq!(
+            history.len(),
+            2,
+            "both the field-edit and the delete snapshots must survive reopen"
+        );
+
+        // Both the delete snapshot (index 0) and the earlier field-edit snapshot
+        // (index 1) must still resolve the original bytes — neither was aliased
+        // or GC'd by the delete.
+        for index in [0, 1] {
+            let bytes =
+                historical_attachment_bytes(&reopened, &db_path, &entry_a, index, "codes.txt");
+            assert_eq!(
+                bytes.as_deref(),
+                Some(b"secret".as_slice()),
+                "history version {index} must retain the original attachment bytes"
+            );
+        }
     }
 
     #[test]
