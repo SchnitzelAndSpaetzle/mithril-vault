@@ -2874,9 +2874,9 @@ dependencies = [
 
 [[package]]
 name = "keepass"
-version = "0.13.8"
+version = "0.13.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c21ad5c74f28ca9d2efd52b041a5a7be659e0681d0d3dc57e625ee050a6bd853"
+checksum = "9eaf00f9ef8d75959f78f128959f923304c273544eaa62dcb34f585520a34a5b"
 dependencies = [
  "aes 0.9.0",
  "base64 0.22.1",
@@ -4055,9 +4055,9 @@ dependencies = [
 
 [[package]]
 name = "psl"
-version = "2.1.212"
+version = "2.1.213"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9f6415ab1b08394487005d41ae7ee69e69903efa1ace538f3b274db605bf8ec"
+checksum = "04e78830163eebdf905adb55ba26ba9b3ba554b08bd84c2fbe3b643c8addf22c"
 dependencies = [
  "psl-types",
 ]
@@ -7464,9 +7464,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.8.2"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
+checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
 dependencies = [
  "serde",
  "zeroize_derive",
@@ -7474,9 +7474,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize_derive"
-version = "1.4.3"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85a5b4158499876c763cb03bc4e49185d3cccbabb15b33c627f7884f43db852e"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
 dependencies = [
  "proc-macro2",
  "quote",
