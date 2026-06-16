@@ -155,14 +155,16 @@ fn entry_content_changed(before: &KeepassEntry, after: &KeepassEntry) -> bool {
 fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<String> {
     let mut changed = Vec::new();
 
-    // Text fields: the union of keys present in either version, compared by
-    // resolved value. `Entry::get` unprotects Protected values, so a password
-    // change is detected here while only its *name* is emitted.
+    // Text fields: the union of keys present in either version. Compare the
+    // stored `Value`, not just the resolved string, so a value change *and* a
+    // protected/unprotected toggle of the same text both register. `Value`'s
+    // `PartialEq` compares protected secrets by content, so a password change
+    // is detected while only the field *name* is emitted.
     let mut keys: BTreeSet<&str> = BTreeSet::new();
     keys.extend(before.fields.keys().map(String::as_str));
     keys.extend(after.fields.keys().map(String::as_str));
     for key in keys {
-        if before.get(key) != after.get(key) {
+        if before.fields.get(key) != after.fields.get(key) {
             changed.push(field_display_name(key));
         }
     }
@@ -193,6 +195,15 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
     let after_atts: BTreeSet<&str> = after.attachments_named().map(|(name, _)| name).collect();
     if before_atts != after_atts {
         changed.push("attachments".to_string());
+    }
+
+    // Location: a move between Groups bumps `location_changed` (but leaves the
+    // content untouched), so a move-only version would otherwise have a blank
+    // changed line. Second-resolution timestamps mean two moves within the same
+    // second don't register — an acceptable, non-crashing degradation versus
+    // resolving the (possibly deleted) parent group, which would panic.
+    if before.times.location_changed != after.times.location_changed {
+        changed.push("location".to_string());
     }
 
     changed
@@ -1031,7 +1042,7 @@ mod tests {
     use crate::dto::entry::{AttachmentMeta, AttachmentSizeStatus};
     use crate::services::kdbx::test_support::create_test_database;
     use keepass::db::Value;
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
 
     /// The hard cap the attachment add/round-trip tests inject. A generous
     /// fixed value so the round-trip cases never trip the cap; the over-cap
@@ -2502,6 +2513,91 @@ mod tests {
             history[0].changed_fields,
             vec!["attachments".to_string()],
             "an attachment delete surfaces the `attachments` attribute"
+        );
+    }
+
+    #[test]
+    fn toggling_a_custom_field_protection_surfaces_its_name() {
+        // Toggling a custom field between unprotected and protected without
+        // changing its text still snapshots (the stored `Value` variant
+        // changed), so the diff must report the field by name even though the
+        // resolved plaintext is identical on both sides.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    custom_fields: Some(BTreeMap::from([(
+                        "API".to_string(),
+                        "xyz".to_string(),
+                    )])),
+                    ..empty_update()
+                },
+            )
+            .expect("add an unprotected custom field");
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    protected_custom_fields: Some(BTreeMap::from([(
+                        "API".to_string(),
+                        SecureString::from("xyz"),
+                    )])),
+                    ..empty_update()
+                },
+            )
+            .expect("re-store the same value as protected");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after protection toggle");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["API".to_string()],
+            "a protection toggle with unchanged text surfaces the field by name"
+        );
+    }
+
+    #[test]
+    fn moving_an_entry_between_groups_surfaces_the_location_attribute() {
+        // A move between real Groups snapshots (#321/#323) but changes none of
+        // the text fields, tags, icon, expiry, or attachments — only the
+        // entry's location. The diff reports `location` so the version isn't a
+        // blank "Changed:" row.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let target = service
+            .create_group(&db_path, None, "Target", None)
+            .expect("create target group");
+
+        service
+            .move_entry(&db_path, &entry_a, &target.id)
+            .expect("move the entry");
+
+        // The pre-move snapshot keeps the entry's creation-time
+        // `location_changed`; the live entry's is bumped to the move instant.
+        // In a fast test both land in the same second, so force them apart to
+        // model the realistic create-then-move-later case.
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.times.location_changed =
+                    chrono::NaiveDate::from_ymd_opt(2099, 1, 1).and_then(|d| d.and_hms_opt(0, 0, 0));
+                Ok(())
+            })
+            .expect("distinguish the move timestamp");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after move");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["location".to_string()],
+            "a move between groups surfaces the `location` attribute"
         );
     }
 
