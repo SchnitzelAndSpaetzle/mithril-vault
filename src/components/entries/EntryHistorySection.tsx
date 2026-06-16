@@ -68,19 +68,43 @@ export function EntryHistorySection({
           </p>
         ) : (
           <ul>
-            {versions.map((version, index) => (
-              <li key={`${version.index}:${version.modifiedAt}`}>
-                {index > 0 && <Separator />}
-                <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-2">
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {version.title}
-                  </span>
-                  <span className="shrink-0 text-sm text-muted-foreground">
-                    {formatHistoryDate(version.modifiedAt)}
-                  </span>
-                </div>
-              </li>
-            ))}
+            {versions.map((version, index) => {
+              // The oldest version (last, newest-first) carries an origin label:
+              // "Created" when it's the original snapshot, otherwise "Earliest
+              // kept version" — and the latter shows no changed line, since the
+              // edit that produced it was pruned away with its predecessor.
+              const isOldest = index === versions.length - 1;
+              const isEarliestKept = isOldest && !version.isCreation;
+              const showChanged =
+                version.changedFields.length > 0 && !isEarliestKept;
+              return (
+                <li key={`${version.index}:${version.modifiedAt}`}>
+                  {index > 0 && <Separator />}
+                  <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {version.title}
+                    </span>
+                    <span className="shrink-0 text-sm text-muted-foreground">
+                      {formatHistoryDate(version.modifiedAt)}
+                    </span>
+                  </div>
+                  {isOldest && (
+                    <p className="px-4 pb-2 text-xs font-medium text-muted-foreground">
+                      {version.isCreation
+                        ? t("entries.detail.historyCreated")
+                        : t("entries.detail.historyEarliestKept")}
+                    </p>
+                  )}
+                  {showChanged && (
+                    <p className="px-4 pb-2 text-xs text-muted-foreground">
+                      {t("entries.detail.historyChanged", {
+                        fields: version.changedFields.join(", "),
+                      })}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </CollapsibleContent>

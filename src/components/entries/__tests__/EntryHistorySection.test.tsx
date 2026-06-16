@@ -52,6 +52,8 @@ describe("EntryHistorySection", () => {
         title: "Example",
         username: "bob",
         url: null,
+        changedFields: ["username"],
+        isCreation: false,
       },
       {
         index: 1,
@@ -59,6 +61,8 @@ describe("EntryHistorySection", () => {
         title: "Example",
         username: "alice",
         url: null,
+        changedFields: ["title"],
+        isCreation: true,
       },
     ];
     listHistoryMock.mockResolvedValue(versions);
@@ -77,6 +81,124 @@ describe("EntryHistorySection", () => {
     // Each row carries a human-readable timestamp derived from modifiedAt.
     expect(screen.getByText(/Feb 17, 2024/)).toBeInTheDocument();
     expect(screen.getByText(/Jan 5, 2024/)).toBeInTheDocument();
+  });
+
+  it("renders a changed-fields line listing the field names that changed", async () => {
+    const versions: EntryHistoryItem[] = [
+      {
+        index: 0,
+        modifiedAt: "2024-02-17T15:58:43Z",
+        title: "Example",
+        username: "bob",
+        url: null,
+        changedFields: ["password", "username"],
+        // The lone version after a first edit is the creation snapshot, which
+        // keeps its changed line (only the earliest-kept case suppresses it).
+        isCreation: true,
+      },
+    ];
+    listHistoryMock.mockResolvedValue(versions);
+
+    renderSection();
+
+    const trigger = await screen.findByRole("button", {
+      name: "entries.detail.history",
+    });
+    fireEvent.click(trigger);
+
+    // The interpolated field names are surfaced (i18n is mocked to echo keys,
+    // so the changed line is keyed by `entries.detail.historyChanged`).
+    await waitFor(() => {
+      expect(
+        screen.getByText("entries.detail.historyChanged")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("labels the oldest version 'Created' when it is the original snapshot", async () => {
+    const versions: EntryHistoryItem[] = [
+      {
+        index: 0,
+        modifiedAt: "2024-02-17T15:58:43Z",
+        title: "Example",
+        username: "bob",
+        url: null,
+        changedFields: ["username"],
+        isCreation: false,
+      },
+      {
+        index: 1,
+        modifiedAt: "2024-01-05T09:30:00Z",
+        title: "Example",
+        username: "alice",
+        url: null,
+        changedFields: ["title"],
+        isCreation: true,
+      },
+    ];
+    listHistoryMock.mockResolvedValue(versions);
+
+    renderSection();
+
+    const trigger = await screen.findByRole("button", {
+      name: "entries.detail.history",
+    });
+    fireEvent.click(trigger);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("entries.detail.historyCreated")
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("entries.detail.historyEarliestKept")
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels the oldest version 'Earliest kept' and suppresses its changed line when the original was pruned", async () => {
+    const versions: EntryHistoryItem[] = [
+      {
+        index: 0,
+        modifiedAt: "2024-02-17T15:58:43Z",
+        title: "Example",
+        username: "bob",
+        url: null,
+        changedFields: ["username"],
+        isCreation: false,
+      },
+      {
+        index: 1,
+        modifiedAt: "2024-01-05T09:30:00Z",
+        title: "Example",
+        username: "alice",
+        url: null,
+        // A meaningful diff exists, but the earliest-kept row must not show it.
+        changedFields: ["title"],
+        isCreation: false,
+      },
+    ];
+    listHistoryMock.mockResolvedValue(versions);
+
+    renderSection();
+
+    const trigger = await screen.findByRole("button", {
+      name: "entries.detail.history",
+    });
+    fireEvent.click(trigger);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("entries.detail.historyEarliestKept")
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("entries.detail.historyCreated")
+    ).not.toBeInTheDocument();
+    // The newest row still shows its changed line; the earliest-kept row does
+    // not — so exactly one changed line renders.
+    expect(screen.getAllByText("entries.detail.historyChanged")).toHaveLength(
+      1
+    );
   });
 
   it("shows an empty state when the entry has no history", async () => {

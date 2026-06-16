@@ -145,6 +145,16 @@ pub struct EntryHistoryItem {
     pub title: String,
     pub username: String,
     pub url: Option<String>,
+    /// Names of the fields/attributes that differ from the version immediately
+    /// newer than this one (the newest snapshot diffs against the live Entry).
+    /// Names only — field *values*, including the password and protected custom
+    /// fields, are compared in-process but never cross IPC (ADR-0008).
+    pub changed_fields: Vec<String>,
+    /// True only for the oldest version, and only when its `modified_at` equals
+    /// the Entry's creation time — i.e. this is the original "Created" version.
+    /// When false on the oldest version, the true creation snapshot was pruned
+    /// away and the view labels it "Earliest kept version".
+    pub is_creation: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
