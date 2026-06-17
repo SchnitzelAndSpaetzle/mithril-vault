@@ -14,7 +14,10 @@ vi.mock("@/lib/tauri", () => ({
   },
 }));
 
-import { EntryHistorySection } from "@/components/entries/EntryHistorySection";
+import {
+  EntryHistorySection,
+  formatChangedFields,
+} from "@/components/entries/EntryHistorySection";
 
 const TEST_DB_ID = "test-vault.kdbx";
 const TEST_ENTRY_ID = "entry-1";
@@ -199,6 +202,20 @@ describe("EntryHistorySection", () => {
     expect(screen.getAllByText("entries.detail.historyChanged")).toHaveLength(
       1
     );
+  });
+
+  it("localizes known changed-field tokens and leaves custom field names verbatim", () => {
+    // The backend emits canonical lowercase tokens; the view maps the known
+    // ones through localized labels (so non-English locales don't show
+    // mixed-language text) while passing user-defined custom field names
+    // through untouched.
+    const labels = {
+      password: "Passwort",
+      location: "Speicherort",
+    };
+    expect(
+      formatChangedFields(["password", "location", "MyCustomField"], labels)
+    ).toBe("Passwort, Speicherort, MyCustomField");
   });
 
   it("shows an empty state when the entry has no history", async () => {

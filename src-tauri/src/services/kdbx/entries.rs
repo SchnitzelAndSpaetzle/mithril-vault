@@ -2529,10 +2529,7 @@ mod tests {
                 &db_path,
                 &entry_a,
                 UpdateEntryData {
-                    custom_fields: Some(BTreeMap::from([(
-                        "API".to_string(),
-                        "xyz".to_string(),
-                    )])),
+                    custom_fields: Some(BTreeMap::from([("API".to_string(), "xyz".to_string())])),
                     ..empty_update()
                 },
             )
@@ -2584,8 +2581,8 @@ mod tests {
         service
             .with_vault_mut(&db_path, |vault| {
                 let mut entry = vault.entry_mut(&entry_a)?;
-                entry.times.location_changed =
-                    chrono::NaiveDate::from_ymd_opt(2099, 1, 1).and_then(|d| d.and_hms_opt(0, 0, 0));
+                entry.times.location_changed = chrono::NaiveDate::from_ymd_opt(2099, 1, 1)
+                    .and_then(|d| d.and_hms_opt(0, 0, 0));
                 Ok(())
             })
             .expect("distinguish the move timestamp");

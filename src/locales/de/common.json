@@ -368,6 +368,18 @@
       "historyChanged": "Geändert: {{fields}}",
       "historyCreated": "Erstellt",
       "historyEarliestKept": "Älteste aufbewahrte Version",
+      "historyField": {
+        "title": "Titel",
+        "username": "Benutzername",
+        "password": "Passwort",
+        "url": "URL",
+        "notes": "Notizen",
+        "tags": "Tags",
+        "icon": "Symbol",
+        "attachments": "Anhänge",
+        "expiry": "Ablauf",
+        "location": "Speicherort"
+      },
       "addAttachment": "Anhang hinzufügen",
       "addingAttachments": "Wird hinzugefügt…",
       "dropToAttach": "Dateien hier ablegen, um sie anzuhängen",

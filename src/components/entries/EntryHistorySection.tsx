@@ -20,6 +20,19 @@ interface EntryHistorySectionProps {
 }
 
 /**
+ * Renders a version's `changedFields` as a comma-separated string, replacing
+ * each canonical token the backend emits with its localized label (so
+ * non-English locales don't show mixed-language text) and passing user-defined
+ * custom field names through verbatim.
+ */
+export function formatChangedFields(
+  fields: string[],
+  labels: Record<string, string>
+): string {
+  return fields.map((field) => labels[field] ?? field).join(", ");
+}
+
+/**
  * Minimal Entry History view (#322): a collapsible section in the Entry detail
  * that lists the Entry's past versions, newest-first, each with its timestamp.
  * Versions come from native KDBX history via {@link entriesApi.listHistory} and
@@ -33,6 +46,21 @@ export function EntryHistorySection({
 }: Readonly<EntryHistorySectionProps>) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+
+  // Localized labels for the standard changed-field tokens the backend emits;
+  // custom field names are not listed and fall through to their raw value.
+  const fieldLabels: Record<string, string> = {
+    title: t("entries.detail.historyField.title"),
+    username: t("entries.detail.historyField.username"),
+    password: t("entries.detail.historyField.password"),
+    url: t("entries.detail.historyField.url"),
+    notes: t("entries.detail.historyField.notes"),
+    tags: t("entries.detail.historyField.tags"),
+    icon: t("entries.detail.historyField.icon"),
+    attachments: t("entries.detail.historyField.attachments"),
+    expiry: t("entries.detail.historyField.expiry"),
+    location: t("entries.detail.historyField.location"),
+  };
 
   const { data: versions = [] } = useQuery({
     queryKey: queryKeys.entries.history(dbId, entryId),
@@ -98,7 +126,10 @@ export function EntryHistorySection({
                   {showChanged && (
                     <p className="px-4 pb-2 text-xs text-muted-foreground">
                       {t("entries.detail.historyChanged", {
-                        fields: version.changedFields.join(", "),
+                        fields: formatChangedFields(
+                          version.changedFields,
+                          fieldLabels
+                        ),
                       })}
                     </p>
                   )}

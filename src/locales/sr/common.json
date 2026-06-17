@@ -368,6 +368,18 @@
       "historyChanged": "Izmenjeno: {{fields}}",
       "historyCreated": "Kreirano",
       "historyEarliestKept": "Najstarija sačuvana verzija",
+      "historyField": {
+        "title": "naslov",
+        "username": "korisničko ime",
+        "password": "lozinka",
+        "url": "URL",
+        "notes": "beleške",
+        "tags": "oznake",
+        "icon": "ikona",
+        "attachments": "prilozi",
+        "expiry": "istek",
+        "location": "lokacija"
+      },
       "addAttachment": "Dodaj prilog",
       "addingAttachments": "Dodavanje…",
       "dropToAttach": "Prevucite datoteke ovde da biste ih priložili",

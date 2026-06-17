@@ -391,6 +391,18 @@
       "historyChanged": "Changed: {{fields}}",
       "historyCreated": "Created",
       "historyEarliestKept": "Earliest kept version",
+      "historyField": {
+        "title": "title",
+        "username": "username",
+        "password": "password",
+        "url": "URL",
+        "notes": "notes",
+        "tags": "tags",
+        "icon": "icon",
+        "attachments": "attachments",
+        "expiry": "expiry",
+        "location": "location"
+      },
       "addAttachment": "Add attachment",
       "addingAttachments": "Adding…",
       "dropToAttach": "Drop files here to attach",

@@ -368,6 +368,18 @@
       "historyChanged": "Modifié : {{fields}}",
       "historyCreated": "Créé",
       "historyEarliestKept": "Version conservée la plus ancienne",
+      "historyField": {
+        "title": "titre",
+        "username": "nom d’utilisateur",
+        "password": "mot de passe",
+        "url": "URL",
+        "notes": "notes",
+        "tags": "étiquettes",
+        "icon": "icône",
+        "attachments": "pièces jointes",
+        "expiry": "expiration",
+        "location": "emplacement"
+      },
       "addAttachment": "Ajouter une pièce jointe",
       "addingAttachments": "Ajout…",
       "dropToAttach": "Déposez des fichiers ici pour les joindre",
