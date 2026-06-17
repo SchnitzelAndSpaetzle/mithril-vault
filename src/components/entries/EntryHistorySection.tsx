@@ -97,14 +97,13 @@ export function EntryHistorySection({
         ) : (
           <ul>
             {versions.map((version, index) => {
-              // The oldest version (last, newest-first) carries an origin label:
-              // "Created" when it's the original snapshot, otherwise "Earliest
-              // kept version" — and the latter shows no changed line, since the
-              // edit that produced it was pruned away with its predecessor.
+              // The oldest version (last, newest-first) carries an origin
+              // label: "Created" when it's the original snapshot, otherwise
+              // "Earliest kept version". Its changed line is still shown —
+              // changedFields is diffed against the next-newer version, so it's
+              // accurate even when the original predecessor was pruned.
               const isOldest = index === versions.length - 1;
-              const isEarliestKept = isOldest && !version.isCreation;
-              const showChanged =
-                version.changedFields.length > 0 && !isEarliestKept;
+              const showChanged = version.changedFields.length > 0;
               return (
                 <li key={`${version.index}:${version.modifiedAt}`}>
                   {index > 0 && <Separator />}

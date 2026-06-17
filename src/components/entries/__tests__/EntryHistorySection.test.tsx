@@ -158,7 +158,7 @@ describe("EntryHistorySection", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("labels the oldest version 'Earliest kept' and suppresses its changed line when the original was pruned", async () => {
+  it("labels the oldest version 'Earliest kept' but still shows its changed line", async () => {
     const versions: EntryHistoryItem[] = [
       {
         index: 0,
@@ -175,7 +175,9 @@ describe("EntryHistorySection", () => {
         title: "Example",
         username: "alice",
         url: null,
-        // A meaningful diff exists, but the earliest-kept row must not show it.
+        // changedFields is diffed against the next-newer version, which still
+        // exists — so it's accurate even though the original predecessor was
+        // pruned. The earliest-kept row keeps its changed line.
         changedFields: ["title"],
         isCreation: false,
       },
@@ -197,10 +199,9 @@ describe("EntryHistorySection", () => {
     expect(
       screen.queryByText("entries.detail.historyCreated")
     ).not.toBeInTheDocument();
-    // The newest row still shows its changed line; the earliest-kept row does
-    // not — so exactly one changed line renders.
+    // Both rows have a non-empty changedFields, so both render a changed line.
     expect(screen.getAllByText("entries.detail.historyChanged")).toHaveLength(
-      1
+      2
     );
   });
 
