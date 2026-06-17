@@ -7,10 +7,15 @@ import type { ReactNode } from "react";
 import type { EntryHistoryItem } from "@/lib/types";
 
 const listHistoryMock = vi.fn();
+const getHistoryPasswordMock = vi.fn();
+const getHistoryProtectedFieldMock = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
   entries: {
     listHistory: (...args: unknown[]) => listHistoryMock(...args),
+    getHistoryPassword: (...args: unknown[]) => getHistoryPasswordMock(...args),
+    getHistoryProtectedField: (...args: unknown[]) =>
+      getHistoryProtectedFieldMock(...args),
   },
 }));
 
@@ -21,6 +26,27 @@ import {
 
 const TEST_DB_ID = "test-vault.kdbx";
 const TEST_ENTRY_ID = "entry-1";
+
+/**
+ * Builds an {@link EntryHistoryItem} with sensible defaults, so each test only
+ * spells out the fields it cares about (every version now also carries a
+ * `fingerprint` and a `protectedFields` list).
+ */
+function makeVersion(
+  overrides: Partial<EntryHistoryItem> & Pick<EntryHistoryItem, "index">
+): EntryHistoryItem {
+  return {
+    modifiedAt: "2024-02-17T15:58:43Z",
+    title: "Example",
+    username: "bob",
+    url: null,
+    changedFields: [],
+    isCreation: false,
+    fingerprint: `fp-${overrides.index}`,
+    protectedFields: [],
+    ...overrides,
+  };
+}
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -42,75 +68,59 @@ function renderSection() {
   );
 }
 
+async function expand() {
+  const trigger = await screen.findByRole("button", {
+    name: "entries.detail.history",
+  });
+  fireEvent.click(trigger);
+}
+
 describe("EntryHistorySection", () => {
   beforeEach(() => {
     listHistoryMock.mockReset();
+    getHistoryPasswordMock.mockReset();
+    getHistoryProtectedFieldMock.mockReset();
   });
 
   it("lists each version with its timestamp once expanded", async () => {
-    const versions: EntryHistoryItem[] = [
-      {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
         index: 0,
         modifiedAt: "2024-02-17T15:58:43Z",
-        title: "Example",
         username: "bob",
-        url: null,
         changedFields: ["username"],
-        isCreation: false,
-      },
-      {
+      }),
+      makeVersion({
         index: 1,
         modifiedAt: "2024-01-05T09:30:00Z",
-        title: "Example",
         username: "alice",
-        url: null,
         changedFields: ["title"],
         isCreation: true,
-      },
-    ];
-    listHistoryMock.mockResolvedValue(versions);
+      }),
+    ]);
 
     renderSection();
-
-    // Collapsed by default — expand to reveal the versions.
-    const trigger = await screen.findByRole("button", {
-      name: "entries.detail.history",
-    });
-    fireEvent.click(trigger);
+    await expand();
 
     await waitFor(() => {
       expect(screen.getAllByRole("listitem")).toHaveLength(2);
     });
-    // Each row carries a human-readable timestamp derived from modifiedAt.
     expect(screen.getByText(/Feb 17, 2024/)).toBeInTheDocument();
     expect(screen.getByText(/Jan 5, 2024/)).toBeInTheDocument();
   });
 
   it("renders a changed-fields line listing the field names that changed", async () => {
-    const versions: EntryHistoryItem[] = [
-      {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
         index: 0,
-        modifiedAt: "2024-02-17T15:58:43Z",
-        title: "Example",
-        username: "bob",
-        url: null,
         changedFields: ["password", "username"],
-        // The lone version after a first edit is the creation snapshot, which
-        // keeps its changed line (only the earliest-kept case suppresses it).
         isCreation: true,
-      },
-    ];
-    listHistoryMock.mockResolvedValue(versions);
+      }),
+    ]);
 
     renderSection();
+    await expand();
 
-    const trigger = await screen.findByRole("button", {
-      name: "entries.detail.history",
-    });
-    fireEvent.click(trigger);
-
-    // The interpolated field names are surfaced (i18n is mocked to echo keys,
-    // so the changed line is keyed by `entries.detail.historyChanged`).
     await waitFor(() => {
       expect(
         screen.getByText("entries.detail.historyChanged")
@@ -119,34 +129,19 @@ describe("EntryHistorySection", () => {
   });
 
   it("labels the oldest version 'Created' when it is the original snapshot", async () => {
-    const versions: EntryHistoryItem[] = [
-      {
-        index: 0,
-        modifiedAt: "2024-02-17T15:58:43Z",
-        title: "Example",
-        username: "bob",
-        url: null,
-        changedFields: ["username"],
-        isCreation: false,
-      },
-      {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({ index: 0, changedFields: ["username"] }),
+      makeVersion({
         index: 1,
         modifiedAt: "2024-01-05T09:30:00Z",
-        title: "Example",
         username: "alice",
-        url: null,
         changedFields: ["title"],
         isCreation: true,
-      },
-    ];
-    listHistoryMock.mockResolvedValue(versions);
+      }),
+    ]);
 
     renderSection();
-
-    const trigger = await screen.findByRole("button", {
-      name: "entries.detail.history",
-    });
-    fireEvent.click(trigger);
+    await expand();
 
     await waitFor(() => {
       expect(
@@ -159,37 +154,18 @@ describe("EntryHistorySection", () => {
   });
 
   it("labels the oldest version 'Earliest kept' but still shows its changed line", async () => {
-    const versions: EntryHistoryItem[] = [
-      {
-        index: 0,
-        modifiedAt: "2024-02-17T15:58:43Z",
-        title: "Example",
-        username: "bob",
-        url: null,
-        changedFields: ["username"],
-        isCreation: false,
-      },
-      {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({ index: 0, changedFields: ["username"] }),
+      makeVersion({
         index: 1,
         modifiedAt: "2024-01-05T09:30:00Z",
-        title: "Example",
         username: "alice",
-        url: null,
-        // changedFields is diffed against the next-newer version, which still
-        // exists — so it's accurate even though the original predecessor was
-        // pruned. The earliest-kept row keeps its changed line.
         changedFields: ["title"],
-        isCreation: false,
-      },
-    ];
-    listHistoryMock.mockResolvedValue(versions);
+      }),
+    ]);
 
     renderSection();
-
-    const trigger = await screen.findByRole("button", {
-      name: "entries.detail.history",
-    });
-    fireEvent.click(trigger);
+    await expand();
 
     await waitFor(() => {
       expect(
@@ -199,17 +175,12 @@ describe("EntryHistorySection", () => {
     expect(
       screen.queryByText("entries.detail.historyCreated")
     ).not.toBeInTheDocument();
-    // Both rows have a non-empty changedFields, so both render a changed line.
     expect(screen.getAllByText("entries.detail.historyChanged")).toHaveLength(
       2
     );
   });
 
   it("localizes known changed-field tokens and leaves custom field names verbatim", () => {
-    // The backend emits canonical lowercase tokens; the view maps the known
-    // ones through localized labels (so non-English locales don't show
-    // mixed-language text) while passing user-defined custom field names
-    // through untouched.
     const labels = {
       password: "Passwort",
       location: "Speicherort",
@@ -223,15 +194,80 @@ describe("EntryHistorySection", () => {
     listHistoryMock.mockResolvedValue([]);
 
     renderSection();
-
-    const trigger = await screen.findByRole("button", {
-      name: "entries.detail.history",
-    });
-    fireEvent.click(trigger);
+    await expand();
 
     await waitFor(() => {
       expect(screen.getByText("entries.detail.noHistory")).toBeInTheDocument();
     });
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+  });
+
+  it("reveals a version's password on demand, guarded by its fingerprint", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
+        index: 0,
+        fingerprint: "fp-zero",
+        changedFields: ["password"],
+      }),
+    ]);
+    getHistoryPasswordMock.mockResolvedValue("orig-pw");
+
+    renderSection();
+    await expand();
+
+    // The password is masked until the explicit reveal action.
+    await waitFor(() => {
+      expect(screen.getByText("••••••••")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("orig-pw")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.revealPassword" })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("orig-pw")).toBeInTheDocument();
+    });
+    // Addressed by index + the version's fingerprint (the stale-edit guard).
+    expect(getHistoryPasswordMock).toHaveBeenCalledWith(
+      TEST_DB_ID,
+      TEST_ENTRY_ID,
+      0,
+      "fp-zero"
+    );
+  });
+
+  it("reveals a version's protected custom field on demand", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
+        index: 0,
+        fingerprint: "fp-zero",
+        protectedFields: ["PIN"],
+      }),
+    ]);
+    getHistoryProtectedFieldMock.mockResolvedValue({
+      key: "PIN",
+      value: "0451",
+    });
+
+    renderSection();
+    await expand();
+
+    expect(screen.queryByText("0451")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "entries.detail.revealField" })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("0451")).toBeInTheDocument();
+    });
+    expect(getHistoryProtectedFieldMock).toHaveBeenCalledWith(
+      TEST_DB_ID,
+      TEST_ENTRY_ID,
+      0,
+      "fp-zero",
+      "PIN"
+    );
   });
 });

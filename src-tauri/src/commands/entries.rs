@@ -144,6 +144,50 @@ pub async fn get_entry_protected_custom_field(
     )
 }
 
+/// Fetches a historical version's password on demand, addressed by `index` in
+/// the newest-first history list and guarded by `fingerprint` (a stale guard
+/// errors rather than returning the wrong version). A successful read appends
+/// one `entry.password_revealed` event — the same audit kind as the live
+/// reveal; a failure (including a guard mismatch) records nothing.
+#[tauri::command]
+pub async fn get_history_entry_password(
+    db_id: String,
+    id: String,
+    index: usize,
+    fingerprint: String,
+    state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<String, AppError> {
+    audit_entry_password_revealed_on_success(
+        audit.inner(),
+        &db_id,
+        &id,
+        state.get_history_entry_password(&db_id, &id, index, &fingerprint),
+    )
+}
+
+/// Fetches a historical version's protected custom field on demand, under the
+/// same index+fingerprint guard as [`get_history_entry_password`]. A successful
+/// read appends one `entry.protected_field_revealed` event; a failure records
+/// nothing.
+#[tauri::command]
+pub async fn get_history_protected_field(
+    db_id: String,
+    id: String,
+    index: usize,
+    fingerprint: String,
+    key: String,
+    state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<CustomFieldValue, AppError> {
+    audit_entry_protected_field_revealed_on_success(
+        audit.inner(),
+        &db_id,
+        &id,
+        state.get_history_protected_field(&db_id, &id, index, &fingerprint, &key),
+    )
+}
+
 /// Fetches a single Attachment's bytes on demand, keyed by filename, as
 /// [`SecureBytes`]. This is the reusable lazy byte-fetch (Preview reuses
 /// it); it records no audit event. Bytes are never included in

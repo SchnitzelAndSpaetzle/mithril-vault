@@ -209,6 +209,101 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
     changed
 }
 
+/// A stable per-version content fingerprint: a hex SHA-256 over the snapshot's
+/// `modified_at`, every field (key + protected flag + resolved value, so a
+/// password rotation registers even when it shares a second with its
+/// predecessor), tags, icon, expiry and attachment names. This is the addressing
+/// guard for per-version reveal/restore (ADR-0008): a version is addressed by
+/// `index` but only acted on when its fingerprint still matches, so a concurrent
+/// edit that shifts the list can't silently retarget. `modified_at` alone is
+/// insufficient — `keepass::Times` stores it at second precision, so two
+/// snapshots made within the same second share it. The hash is one-way and
+/// hashes secret *content* only to disambiguate, never exposing it.
+fn history_fingerprint(snapshot: &EntryRef<'_>) -> String {
+    use sha2::{Digest, Sha256};
+
+    // Length-prefix every segment so distinct field boundaries can't collide by
+    // concatenation (e.g. key "ab"+value "c" vs key "a"+value "bc").
+    fn push(buf: &mut Vec<u8>, bytes: &[u8]) {
+        buf.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+        buf.extend_from_slice(bytes);
+    }
+
+    let mut buf: Vec<u8> = Vec::new();
+
+    push(
+        &mut buf,
+        snapshot
+            .times
+            .last_modification
+            .map(|t| t.to_string())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+
+    // Fields in key order so the fingerprint is independent of map iteration.
+    let mut keys: Vec<&str> = snapshot.fields.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    for key in keys {
+        push(&mut buf, key.as_bytes());
+        if let Some(value) = snapshot.fields.get(key) {
+            push(&mut buf, &[u8::from(matches!(value, Value::Protected(_)))]);
+            push(&mut buf, value.get().as_bytes());
+        }
+    }
+
+    let mut tags = snapshot.tags.clone();
+    tags.sort();
+    for tag in &tags {
+        push(&mut buf, tag.as_bytes());
+    }
+
+    push(&mut buf, format!("{:?}", snapshot.icon()).as_bytes());
+    push(
+        &mut buf,
+        &[u8::from(snapshot.times.expires.unwrap_or(false))],
+    );
+    push(
+        &mut buf,
+        snapshot
+            .times
+            .expiry
+            .map(|t| t.to_string())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+
+    let mut attachments: Vec<&str> = snapshot.attachments_named().map(|(name, _)| name).collect();
+    attachments.sort_unstable();
+    for name in attachments {
+        push(&mut buf, name.as_bytes());
+    }
+
+    let digest = Sha256::digest(&buf);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write;
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
+/// The keys of a snapshot's *protected custom* fields (excludes the standard
+/// Password etc.), sorted. Names only — values never cross IPC (ADR-0008); they
+/// let the view offer a per-version reveal action for each protected field.
+fn protected_field_keys(snapshot: &EntryRef<'_>) -> Vec<String> {
+    let mut keys: Vec<String> = snapshot
+        .fields
+        .iter()
+        .filter(|(key, value)| {
+            matches!(value, Value::Protected(_)) && !is_standard_entry_field(key)
+        })
+        .map(|(key, _)| key.clone())
+        .collect();
+    keys.sort();
+    keys
+}
+
 /// Maps a KDBX field key to the name surfaced in `changed_fields`. Standard
 /// fields read as lowercase domain names (`password`, `title`, …) so the view
 /// can localize them; custom fields keep their user-defined key verbatim.
@@ -318,6 +413,8 @@ impl KdbxService {
                     url: snapshot.get_url().map(std::string::ToString::to_string),
                     changed_fields,
                     is_creation,
+                    fingerprint: history_fingerprint(&snapshot),
+                    protected_fields: protected_field_keys(&snapshot),
                 });
             }
             Ok(items)
@@ -332,6 +429,90 @@ impl KdbxService {
                 .get_password()
                 .map(std::string::ToString::to_string)
                 .unwrap_or_default())
+        })
+    }
+
+    /// Resolves the snapshot at `index` in the newest-first history list and
+    /// verifies its content fingerprint still matches `expected_fingerprint`
+    /// before handing it to `read` (ADR-0008). The guard re-reads the live list
+    /// inside the same Vault lock, so a concurrent edit that prepended a new
+    /// version (shifting indices) or rewrote this one is caught: either the
+    /// index no longer exists or its fingerprint differs, both
+    /// [`AppError::HistoryVersionMismatch`]. This is the shared addressing
+    /// mechanism reused by Restore (#328). `read` extracts the secret from the
+    /// verified snapshot; the listing itself never carries secrets.
+    fn with_history_version<T>(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        expected_fingerprint: &str,
+        read: impl FnOnce(&EntryRef<'_>) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(id)?;
+            let snapshot = entry
+                .historical(index)
+                .ok_or(AppError::HistoryVersionMismatch(index))?;
+            if history_fingerprint(&snapshot) != expected_fingerprint {
+                return Err(AppError::HistoryVersionMismatch(index));
+            }
+            read(&snapshot)
+        })
+    }
+
+    /// Fetches a historical version's password on demand, mirroring
+    /// [`get_entry_password`] for the live Entry (ADR-0008). The version is
+    /// addressed by `index` in the newest-first list and guarded by
+    /// `fingerprint`; a stale/mismatched fingerprint errors rather than
+    /// returning the wrong version's secret. The history listing never carries
+    /// this value.
+    ///
+    /// [`get_entry_password`]: Self::get_entry_password
+    pub fn get_history_entry_password(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+    ) -> Result<String, AppError> {
+        self.with_history_version(db_id, id, index, fingerprint, |snapshot| {
+            Ok(snapshot
+                .get_password()
+                .map(std::string::ToString::to_string)
+                .unwrap_or_default())
+        })
+    }
+
+    /// Fetches a historical version's protected custom field on demand,
+    /// mirroring [`get_entry_protected_custom_field`] for the live Entry. Same
+    /// index+fingerprint guard as [`get_history_entry_password`]; a non-existent
+    /// or unprotected key errors exactly as the live path does.
+    ///
+    /// [`get_entry_protected_custom_field`]: Self::get_entry_protected_custom_field
+    pub fn get_history_protected_field(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+        key: &str,
+    ) -> Result<CustomFieldValue, AppError> {
+        if is_standard_entry_field(key) {
+            return Err(AppError::CustomFieldNotFound(key.to_string()));
+        }
+        self.with_history_version(db_id, id, index, fingerprint, |snapshot| {
+            let value = snapshot
+                .fields
+                .get(key)
+                .ok_or_else(|| AppError::CustomFieldNotFound(key.to_string()))?;
+            match value {
+                Value::Protected(_) => Ok(CustomFieldValue {
+                    key: key.to_string(),
+                    value: value.get().clone(),
+                }),
+                Value::Unprotected(_) => Err(AppError::CustomFieldNotProtected(key.to_string())),
+            }
         })
     }
 

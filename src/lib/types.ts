@@ -103,6 +103,14 @@ export const EntryHistoryItemSchema = z.object({
   url: z.string().nullable().optional(),
   changedFields: z.array(z.string()),
   isCreation: z.boolean(),
+  // Stable content fingerprint of this snapshot. The reveal commands address a
+  // version by `index` *guarded by* this fingerprint (never `modifiedAt` alone,
+  // which is second-precision) — the view echoes it back so a concurrent edit
+  // that shifts the list can't silently retarget the reveal.
+  fingerprint: z.string(),
+  // Keys of this version's protected custom fields (names only — never values),
+  // so the view can render a per-version reveal action for each.
+  protectedFields: z.array(z.string()),
 });
 export type EntryHistoryItem = z.infer<typeof EntryHistoryItemSchema>;
 

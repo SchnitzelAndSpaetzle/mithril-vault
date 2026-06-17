@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 
-import { useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, History } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, History, Loader2 } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator.tsx";
 import { entries as entriesApi } from "@/lib/tauri";
 import { queryKeys } from "@/lib/query-keys";
@@ -132,6 +133,43 @@ export function EntryHistorySection({
                       })}
                     </p>
                   )}
+                  {/* Per-version secret reveal, mirroring the live Entry: the
+                      value is fetched only on the explicit action, addressed by
+                      this version's index and guarded by its fingerprint. */}
+                  <HistorySecretRow
+                    label={t("entries.detail.password")}
+                    revealLabel={t("entries.detail.revealPassword")}
+                    hideLabel={t("entries.detail.hidePassword")}
+                    fetchValue={() =>
+                      entriesApi.getHistoryPassword(
+                        dbId,
+                        entryId,
+                        version.index,
+                        version.fingerprint
+                      )
+                    }
+                  />
+                  {version.protectedFields.map((key) => (
+                    <HistorySecretRow
+                      key={key}
+                      label={key}
+                      revealLabel={t("entries.detail.revealField", {
+                        field: key,
+                      })}
+                      hideLabel={t("entries.detail.hideField", { field: key })}
+                      fetchValue={() =>
+                        entriesApi
+                          .getHistoryProtectedField(
+                            dbId,
+                            entryId,
+                            version.index,
+                            version.fingerprint,
+                            key
+                          )
+                          .then((field) => field.value)
+                      }
+                    />
+                  ))}
                 </li>
               );
             })}
@@ -139,6 +177,75 @@ export function EntryHistorySection({
         )}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/**
+ * One masked secret of a historical version (its password or a protected custom
+ * field), revealed only on the explicit eye-toggle. Mirrors the live Entry's
+ * reveal-on-demand rule: nothing is fetched until the user asks, and `fetchValue`
+ * carries the version's index + fingerprint guard (ADR-0008). Hiding drops the
+ * value from state so it doesn't linger.
+ */
+function HistorySecretRow({
+  label,
+  revealLabel,
+  hideLabel,
+  fetchValue,
+}: Readonly<{
+  label: string;
+  revealLabel: string;
+  hideLabel: string;
+  fetchValue: () => Promise<string>;
+}>) {
+  const [value, setValue] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const isVisible = value !== null;
+
+  const reveal = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      setValue(await fetchValue());
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchValue]);
+
+  const hide = useCallback(() => setValue(null), []);
+
+  let displayValue: ReactNode;
+  if (isLoading) {
+    displayValue = <Loader2 className="inline h-3 w-3 animate-spin" />;
+  } else if (isVisible) {
+    displayValue = value;
+  } else {
+    displayValue = "••••••••";
+  }
+
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-2 px-4 pb-2">
+      <small className="shrink-0 text-xs font-medium text-muted-foreground">
+        {label}
+      </small>
+      <div className="flex w-0 min-w-0 flex-1 items-center justify-end gap-2">
+        <span className="min-w-0 truncate text-right text-xs text-muted-foreground">
+          {displayValue}
+        </span>
+        <Button
+          variant="outline"
+          size="icon-xs"
+          aria-label={isVisible ? hideLabel : revealLabel}
+          onClick={isVisible ? hide : reveal}
+          disabled={isLoading}
+        >
+          {isVisible ? (
+            <EyeOff className="h-3 w-3" />
+          ) : (
+            <Eye className="h-3 w-3" />
+          )}
+        </Button>
+      </div>
+    </div>
   );
 }
 
