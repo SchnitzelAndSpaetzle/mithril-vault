@@ -6,7 +6,8 @@ use crate::dto::entry::{
 };
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
-use keepass::db::{Entry as KeepassEntry, Times, Value};
+use keepass::db::{Entry as KeepassEntry, EntryRef, Times, Value};
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 
 use super::conversions::{
@@ -145,6 +146,84 @@ fn entry_content_changed(before: &KeepassEntry, after: &KeepassEntry) -> bool {
     a != b
 }
 
+/// Names the fields that differ between two versions of an Entry, for the
+/// history "Changed: …" line. `before` is the older version; `after` is the
+/// version immediately newer than it (the live Entry, for the newest
+/// snapshot). Field *values* — including the password and protected custom
+/// fields — are compared in-process so a rotation registers, but only the
+/// names are returned: no secret crosses IPC (ADR-0008).
+fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<String> {
+    let mut changed = Vec::new();
+
+    // Text fields: the union of keys present in either version. Compare the
+    // stored `Value`, not just the resolved string, so a value change *and* a
+    // protected/unprotected toggle of the same text both register. `Value`'s
+    // `PartialEq` compares protected secrets by content, so a password change
+    // is detected while only the field *name* is emitted.
+    let mut keys: BTreeSet<&str> = BTreeSet::new();
+    keys.extend(before.fields.keys().map(String::as_str));
+    keys.extend(after.fields.keys().map(String::as_str));
+    for key in keys {
+        if before.fields.get(key) != after.fields.get(key) {
+            changed.push(field_display_name(key));
+        }
+    }
+
+    // Tags: order-insensitive so a reorder isn't reported as a change.
+    let mut before_tags = before.tags.clone();
+    let mut after_tags = after.tags.clone();
+    before_tags.sort();
+    after_tags.sort();
+    if before_tags != after_tags {
+        changed.push("tags".to_string());
+    }
+
+    // Icon: builtin id or custom-icon reference (`Icon` is `PartialEq`).
+    if before.icon() != after.icon() {
+        changed.push("icon".to_string());
+    }
+
+    // Expiry: both the flag and the timestamp, so enabling/disabling or moving
+    // the date registers.
+    if (before.times.expires, before.times.expiry) != (after.times.expires, after.times.expiry) {
+        changed.push("expiry".to_string());
+    }
+
+    // Attachments: compare the set of filenames only. An add/delete/rename
+    // registers; the binary payloads are never read (ADR-0003).
+    let before_atts: BTreeSet<&str> = before.attachments_named().map(|(name, _)| name).collect();
+    let after_atts: BTreeSet<&str> = after.attachments_named().map(|(name, _)| name).collect();
+    if before_atts != after_atts {
+        changed.push("attachments".to_string());
+    }
+
+    // Location: a move between Groups bumps `location_changed` (but leaves the
+    // content untouched), so a move-only version would otherwise have a blank
+    // changed line. Second-resolution timestamps mean two moves within the same
+    // second don't register — an acceptable, non-crashing degradation versus
+    // resolving the (possibly deleted) parent group, which would panic.
+    if before.times.location_changed != after.times.location_changed {
+        changed.push("location".to_string());
+    }
+
+    changed
+}
+
+/// Maps a KDBX field key to the name surfaced in `changed_fields`. Standard
+/// fields read as lowercase domain names (`password`, `title`, …) so the view
+/// can localize them; custom fields keep their user-defined key verbatim.
+fn field_display_name(key: &str) -> String {
+    match key {
+        "Title" => "title",
+        "UserName" => "username",
+        "Password" => "password",
+        "URL" => "url",
+        "Notes" => "notes",
+        other => other,
+    }
+    .to_string()
+}
+
 impl KdbxService {
     /// Lists entries, optionally filtered by group.
     pub fn list_entries(
@@ -204,24 +283,43 @@ impl KdbxService {
     ) -> Result<Vec<EntryHistoryItem>, AppError> {
         self.with_vault(db_id, |vault| {
             let entry = vault.find_entry(id)?;
-            let items = entry.history.as_ref().map_or_else(Vec::new, |history| {
-                history
-                    .get_entries()
-                    .iter()
-                    .enumerate()
-                    .map(|(index, snapshot)| EntryHistoryItem {
-                        index,
-                        modified_at: snapshot
-                            .times
-                            .last_modification
-                            .map(|t| t.to_string())
-                            .unwrap_or_default(),
-                        title: snapshot.get_title().unwrap_or_default().to_string(),
-                        username: snapshot.get_username().unwrap_or_default().to_string(),
-                        url: snapshot.get_url().map(std::string::ToString::to_string),
-                    })
-                    .collect()
-            });
+            let count = entry.history.as_ref().map_or(0, |h| h.get_entries().len());
+            let mut items = Vec::with_capacity(count);
+            for index in 0..count {
+                let snapshot = entry
+                    .historical(index)
+                    .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+                // Diff this snapshot against the version immediately newer than
+                // it: the previous (newer) snapshot, or the live Entry when this
+                // is the newest snapshot (index 0).
+                let changed_fields = if index == 0 {
+                    changed_field_names(&snapshot, &entry)
+                } else {
+                    let newer = entry
+                        .historical(index - 1)
+                        .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+                    changed_field_names(&snapshot, &newer)
+                };
+                // The oldest version is the original "Created" snapshot only
+                // when its timestamp still matches the Entry's creation time; if
+                // retention pruned the original away, the oldest survivor is an
+                // "Earliest kept version" instead.
+                let is_creation =
+                    index + 1 == count && snapshot.times.last_modification == entry.times.creation;
+                items.push(EntryHistoryItem {
+                    index,
+                    modified_at: snapshot
+                        .times
+                        .last_modification
+                        .map(|t| t.to_string())
+                        .unwrap_or_default(),
+                    title: snapshot.get_title().unwrap_or_default().to_string(),
+                    username: snapshot.get_username().unwrap_or_default().to_string(),
+                    url: snapshot.get_url().map(std::string::ToString::to_string),
+                    changed_fields,
+                    is_creation,
+                });
+            }
             Ok(items)
         })
     }
@@ -944,7 +1042,7 @@ mod tests {
     use crate::dto::entry::{AttachmentMeta, AttachmentSizeStatus};
     use crate::services::kdbx::test_support::create_test_database;
     use keepass::db::Value;
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
 
     /// The hard cap the attachment add/round-trip tests inject. A generous
     /// fixed value so the round-trip cases never trip the cap; the over-cap
@@ -2199,6 +2297,391 @@ mod tests {
         assert!(
             history.is_empty(),
             "a None history node lists as empty, not an error"
+        );
+    }
+
+    #[test]
+    fn the_newest_version_lists_the_fields_changed_against_the_live_entry() {
+        // `changed_fields` on a version names what differs from the version
+        // immediately newer than it — and the *newest* snapshot's newer
+        // neighbour is the live Entry. Entry A starts as username "alice";
+        // renaming it to "bob" leaves the sole snapshot (still "alice")
+        // reporting that username changed relative to the live "bob".
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("bob".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename username");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after edit");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["username".to_string()],
+            "the newest snapshot diffs against the live Entry; only username changed"
+        );
+    }
+
+    #[test]
+    fn each_version_diffs_against_the_next_newer_version_not_the_live_entry() {
+        // A multi-edit sequence: rename the username (alice → bob), then the
+        // title (Entry A → Renamed). Each snapshot's `changed_fields` reflects
+        // the *single* field that changed when it was superseded — proving the
+        // diff walks neighbour-to-neighbour, not every snapshot against live.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("bob".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename username");
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    title: Some("Renamed".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename title");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after two edits");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["title".to_string()],
+            "newest snapshot vs live Entry: only the title changed"
+        );
+        assert_eq!(
+            history[1].changed_fields,
+            vec!["username".to_string()],
+            "older snapshot vs its newer neighbour: only the username changed"
+        );
+    }
+
+    #[test]
+    fn a_password_rotation_surfaces_the_name_password_with_no_value() {
+        // The protected Password field is compared in-process (so a rotation is
+        // detected), but `changed_fields` carries only the name `password`. The
+        // DTO has no password field at all, so the secret structurally cannot
+        // cross IPC — names only (ADR-0008).
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    password: Some(SecureString::from("rotated-secret")),
+                    ..empty_update()
+                },
+            )
+            .expect("rotate password");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after rotation");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["password".to_string()],
+            "a changed password surfaces by name only"
+        );
+    }
+
+    #[test]
+    fn a_tags_only_edit_surfaces_the_tags_attribute() {
+        // Snapshots are captured for tag edits too (PRD #321), so a version
+        // created by a tags-only change must carry a meaningful changed line.
+        // Entry A starts untagged; applying a tag surfaces `tags`.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    tags: Some(vec!["work".to_string()]),
+                    ..empty_update()
+                },
+            )
+            .expect("apply a tag");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after tag edit");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["tags".to_string()],
+            "a tags-only edit surfaces the `tags` attribute"
+        );
+    }
+
+    #[test]
+    fn an_icon_change_surfaces_the_icon_attribute() {
+        // Entry A is seeded with builtin icon 0; switching it to icon 1 is a
+        // content change that snapshots, and the diff names `icon`.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    icon_id: Some(1),
+                    ..empty_update()
+                },
+            )
+            .expect("change icon");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after icon change");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["icon".to_string()],
+            "an icon change surfaces the `icon` attribute"
+        );
+    }
+
+    #[test]
+    fn enabling_expiry_surfaces_the_expiry_attribute() {
+        // Entry A has no expiry; enabling it with a timestamp is a content
+        // change that snapshots, and the diff names `expiry`.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    expires: Some(true),
+                    expiry_time: Some("2030-01-01T12:00:00+00:00".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("enable expiry");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after enabling expiry");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["expiry".to_string()],
+            "enabling expiry surfaces the `expiry` attribute"
+        );
+    }
+
+    #[test]
+    fn deleting_an_attachment_surfaces_the_attachments_attribute() {
+        // Attachment add/delete snapshots too (PRD #321). Seed an attachment,
+        // then delete it: the captured version still holds the file while the
+        // live Entry has none, so the diff names `attachments` — by name, never
+        // the blob.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
+
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after attachment delete");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["attachments".to_string()],
+            "an attachment delete surfaces the `attachments` attribute"
+        );
+    }
+
+    #[test]
+    fn toggling_a_custom_field_protection_surfaces_its_name() {
+        // Toggling a custom field between unprotected and protected without
+        // changing its text still snapshots (the stored `Value` variant
+        // changed), so the diff must report the field by name even though the
+        // resolved plaintext is identical on both sides.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    custom_fields: Some(BTreeMap::from([("API".to_string(), "xyz".to_string())])),
+                    ..empty_update()
+                },
+            )
+            .expect("add an unprotected custom field");
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    protected_custom_fields: Some(BTreeMap::from([(
+                        "API".to_string(),
+                        SecureString::from("xyz"),
+                    )])),
+                    ..empty_update()
+                },
+            )
+            .expect("re-store the same value as protected");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after protection toggle");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["API".to_string()],
+            "a protection toggle with unchanged text surfaces the field by name"
+        );
+    }
+
+    #[test]
+    fn moving_an_entry_between_groups_surfaces_the_location_attribute() {
+        // A move between real Groups snapshots (#321/#323) but changes none of
+        // the text fields, tags, icon, expiry, or attachments — only the
+        // entry's location. The diff reports `location` so the version isn't a
+        // blank "Changed:" row.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let target = service
+            .create_group(&db_path, None, "Target", None)
+            .expect("create target group");
+
+        service
+            .move_entry(&db_path, &entry_a, &target.id)
+            .expect("move the entry");
+
+        // The pre-move snapshot keeps the entry's creation-time
+        // `location_changed`; the live entry's is bumped to the move instant.
+        // In a fast test both land in the same second, so force them apart to
+        // model the realistic create-then-move-later case.
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.times.location_changed = chrono::NaiveDate::from_ymd_opt(2099, 1, 1)
+                    .and_then(|d| d.and_hms_opt(0, 0, 0));
+                Ok(())
+            })
+            .expect("distinguish the move timestamp");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after move");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["location".to_string()],
+            "a move between groups surfaces the `location` attribute"
+        );
+    }
+
+    #[test]
+    fn the_oldest_version_is_the_creation_when_its_timestamp_matches_creation() {
+        // The original snapshot's `last_modification` is the Entry's creation
+        // instant (it was never edited while live). So after editing, the oldest
+        // kept version is flagged `is_creation` — the view labels it "Created".
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("bob".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename username");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after edit");
+
+        let oldest = history.last().expect("a version exists");
+        assert!(
+            oldest.is_creation,
+            "the original snapshot's timestamp matches the Entry's creation time"
+        );
+    }
+
+    #[test]
+    fn the_oldest_version_is_not_the_creation_after_the_original_was_evicted() {
+        // Once retention prunes the original snapshot away, the oldest survivor
+        // postdates the Entry's creation, so it is NOT flagged `is_creation` —
+        // the view labels it "Earliest kept version". Pruning isn't enforced
+        // yet, so simulate eviction by dropping the oldest (creation) snapshot.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        for name in ["bob", "carol"] {
+            service
+                .update_entry(
+                    &db_path,
+                    &entry_a,
+                    UpdateEntryData {
+                        username: Some(name.to_string()),
+                        ..empty_update()
+                    },
+                )
+                .expect("rename username");
+        }
+
+        // Rebuild history keeping only the newest snapshot, mimicking eviction
+        // of the original creation version. Stamp the survivor with a clearly
+        // later timestamp, since a real evicted-original survivor postdates
+        // creation (KDBX timestamps are second-resolution, so same-second test
+        // edits would otherwise all collide with the creation instant).
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                if let Some(history) = entry.history.as_mut() {
+                    let mut newest = history.get_entries().first().cloned();
+                    if let Some(snapshot) = newest.as_mut() {
+                        snapshot.times.last_modification =
+                            chrono::NaiveDate::from_ymd_opt(2099, 1, 1)
+                                .and_then(|d| d.and_hms_opt(0, 0, 0));
+                    }
+                    let mut rebuilt = keepass::db::History::default();
+                    if let Some(snapshot) = newest {
+                        rebuilt.add_entry(snapshot);
+                    }
+                    entry.history = Some(rebuilt);
+                }
+                Ok(())
+            })
+            .expect("evict the original snapshot");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after eviction");
+
+        assert_eq!(history.len(), 1, "only the newest snapshot survives");
+        let oldest = history.last().expect("a version exists");
+        assert!(
+            !oldest.is_creation,
+            "an earliest-kept survivor postdates creation and is not the original"
         );
     }
 

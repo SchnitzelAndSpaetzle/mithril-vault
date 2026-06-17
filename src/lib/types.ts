@@ -92,13 +92,17 @@ export type Entry = z.infer<typeof EntrySchema>;
 /// One past version of an Entry, surfaced from native KDBX history (ADR-0008).
 /// Non-secret display fields only — passwords and protected values are never
 /// part of the listing. `index` is the version's position in the newest-first
-/// list; `modifiedAt` is the snapshot's timestamp.
+/// list; `modifiedAt` is the snapshot's timestamp. `changedFields` names what
+/// differs from the next-newer version (names only — never values); the oldest
+/// version is the original "Created" snapshot when `isCreation` is true.
 export const EntryHistoryItemSchema = z.object({
   index: z.number().int().nonnegative(),
   modifiedAt: z.string(),
   title: z.string(),
   username: z.string(),
   url: z.string().nullable().optional(),
+  changedFields: z.array(z.string()),
+  isCreation: z.boolean(),
 });
 export type EntryHistoryItem = z.infer<typeof EntryHistoryItemSchema>;
 
