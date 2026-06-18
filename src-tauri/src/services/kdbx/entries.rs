@@ -6,7 +6,7 @@ use crate::dto::entry::{
 };
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
-use keepass::db::{Entry as KeepassEntry, EntryRef, Times, Value};
+use keepass::db::{Entry as KeepassEntry, EntryRef, Icon, Times, Value};
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
 
@@ -516,6 +516,123 @@ impl KdbxService {
                 }),
                 Value::Unprotected(_) => Err(AppError::CustomFieldNotProtected(key.to_string())),
             }
+        })
+    }
+
+    /// Restores an Entry to a past version, addressed by `index` in the
+    /// newest-first history list and guarded by `fingerprint` — the same
+    /// addressing mechanism as the per-version reveal (ADR-0008); a
+    /// stale/mismatched guard errors [`AppError::HistoryVersionMismatch`]
+    /// rather than restoring the wrong version. The current state is first
+    /// snapshotted into history (so the restore is itself undoable), then the
+    /// live Entry's content — all fields including the password — is overwritten
+    /// from the chosen version and `last_modification` bumped to now. The
+    /// Entry's UUID and parent Group are left untouched: a version carries
+    /// content, not location. The restored secret is read in-process and never
+    /// crosses IPC.
+    pub fn restore_entry_history(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+    ) -> Result<Entry, AppError> {
+        self.with_vault_mut(db_id, |vault| {
+            let eid = vault.find_entry_id(id)?;
+            let group_uuid = {
+                let mut entry = vault.entry_mut(id)?;
+
+                // Resolve + guard the target version, then clone its content out
+                // before any mutation. The fingerprint is re-checked against the
+                // live snapshot inside the same Vault lock, so a concurrent edit
+                // that shifted indices is caught here. A full owned clone of the
+                // snapshot Entry is taken so every content field — text fields
+                // (incl. the password), tags, icon, expiry, attachments, and the
+                // remaining metadata — can be reapplied without holding the
+                // immutable borrow across the mutation.
+                let (source, restored_attachments): (KeepassEntry, Vec<(String, Vec<u8>)>) = {
+                    let live = entry.as_ref();
+                    let snapshot = live
+                        .historical(index)
+                        .ok_or(AppError::HistoryVersionMismatch(index))?;
+                    if history_fingerprint(&snapshot, &self.history_fingerprint_key) != fingerprint
+                    {
+                        return Err(AppError::HistoryVersionMismatch(index));
+                    }
+                    // Attachment bytes must be read here, while the snapshot's
+                    // `EntryRef` still has Database access — the owned clone
+                    // below can't resolve binaries on its own (the map is
+                    // crate-private and keyed into the pool).
+                    let attachments = snapshot
+                        .attachments_named()
+                        .map(|(name, att)| (name.to_string(), att.get().clone()))
+                        .collect();
+                    ((*snapshot).clone(), attachments)
+                };
+
+                // Snapshot the pre-restore state so the restore is undoable: it
+                // becomes the newest history version. Attachment binaries that
+                // the live Entry still references are kept alive by this
+                // snapshot's reference even though the live map is overwritten
+                // below (the fork's retention rule).
+                let before: KeepassEntry = (*entry.as_ref()).clone();
+
+                // Overwrite content from the chosen version. Identity (UUID),
+                // location (parent Group), and the history list are deliberately
+                // left untouched — a version carries content, not where the
+                // Entry lives.
+                entry.fields.clone_from(&source.fields);
+                entry.tags.clone_from(&source.tags);
+                entry.custom_data.clone_from(&source.custom_data);
+                entry.autotype.clone_from(&source.autotype);
+                entry.foreground_color.clone_from(&source.foreground_color);
+                entry.background_color.clone_from(&source.background_color);
+                entry.override_url.clone_from(&source.override_url);
+                entry.quality_check = source.quality_check;
+
+                // Icon: the field is crate-private, so go through the setters.
+                match source.icon() {
+                    None => entry.set_icon_none(),
+                    Some(Icon::BuiltIn(n)) => entry.set_icon_builtin(*n),
+                    Some(Icon::Custom(cid)) => entry
+                        .set_icon_custom(*cid)
+                        .map_err(|e| AppError::Kdbx(e.to_string()))?,
+                }
+
+                // Attachments: the map is crate-private and shares binary-pool
+                // ids, so rebuild it through the public add/remove API. Re-adding
+                // by value restores the same bytes under the same names; ids the
+                // live Entry no longer references survive via `before` and are
+                // pruned at save time.
+                let live_names: Vec<String> = entry
+                    .as_ref()
+                    .attachments_named()
+                    .map(|(name, _)| name.to_string())
+                    .collect();
+                for name in live_names {
+                    entry.remove_attachment_by_name(&name);
+                }
+                for (name, bytes) in restored_attachments {
+                    entry.add_attachment(name, Value::unprotected(bytes));
+                }
+
+                // Expiry (flag + timestamp), then bump last_modification to now.
+                entry.times.expires = source.times.expires;
+                entry.times.expiry = source.times.expiry;
+                entry.times.last_modification = Some(Times::now());
+
+                snapshot_entry_history(&mut entry, before);
+
+                entry.as_ref().parent().id().uuid().to_string()
+            };
+
+            let entry_ref = vault
+                .db()
+                .entry(eid)
+                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+            let result = convert_entry(&entry_ref, &group_uuid);
+            vault.mark_modified();
+            Ok(result)
         })
     }
 

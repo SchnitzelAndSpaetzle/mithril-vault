@@ -391,6 +391,11 @@
       "historyChanged": "Changed: {{fields}}",
       "historyCreated": "Created",
       "historyEarliestKept": "Earliest kept version",
+      "restoreVersion": "Restore this version",
+      "restoreHistoryConfirmTitle": "Restore version",
+      "restoreHistoryConfirm": "Restore this entry to the version from {{date}}? The current state is saved to history first, so you can undo this.",
+      "restoreHistorySuccess": "Entry restored to the selected version",
+      "restoreHistoryFailed": "Failed to restore the entry",
       "historyField": {
         "title": "title",
         "username": "username",

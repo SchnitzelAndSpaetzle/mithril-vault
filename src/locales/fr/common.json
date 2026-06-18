@@ -368,6 +368,11 @@
       "historyChanged": "Modifié : {{fields}}",
       "historyCreated": "Créé",
       "historyEarliestKept": "Version conservée la plus ancienne",
+      "restoreVersion": "Restaurer cette version",
+      "restoreHistoryConfirmTitle": "Restaurer la version",
+      "restoreHistoryConfirm": "Restaurer cette entrée à la version du {{date}} ? L'état actuel est d'abord enregistré dans l'historique, vous pourrez donc annuler.",
+      "restoreHistorySuccess": "Entrée restaurée à la version sélectionnée",
+      "restoreHistoryFailed": "Échec de la restauration de l'entrée",
       "historyField": {
         "title": "titre",
         "username": "nom d’utilisateur",

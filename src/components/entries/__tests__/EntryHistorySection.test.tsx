@@ -9,6 +9,7 @@ import type { EntryHistoryItem } from "@/lib/types";
 const listHistoryMock = vi.fn();
 const getHistoryPasswordMock = vi.fn();
 const getHistoryProtectedFieldMock = vi.fn();
+const restoreHistoryMock = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
   entries: {
@@ -16,7 +17,21 @@ vi.mock("@/lib/tauri", () => ({
     getHistoryPassword: (...args: unknown[]) => getHistoryPasswordMock(...args),
     getHistoryProtectedField: (...args: unknown[]) =>
       getHistoryProtectedFieldMock(...args),
+    restoreHistory: (...args: unknown[]) => restoreHistoryMock(...args),
   },
+}));
+
+const askMock = vi.fn();
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  ask: (...args: unknown[]) => askMock(...args),
+}));
+
+vi.mock("@/lib/save-with-error-toast", () => ({
+  saveWithErrorToast: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 import {
@@ -80,6 +95,8 @@ describe("EntryHistorySection", () => {
     listHistoryMock.mockReset();
     getHistoryPasswordMock.mockReset();
     getHistoryProtectedFieldMock.mockReset();
+    restoreHistoryMock.mockReset();
+    askMock.mockReset();
   });
 
   it("lists each version with its timestamp once expanded", async () => {
@@ -269,5 +286,64 @@ describe("EntryHistorySection", () => {
       "fp-zero",
       "PIN"
     );
+  });
+
+  it("restores a version after the user confirms, addressed by index + fingerprint", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
+        index: 0,
+        fingerprint: "fp-zero",
+        changedFields: ["password"],
+      }),
+    ]);
+    askMock.mockResolvedValue(true);
+    restoreHistoryMock.mockResolvedValue({ id: TEST_ENTRY_ID });
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.restoreVersion",
+      })
+    );
+
+    // The destructive action is gated on an explicit confirmation.
+    await waitFor(() => {
+      expect(askMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(restoreHistoryMock).toHaveBeenCalledWith(
+        TEST_DB_ID,
+        TEST_ENTRY_ID,
+        0,
+        "fp-zero"
+      );
+    });
+  });
+
+  it("does not restore when the user cancels the confirmation", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
+        index: 0,
+        fingerprint: "fp-zero",
+        changedFields: ["password"],
+      }),
+    ]);
+    askMock.mockResolvedValue(false);
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.restoreVersion",
+      })
+    );
+
+    await waitFor(() => {
+      expect(askMock).toHaveBeenCalledTimes(1);
+    });
+    expect(restoreHistoryMock).not.toHaveBeenCalled();
   });
 });

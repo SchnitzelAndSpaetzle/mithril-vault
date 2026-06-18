@@ -20,7 +20,8 @@ use std::time::Duration;
 use tempfile::TempDir;
 
 use mithril_vault_lib::commands::entries::{
-    audit_entry_password_revealed_on_success, audit_entry_protected_field_revealed_on_success,
+    audit_entry_history_restored_on_success, audit_entry_password_revealed_on_success,
+    audit_entry_protected_field_revealed_on_success,
 };
 use mithril_vault_lib::services::audit::format::AuditEvent;
 use mithril_vault_lib::services::audit::key::InMemoryAuditKey;
@@ -387,6 +388,40 @@ fn password_update(password: &str) -> UpdateEntryData {
     }
 }
 
+/// An `UpdateEntryData` that changes only the built-in icon.
+fn icon_update(icon_id: u32) -> UpdateEntryData {
+    UpdateEntryData {
+        title: None,
+        username: None,
+        password: None,
+        url: None,
+        notes: None,
+        icon_id: Some(icon_id),
+        tags: None,
+        custom_fields: None,
+        protected_custom_fields: None,
+        expires: None,
+        expiry_time: None,
+    }
+}
+
+/// An `UpdateEntryData` that enables expiry at the given RFC3339 timestamp.
+fn expiry_update(expiry_time: &str) -> UpdateEntryData {
+    UpdateEntryData {
+        title: None,
+        username: None,
+        password: None,
+        url: None,
+        notes: None,
+        icon_id: None,
+        tags: None,
+        custom_fields: None,
+        protected_custom_fields: None,
+        expires: Some(true),
+        expiry_time: Some(expiry_time.to_string()),
+    }
+}
+
 /// Creates one entry with the given password and protected custom field, then
 /// returns the service, its temp dir, the db path and the new entry id.
 fn create_entry_with_secret(
@@ -670,6 +705,321 @@ fn a_guard_failure_records_no_audit_event() {
     assert!(
         events.is_empty(),
         "no event must be recorded on a guard failure"
+    );
+}
+
+// ============================================================================
+// Entry History: restore from a version (#328)
+// ============================================================================
+
+#[test]
+fn restore_history_overwrites_live_content_from_the_chosen_version() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    // Rotate the password so "orig-pw" lands in history as the only prior version.
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+
+    let restored = service
+        .restore_entry_history(&db, &entry_id, version.index, &version.fingerprint)
+        .expect("restore");
+
+    // The live Entry's content is now the chosen version's — the password it
+    // carried back then, read in Rust and applied without crossing IPC.
+    let pw = service
+        .get_entry_password(&db, &entry_id)
+        .expect("password");
+    assert_eq!(pw, "orig-pw", "restore must overwrite the live password");
+    // The returned DTO is the same Entry (identity unchanged).
+    assert_eq!(restored.id, entry_id);
+}
+
+#[test]
+fn restore_history_snapshots_the_pre_restore_state_as_the_newest_version() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+
+    // One prior version ("orig-pw") exists before the restore.
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    assert_eq!(history.len(), 1);
+    let target = history[0].clone();
+
+    service
+        .restore_entry_history(&db, &entry_id, target.index, &target.fingerprint)
+        .expect("restore");
+
+    // The pre-restore live state ("new-pw") is captured as the newest history
+    // version, so the restore is itself undoable.
+    let after = service.list_entry_history(&db, &entry_id).expect("history");
+    assert_eq!(
+        after.len(),
+        2,
+        "restore must append the pre-restore state to history"
+    );
+    let newest = &after[0];
+    let pre_restore_pw = service
+        .get_history_entry_password(&db, &entry_id, newest.index, &newest.fingerprint)
+        .expect("history password");
+    assert_eq!(
+        pre_restore_pw, "new-pw",
+        "the newest history version must be the pre-restore state"
+    );
+}
+
+#[test]
+fn restore_history_preserves_uuid_and_parent_group_and_bumps_mtime() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    // Edit so "orig-pw" lands in history while the entry is still in root.
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+
+    // Move the entry to a different Group *after* the target version was
+    // recorded, so the snapshot's stored parent (root) differs from the live
+    // parent. A restore must not drag the Entry back to where it used to live.
+    let groups = service.list_groups(&db).expect("groups");
+    let root = &groups[0];
+    let target_group = root.children.first().expect("a default child group");
+    let moved = service
+        .move_entry(&db, &entry_id, &target_group.id)
+        .expect("move entry");
+    assert_eq!(moved.group_id, target_group.id);
+
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    // The oldest version is the "orig-pw" snapshot recorded while in root.
+    let target = history.last().expect("oldest version").clone();
+    let pre_modified = service
+        .get_entry(&db, &entry_id)
+        .expect("entry")
+        .modified_at;
+
+    let restored = service
+        .restore_entry_history(&db, &entry_id, target.index, &target.fingerprint)
+        .expect("restore");
+
+    // Content is restored, but identity and location are untouched: a version
+    // carries content, not where the Entry lives.
+    assert_eq!(restored.id, entry_id, "UUID must be unchanged by a restore");
+    assert_eq!(
+        restored.group_id, target_group.id,
+        "parent Group must be unchanged by a restore"
+    );
+    assert!(
+        restored.modified_at >= pre_modified,
+        "last_modification must advance to now, got {} (was {pre_modified})",
+        restored.modified_at
+    );
+}
+
+#[test]
+fn restore_history_overwrites_the_icon() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "pw", None);
+    // Set a built-in icon, then change it so the first icon lands in history.
+    service
+        .update_entry(&db, &entry_id, icon_update(1))
+        .expect("set icon 1");
+    service
+        .update_entry(&db, &entry_id, icon_update(2))
+        .expect("set icon 2");
+
+    // The snapshot with icon 1 is the version immediately before the icon-2 edit.
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = history
+        .iter()
+        .find(|v| v.changed_fields.iter().any(|f| f == "icon"))
+        .expect("a version recording the icon change")
+        .clone();
+
+    let restored = service
+        .restore_entry_history(&db, &entry_id, version.index, &version.fingerprint)
+        .expect("restore");
+    assert_eq!(
+        restored.icon_id,
+        Some(1),
+        "restore must bring back the version's icon"
+    );
+}
+
+#[test]
+fn restore_history_overwrites_the_expiry() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "pw", None);
+    // Set an expiry, then clear it so the expiring version lands in history.
+    service
+        .update_entry(&db, &entry_id, expiry_update("2030-01-01T00:00:00Z"))
+        .expect("set expiry");
+    let live_with_expiry = service.get_entry(&db, &entry_id).expect("entry");
+    assert!(live_with_expiry.expires);
+
+    // Now disable expiry on the live entry; the expiring snapshot becomes the
+    // newest history version (index 0).
+    let mut clear = expiry_update("2030-01-01T00:00:00Z");
+    clear.expires = Some(false);
+    service
+        .update_entry(&db, &entry_id, clear)
+        .expect("clear expiry");
+
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = history[0].clone();
+
+    // Restoring the expiring version brings the expiry flag + timestamp back.
+    let restored = service
+        .restore_entry_history(&db, &entry_id, version.index, &version.fingerprint)
+        .expect("restore");
+    assert!(
+        restored.expires,
+        "restore must bring back the version's expiry"
+    );
+    assert_eq!(restored.expiry_time, live_with_expiry.expiry_time);
+}
+
+#[test]
+fn restore_history_overwrites_attachments() {
+    let (service, dir, db, entry_id) = create_entry_with_secret("svc", "pw", None);
+    // Attach a file (snapshots the pre-add, attachment-less state), then delete
+    // it (snapshots the pre-delete state — the version that carries the file).
+    let att_path = dir.path().join("secret.txt");
+    std::fs::write(&att_path, b"top secret bytes").expect("write attachment file");
+    service
+        .add_entry_attachment(&db, &entry_id, &att_path, 25 * 1024 * 1024)
+        .expect("add attachment");
+    service
+        .delete_entry_attachment(&db, &entry_id, "secret.txt")
+        .expect("delete attachment");
+
+    let live = service.get_entry(&db, &entry_id).expect("entry");
+    assert!(
+        live.attachments.is_empty(),
+        "attachment must be gone before the restore"
+    );
+
+    // The newest history version is the pre-delete state, which still carries
+    // the attachment.
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = history
+        .iter()
+        .find(|v| v.changed_fields.iter().any(|f| f == "attachments"))
+        .expect("a version recording the attachment")
+        .clone();
+
+    let restored = service
+        .restore_entry_history(&db, &entry_id, version.index, &version.fingerprint)
+        .expect("restore");
+    assert_eq!(
+        restored.attachments.len(),
+        1,
+        "restore must bring back the version's attachment"
+    );
+    assert_eq!(restored.attachments[0].filename, "secret.txt");
+
+    // The restored attachment carries the original bytes.
+    let bytes = service
+        .get_entry_attachment(&db, &entry_id, "secret.txt")
+        .expect("attachment bytes");
+    assert_eq!(bytes.to_vec(), b"top secret bytes".to_vec());
+}
+
+#[test]
+fn restore_history_rejects_a_stale_fingerprint() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+
+    // A mismatched fingerprint must not restore the wrong version — it errors,
+    // and the live Entry is left untouched.
+    let result =
+        service.restore_entry_history(&db, &entry_id, version.index, "not-the-fingerprint");
+    assert!(
+        matches!(result, Err(AppError::HistoryVersionMismatch(idx)) if idx == version.index),
+        "a stale fingerprint must error, got {result:?}"
+    );
+    let pw = service
+        .get_entry_password(&db, &entry_id)
+        .expect("password");
+    assert_eq!(
+        pw, "new-pw",
+        "a rejected restore must not mutate the live Entry"
+    );
+}
+
+#[test]
+fn restore_history_rejects_an_out_of_range_index() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+
+    let result = service.restore_entry_history(&db, &entry_id, 99, "anything");
+    assert!(
+        matches!(result, Err(AppError::HistoryVersionMismatch(99))),
+        "an out-of-range index must error, got {result:?}"
+    );
+}
+
+#[test]
+fn a_restore_records_one_history_restored_event_carrying_the_entry_id() {
+    let (service, dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+    let restored = audit_entry_history_restored_on_success(
+        &audit,
+        &db,
+        &entry_id,
+        service.restore_entry_history(&db, &entry_id, version.index, &version.fingerprint),
+    )
+    .expect("restore");
+    assert_eq!(restored.id, entry_id);
+
+    let events = audit
+        .read(Path::new(&db), &AuditFilter::default())
+        .expect("read audit");
+    assert_eq!(
+        events.len(),
+        1,
+        "exactly one event for a successful restore"
+    );
+    match &events[0] {
+        AuditEvent::EntryHistoryRestored { entry_id: id, .. } => assert_eq!(id, &entry_id),
+        other => panic!("unexpected event kind: {other:?}"),
+    }
+}
+
+#[test]
+fn a_rejected_restore_records_no_audit_event() {
+    let (service, dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+    let result = audit_entry_history_restored_on_success(
+        &audit,
+        &db,
+        &entry_id,
+        service.restore_entry_history(&db, &entry_id, version.index, "stale-fingerprint"),
+    );
+    assert!(matches!(result, Err(AppError::HistoryVersionMismatch(_))));
+
+    let events = audit
+        .read(Path::new(&db), &AuditFilter::default())
+        .expect("read audit");
+    assert!(
+        events.is_empty(),
+        "a guard failure must record no audit event"
     );
 }
 

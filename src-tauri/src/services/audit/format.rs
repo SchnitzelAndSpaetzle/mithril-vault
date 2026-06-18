@@ -52,6 +52,11 @@ pub enum AuditEvent {
         entry_id: String,
         attachment_id: String,
     },
+    #[serde(rename = "entry.history_restored")]
+    EntryHistoryRestored {
+        timestamp: DateTime<Utc>,
+        entry_id: String,
+    },
     #[serde(rename = "preferences.security_changed")]
     PreferencesSecurityChanged {
         timestamp: DateTime<Utc>,
@@ -248,6 +253,22 @@ mod tests {
         assert!(json.contains("\"kind\":\"entry.attachment_exported\""));
         assert!(json.contains("\"entry_id\":\"uuid-4\""));
         assert!(json.contains("\"attachment_id\":\"recovery-codes.txt\""));
+    }
+
+    /// Restoring an Entry to a past version (#328) carries the Entry's UUID and
+    /// nothing more; the wire tag is pinned to the dotted form so already-written
+    /// logs stay readable across refactors of the Rust enum.
+    #[test]
+    fn entry_history_restored_round_trips_with_entry_id_and_dotted_kind() {
+        let event = AuditEvent::EntryHistoryRestored {
+            timestamp: Utc.with_ymd_and_hms(2026, 6, 18, 10, 0, 0).unwrap(),
+            entry_id: "uuid-5".to_string(),
+        };
+        let parsed = AuditEvent::from_bytes(&event.to_bytes()).expect("parse");
+        assert_eq!(parsed, event);
+        let json = String::from_utf8(event.to_bytes()).expect("utf8");
+        assert!(json.contains("\"kind\":\"entry.history_restored\""));
+        assert!(json.contains("\"entry_id\":\"uuid-5\""));
     }
 
     /// Manual clear of the audit log emits exactly one surviving event

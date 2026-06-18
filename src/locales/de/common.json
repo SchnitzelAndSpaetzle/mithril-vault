@@ -368,6 +368,11 @@
       "historyChanged": "Geändert: {{fields}}",
       "historyCreated": "Erstellt",
       "historyEarliestKept": "Älteste aufbewahrte Version",
+      "restoreVersion": "Diese Version wiederherstellen",
+      "restoreHistoryConfirmTitle": "Version wiederherstellen",
+      "restoreHistoryConfirm": "Diesen Eintrag auf die Version vom {{date}} zurücksetzen? Der aktuelle Stand wird zuerst im Verlauf gespeichert, sodass Sie dies rückgängig machen können.",
+      "restoreHistorySuccess": "Eintrag auf die ausgewählte Version zurückgesetzt",
+      "restoreHistoryFailed": "Eintrag konnte nicht wiederhergestellt werden",
       "historyField": {
         "title": "Titel",
         "username": "Benutzername",
