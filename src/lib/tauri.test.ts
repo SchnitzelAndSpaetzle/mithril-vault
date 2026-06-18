@@ -449,11 +449,11 @@ describe("tauri wrappers validation", () => {
       },
     ]);
 
-    const history = await entries.listHistory(dbId, id);
+    const [version] = await entries.listHistory(dbId, id);
 
     expect(invoke).toHaveBeenCalledWith("list_entry_history", { dbId, id });
-    expect(history[0].fingerprint).toBe("abc123");
-    expect(history[0].protectedFields).toEqual(["PIN"]);
+    expect(version?.fingerprint).toBe("abc123");
+    expect(version?.protectedFields).toEqual(["PIN"]);
   });
 
   it("reveals a historical password addressed by index + fingerprint", async () => {
