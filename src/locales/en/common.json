@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Password copied",
       "entryProtectedFieldRevealed": "Protected field revealed",
       "entryAttachmentExported": "Attachment downloaded",
+      "entryHistoryRestored": "Restored from history",
       "preferencesSecurityChanged": "Security preference changed",
       "auditCleared": "Audit log cleared"
     },

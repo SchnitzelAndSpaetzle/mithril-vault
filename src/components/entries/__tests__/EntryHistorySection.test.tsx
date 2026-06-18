@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { EntryHistoryItem } from "@/lib/types";
+import { queryKeys } from "@/lib/query-keys";
 
 const listHistoryMock = vi.fn();
 const getHistoryPasswordMock = vi.fn();
@@ -345,5 +346,48 @@ describe("EntryHistorySection", () => {
       expect(askMock).toHaveBeenCalledTimes(1);
     });
     expect(restoreHistoryMock).not.toHaveBeenCalled();
+  });
+
+  it("invalidates the password-health report after a restore", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
+        index: 0,
+        fingerprint: "fp-zero",
+        changedFields: ["password"],
+      }),
+    ]);
+    askMock.mockResolvedValue(true);
+    restoreHistoryMock.mockResolvedValue({ id: TEST_ENTRY_ID });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    // Seed a cached password-health report so we can prove the restore marks
+    // it stale (a restore can replace the live password/expiry).
+    queryClient.setQueryData(queryKeys.passwordHealth.report(TEST_DB_ID), {
+      entries: [],
+    });
+
+    render(<EntryHistorySection dbId={TEST_DB_ID} entryId={TEST_ENTRY_ID} />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.restoreVersion",
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryState(queryKeys.passwordHealth.report(TEST_DB_ID))
+          ?.isInvalidated
+      ).toBe(true);
+    });
   });
 });

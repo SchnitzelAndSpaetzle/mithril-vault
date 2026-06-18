@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Mot de passe copié",
       "entryProtectedFieldRevealed": "Champ protégé affiché",
       "entryAttachmentExported": "Pièce jointe téléchargée",
+      "entryHistoryRestored": "Restauré depuis l'historique",
       "preferencesSecurityChanged": "Préférence de sécurité modifiée",
       "auditCleared": "Journal d'audit effacé"
     },

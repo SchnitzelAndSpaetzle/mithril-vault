@@ -124,6 +124,12 @@ export function EntryHistorySection({
             query.queryKey[0] === queryKeys.entries.all[0] &&
             query.queryKey[1] === dbId,
         }),
+        // A restore can replace the live password/expiry, so any cached
+        // password-health findings must be recomputed — same as the entry
+        // mutation hook does for the same kind of content change.
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.passwordHealth.report(dbId),
+        }),
       ]);
       toast.success(t("entries.detail.restoreHistorySuccess"));
     },

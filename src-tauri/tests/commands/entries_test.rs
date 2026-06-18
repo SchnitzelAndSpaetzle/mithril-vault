@@ -1023,6 +1023,59 @@ fn a_rejected_restore_records_no_audit_event() {
     );
 }
 
+#[test]
+fn restore_guard_covers_attachment_bytes_for_same_second_versions() {
+    let (service, dir, db, entry_id) = create_entry_with_secret("svc", "pw", None);
+    let path = dir.path().join("f.txt");
+    // Rapid add/delete cycles, each storing DIFFERENT bytes under the SAME
+    // filename, so several with-attachment snapshots land within the same second
+    // differing only in attachment bytes. A name-only fingerprint can't tell
+    // them apart; the byte-aware one must.
+    for i in 0..6u8 {
+        std::fs::write(&path, [i; 8]).expect("write attachment");
+        service
+            .add_entry_attachment(&db, &entry_id, &path, 25 * 1024 * 1024)
+            .expect("add attachment");
+        service
+            .delete_entry_attachment(&db, &entry_id, "f.txt")
+            .expect("delete attachment");
+    }
+
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    // Each delete's pre-image (the with-attachment snapshot) lands at an even
+    // index in the newest-first list.
+    let with_att: Vec<_> = history.iter().step_by(2).collect();
+
+    // Find two with-attachment snapshots that share a second-precision
+    // timestamp — guaranteed among rapid edits.
+    let mut pair = None;
+    'outer: for a in 0..with_att.len() {
+        for b in (a + 1)..with_att.len() {
+            if with_att[a].modified_at == with_att[b].modified_at {
+                pair = Some((with_att[a], with_att[b]));
+                break 'outer;
+            }
+        }
+    }
+    let (v0, v1) =
+        pair.expect("two with-attachment snapshots must share a second among rapid edits");
+
+    // They share a second but carry different attachment bytes, so a byte-aware
+    // fingerprint must distinguish them — a name-only MAC would collide here.
+    assert_ne!(
+        v0.fingerprint, v1.fingerprint,
+        "fingerprint must disambiguate same-second attachment byte swaps"
+    );
+
+    // And the guard must reject addressing one index with the other's
+    // fingerprint, so a stale index can't shift restore onto the wrong bytes.
+    let crossed = service.restore_entry_history(&db, &entry_id, v0.index, &v1.fingerprint);
+    assert!(
+        matches!(crossed, Err(AppError::HistoryVersionMismatch(_))),
+        "guard must reject a cross-version address differing only in attachment bytes, got {crossed:?}"
+    );
+}
+
 // ============================================================================
 // create_entry command tests
 // ============================================================================

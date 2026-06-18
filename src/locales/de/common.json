@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Passwort kopiert",
       "entryProtectedFieldRevealed": "Geschütztes Feld angezeigt",
       "entryAttachmentExported": "Anhang heruntergeladen",
+      "entryHistoryRestored": "Aus Verlauf wiederhergestellt",
       "preferencesSecurityChanged": "Sicherheitseinstellung geändert",
       "auditCleared": "Audit-Protokoll geleert"
     },

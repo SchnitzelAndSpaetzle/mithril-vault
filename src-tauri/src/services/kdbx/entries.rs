@@ -212,7 +212,7 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
 /// A stable per-version content fingerprint: a hex **keyed BLAKE3 MAC** over the
 /// snapshot's `modified_at`, every field (key + protected flag + resolved value,
 /// so a password rotation registers even when it shares a second with its
-/// predecessor), tags, icon, expiry and attachment names. This is the addressing
+/// predecessor), tags, icon, expiry and attachment names + bytes. This is the addressing
 /// guard for per-version reveal/restore (ADR-0008): a version is addressed by
 /// `index` but only acted on when its fingerprint still matches, so a concurrent
 /// edit that shifts the list can't silently retarget. `modified_at` alone is
@@ -226,6 +226,10 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
 /// require the key, which never leaves the backend. Inputs are streamed directly
 /// into the hasher rather than collected into an owned buffer, so no extra
 /// plaintext copy of the secrets lingers in allocator memory after the call.
+/// One restored attachment: its filename and the original `Value` (carrying the
+/// protected/unprotected flag, so restore preserves it).
+type RestoredAttachment = (String, Value<Vec<u8>>);
+
 fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> String {
     // Length-prefix every segment so distinct field boundaries can't collide by
     // concatenation (e.g. key "ab"+value "c" vs key "a"+value "bc").
@@ -281,10 +285,17 @@ fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> 
             .as_bytes(),
     );
 
-    let mut attachments: Vec<&str> = snapshot.attachments_named().map(|(name, _)| name).collect();
-    attachments.sort_unstable();
-    for name in attachments {
+    // Attachment name *and* bytes, in name order. Restore copies the actual
+    // bytes, so the guard must cover them too: a same-second delete + re-add of
+    // a different file under the same name would otherwise share a fingerprint
+    // and let a stale index shift restore onto the wrong bytes. Bytes are
+    // streamed straight into the hasher (no owned copy lingers); `AttachmentRef`
+    // borrows the snapshot's Database, which outlives this call.
+    let mut attachments: Vec<_> = snapshot.attachments_named().collect();
+    attachments.sort_by(|a, b| a.0.cmp(b.0));
+    for (name, attachment) in &attachments {
         feed(&mut hasher, name.as_bytes());
+        feed(&mut hasher, attachment.get());
     }
 
     hasher.finalize().to_hex().to_string()
@@ -550,7 +561,7 @@ impl KdbxService {
                 // (incl. the password), tags, icon, expiry, attachments, and the
                 // remaining metadata — can be reapplied without holding the
                 // immutable borrow across the mutation.
-                let (source, restored_attachments): (KeepassEntry, Vec<(String, Vec<u8>)>) = {
+                let (source, restored_attachments): (KeepassEntry, Vec<RestoredAttachment>) = {
                     let live = entry.as_ref();
                     let snapshot = live
                         .historical(index)
@@ -559,13 +570,15 @@ impl KdbxService {
                     {
                         return Err(AppError::HistoryVersionMismatch(index));
                     }
-                    // Attachment bytes must be read here, while the snapshot's
+                    // Attachments must be read here, while the snapshot's
                     // `EntryRef` still has Database access — the owned clone
                     // below can't resolve binaries on its own (the map is
-                    // crate-private and keyed into the pool).
+                    // crate-private and keyed into the pool). The whole `Value`
+                    // is cloned (not just the bytes) so a protected attachment
+                    // from an imported vault stays protected after restore.
                     let attachments = snapshot
                         .attachments_named()
-                        .map(|(name, att)| (name.to_string(), att.get().clone()))
+                        .map(|(name, att)| (name.to_string(), att.data.clone()))
                         .collect();
                     ((*snapshot).clone(), attachments)
                 };
@@ -601,9 +614,9 @@ impl KdbxService {
 
                 // Attachments: the map is crate-private and shares binary-pool
                 // ids, so rebuild it through the public add/remove API. Re-adding
-                // by value restores the same bytes under the same names; ids the
-                // live Entry no longer references survive via `before` and are
-                // pruned at save time.
+                // by value restores the same bytes (and protection flag) under
+                // the same names; ids the live Entry no longer references survive
+                // via `before` and are pruned at save time.
                 let live_names: Vec<String> = entry
                     .as_ref()
                     .attachments_named()
@@ -612,8 +625,8 @@ impl KdbxService {
                 for name in live_names {
                     entry.remove_attachment_by_name(&name);
                 }
-                for (name, bytes) in restored_attachments {
-                    entry.add_attachment(name, Value::unprotected(bytes));
+                for (name, value) in restored_attachments {
+                    entry.add_attachment(name, value);
                 }
 
                 // Expiry (flag + timestamp), then bump last_modification to now.
