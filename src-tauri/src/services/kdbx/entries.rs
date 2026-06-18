@@ -209,30 +209,35 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
     changed
 }
 
-/// A stable per-version content fingerprint: a hex SHA-256 over the snapshot's
-/// `modified_at`, every field (key + protected flag + resolved value, so a
-/// password rotation registers even when it shares a second with its
+/// A stable per-version content fingerprint: a hex **keyed BLAKE3 MAC** over the
+/// snapshot's `modified_at`, every field (key + protected flag + resolved value,
+/// so a password rotation registers even when it shares a second with its
 /// predecessor), tags, icon, expiry and attachment names. This is the addressing
 /// guard for per-version reveal/restore (ADR-0008): a version is addressed by
 /// `index` but only acted on when its fingerprint still matches, so a concurrent
 /// edit that shifts the list can't silently retarget. `modified_at` alone is
 /// insufficient — `keepass::Times` stores it at second precision, so two
-/// snapshots made within the same second share it. The hash is one-way and
-/// hashes secret *content* only to disambiguate, never exposing it.
-fn history_fingerprint(snapshot: &EntryRef<'_>) -> String {
-    use sha2::{Digest, Sha256};
-
+/// snapshots made within the same second share it.
+///
+/// Secret *content* is fed in to disambiguate same-second rotations, but the
+/// MAC is **keyed** by a per-process backend key (`key`), so although the
+/// fingerprint is returned by `list_entry_history`, it is not an unsalted
+/// brute-force oracle over historical passwords/PINs: confirming a guess would
+/// require the key, which never leaves the backend. Inputs are streamed directly
+/// into the hasher rather than collected into an owned buffer, so no extra
+/// plaintext copy of the secrets lingers in allocator memory after the call.
+fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> String {
     // Length-prefix every segment so distinct field boundaries can't collide by
     // concatenation (e.g. key "ab"+value "c" vs key "a"+value "bc").
-    fn push(buf: &mut Vec<u8>, bytes: &[u8]) {
-        buf.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
-        buf.extend_from_slice(bytes);
+    fn feed(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+        hasher.update(&(bytes.len() as u64).to_le_bytes());
+        hasher.update(bytes);
     }
 
-    let mut buf: Vec<u8> = Vec::new();
+    let mut hasher = blake3::Hasher::new_keyed(key);
 
-    push(
-        &mut buf,
+    feed(
+        &mut hasher,
         snapshot
             .times
             .last_modification
@@ -244,27 +249,30 @@ fn history_fingerprint(snapshot: &EntryRef<'_>) -> String {
     // Fields in key order so the fingerprint is independent of map iteration.
     let mut keys: Vec<&str> = snapshot.fields.keys().map(String::as_str).collect();
     keys.sort_unstable();
-    for key in keys {
-        push(&mut buf, key.as_bytes());
-        if let Some(value) = snapshot.fields.get(key) {
-            push(&mut buf, &[u8::from(matches!(value, Value::Protected(_)))]);
-            push(&mut buf, value.get().as_bytes());
+    for field_key in keys {
+        feed(&mut hasher, field_key.as_bytes());
+        if let Some(value) = snapshot.fields.get(field_key) {
+            feed(
+                &mut hasher,
+                &[u8::from(matches!(value, Value::Protected(_)))],
+            );
+            feed(&mut hasher, value.get().as_bytes());
         }
     }
 
     let mut tags = snapshot.tags.clone();
     tags.sort();
     for tag in &tags {
-        push(&mut buf, tag.as_bytes());
+        feed(&mut hasher, tag.as_bytes());
     }
 
-    push(&mut buf, format!("{:?}", snapshot.icon()).as_bytes());
-    push(
-        &mut buf,
+    feed(&mut hasher, format!("{:?}", snapshot.icon()).as_bytes());
+    feed(
+        &mut hasher,
         &[u8::from(snapshot.times.expires.unwrap_or(false))],
     );
-    push(
-        &mut buf,
+    feed(
+        &mut hasher,
         snapshot
             .times
             .expiry
@@ -276,16 +284,10 @@ fn history_fingerprint(snapshot: &EntryRef<'_>) -> String {
     let mut attachments: Vec<&str> = snapshot.attachments_named().map(|(name, _)| name).collect();
     attachments.sort_unstable();
     for name in attachments {
-        push(&mut buf, name.as_bytes());
+        feed(&mut hasher, name.as_bytes());
     }
 
-    let digest = Sha256::digest(&buf);
-    let mut hex = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        use std::fmt::Write;
-        let _ = write!(hex, "{byte:02x}");
-    }
-    hex
+    hasher.finalize().to_hex().to_string()
 }
 
 /// The keys of a snapshot's *protected custom* fields (excludes the standard
@@ -413,7 +415,7 @@ impl KdbxService {
                     url: snapshot.get_url().map(std::string::ToString::to_string),
                     changed_fields,
                     is_creation,
-                    fingerprint: history_fingerprint(&snapshot),
+                    fingerprint: history_fingerprint(&snapshot, &self.history_fingerprint_key),
                     protected_fields: protected_field_keys(&snapshot),
                 });
             }
@@ -454,7 +456,8 @@ impl KdbxService {
             let snapshot = entry
                 .historical(index)
                 .ok_or(AppError::HistoryVersionMismatch(index))?;
-            if history_fingerprint(&snapshot) != expected_fingerprint {
+            if history_fingerprint(&snapshot, &self.history_fingerprint_key) != expected_fingerprint
+            {
                 return Err(AppError::HistoryVersionMismatch(index));
             }
             read(&snapshot)
@@ -1229,6 +1232,35 @@ mod tests {
     /// fixed value so the round-trip cases never trip the cap; the over-cap
     /// cases seed a file one byte past it.
     const TEST_HARD_CAP: u64 = 25 * 1024 * 1024;
+
+    #[test]
+    fn history_fingerprint_is_keyed_and_deterministic() {
+        // The fingerprint is exposed by `list_entry_history`, so it must be a
+        // keyed MAC rather than an unsalted hash of the snapshot's (secret-
+        // bearing) content — otherwise it would be an offline brute-force oracle
+        // over historical passwords/PINs. This pins that property: fixed key →
+        // stable output, different key → different output.
+        let (service, _dir, db, entry_a, _entry_b) = create_test_database();
+        let key1 = [1u8; blake3::KEY_LEN];
+        let key2 = [2u8; blake3::KEY_LEN];
+        service
+            .with_vault(&db, |vault| {
+                let entry = vault.find_entry(&entry_a)?;
+                let under_key1 = history_fingerprint(&entry, &key1);
+                assert_eq!(
+                    under_key1,
+                    history_fingerprint(&entry, &key1),
+                    "same key + same content must be deterministic"
+                );
+                assert_ne!(
+                    under_key1,
+                    history_fingerprint(&entry, &key2),
+                    "a different key must yield a different fingerprint (keyed MAC)"
+                );
+                Ok(())
+            })
+            .expect("with_vault");
+    }
 
     #[test]
     fn classify_attachment_size_walks_the_thresholds() {

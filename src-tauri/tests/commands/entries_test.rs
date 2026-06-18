@@ -482,50 +482,44 @@ fn get_history_entry_password_rejects_an_out_of_range_index() {
 
 #[test]
 fn version_guard_distinguishes_two_snapshots_sharing_a_second() {
-    // Three back-to-back password edits (no sleep) land their pre-images in
-    // history within the same wall-clock second, so the two newest snapshots
-    // share a second-precision `modified_at`. A timestamp-only guard could not
-    // tell them apart; the content fingerprint must.
+    // Several back-to-back password edits (no sleep) land their pre-images in
+    // history microseconds apart, so adjacent snapshots share a second-precision
+    // `modified_at`. Rather than assume where we sit relative to a clock-second
+    // boundary, we *find* an adjacent same-second pair among the snapshots (six
+    // microsecond-spaced edits can't span more than one boundary, so at least
+    // one such pair always exists). The point: a timestamp-only guard could not
+    // tell that pair apart; the content fingerprint must.
     let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig", None);
-    service
-        .update_entry(&db, &entry_id, password_update("v1"))
-        .expect("edit 1");
-    service
-        .update_entry(&db, &entry_id, password_update("v2"))
-        .expect("edit 2");
-    service
-        .update_entry(&db, &entry_id, password_update("v3"))
-        .expect("edit 3");
+    for password in ["v1", "v2", "v3", "v4", "v5", "v6"] {
+        service
+            .update_entry(&db, &entry_id, password_update(password))
+            .expect("rapid edit");
+    }
 
     let history = service.list_entry_history(&db, &entry_id).expect("history");
-    let newest = &history[0];
-    let older = &history[1];
+    let pair = history
+        .windows(2)
+        .find(|w| w[0].modified_at == w[1].modified_at)
+        .expect("rapid edits must produce two snapshots within the same second");
+    let (newest, older) = (&pair[0], &pair[1]);
 
-    // Precondition: the two snapshots really do share a second-precision
-    // timestamp (rapid edits never sleep across a second boundary here).
-    assert_eq!(
-        newest.modified_at, older.modified_at,
-        "expected two snapshots within the same second"
-    );
-    // …yet their fingerprints differ, because the hashed password content does.
+    // The two snapshots share a second-precision timestamp …
+    assert_eq!(newest.modified_at, older.modified_at);
+    // … yet their fingerprints differ, because the hashed password content does.
     assert_ne!(
         newest.fingerprint, older.fingerprint,
         "fingerprint must disambiguate same-second snapshots"
     );
 
-    // Each index returns its own version's password.
-    assert_eq!(
-        service
-            .get_history_entry_password(&db, &entry_id, newest.index, &newest.fingerprint)
-            .expect("newest password"),
-        "v2"
-    );
-    assert_eq!(
-        service
-            .get_history_entry_password(&db, &entry_id, older.index, &older.fingerprint)
-            .expect("older password"),
-        "v1"
-    );
+    // Each index, addressed with its own fingerprint, returns a distinct
+    // password — confirming they really are different versions.
+    let newest_pw = service
+        .get_history_entry_password(&db, &entry_id, newest.index, &newest.fingerprint)
+        .expect("newest password");
+    let older_pw = service
+        .get_history_entry_password(&db, &entry_id, older.index, &older.fingerprint)
+        .expect("older password");
+    assert_ne!(newest_pw, older_pw);
 
     // The decisive case: addressing the newest index with the *older* snapshot's
     // fingerprint. The shared timestamp would have let a timestamp guard through

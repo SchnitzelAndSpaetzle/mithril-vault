@@ -20,6 +20,8 @@ use crate::commands::settings::BackupSettings;
 use crate::domain::kdbx::OpenDatabase;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
+use rand::rand_core::TryRng;
+use rand::rngs::SysRng;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -34,15 +36,34 @@ pub struct KdbxService {
     databases: Mutex<HashMap<String, OpenDatabase>>,
     pub(crate) favicons: FaviconCooldown,
     backup_settings: Mutex<BackupSettings>,
+    /// Per-process random key for the Entry-History version fingerprint
+    /// (`services::kdbx::entries::history_fingerprint`). The fingerprint is a
+    /// *keyed* MAC over the snapshot — including secret values — so it can still
+    /// disambiguate two same-second password rotations, yet the value returned
+    /// by `list_entry_history` is **not** a brute-forceable hash of those
+    /// secrets: without this key an offline attacker can't confirm a guessed
+    /// password/PIN. The key never leaves the backend and is regenerated each
+    /// process start (fingerprints are only ever used transiently within a
+    /// session, never persisted), so it need not be stable across restarts.
+    pub(crate) history_fingerprint_key: [u8; blake3::KEY_LEN],
 }
 
 impl KdbxService {
     /// Creates a new KDBX service.
     pub fn new() -> Self {
+        // Mirror the password-health analyzer's keying: a fresh OS-random key,
+        // falling back to all-zero only if the RNG fails. The guard stays
+        // correct under the fallback (both sides use the same key); only the
+        // brute-force resistance of the exposed fingerprint degrades.
+        let mut history_fingerprint_key = [0u8; blake3::KEY_LEN];
+        if SysRng.try_fill_bytes(&mut history_fingerprint_key).is_err() {
+            history_fingerprint_key = [0u8; blake3::KEY_LEN];
+        }
         Self {
             databases: Mutex::new(HashMap::new()),
             favicons: FaviconCooldown::new(),
             backup_settings: Mutex::new(BackupSettings::default()),
+            history_fingerprint_key,
         }
     }
 

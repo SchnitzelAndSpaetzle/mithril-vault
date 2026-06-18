@@ -106,7 +106,12 @@ export function EntryHistorySection({
               const isOldest = index === versions.length - 1;
               const showChanged = version.changedFields.length > 0;
               return (
-                <li key={`${version.index}:${version.modifiedAt}`}>
+                // Key on the fingerprint, not just index+timestamp: two snapshots
+                // can share a second-precision timestamp at the same index after
+                // a rapid edit + refetch. Keying on the content fingerprint forces
+                // a different snapshot to remount the row, so a previously
+                // revealed secret can't linger under a now-different version.
+                <li key={`${version.index}:${version.fingerprint}`}>
                   {index > 0 && <Separator />}
                   <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-2">
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
