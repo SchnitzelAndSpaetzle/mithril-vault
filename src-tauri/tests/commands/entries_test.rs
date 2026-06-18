@@ -366,6 +366,314 @@ fn get_entry_password_records_zero_audit_events_on_failure() {
 }
 
 // ============================================================================
+// Entry History: per-version secret reveal + version guard (#325)
+// ============================================================================
+
+/// Builds an `UpdateEntryData` that changes only the password, leaving every
+/// other field untouched — the minimal content change that pushes a snapshot.
+fn password_update(password: &str) -> UpdateEntryData {
+    UpdateEntryData {
+        title: None,
+        username: None,
+        password: Some(SecureString::from(password)),
+        url: None,
+        notes: None,
+        icon_id: None,
+        tags: None,
+        custom_fields: None,
+        protected_custom_fields: None,
+        expires: None,
+        expiry_time: None,
+    }
+}
+
+/// Creates one entry with the given password and protected custom field, then
+/// returns the service, its temp dir, the db path and the new entry id.
+fn create_entry_with_secret(
+    title: &str,
+    password: &str,
+    protected: Option<(&str, &str)>,
+) -> (KdbxService, TempDir, String, String) {
+    let (service, dir, db) = create_test_database();
+    let info = service.get_info(&db).expect("database info");
+    let protected_custom_fields = protected.map(|(k, v)| {
+        let mut map: BTreeMap<String, SecureString> = BTreeMap::new();
+        map.insert(k.to_string(), SecureString::from(v));
+        map
+    });
+    let entry = service
+        .create_entry(
+            &db,
+            &info.root_group_id,
+            CreateEntryData {
+                title: title.to_string(),
+                username: String::new(),
+                password: SecureString::from(password),
+                url: None,
+                notes: None,
+                icon_id: None,
+                tags: None,
+                custom_fields: None,
+                protected_custom_fields,
+                expires: None,
+                expiry_time: None,
+            },
+        )
+        .expect("create entry");
+    (service, dir, db, entry.id)
+}
+
+#[test]
+fn get_history_entry_password_returns_that_versions_password() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    // Edit the password so the original ("orig-pw") lands in history.
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    assert_eq!(history.len(), 1, "one prior version after a single edit");
+    let version = &history[0];
+
+    let pw = service
+        .get_history_entry_password(&db, &entry_id, version.index, &version.fingerprint)
+        .expect("history password");
+    assert_eq!(
+        pw, "orig-pw",
+        "must return the historical version's password, not the live one"
+    );
+}
+
+#[test]
+fn get_history_entry_password_rejects_a_stale_fingerprint() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+
+    // A fingerprint that doesn't match the addressed index is rejected outright
+    // — no secret is returned for a version the caller didn't actually see.
+    let result =
+        service.get_history_entry_password(&db, &entry_id, version.index, "deadbeef-not-real");
+    assert!(
+        matches!(result, Err(AppError::HistoryVersionMismatch(idx)) if idx == version.index),
+        "a mismatched fingerprint must error, got {result:?}"
+    );
+}
+
+#[test]
+fn get_history_entry_password_rejects_an_out_of_range_index() {
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+
+    // Index past the end of the (length-1) list: the addressed version doesn't
+    // exist, which is the same "list moved under you" failure as a mismatch.
+    let result = service.get_history_entry_password(&db, &entry_id, 99, "anything");
+    assert!(
+        matches!(result, Err(AppError::HistoryVersionMismatch(99))),
+        "an out-of-range index must error, got {result:?}"
+    );
+}
+
+#[test]
+fn version_guard_distinguishes_two_snapshots_sharing_a_second() {
+    // Several back-to-back password edits (no sleep) land their pre-images in
+    // history microseconds apart, so adjacent snapshots share a second-precision
+    // `modified_at`. Rather than assume where we sit relative to a clock-second
+    // boundary, we *find* an adjacent same-second pair among the snapshots (six
+    // microsecond-spaced edits can't span more than one boundary, so at least
+    // one such pair always exists). The point: a timestamp-only guard could not
+    // tell that pair apart; the content fingerprint must.
+    let (service, _dir, db, entry_id) = create_entry_with_secret("svc", "orig", None);
+    for password in ["v1", "v2", "v3", "v4", "v5", "v6"] {
+        service
+            .update_entry(&db, &entry_id, password_update(password))
+            .expect("rapid edit");
+    }
+
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let pair = history
+        .windows(2)
+        .find(|w| w[0].modified_at == w[1].modified_at)
+        .expect("rapid edits must produce two snapshots within the same second");
+    let (newest, older) = (&pair[0], &pair[1]);
+
+    // The two snapshots share a second-precision timestamp …
+    assert_eq!(newest.modified_at, older.modified_at);
+    // … yet their fingerprints differ, because the hashed password content does.
+    assert_ne!(
+        newest.fingerprint, older.fingerprint,
+        "fingerprint must disambiguate same-second snapshots"
+    );
+
+    // Each index, addressed with its own fingerprint, returns a distinct
+    // password — confirming they really are different versions.
+    let newest_pw = service
+        .get_history_entry_password(&db, &entry_id, newest.index, &newest.fingerprint)
+        .expect("newest password");
+    let older_pw = service
+        .get_history_entry_password(&db, &entry_id, older.index, &older.fingerprint)
+        .expect("older password");
+    assert_ne!(newest_pw, older_pw);
+
+    // The decisive case: addressing the newest index with the *older* snapshot's
+    // fingerprint. The shared timestamp would have let a timestamp guard through
+    // onto the wrong version; the fingerprint guard rejects it.
+    let crossed =
+        service.get_history_entry_password(&db, &entry_id, newest.index, &older.fingerprint);
+    assert!(
+        matches!(crossed, Err(AppError::HistoryVersionMismatch(_))),
+        "fingerprint guard must reject a same-second cross-version address, got {crossed:?}"
+    );
+}
+
+/// An `UpdateEntryData` that replaces the protected custom fields with a single
+/// `key`=`value` pair (the minimal protected-field content change).
+fn protected_field_update(key: &str, value: &str) -> UpdateEntryData {
+    let mut map: BTreeMap<String, SecureString> = BTreeMap::new();
+    map.insert(key.to_string(), SecureString::from(value));
+    UpdateEntryData {
+        title: None,
+        username: None,
+        password: None,
+        url: None,
+        notes: None,
+        icon_id: None,
+        tags: None,
+        custom_fields: None,
+        protected_custom_fields: Some(map),
+        expires: None,
+        expiry_time: None,
+    }
+}
+
+#[test]
+fn get_history_protected_field_returns_that_versions_value() {
+    let (service, _dir, db, entry_id) =
+        create_entry_with_secret("svc", "pw", Some(("PIN", "0451")));
+    // Rotate the protected field so the original value lands in history.
+    service
+        .update_entry(&db, &entry_id, protected_field_update("PIN", "9999"))
+        .expect("rotate PIN");
+
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+    // The listing names the protected custom field (key only) so the view can
+    // offer a per-version reveal action — but never carries its value.
+    assert!(
+        version.protected_fields.contains(&"PIN".to_string()),
+        "protected field key must be listed, got {:?}",
+        version.protected_fields
+    );
+
+    let value = service
+        .get_history_protected_field(&db, &entry_id, version.index, &version.fingerprint, "PIN")
+        .expect("history protected field");
+    assert_eq!(value.value, "0451", "must return the historical PIN");
+
+    // Same fingerprint guard as the password path.
+    let stale = service.get_history_protected_field(
+        &db,
+        &entry_id,
+        version.index,
+        "not-the-fingerprint",
+        "PIN",
+    );
+    assert!(
+        matches!(stale, Err(AppError::HistoryVersionMismatch(_))),
+        "a stale fingerprint must error, got {stale:?}"
+    );
+}
+
+#[test]
+fn get_history_protected_field_errors_on_unknown_key() {
+    let (service, _dir, db, entry_id) =
+        create_entry_with_secret("svc", "pw", Some(("PIN", "0451")));
+    service
+        .update_entry(&db, &entry_id, protected_field_update("PIN", "9999"))
+        .expect("rotate PIN");
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+
+    let unknown = service.get_history_protected_field(
+        &db,
+        &entry_id,
+        version.index,
+        &version.fingerprint,
+        "Nope",
+    );
+    assert!(
+        matches!(unknown, Err(AppError::CustomFieldNotFound(_))),
+        "an unknown key must error, got {unknown:?}"
+    );
+}
+
+#[test]
+fn revealing_a_history_password_records_one_password_revealed_event() {
+    // Viewing a historical password reuses the live `entry.password_revealed`
+    // kind via the same audit wrapper the command uses.
+    let (service, dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+    let pw = audit_entry_password_revealed_on_success(
+        &audit,
+        &db,
+        &entry_id,
+        service.get_history_entry_password(&db, &entry_id, version.index, &version.fingerprint),
+    )
+    .expect("history password");
+    assert_eq!(pw, "orig-pw");
+
+    let events = audit
+        .read(Path::new(&db), &AuditFilter::default())
+        .expect("read audit");
+    assert_eq!(events.len(), 1, "exactly one event for a successful reveal");
+    match &events[0] {
+        AuditEvent::EntryPasswordRevealed { entry_id: id, .. } => assert_eq!(id, &entry_id),
+        other => panic!("unexpected event kind: {other:?}"),
+    }
+}
+
+#[test]
+fn a_guard_failure_records_no_audit_event() {
+    // A mismatched fingerprint returns no secret, so it must also leave no
+    // audit trail — the wrapper records only on success.
+    let (service, dir, db, entry_id) = create_entry_with_secret("svc", "orig-pw", None);
+    service
+        .update_entry(&db, &entry_id, password_update("new-pw"))
+        .expect("update password");
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    let version = &history[0];
+
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+    let result = audit_entry_password_revealed_on_success(
+        &audit,
+        &db,
+        &entry_id,
+        service.get_history_entry_password(&db, &entry_id, version.index, "stale-fingerprint"),
+    );
+    assert!(matches!(result, Err(AppError::HistoryVersionMismatch(_))));
+
+    let events = audit
+        .read(Path::new(&db), &AuditFilter::default())
+        .expect("read audit");
+    assert!(
+        events.is_empty(),
+        "no event must be recorded on a guard failure"
+    );
+}
+
+// ============================================================================
 // create_entry command tests
 // ============================================================================
 

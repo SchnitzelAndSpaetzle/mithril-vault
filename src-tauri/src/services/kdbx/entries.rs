@@ -209,6 +209,103 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
     changed
 }
 
+/// A stable per-version content fingerprint: a hex **keyed BLAKE3 MAC** over the
+/// snapshot's `modified_at`, every field (key + protected flag + resolved value,
+/// so a password rotation registers even when it shares a second with its
+/// predecessor), tags, icon, expiry and attachment names. This is the addressing
+/// guard for per-version reveal/restore (ADR-0008): a version is addressed by
+/// `index` but only acted on when its fingerprint still matches, so a concurrent
+/// edit that shifts the list can't silently retarget. `modified_at` alone is
+/// insufficient — `keepass::Times` stores it at second precision, so two
+/// snapshots made within the same second share it.
+///
+/// Secret *content* is fed in to disambiguate same-second rotations, but the
+/// MAC is **keyed** by a per-process backend key (`key`), so although the
+/// fingerprint is returned by `list_entry_history`, it is not an unsalted
+/// brute-force oracle over historical passwords/PINs: confirming a guess would
+/// require the key, which never leaves the backend. Inputs are streamed directly
+/// into the hasher rather than collected into an owned buffer, so no extra
+/// plaintext copy of the secrets lingers in allocator memory after the call.
+fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> String {
+    // Length-prefix every segment so distinct field boundaries can't collide by
+    // concatenation (e.g. key "ab"+value "c" vs key "a"+value "bc").
+    fn feed(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+        hasher.update(&(bytes.len() as u64).to_le_bytes());
+        hasher.update(bytes);
+    }
+
+    let mut hasher = blake3::Hasher::new_keyed(key);
+
+    feed(
+        &mut hasher,
+        snapshot
+            .times
+            .last_modification
+            .map(|t| t.to_string())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+
+    // Fields in key order so the fingerprint is independent of map iteration.
+    let mut keys: Vec<&str> = snapshot.fields.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    for field_key in keys {
+        feed(&mut hasher, field_key.as_bytes());
+        if let Some(value) = snapshot.fields.get(field_key) {
+            feed(
+                &mut hasher,
+                &[u8::from(matches!(value, Value::Protected(_)))],
+            );
+            feed(&mut hasher, value.get().as_bytes());
+        }
+    }
+
+    let mut tags = snapshot.tags.clone();
+    tags.sort();
+    for tag in &tags {
+        feed(&mut hasher, tag.as_bytes());
+    }
+
+    feed(&mut hasher, format!("{:?}", snapshot.icon()).as_bytes());
+    feed(
+        &mut hasher,
+        &[u8::from(snapshot.times.expires.unwrap_or(false))],
+    );
+    feed(
+        &mut hasher,
+        snapshot
+            .times
+            .expiry
+            .map(|t| t.to_string())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+
+    let mut attachments: Vec<&str> = snapshot.attachments_named().map(|(name, _)| name).collect();
+    attachments.sort_unstable();
+    for name in attachments {
+        feed(&mut hasher, name.as_bytes());
+    }
+
+    hasher.finalize().to_hex().to_string()
+}
+
+/// The keys of a snapshot's *protected custom* fields (excludes the standard
+/// Password etc.), sorted. Names only — values never cross IPC (ADR-0008); they
+/// let the view offer a per-version reveal action for each protected field.
+fn protected_field_keys(snapshot: &EntryRef<'_>) -> Vec<String> {
+    let mut keys: Vec<String> = snapshot
+        .fields
+        .iter()
+        .filter(|(key, value)| {
+            matches!(value, Value::Protected(_)) && !is_standard_entry_field(key)
+        })
+        .map(|(key, _)| key.clone())
+        .collect();
+    keys.sort();
+    keys
+}
+
 /// Maps a KDBX field key to the name surfaced in `changed_fields`. Standard
 /// fields read as lowercase domain names (`password`, `title`, …) so the view
 /// can localize them; custom fields keep their user-defined key verbatim.
@@ -318,6 +415,8 @@ impl KdbxService {
                     url: snapshot.get_url().map(std::string::ToString::to_string),
                     changed_fields,
                     is_creation,
+                    fingerprint: history_fingerprint(&snapshot, &self.history_fingerprint_key),
+                    protected_fields: protected_field_keys(&snapshot),
                 });
             }
             Ok(items)
@@ -332,6 +431,91 @@ impl KdbxService {
                 .get_password()
                 .map(std::string::ToString::to_string)
                 .unwrap_or_default())
+        })
+    }
+
+    /// Resolves the snapshot at `index` in the newest-first history list and
+    /// verifies its content fingerprint still matches `expected_fingerprint`
+    /// before handing it to `read` (ADR-0008). The guard re-reads the live list
+    /// inside the same Vault lock, so a concurrent edit that prepended a new
+    /// version (shifting indices) or rewrote this one is caught: either the
+    /// index no longer exists or its fingerprint differs, both
+    /// [`AppError::HistoryVersionMismatch`]. This is the shared addressing
+    /// mechanism reused by Restore (#328). `read` extracts the secret from the
+    /// verified snapshot; the listing itself never carries secrets.
+    fn with_history_version<T>(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        expected_fingerprint: &str,
+        read: impl FnOnce(&EntryRef<'_>) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(id)?;
+            let snapshot = entry
+                .historical(index)
+                .ok_or(AppError::HistoryVersionMismatch(index))?;
+            if history_fingerprint(&snapshot, &self.history_fingerprint_key) != expected_fingerprint
+            {
+                return Err(AppError::HistoryVersionMismatch(index));
+            }
+            read(&snapshot)
+        })
+    }
+
+    /// Fetches a historical version's password on demand, mirroring
+    /// [`get_entry_password`] for the live Entry (ADR-0008). The version is
+    /// addressed by `index` in the newest-first list and guarded by
+    /// `fingerprint`; a stale/mismatched fingerprint errors rather than
+    /// returning the wrong version's secret. The history listing never carries
+    /// this value.
+    ///
+    /// [`get_entry_password`]: Self::get_entry_password
+    pub fn get_history_entry_password(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+    ) -> Result<String, AppError> {
+        self.with_history_version(db_id, id, index, fingerprint, |snapshot| {
+            Ok(snapshot
+                .get_password()
+                .map(std::string::ToString::to_string)
+                .unwrap_or_default())
+        })
+    }
+
+    /// Fetches a historical version's protected custom field on demand,
+    /// mirroring [`get_entry_protected_custom_field`] for the live Entry. Same
+    /// index+fingerprint guard as [`get_history_entry_password`]; a non-existent
+    /// or unprotected key errors exactly as the live path does.
+    ///
+    /// [`get_entry_protected_custom_field`]: Self::get_entry_protected_custom_field
+    pub fn get_history_protected_field(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+        key: &str,
+    ) -> Result<CustomFieldValue, AppError> {
+        if is_standard_entry_field(key) {
+            return Err(AppError::CustomFieldNotFound(key.to_string()));
+        }
+        self.with_history_version(db_id, id, index, fingerprint, |snapshot| {
+            let value = snapshot
+                .fields
+                .get(key)
+                .ok_or_else(|| AppError::CustomFieldNotFound(key.to_string()))?;
+            match value {
+                Value::Protected(_) => Ok(CustomFieldValue {
+                    key: key.to_string(),
+                    value: value.get().clone(),
+                }),
+                Value::Unprotected(_) => Err(AppError::CustomFieldNotProtected(key.to_string())),
+            }
         })
     }
 
@@ -1048,6 +1232,35 @@ mod tests {
     /// fixed value so the round-trip cases never trip the cap; the over-cap
     /// cases seed a file one byte past it.
     const TEST_HARD_CAP: u64 = 25 * 1024 * 1024;
+
+    #[test]
+    fn history_fingerprint_is_keyed_and_deterministic() {
+        // The fingerprint is exposed by `list_entry_history`, so it must be a
+        // keyed MAC rather than an unsalted hash of the snapshot's (secret-
+        // bearing) content — otherwise it would be an offline brute-force oracle
+        // over historical passwords/PINs. This pins that property: fixed key →
+        // stable output, different key → different output.
+        let (service, _dir, db, entry_a, _entry_b) = create_test_database();
+        let key1 = [1u8; blake3::KEY_LEN];
+        let key2 = [2u8; blake3::KEY_LEN];
+        service
+            .with_vault(&db, |vault| {
+                let entry = vault.find_entry(&entry_a)?;
+                let under_key1 = history_fingerprint(&entry, &key1);
+                assert_eq!(
+                    under_key1,
+                    history_fingerprint(&entry, &key1),
+                    "same key + same content must be deterministic"
+                );
+                assert_ne!(
+                    under_key1,
+                    history_fingerprint(&entry, &key2),
+                    "a different key must yield a different fingerprint (keyed MAC)"
+                );
+                Ok(())
+            })
+            .expect("with_vault");
+    }
 
     #[test]
     fn classify_attachment_size_walks_the_thresholds() {

@@ -324,6 +324,54 @@ export const entries = {
   },
 
   /**
+   * Reveals a historical version's password on demand (ADR-0008), mirroring
+   * {@link getPassword} for the live Entry. The version is addressed by its
+   * `index` in the newest-first list and guarded by `fingerprint` (taken from
+   * the {@link EntryHistoryItem}); a stale/mismatched fingerprint errors rather
+   * than returning the wrong version's secret. The listing never carries this.
+   */
+  async getHistoryPassword(
+    dbId: string,
+    id: string,
+    index: number,
+    fingerprint: string
+  ): Promise<string> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("get_history_entry_password", {
+      dbId,
+      id,
+      index,
+      fingerprint,
+    });
+    return z.string().parse(result);
+  },
+
+  /**
+   * Reveals a historical version's protected custom field on demand, under the
+   * same index+fingerprint guard as {@link getHistoryPassword}.
+   */
+  async getHistoryProtectedField(
+    dbId: string,
+    id: string,
+    index: number,
+    fingerprint: string,
+    key: string
+  ): Promise<CustomFieldValue> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    CustomFieldKeySchema.parse({ key });
+    const result = await invoke("get_history_protected_field", {
+      dbId,
+      id,
+      index,
+      fingerprint,
+      key,
+    });
+    return CustomFieldValueSchema.parse(result);
+  },
+
+  /**
    * Phase 1 (picker): opens the multi-select file dialog *in Rust*, buffers the
    * picked paths backend-side, and returns the size-classification plan against
    * the configured thresholds — without reading bytes or mutating the Vault.

@@ -20,6 +20,8 @@ use crate::commands::settings::BackupSettings;
 use crate::domain::kdbx::OpenDatabase;
 use crate::dto::database::DatabaseInfo;
 use crate::dto::error::AppError;
+use rand::rand_core::TryRng;
+use rand::rngs::SysRng;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -34,6 +36,39 @@ pub struct KdbxService {
     databases: Mutex<HashMap<String, OpenDatabase>>,
     pub(crate) favicons: FaviconCooldown,
     backup_settings: Mutex<BackupSettings>,
+    /// Per-process random key for the Entry-History version fingerprint
+    /// (`services::kdbx::entries::history_fingerprint`). The fingerprint is a
+    /// *keyed* MAC over the snapshot — including secret values — so it can still
+    /// disambiguate two same-second password rotations, yet the value returned
+    /// by `list_entry_history` is **not** a brute-forceable hash of those
+    /// secrets: without this key an offline attacker can't confirm a guessed
+    /// password/PIN. The key never leaves the backend and is regenerated each
+    /// process start (fingerprints are only ever used transiently within a
+    /// session, never persisted), so it need not be stable across restarts.
+    pub(crate) history_fingerprint_key: [u8; blake3::KEY_LEN],
+}
+
+/// Generates the per-process history-fingerprint key from OS randomness,
+/// **failing closed** if the RNG is unavailable.
+///
+/// Unlike the password-health analyzer (where a degraded key only weakens
+/// per-run grouping), this key is a security boundary: the fingerprint is
+/// returned over IPC and derived from secret field values, so continuing with a
+/// known (e.g. all-zero) key would turn it into a publicly reproducible offline
+/// guessing oracle over historical passwords/PINs. We therefore abort rather
+/// than expose fingerprints derived with a known key.
+///
+/// # Panics
+/// Panics if the OS RNG cannot produce key material. This is an unrecoverable,
+/// security-critical startup condition and is effectively unreachable on
+/// supported platforms.
+fn generate_history_fingerprint_key() -> [u8; blake3::KEY_LEN] {
+    let mut key = [0u8; blake3::KEY_LEN];
+    assert!(
+        SysRng.try_fill_bytes(&mut key).is_ok(),
+        "failed to seed history fingerprint key: OS RNG unavailable"
+    );
+    key
 }
 
 impl KdbxService {
@@ -43,6 +78,7 @@ impl KdbxService {
             databases: Mutex::new(HashMap::new()),
             favicons: FaviconCooldown::new(),
             backup_settings: Mutex::new(BackupSettings::default()),
+            history_fingerprint_key: generate_history_fingerprint_key(),
         }
     }
 
