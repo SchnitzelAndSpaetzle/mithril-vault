@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator.tsx";
 import { entries as entriesApi } from "@/lib/tauri";
+import type { EntryHistoryItem } from "@/lib/types";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
@@ -97,91 +98,117 @@ export function EntryHistorySection({
           </p>
         ) : (
           <ul>
-            {versions.map((version, index) => {
-              // The oldest version (last, newest-first) carries an origin
-              // label: "Created" when it's the original snapshot, otherwise
-              // "Earliest kept version". Its changed line is still shown —
-              // changedFields is diffed against the next-newer version, so it's
-              // accurate even when the original predecessor was pruned.
-              const isOldest = index === versions.length - 1;
-              const showChanged = version.changedFields.length > 0;
-              return (
-                // Key on the fingerprint, not just index+timestamp: two snapshots
-                // can share a second-precision timestamp at the same index after
-                // a rapid edit + refetch. Keying on the content fingerprint forces
-                // a different snapshot to remount the row, so a previously
-                // revealed secret can't linger under a now-different version.
-                <li key={`${version.index}:${version.fingerprint}`}>
-                  {index > 0 && <Separator />}
-                  <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-2">
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                      {version.title}
-                    </span>
-                    <span className="shrink-0 text-sm text-muted-foreground">
-                      {formatHistoryDate(version.modifiedAt)}
-                    </span>
-                  </div>
-                  {isOldest && (
-                    <p className="px-4 pb-2 text-xs font-medium text-muted-foreground">
-                      {version.isCreation
-                        ? t("entries.detail.historyCreated")
-                        : t("entries.detail.historyEarliestKept")}
-                    </p>
-                  )}
-                  {showChanged && (
-                    <p className="px-4 pb-2 text-xs text-muted-foreground">
-                      {t("entries.detail.historyChanged", {
-                        fields: formatChangedFields(
-                          version.changedFields,
-                          fieldLabels
-                        ),
-                      })}
-                    </p>
-                  )}
-                  {/* Per-version secret reveal, mirroring the live Entry: the
-                      value is fetched only on the explicit action, addressed by
-                      this version's index and guarded by its fingerprint. */}
-                  <HistorySecretRow
-                    label={t("entries.detail.password")}
-                    revealLabel={t("entries.detail.revealPassword")}
-                    hideLabel={t("entries.detail.hidePassword")}
-                    fetchValue={() =>
-                      entriesApi.getHistoryPassword(
-                        dbId,
-                        entryId,
-                        version.index,
-                        version.fingerprint
-                      )
-                    }
-                  />
-                  {version.protectedFields.map((key) => (
-                    <HistorySecretRow
-                      key={key}
-                      label={key}
-                      revealLabel={t("entries.detail.revealField", {
-                        field: key,
-                      })}
-                      hideLabel={t("entries.detail.hideField", { field: key })}
-                      fetchValue={() =>
-                        entriesApi
-                          .getHistoryProtectedField(
-                            dbId,
-                            entryId,
-                            version.index,
-                            version.fingerprint,
-                            key
-                          )
-                          .then((field) => field.value)
-                      }
-                    />
-                  ))}
-                </li>
-              );
-            })}
+            {versions.map((version, index) => (
+              // Key on the fingerprint, not just index+timestamp: two snapshots
+              // can share a second-precision timestamp at the same index after a
+              // rapid edit + refetch. Keying on the content fingerprint forces a
+              // different snapshot to remount the row, so a previously revealed
+              // secret can't linger under a now-different version.
+              <HistoryVersionItem
+                key={`${version.index}:${version.fingerprint}`}
+                dbId={dbId}
+                entryId={entryId}
+                version={version}
+                // The oldest version (last, newest-first) carries an origin
+                // label; a separator divides it from the version above.
+                isOldest={index === versions.length - 1}
+                showSeparator={index > 0}
+                fieldLabels={fieldLabels}
+              />
+            ))}
           </ul>
         )}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/**
+ * One past version's row: its title + timestamp, an origin/changed line, and a
+ * per-version secret reveal for the password and each protected custom field
+ * (mirroring the live Entry — the value is fetched only on the explicit action,
+ * addressed by this version's index and guarded by its fingerprint, ADR-0008).
+ * Extracted from {@link EntryHistorySection} so the reveal closures aren't
+ * nested inside two `.map()` callbacks (keeps function nesting shallow).
+ */
+function HistoryVersionItem({
+  dbId,
+  entryId,
+  version,
+  isOldest,
+  showSeparator,
+  fieldLabels,
+}: Readonly<{
+  dbId: string;
+  entryId: string;
+  version: EntryHistoryItem;
+  isOldest: boolean;
+  showSeparator: boolean;
+  fieldLabels: Record<string, string>;
+}>) {
+  const { t } = useTranslation();
+  // The changed line is shown even on the oldest "Earliest kept" version:
+  // changedFields is diffed against the next-newer version, so it's accurate
+  // even when the original predecessor was pruned.
+  const showChanged = version.changedFields.length > 0;
+
+  return (
+    <li>
+      {showSeparator && <Separator />}
+      <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {version.title}
+        </span>
+        <span className="shrink-0 text-sm text-muted-foreground">
+          {formatHistoryDate(version.modifiedAt)}
+        </span>
+      </div>
+      {isOldest && (
+        <p className="px-4 pb-2 text-xs font-medium text-muted-foreground">
+          {version.isCreation
+            ? t("entries.detail.historyCreated")
+            : t("entries.detail.historyEarliestKept")}
+        </p>
+      )}
+      {showChanged && (
+        <p className="px-4 pb-2 text-xs text-muted-foreground">
+          {t("entries.detail.historyChanged", {
+            fields: formatChangedFields(version.changedFields, fieldLabels),
+          })}
+        </p>
+      )}
+      <HistorySecretRow
+        label={t("entries.detail.password")}
+        revealLabel={t("entries.detail.revealPassword")}
+        hideLabel={t("entries.detail.hidePassword")}
+        fetchValue={() =>
+          entriesApi.getHistoryPassword(
+            dbId,
+            entryId,
+            version.index,
+            version.fingerprint
+          )
+        }
+      />
+      {version.protectedFields.map((key) => (
+        <HistorySecretRow
+          key={key}
+          label={key}
+          revealLabel={t("entries.detail.revealField", { field: key })}
+          hideLabel={t("entries.detail.hideField", { field: key })}
+          fetchValue={async () => {
+            const field = await entriesApi.getHistoryProtectedField(
+              dbId,
+              entryId,
+              version.index,
+              version.fingerprint,
+              key
+            );
+            return field.value;
+          }}
+        />
+      ))}
+    </li>
   );
 }
 
