@@ -48,22 +48,37 @@ pub struct KdbxService {
     pub(crate) history_fingerprint_key: [u8; blake3::KEY_LEN],
 }
 
+/// Generates the per-process history-fingerprint key from OS randomness,
+/// **failing closed** if the RNG is unavailable.
+///
+/// Unlike the password-health analyzer (where a degraded key only weakens
+/// per-run grouping), this key is a security boundary: the fingerprint is
+/// returned over IPC and derived from secret field values, so continuing with a
+/// known (e.g. all-zero) key would turn it into a publicly reproducible offline
+/// guessing oracle over historical passwords/PINs. We therefore abort rather
+/// than expose fingerprints derived with a known key.
+///
+/// # Panics
+/// Panics if the OS RNG cannot produce key material. This is an unrecoverable,
+/// security-critical startup condition and is effectively unreachable on
+/// supported platforms.
+fn generate_history_fingerprint_key() -> [u8; blake3::KEY_LEN] {
+    let mut key = [0u8; blake3::KEY_LEN];
+    assert!(
+        SysRng.try_fill_bytes(&mut key).is_ok(),
+        "failed to seed history fingerprint key: OS RNG unavailable"
+    );
+    key
+}
+
 impl KdbxService {
     /// Creates a new KDBX service.
     pub fn new() -> Self {
-        // Mirror the password-health analyzer's keying: a fresh OS-random key,
-        // falling back to all-zero only if the RNG fails. The guard stays
-        // correct under the fallback (both sides use the same key); only the
-        // brute-force resistance of the exposed fingerprint degrades.
-        let mut history_fingerprint_key = [0u8; blake3::KEY_LEN];
-        if SysRng.try_fill_bytes(&mut history_fingerprint_key).is_err() {
-            history_fingerprint_key = [0u8; blake3::KEY_LEN];
-        }
         Self {
             databases: Mutex::new(HashMap::new()),
             favicons: FaviconCooldown::new(),
             backup_settings: Mutex::new(BackupSettings::default()),
-            history_fingerprint_key,
+            history_fingerprint_key: generate_history_fingerprint_key(),
         }
     }
 
