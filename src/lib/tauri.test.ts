@@ -431,4 +431,61 @@ describe("tauri wrappers validation", () => {
         "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
     });
   });
+
+  it("parses list_entry_history including the fingerprint and protected-field keys", async () => {
+    const dbId = "/mock/test.kdbx";
+    const id = crypto.randomUUID();
+    vi.mocked(invoke).mockResolvedValueOnce([
+      {
+        index: 0,
+        modifiedAt: "2024-02-17T15:58:43Z",
+        title: "Example",
+        username: "bob",
+        url: null,
+        changedFields: ["password"],
+        isCreation: true,
+        fingerprint: "abc123",
+        protectedFields: ["PIN"],
+      },
+    ]);
+
+    const history = await entries.listHistory(dbId, id);
+
+    expect(invoke).toHaveBeenCalledWith("list_entry_history", { dbId, id });
+    expect(history[0].fingerprint).toBe("abc123");
+    expect(history[0].protectedFields).toEqual(["PIN"]);
+  });
+
+  it("reveals a historical password addressed by index + fingerprint", async () => {
+    const dbId = "/mock/test.kdbx";
+    const id = crypto.randomUUID();
+    vi.mocked(invoke).mockResolvedValueOnce("orig-pw");
+
+    await expect(
+      entries.getHistoryPassword(dbId, id, 0, "fp-zero")
+    ).resolves.toBe("orig-pw");
+    expect(invoke).toHaveBeenCalledWith("get_history_entry_password", {
+      dbId,
+      id,
+      index: 0,
+      fingerprint: "fp-zero",
+    });
+  });
+
+  it("reveals a historical protected field addressed by index + fingerprint", async () => {
+    const dbId = "/mock/test.kdbx";
+    const id = crypto.randomUUID();
+    vi.mocked(invoke).mockResolvedValueOnce({ key: "PIN", value: "0451" });
+
+    await expect(
+      entries.getHistoryProtectedField(dbId, id, 0, "fp-zero", "PIN")
+    ).resolves.toEqual({ key: "PIN", value: "0451" });
+    expect(invoke).toHaveBeenCalledWith("get_history_protected_field", {
+      dbId,
+      id,
+      index: 0,
+      fingerprint: "fp-zero",
+      key: "PIN",
+    });
+  });
 });
