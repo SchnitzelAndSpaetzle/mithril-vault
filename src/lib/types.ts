@@ -280,6 +280,18 @@ export const DatabaseConfigSchema = z.object({
 });
 export type DatabaseConfig = z.infer<typeof DatabaseConfigSchema>;
 
+/**
+ * The per-Vault Entry-History retention, surfaced as the raw KDBX
+ * `Meta.history_max_items` value. This is the writable vault-meta surface, kept
+ * distinct from the read-only {@link DatabaseConfig}. `maxItems` is `null` when
+ * the field is absent (effective default of 10); negative = unlimited; `0` =
+ * disabled; positive `n` = keep newest `n`.
+ */
+export const VaultHistorySettingsSchema = z.object({
+  maxItems: z.number().int().nullable(),
+});
+export type VaultHistorySettings = z.infer<typeof VaultHistorySettingsSchema>;
+
 export const RecentDatabaseSchema = z.object({
   path: z.string(),
   keyfilePath: z.string().nullable(),

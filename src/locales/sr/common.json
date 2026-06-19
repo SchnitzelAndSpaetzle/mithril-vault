@@ -236,7 +236,15 @@
       "pendingTitle": "Implementacija na čekanju",
       "pendingItems": {
         "mutations": "Kontrole mutacije na nivou baze podataka još nisu implementirane.",
-        "recycleBin": "Uređivanje korpe za otpatke/istorije/bezbednosnih pravila je na čekanju."
+        "recycleBin": "Измена корпе за отпатке и безбедносне политике тек предстоји."
+      },
+      "history": {
+        "title": "Историја уноса",
+        "description": "Колико претходних верзија сваког уноса овај сеф чува. Чува се у датотеци базе података, па ограничење путује заједно с њом.",
+        "keepNewest": "Задржи најновије",
+        "itemsLabel": "Број верзија за задржавање",
+        "unlimited": "Неограничено",
+        "disabled": "Онемогућено"
       }
     },
     "sidebar": {

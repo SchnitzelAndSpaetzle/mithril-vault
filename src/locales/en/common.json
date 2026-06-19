@@ -259,7 +259,15 @@
       "pendingTitle": "Pending implementation",
       "pendingItems": {
         "mutations": "Database-level mutation controls are not implemented yet.",
-        "recycleBin": "Recycle-bin/history/security policy edits are TODO."
+        "recycleBin": "Recycle-bin and security-policy edits are TODO."
+      },
+      "history": {
+        "title": "Entry history",
+        "description": "How many past versions of each entry this vault keeps. Stored in the database file, so the limit travels with it.",
+        "keepNewest": "Keep newest",
+        "itemsLabel": "Number of versions to keep",
+        "unlimited": "Unlimited",
+        "disabled": "Disabled"
       }
     },
     "sidebar": {

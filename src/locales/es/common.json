@@ -236,7 +236,15 @@
       "pendingTitle": "Implementación pendiente",
       "pendingItems": {
         "mutations": "Los controles de mutación a nivel de base de datos aún no están implementados.",
-        "recycleBin": "La edición de papelera de reciclaje/historial/políticas de seguridad está pendiente."
+        "recycleBin": "La edición de la papelera y de la política de seguridad está pendiente."
+      },
+      "history": {
+        "title": "Historial de entradas",
+        "description": "Cuántas versiones anteriores de cada entrada conserva esta caja fuerte. Se almacena en el archivo de base de datos, por lo que el límite viaja con él.",
+        "keepNewest": "Conservar las más recientes",
+        "itemsLabel": "Número de versiones a conservar",
+        "unlimited": "Ilimitado",
+        "disabled": "Desactivado"
       }
     },
     "sidebar": {

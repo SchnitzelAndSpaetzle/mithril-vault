@@ -29,6 +29,7 @@ import type {
   PasswordHealthReport,
   RecentDatabase,
   UpdateEntryData,
+  VaultHistorySettings,
 } from "./types";
 import {
   AddAttachmentsOutcomeSchema,
@@ -56,6 +57,7 @@ import {
   PasswordHealthReportSchema,
   RecentDatabaseSchema,
   UpdateEntryDataSchema,
+  VaultHistorySettingsSchema,
 } from "./types";
 
 export const KeepassIdSchema = z.guid();
@@ -234,6 +236,31 @@ export const database = {
     DbIdSchema.parse({ dbId });
     const result = await invoke("get_database_config", { dbId });
     return DatabaseConfigSchema.parse(result);
+  },
+
+  /**
+   * Reads the per-Vault Entry-History retention (`Meta.history_max_items`) — the
+   * writable vault-meta surface, distinct from the read-only crypto config
+   * returned by {@link getConfig}. `maxItems` is the raw signed value (`null`
+   * when absent → effective default 10).
+   */
+  async getHistorySettings(dbId: string): Promise<VaultHistorySettings> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_vault_history_settings", { dbId });
+    return VaultHistorySettingsSchema.parse(result);
+  },
+
+  /**
+   * Writes the per-Vault History Limit. Pass `null` to clear the field (default
+   * 10), a negative value for unlimited, `0` to disable, or positive `n` to keep
+   * the newest `n` versions. Persists on next save.
+   */
+  async updateHistorySettings(
+    dbId: string,
+    maxItems: number | null
+  ): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    return invoke("update_vault_history_settings", { dbId, maxItems });
   },
 
   /**

@@ -6,6 +6,7 @@ pub mod entries;
 pub mod favicons;
 pub mod groups;
 pub mod header;
+pub mod history;
 pub mod key;
 pub mod keyfile;
 pub mod open;

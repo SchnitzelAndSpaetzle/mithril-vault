@@ -236,7 +236,15 @@
       "pendingTitle": "Ausstehende Implementierung",
       "pendingItems": {
         "mutations": "Datenbankebene-Steuerungen sind noch nicht implementiert.",
-        "recycleBin": "Papierkorb/Verlauf/Sicherheitsrichtlinien-Bearbeitung ist noch TODO."
+        "recycleBin": "Bearbeiten von Papierkorb- und Sicherheitsrichtlinien steht noch aus."
+      },
+      "history": {
+        "title": "Eintragsverlauf",
+        "description": "Wie viele frühere Versionen jedes Eintrags dieser Tresor behält. In der Datenbankdatei gespeichert, sodass das Limit mit ihr mitreist.",
+        "keepNewest": "Neueste behalten",
+        "itemsLabel": "Anzahl der zu behaltenden Versionen",
+        "unlimited": "Unbegrenzt",
+        "disabled": "Deaktiviert"
       }
     },
     "sidebar": {
