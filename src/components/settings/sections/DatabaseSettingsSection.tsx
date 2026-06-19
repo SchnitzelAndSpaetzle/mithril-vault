@@ -101,11 +101,11 @@ export function DatabaseSettingsSection({
     >
       {databaseSectionContent}
 
-      {dbId && (
+      {dbId && historySettings && (
         <>
           <Separator />
           <VaultHistorySettingsControl
-            maxItems={historySettings?.maxItems ?? null}
+            maxItems={historySettings.maxItems}
             onChange={updateHistorySettings}
             disabled={isUpdatingHistory}
           />
