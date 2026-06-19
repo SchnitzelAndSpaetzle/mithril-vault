@@ -321,16 +321,22 @@ fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> 
             .as_bytes(),
     );
 
-    // Attachment name *and* bytes, in name order. Restore copies the actual
-    // bytes, so the guard must cover them too: a same-second delete + re-add of
-    // a different file under the same name would otherwise share a fingerprint
-    // and let a stale index shift restore onto the wrong bytes. Bytes are
-    // streamed straight into the hasher (no owned copy lingers); `AttachmentRef`
-    // borrows the snapshot's Database, which outlives this call.
+    // Attachment name, protection flag, *and* bytes, in name order. Restore
+    // copies the whole `Value` — bytes and protected/unprotected state — so the
+    // guard must cover all three: a same-second delete + re-add of a different
+    // file (or the same file with a flipped protection flag) under the same name
+    // would otherwise share a fingerprint and let a stale index shift restore
+    // onto the wrong content. Bytes are streamed straight into the hasher (no
+    // owned copy lingers); `AttachmentRef` borrows the snapshot's Database, which
+    // outlives this call.
     let mut attachments: Vec<_> = snapshot.attachments_named().collect();
     attachments.sort_by(|a, b| a.0.cmp(b.0));
     for (name, attachment) in &attachments {
         feed(&mut hasher, name.as_bytes());
+        feed(
+            &mut hasher,
+            &[u8::from(matches!(attachment.data, Value::Protected(_)))],
+        );
         feed(&mut hasher, attachment.get());
     }
 
@@ -1435,6 +1441,36 @@ mod tests {
                 Ok(())
             })
             .expect("with_vault");
+    }
+
+    #[test]
+    fn history_fingerprint_distinguishes_attachment_protection_state() {
+        // Restore preserves an attachment's protected/unprotected `Value`, so the
+        // guard must too: two same-second versions whose attachment differs only
+        // by that flag (same name, same bytes) must not share a fingerprint, or a
+        // stale index could shift restore onto the wrong protection state. The
+        // app's own add path only stores unprotected, so this is constructed
+        // directly via the keepass API (imported vaults can carry protected
+        // binaries).
+        let (service, _dir, db, entry_a, _entry_b) = create_test_database();
+        let key = [7u8; blake3::KEY_LEN];
+        service
+            .with_vault_mut(&db, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("f.txt", Value::protected(vec![1u8, 2, 3]));
+                let protected_fp = history_fingerprint(&entry.as_ref(), &key);
+
+                entry.remove_attachment_by_name("f.txt");
+                entry.add_attachment("f.txt", Value::unprotected(vec![1u8, 2, 3]));
+                let unprotected_fp = history_fingerprint(&entry.as_ref(), &key);
+
+                assert_ne!(
+                    protected_fp, unprotected_fp,
+                    "fingerprint must reflect an attachment's protection state, not just its bytes"
+                );
+                Ok(())
+            })
+            .expect("with_vault_mut");
     }
 
     #[test]
