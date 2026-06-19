@@ -72,6 +72,25 @@ pub fn audit_attachment_exported_on_success<T>(
     result
 }
 
+/// Maps a `restore_entry_history` outcome through the audit subsystem: a
+/// successful restore records exactly one `entry.history_restored` event
+/// carrying the Entry's UUID; any error path (including a guard mismatch)
+/// records nothing.
+///
+/// Kept as a free function (mirroring the reveal/export wrappers above) so
+/// integration tests can drive it without a Tauri runtime.
+pub fn audit_entry_history_restored_on_success<T>(
+    audit: &AuditService,
+    vault_path: &str,
+    entry_id: &str,
+    result: Result<T, AppError>,
+) -> Result<T, AppError> {
+    if result.is_ok() {
+        audit.record_entry_history_restored(Path::new(vault_path), entry_id);
+    }
+    result
+}
+
 /// Lists entries, optionally filtered by group.
 /// The `db_id` is the path to the database file.
 #[tauri::command]
@@ -185,6 +204,32 @@ pub async fn get_history_protected_field(
         &db_id,
         &id,
         state.get_history_protected_field(&db_id, &id, index, &fingerprint, &key),
+    )
+}
+
+/// Restores an Entry to a past version, addressed by `index` in the
+/// newest-first history list and guarded by `fingerprint` (a stale guard
+/// errors rather than restoring the wrong version). The current state is
+/// snapshotted into history first so the restore is undoable, then the live
+/// Entry's content — all fields including the password, attachments, icon and
+/// expiry — is overwritten from the chosen version; UUID and parent Group are
+/// untouched. The restored secret is read in Rust and never crosses IPC. A
+/// successful restore appends one `entry.history_restored` event; a failure
+/// (including a guard mismatch) records nothing.
+#[tauri::command]
+pub async fn restore_entry_history(
+    db_id: String,
+    id: String,
+    index: usize,
+    fingerprint: String,
+    state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<Entry, AppError> {
+    audit_entry_history_restored_on_success(
+        audit.inner(),
+        &db_id,
+        &id,
+        state.restore_entry_history(&db_id, &id, index, &fingerprint),
     )
 }
 

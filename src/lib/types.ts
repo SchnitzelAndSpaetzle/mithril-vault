@@ -436,6 +436,7 @@ export const AuditEventKindSchema = z.enum([
   "entryPasswordCopied",
   "entryProtectedFieldRevealed",
   "entryAttachmentExported",
+  "entryHistoryRestored",
   "preferencesSecurityChanged",
   "auditCleared",
 ]);

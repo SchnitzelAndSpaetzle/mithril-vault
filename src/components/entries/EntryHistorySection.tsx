@@ -2,8 +2,17 @@
 
 import { useCallback, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Eye, EyeOff, History, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  Eye,
+  EyeOff,
+  History,
+  Loader2,
+  RotateCcw,
+} from "lucide-react";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator.tsx";
 import { entries as entriesApi } from "@/lib/tauri";
+import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import type { EntryHistoryItem } from "@/lib/types";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -64,10 +74,75 @@ export function EntryHistorySection({
     location: t("entries.detail.historyField.location"),
   };
 
+  const queryClient = useQueryClient();
+
   const { data: versions = [] } = useQuery({
     queryKey: queryKeys.entries.history(dbId, entryId),
     queryFn: () => entriesApi.listHistory(dbId, entryId),
   });
+
+  // Restores the Entry to a chosen version after an explicit confirmation: the
+  // backend snapshots the current state into history first (so the restore is
+  // undoable), then overwrites the live content (ADR-0008). Secrets are read
+  // backend-side and never round-trip. On success we persist via the shared
+  // helper (which surfaces its own toast on a disk/backup failure) and refresh
+  // the detail, list, and history views so the restored content and the new
+  // pre-restore version both appear.
+  const handleRestore = useCallback(
+    async (version: EntryHistoryItem) => {
+      const confirmed = await ask(
+        t("entries.detail.restoreHistoryConfirm", {
+          date: formatHistoryDate(version.modifiedAt),
+        }),
+        {
+          title: t("entries.detail.restoreHistoryConfirmTitle"),
+          kind: "warning",
+        }
+      );
+      if (!confirmed) return;
+
+      try {
+        await entriesApi.restoreHistory(
+          dbId,
+          entryId,
+          version.index,
+          version.fingerprint
+        );
+      } catch (error) {
+        // A version whose restorable content matches the current entry (e.g. a
+        // move-only version — restore never touches the parent Group) is a
+        // no-op the backend rejects rather than reporting a phantom success.
+        // Surface it as a neutral info message, not a failure.
+        if (String(error).includes("History version unchanged")) {
+          toast.info(t("entries.detail.restoreHistoryUnchanged"));
+          return;
+        }
+        console.error("Failed to restore entry version:", error);
+        toast.error(t("entries.detail.restoreHistoryFailed"));
+        return;
+      }
+
+      await saveWithErrorToast(dbId, t);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.entries.detail(dbId, entryId),
+        }),
+        queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === queryKeys.entries.all[0] &&
+            query.queryKey[1] === dbId,
+        }),
+        // A restore can replace the live password/expiry, so any cached
+        // password-health findings must be recomputed — same as the entry
+        // mutation hook does for the same kind of content change.
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.passwordHealth.report(dbId),
+        }),
+      ]);
+      toast.success(t("entries.detail.restoreHistorySuccess"));
+    },
+    [dbId, entryId, queryClient, t]
+  );
 
   return (
     <Collapsible
@@ -114,6 +189,7 @@ export function EntryHistorySection({
                 isOldest={index === versions.length - 1}
                 showSeparator={index > 0}
                 fieldLabels={fieldLabels}
+                onRestore={handleRestore}
               />
             ))}
           </ul>
@@ -138,6 +214,7 @@ function HistoryVersionItem({
   isOldest,
   showSeparator,
   fieldLabels,
+  onRestore,
 }: Readonly<{
   dbId: string;
   entryId: string;
@@ -145,6 +222,7 @@ function HistoryVersionItem({
   isOldest: boolean;
   showSeparator: boolean;
   fieldLabels: Record<string, string>;
+  onRestore: (version: EntryHistoryItem) => void;
 }>) {
   const { t } = useTranslation();
   // The changed line is shown even on the oldest "Earliest kept" version:
@@ -162,6 +240,15 @@ function HistoryVersionItem({
         <span className="shrink-0 text-sm text-muted-foreground">
           {formatHistoryDate(version.modifiedAt)}
         </span>
+        <Button
+          variant="outline"
+          size="icon-xs"
+          className="shrink-0"
+          aria-label={t("entries.detail.restoreVersion")}
+          onClick={() => onRestore(version)}
+        >
+          <RotateCcw className="h-3 w-3" />
+        </Button>
       </div>
       {isOldest && (
         <p className="px-4 pb-2 text-xs font-medium text-muted-foreground">

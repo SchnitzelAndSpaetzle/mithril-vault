@@ -5,10 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { EntryHistoryItem } from "@/lib/types";
+import { queryKeys } from "@/lib/query-keys";
 
 const listHistoryMock = vi.fn();
 const getHistoryPasswordMock = vi.fn();
 const getHistoryProtectedFieldMock = vi.fn();
+const restoreHistoryMock = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
   entries: {
@@ -16,6 +18,27 @@ vi.mock("@/lib/tauri", () => ({
     getHistoryPassword: (...args: unknown[]) => getHistoryPasswordMock(...args),
     getHistoryProtectedField: (...args: unknown[]) =>
       getHistoryProtectedFieldMock(...args),
+    restoreHistory: (...args: unknown[]) => restoreHistoryMock(...args),
+  },
+}));
+
+const askMock = vi.fn();
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  ask: (...args: unknown[]) => askMock(...args),
+}));
+
+vi.mock("@/lib/save-with-error-toast", () => ({
+  saveWithErrorToast: vi.fn().mockResolvedValue(undefined),
+}));
+
+const toastSuccessMock = vi.fn();
+const toastErrorMock = vi.fn();
+const toastInfoMock = vi.fn();
+vi.mock("sonner", () => ({
+  toast: {
+    success: (...args: unknown[]) => toastSuccessMock(...args),
+    error: (...args: unknown[]) => toastErrorMock(...args),
+    info: (...args: unknown[]) => toastInfoMock(...args),
   },
 }));
 
@@ -80,6 +103,11 @@ describe("EntryHistorySection", () => {
     listHistoryMock.mockReset();
     getHistoryPasswordMock.mockReset();
     getHistoryProtectedFieldMock.mockReset();
+    restoreHistoryMock.mockReset();
+    askMock.mockReset();
+    toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
+    toastInfoMock.mockReset();
   });
 
   it("lists each version with its timestamp once expanded", async () => {
@@ -269,5 +297,135 @@ describe("EntryHistorySection", () => {
       "fp-zero",
       "PIN"
     );
+  });
+
+  it("restores a version after the user confirms, addressed by index + fingerprint", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
+        index: 0,
+        fingerprint: "fp-zero",
+        changedFields: ["password"],
+      }),
+    ]);
+    askMock.mockResolvedValue(true);
+    restoreHistoryMock.mockResolvedValue({ id: TEST_ENTRY_ID });
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.restoreVersion",
+      })
+    );
+
+    // The destructive action is gated on an explicit confirmation.
+    await waitFor(() => {
+      expect(askMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(restoreHistoryMock).toHaveBeenCalledWith(
+        TEST_DB_ID,
+        TEST_ENTRY_ID,
+        0,
+        "fp-zero"
+      );
+    });
+  });
+
+  it("does not restore when the user cancels the confirmation", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
+        index: 0,
+        fingerprint: "fp-zero",
+        changedFields: ["password"],
+      }),
+    ]);
+    askMock.mockResolvedValue(false);
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.restoreVersion",
+      })
+    );
+
+    await waitFor(() => {
+      expect(askMock).toHaveBeenCalledTimes(1);
+    });
+    expect(restoreHistoryMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a neutral info message (not a success) when the version is unchanged", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({ index: 0, fingerprint: "fp-zero", changedFields: [] }),
+    ]);
+    askMock.mockResolvedValue(true);
+    // The backend rejects a no-op (e.g. a move-only version) with this message.
+    restoreHistoryMock.mockRejectedValue(
+      "History version unchanged: this version's content matches the current entry"
+    );
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.restoreVersion",
+      })
+    );
+
+    await waitFor(() => {
+      expect(toastInfoMock).toHaveBeenCalledWith(
+        "entries.detail.restoreHistoryUnchanged"
+      );
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("invalidates the password-health report after a restore", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({
+        index: 0,
+        fingerprint: "fp-zero",
+        changedFields: ["password"],
+      }),
+    ]);
+    askMock.mockResolvedValue(true);
+    restoreHistoryMock.mockResolvedValue({ id: TEST_ENTRY_ID });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    // Seed a cached password-health report so we can prove the restore marks
+    // it stale (a restore can replace the live password/expiry).
+    queryClient.setQueryData(queryKeys.passwordHealth.report(TEST_DB_ID), {
+      entries: [],
+    });
+
+    render(<EntryHistorySection dbId={TEST_DB_ID} entryId={TEST_ENTRY_ID} />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.restoreVersion",
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryState(queryKeys.passwordHealth.report(TEST_DB_ID))
+          ?.isInvalidated
+      ).toBe(true);
+    });
   });
 });

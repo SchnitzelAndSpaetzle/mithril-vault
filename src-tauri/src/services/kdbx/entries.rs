@@ -6,8 +6,8 @@ use crate::dto::entry::{
 };
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
-use keepass::db::{Entry as KeepassEntry, EntryRef, Times, Value};
-use std::collections::BTreeSet;
+use keepass::db::{Entry as KeepassEntry, EntryRef, Icon, Times, Value};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 
 use super::conversions::{
@@ -212,7 +212,7 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
 /// A stable per-version content fingerprint: a hex **keyed BLAKE3 MAC** over the
 /// snapshot's `modified_at`, every field (key + protected flag + resolved value,
 /// so a password rotation registers even when it shares a second with its
-/// predecessor), tags, icon, expiry and attachment names. This is the addressing
+/// predecessor), tags, icon, expiry and attachment names + bytes. This is the addressing
 /// guard for per-version reveal/restore (ADR-0008): a version is addressed by
 /// `index` but only acted on when its fingerprint still matches, so a concurrent
 /// edit that shifts the list can't silently retarget. `modified_at` alone is
@@ -226,6 +226,46 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
 /// require the key, which never leaves the backend. Inputs are streamed directly
 /// into the hasher rather than collected into an owned buffer, so no extra
 /// plaintext copy of the secrets lingers in allocator memory after the call.
+/// One restored attachment: its filename and the original `Value` (carrying the
+/// protected/unprotected flag, so restore preserves it).
+type RestoredAttachment = (String, Value<Vec<u8>>);
+
+/// Whether restoring `source` (with its `restored_attachments`) onto `live`
+/// would actually change any restorable content. Restore copies content but
+/// never identity or location, so a version that differs from the live Entry
+/// only in where it lived (a move-only snapshot) restores to a no-op. Comparing
+/// only the restorable subset — and attachments by name→`Value`, not pool id —
+/// lets the caller reject that no-op instead of bumping mtime, snapshotting,
+/// auditing, and reporting a phantom success (#328).
+fn restore_changes_content(
+    live: &EntryRef<'_>,
+    source: &KeepassEntry,
+    restored_attachments: &[RestoredAttachment],
+) -> bool {
+    if live.fields != source.fields
+        || live.tags != source.tags
+        || live.custom_data != source.custom_data
+        || live.autotype != source.autotype
+        || live.foreground_color != source.foreground_color
+        || live.background_color != source.background_color
+        || live.override_url != source.override_url
+        || live.quality_check != source.quality_check
+        || live.icon() != source.icon()
+        || live.times.expires != source.times.expires
+        || live.times.expiry != source.times.expiry
+    {
+        return true;
+    }
+    // Attachments by content (name → bytes + protection flag), not by the
+    // pool ids the rebuild would churn.
+    let live_attachments: BTreeMap<String, Value<Vec<u8>>> = live
+        .attachments_named()
+        .map(|(name, att)| (name.to_string(), att.data.clone()))
+        .collect();
+    let restored: BTreeMap<String, Value<Vec<u8>>> = restored_attachments.iter().cloned().collect();
+    live_attachments != restored
+}
+
 fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> String {
     // Length-prefix every segment so distinct field boundaries can't collide by
     // concatenation (e.g. key "ab"+value "c" vs key "a"+value "bc").
@@ -281,10 +321,23 @@ fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> 
             .as_bytes(),
     );
 
-    let mut attachments: Vec<&str> = snapshot.attachments_named().map(|(name, _)| name).collect();
-    attachments.sort_unstable();
-    for name in attachments {
+    // Attachment name, protection flag, *and* bytes, in name order. Restore
+    // copies the whole `Value` — bytes and protected/unprotected state — so the
+    // guard must cover all three: a same-second delete + re-add of a different
+    // file (or the same file with a flipped protection flag) under the same name
+    // would otherwise share a fingerprint and let a stale index shift restore
+    // onto the wrong content. Bytes are streamed straight into the hasher (no
+    // owned copy lingers); `AttachmentRef` borrows the snapshot's Database, which
+    // outlives this call.
+    let mut attachments: Vec<_> = snapshot.attachments_named().collect();
+    attachments.sort_by(|a, b| a.0.cmp(b.0));
+    for (name, attachment) in &attachments {
         feed(&mut hasher, name.as_bytes());
+        feed(
+            &mut hasher,
+            &[u8::from(matches!(attachment.data, Value::Protected(_)))],
+        );
+        feed(&mut hasher, attachment.get());
     }
 
     hasher.finalize().to_hex().to_string()
@@ -516,6 +569,134 @@ impl KdbxService {
                 }),
                 Value::Unprotected(_) => Err(AppError::CustomFieldNotProtected(key.to_string())),
             }
+        })
+    }
+
+    /// Restores an Entry to a past version, addressed by `index` in the
+    /// newest-first history list and guarded by `fingerprint` — the same
+    /// addressing mechanism as the per-version reveal (ADR-0008); a
+    /// stale/mismatched guard errors [`AppError::HistoryVersionMismatch`]
+    /// rather than restoring the wrong version. The current state is first
+    /// snapshotted into history (so the restore is itself undoable), then the
+    /// live Entry's content — all fields including the password — is overwritten
+    /// from the chosen version and `last_modification` bumped to now. The
+    /// Entry's UUID and parent Group are left untouched: a version carries
+    /// content, not location. The restored secret is read in-process and never
+    /// crosses IPC.
+    pub fn restore_entry_history(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+    ) -> Result<Entry, AppError> {
+        self.with_vault_mut(db_id, |vault| {
+            let eid = vault.find_entry_id(id)?;
+            let group_uuid = {
+                let mut entry = vault.entry_mut(id)?;
+
+                // Resolve + guard the target version, then clone its content out
+                // before any mutation. The fingerprint is re-checked against the
+                // live snapshot inside the same Vault lock, so a concurrent edit
+                // that shifted indices is caught here. A full owned clone of the
+                // snapshot Entry is taken so every content field — text fields
+                // (incl. the password), tags, icon, expiry, attachments, and the
+                // remaining metadata — can be reapplied without holding the
+                // immutable borrow across the mutation.
+                let (source, restored_attachments): (KeepassEntry, Vec<RestoredAttachment>) = {
+                    let live = entry.as_ref();
+                    let snapshot = live
+                        .historical(index)
+                        .ok_or(AppError::HistoryVersionMismatch(index))?;
+                    if history_fingerprint(&snapshot, &self.history_fingerprint_key) != fingerprint
+                    {
+                        return Err(AppError::HistoryVersionMismatch(index));
+                    }
+                    // Attachments must be read here, while the snapshot's
+                    // `EntryRef` still has Database access — the owned clone
+                    // below can't resolve binaries on its own (the map is
+                    // crate-private and keyed into the pool). The whole `Value`
+                    // is cloned (not just the bytes) so a protected attachment
+                    // from an imported vault stays protected after restore.
+                    let attachments = snapshot
+                        .attachments_named()
+                        .map(|(name, att)| (name.to_string(), att.data.clone()))
+                        .collect();
+                    ((*snapshot).clone(), attachments)
+                };
+
+                // Reject a no-op restore: a version that differs from the live
+                // Entry only in where it lived (a move-only snapshot) would
+                // otherwise bump mtime, append a junk history version, audit,
+                // save, and report a phantom success even though nothing
+                // restorable changed. Checked before any mutation.
+                if !restore_changes_content(&entry.as_ref(), &source, &restored_attachments) {
+                    return Err(AppError::HistoryVersionUnchanged);
+                }
+
+                // Snapshot the pre-restore state so the restore is undoable: it
+                // becomes the newest history version. Attachment binaries that
+                // the live Entry still references are kept alive by this
+                // snapshot's reference even though the live map is overwritten
+                // below (the fork's retention rule).
+                let before: KeepassEntry = (*entry.as_ref()).clone();
+
+                // Overwrite content from the chosen version. Identity (UUID),
+                // location (parent Group), and the history list are deliberately
+                // left untouched — a version carries content, not where the
+                // Entry lives.
+                entry.fields.clone_from(&source.fields);
+                entry.tags.clone_from(&source.tags);
+                entry.custom_data.clone_from(&source.custom_data);
+                entry.autotype.clone_from(&source.autotype);
+                entry.foreground_color.clone_from(&source.foreground_color);
+                entry.background_color.clone_from(&source.background_color);
+                entry.override_url.clone_from(&source.override_url);
+                entry.quality_check = source.quality_check;
+
+                // Icon: the field is crate-private, so go through the setters.
+                match source.icon() {
+                    None => entry.set_icon_none(),
+                    Some(Icon::BuiltIn(n)) => entry.set_icon_builtin(*n),
+                    Some(Icon::Custom(cid)) => entry
+                        .set_icon_custom(*cid)
+                        .map_err(|e| AppError::Kdbx(e.to_string()))?,
+                }
+
+                // Attachments: the map is crate-private and shares binary-pool
+                // ids, so rebuild it through the public add/remove API. Re-adding
+                // by value restores the same bytes (and protection flag) under
+                // the same names; ids the live Entry no longer references survive
+                // via `before` and are pruned at save time.
+                let live_names: Vec<String> = entry
+                    .as_ref()
+                    .attachments_named()
+                    .map(|(name, _)| name.to_string())
+                    .collect();
+                for name in live_names {
+                    entry.remove_attachment_by_name(&name);
+                }
+                for (name, value) in restored_attachments {
+                    entry.add_attachment(name, value);
+                }
+
+                // Expiry (flag + timestamp), then bump last_modification to now.
+                entry.times.expires = source.times.expires;
+                entry.times.expiry = source.times.expiry;
+                entry.times.last_modification = Some(Times::now());
+
+                snapshot_entry_history(&mut entry, before);
+
+                entry.as_ref().parent().id().uuid().to_string()
+            };
+
+            let entry_ref = vault
+                .db()
+                .entry(eid)
+                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+            let result = convert_entry(&entry_ref, &group_uuid);
+            vault.mark_modified();
+            Ok(result)
         })
     }
 
@@ -1260,6 +1441,36 @@ mod tests {
                 Ok(())
             })
             .expect("with_vault");
+    }
+
+    #[test]
+    fn history_fingerprint_distinguishes_attachment_protection_state() {
+        // Restore preserves an attachment's protected/unprotected `Value`, so the
+        // guard must too: two same-second versions whose attachment differs only
+        // by that flag (same name, same bytes) must not share a fingerprint, or a
+        // stale index could shift restore onto the wrong protection state. The
+        // app's own add path only stores unprotected, so this is constructed
+        // directly via the keepass API (imported vaults can carry protected
+        // binaries).
+        let (service, _dir, db, entry_a, _entry_b) = create_test_database();
+        let key = [7u8; blake3::KEY_LEN];
+        service
+            .with_vault_mut(&db, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("f.txt", Value::protected(vec![1u8, 2, 3]));
+                let protected_fp = history_fingerprint(&entry.as_ref(), &key);
+
+                entry.remove_attachment_by_name("f.txt");
+                entry.add_attachment("f.txt", Value::unprotected(vec![1u8, 2, 3]));
+                let unprotected_fp = history_fingerprint(&entry.as_ref(), &key);
+
+                assert_ne!(
+                    protected_fp, unprotected_fp,
+                    "fingerprint must reflect an attachment's protection state, not just its bytes"
+                );
+                Ok(())
+            })
+            .expect("with_vault_mut");
     }
 
     #[test]

@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Lozinka kopirana",
       "entryProtectedFieldRevealed": "Zaštićeno polje prikazano",
       "entryAttachmentExported": "Prilog preuzet",
+      "entryHistoryRestored": "Vraćeno iz istorije",
       "preferencesSecurityChanged": "Bezbednosno podešavanje promenjeno",
       "auditCleared": "Dnevnik nadzora obrisan"
     },
@@ -368,6 +369,12 @@
       "historyChanged": "Izmenjeno: {{fields}}",
       "historyCreated": "Kreirano",
       "historyEarliestKept": "Najstarija sačuvana verzija",
+      "restoreVersion": "Vrati ovu verziju",
+      "restoreHistoryConfirmTitle": "Vraćanje verzije",
+      "restoreHistoryConfirm": "Vratiti ovu stavku na verziju od {{date}}? Trenutno stanje se prvo čuva u istoriji, pa možete poništiti ovu radnju.",
+      "restoreHistorySuccess": "Stavka je vraćena na izabranu verziju",
+      "restoreHistoryFailed": "Vraćanje stavke nije uspelo",
+      "restoreHistoryUnchanged": "Ova verzija odgovara trenutnoj stavci — nema šta da se vrati",
       "historyField": {
         "title": "naslov",
         "username": "korisničko ime",

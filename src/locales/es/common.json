@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Contraseña copiada",
       "entryProtectedFieldRevealed": "Campo protegido revelado",
       "entryAttachmentExported": "Adjunto descargado",
+      "entryHistoryRestored": "Restaurado desde el historial",
       "preferencesSecurityChanged": "Preferencia de seguridad modificada",
       "auditCleared": "Registro de auditoría borrado"
     },
@@ -368,6 +369,12 @@
       "historyChanged": "Cambiado: {{fields}}",
       "historyCreated": "Creado",
       "historyEarliestKept": "Versión más antigua conservada",
+      "restoreVersion": "Restaurar esta versión",
+      "restoreHistoryConfirmTitle": "Restaurar versión",
+      "restoreHistoryConfirm": "¿Restaurar esta entrada a la versión del {{date}}? El estado actual se guarda primero en el historial, para que puedas deshacerlo.",
+      "restoreHistorySuccess": "Entrada restaurada a la versión seleccionada",
+      "restoreHistoryFailed": "No se pudo restaurar la entrada",
+      "restoreHistoryUnchanged": "Esta versión coincide con la entrada actual: no hay nada que restaurar",
       "historyField": {
         "title": "título",
         "username": "usuario",

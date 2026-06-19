@@ -358,6 +358,24 @@ describe("tauri wrappers validation", () => {
     });
   });
 
+  it("audit.list accepts an entryHistoryRestored event", async () => {
+    // Regression: a vault with a restore event must not make the whole audit
+    // query reject. The kind has to be in AuditEventKindSchema.
+    const payload = {
+      events: [
+        {
+          kind: "entryHistoryRestored",
+          timestamp: "2026-06-18T12:00:00.000Z",
+          entryId: "uuid-restore",
+        },
+      ],
+      degraded: false,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(payload);
+
+    await expect(audit.list("/mock/vault.kdbx")).resolves.toEqual(payload);
+  });
+
   it("audit.list surfaces a degraded flag from the backend", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({
       events: [],

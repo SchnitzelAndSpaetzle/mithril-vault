@@ -372,6 +372,34 @@ export const entries = {
   },
 
   /**
+   * Restores an Entry to a past version (ADR-0008). The version is addressed by
+   * its `index` in the newest-first list and guarded by `fingerprint` (taken
+   * from the {@link EntryHistoryItem}); a stale/mismatched fingerprint errors
+   * rather than restoring the wrong version. The backend snapshots the current
+   * state into history first (so the restore is undoable), then overwrites the
+   * live Entry's content from the chosen version — all fields incl. password,
+   * attachments, icon and expiry — leaving its UUID and parent Group untouched.
+   * Secrets are read backend-side and never round-trip. Returns the updated
+   * Entry (no secret fields).
+   */
+  async restoreHistory(
+    dbId: string,
+    id: string,
+    index: number,
+    fingerprint: string
+  ): Promise<Entry> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("restore_entry_history", {
+      dbId,
+      id,
+      index,
+      fingerprint,
+    });
+    return EntrySchema.parse(result);
+  },
+
+  /**
    * Phase 1 (picker): opens the multi-select file dialog *in Rust*, buffers the
    * picked paths backend-side, and returns the size-classification plan against
    * the configured thresholds — without reading bytes or mutating the Vault.
