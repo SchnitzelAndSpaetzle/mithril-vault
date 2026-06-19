@@ -3205,22 +3205,36 @@ mod tests {
         );
     }
 
+    /// Applies a single username edit — one content change, so one snapshot
+    /// under any non-disabled limit.
+    fn edit_username(service: &KdbxService, db_path: &str, entry_id: &str, username: &str) {
+        service
+            .update_entry(
+                db_path,
+                entry_id,
+                UpdateEntryData {
+                    username: Some(username.to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("edit username");
+    }
+
     /// Renames the Entry's username `count` times, yielding `count` history
     /// snapshots (each edit changes content, so each is kept). Returns nothing;
-    /// callers inspect via `list_entry_history`.
+    /// callers inspect via [`history_len`].
     fn edit_username_n_times(service: &KdbxService, db_path: &str, entry_id: &str, count: usize) {
         for i in 0..count {
-            service
-                .update_entry(
-                    db_path,
-                    entry_id,
-                    UpdateEntryData {
-                        username: Some(format!("user{i}")),
-                        ..empty_update()
-                    },
-                )
-                .expect("edit username");
+            edit_username(service, db_path, entry_id, &format!("user{i}"));
         }
+    }
+
+    /// The number of history versions currently recorded for an Entry.
+    fn history_len(service: &KdbxService, db_path: &str, entry_id: &str) -> usize {
+        service
+            .list_entry_history(db_path, entry_id)
+            .expect("list history")
+            .len()
     }
 
     #[test]
@@ -3261,10 +3275,11 @@ mod tests {
 
         edit_username_n_times(&service, &db_path, &entry_a, 12);
 
-        let history = service
-            .list_entry_history(&db_path, &entry_a)
-            .expect("list history");
-        assert_eq!(history.len(), 12, "unlimited history is never pruned");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            12,
+            "unlimited history is never pruned"
+        );
     }
 
     #[test]
@@ -3275,11 +3290,8 @@ mod tests {
 
         edit_username_n_times(&service, &db_path, &entry_a, 15);
 
-        let history = service
-            .list_entry_history(&db_path, &entry_a)
-            .expect("list history");
         assert_eq!(
-            history.len(),
+            history_len(&service, &db_path, &entry_a),
             10,
             "absent History Limit resolves to the bounded default of 10"
         );
@@ -3295,10 +3307,7 @@ mod tests {
         // Accrue some history under the default limit first.
         edit_username_n_times(&service, &db_path, &entry_a, 3);
         assert_eq!(
-            service
-                .list_entry_history(&db_path, &entry_a)
-                .expect("list history")
-                .len(),
+            history_len(&service, &db_path, &entry_a),
             3,
             "precondition: three versions exist"
         );
@@ -3308,30 +3317,16 @@ mod tests {
             .update_vault_history_settings(&db_path, Some(0))
             .expect("disable history");
         assert_eq!(
-            service
-                .list_entry_history(&db_path, &entry_a)
-                .expect("list history")
-                .len(),
+            history_len(&service, &db_path, &entry_a),
             3,
             "setting the limit to 0 does not wipe history instantly"
         );
 
         // The next content edit adds no snapshot and prunes existing history to zero.
-        service
-            .update_entry(
-                &db_path,
-                &entry_a,
-                UpdateEntryData {
-                    username: Some("after-disable".to_string()),
-                    ..empty_update()
-                },
-            )
-            .expect("edit after disabling");
-        assert!(
-            service
-                .list_entry_history(&db_path, &entry_a)
-                .expect("list history")
-                .is_empty(),
+        edit_username(&service, &db_path, &entry_a, "after-disable");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            0,
             "disabled history is pruned to zero on the next content edit"
         );
     }
@@ -3736,30 +3731,16 @@ mod tests {
             .move_entry(&db_path, &entry_a, &root)
             .expect("restore from recycle bin");
         assert_eq!(
-            service
-                .list_entry_history(&db_path, &entry_a)
-                .expect("list history")
-                .len(),
+            history_len(&service, &db_path, &entry_a),
             3,
             "history survives trash/restore while disabled"
         );
 
         // The next genuine content edit prunes the disabled history to zero.
-        service
-            .update_entry(
-                &db_path,
-                &entry_a,
-                UpdateEntryData {
-                    username: Some("after-restore".to_string()),
-                    ..empty_update()
-                },
-            )
-            .expect("content edit after restore");
-        assert!(
-            service
-                .list_entry_history(&db_path, &entry_a)
-                .expect("list history")
-                .is_empty(),
+        edit_username(&service, &db_path, &entry_a, "after-restore");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            0,
             "the next content edit prunes disabled history to zero"
         );
     }
