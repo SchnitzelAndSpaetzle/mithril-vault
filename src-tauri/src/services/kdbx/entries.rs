@@ -96,7 +96,9 @@ pub(crate) fn plan_attachment_adds(
 /// S6 enforces the per-Vault [`HistoryRetention`] here — the single place every
 /// mutation funnels through, so the limit applies uniformly:
 /// - [`HistoryRetention::Disabled`]: no new snapshot, and the Entry's existing
-///   history is dropped — the "pruned to zero lazily on next edit" rule.
+///   history is dropped — the "pruned to zero lazily on the next content edit"
+///   rule. Because only snapshot-producing content edits reach this chokepoint,
+///   reversible Recycle-Bin transitions leave a disabled Entry's history intact.
 /// - [`HistoryRetention::Unlimited`]: append, never prune.
 /// - [`HistoryRetention::Limited`]`(n)`: append, then prune to the newest `n`.
 ///
@@ -120,7 +122,8 @@ pub(crate) fn snapshot_entry_history(
 ) {
     match retention {
         HistoryRetention::Disabled => {
-            // No new snapshots; drop any existing history lazily on this edit.
+            // No new snapshots; drop any existing history lazily on this
+            // content edit (Recycle-Bin transitions never reach here).
             entry.history = None;
         }
         HistoryRetention::Unlimited => {
@@ -3313,7 +3316,7 @@ mod tests {
             "setting the limit to 0 does not wipe history instantly"
         );
 
-        // The next edit adds no snapshot and prunes the existing history to zero.
+        // The next content edit adds no snapshot and prunes existing history to zero.
         service
             .update_entry(
                 &db_path,
@@ -3329,7 +3332,7 @@ mod tests {
                 .list_entry_history(&db_path, &entry_a)
                 .expect("list history")
                 .is_empty(),
-            "disabled history is pruned to zero on the next edit"
+            "disabled history is pruned to zero on the next content edit"
         );
     }
 
@@ -3705,6 +3708,59 @@ mod tests {
         assert!(
             history.is_empty(),
             "restoring from the Recycle Bin must not create a history version"
+        );
+    }
+
+    #[test]
+    fn disabled_history_survives_trash_and_restore_then_prunes_on_next_content_edit() {
+        // Disabling history must not destroy existing versions through a
+        // reversible trash/restore round-trip — only a genuine content edit
+        // prunes them to zero. This pins the "next *content* edit" invariant:
+        // Recycle-Bin transitions are excluded from the snapshot chokepoint
+        // (#323 / ADR-0008), so they must neither snapshot nor prune.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let root = service.get_info(&db_path).expect("info").root_group_id;
+
+        // Accrue history under the default limit, then disable.
+        edit_username_n_times(&service, &db_path, &entry_a, 3);
+        service
+            .update_vault_history_settings(&db_path, Some(0))
+            .expect("disable history");
+
+        // Trash then restore: a reversible location round-trip must preserve
+        // the (already-frozen) history untouched.
+        service
+            .delete_entry(&db_path, &entry_a)
+            .expect("send to recycle bin");
+        service
+            .move_entry(&db_path, &entry_a, &root)
+            .expect("restore from recycle bin");
+        assert_eq!(
+            service
+                .list_entry_history(&db_path, &entry_a)
+                .expect("list history")
+                .len(),
+            3,
+            "history survives trash/restore while disabled"
+        );
+
+        // The next genuine content edit prunes the disabled history to zero.
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("after-restore".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("content edit after restore");
+        assert!(
+            service
+                .list_entry_history(&db_path, &entry_a)
+                .expect("list history")
+                .is_empty(),
+            "the next content edit prunes disabled history to zero"
         );
     }
 

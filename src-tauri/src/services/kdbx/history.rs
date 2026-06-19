@@ -13,7 +13,8 @@ use super::KdbxService;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HistoryRetention {
     /// No new snapshots; existing history is pruned to zero lazily on the
-    /// Entry's next edit (raw value `0`).
+    /// Entry's next snapshot-producing *content* edit — reversible Recycle-Bin
+    /// transitions deliberately leave it intact (raw value `0`).
     Disabled,
     /// History grows without bound (raw value negative).
     Unlimited,
