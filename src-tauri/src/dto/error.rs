@@ -45,6 +45,9 @@ pub enum AppError {
     #[error("History version no longer matches: index {0} has changed or was pruned")]
     HistoryVersionMismatch(usize),
 
+    #[error("History version unchanged: this version's content matches the current entry")]
+    HistoryVersionUnchanged,
+
     #[error("Group not found: {0}")]
     GroupNotFound(String),
 

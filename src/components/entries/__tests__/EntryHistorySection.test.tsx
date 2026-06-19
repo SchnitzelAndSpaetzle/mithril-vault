@@ -31,8 +31,15 @@ vi.mock("@/lib/save-with-error-toast", () => ({
   saveWithErrorToast: vi.fn().mockResolvedValue(undefined),
 }));
 
+const toastSuccessMock = vi.fn();
+const toastErrorMock = vi.fn();
+const toastInfoMock = vi.fn();
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: {
+    success: (...args: unknown[]) => toastSuccessMock(...args),
+    error: (...args: unknown[]) => toastErrorMock(...args),
+    info: (...args: unknown[]) => toastInfoMock(...args),
+  },
 }));
 
 import {
@@ -98,6 +105,9 @@ describe("EntryHistorySection", () => {
     getHistoryProtectedFieldMock.mockReset();
     restoreHistoryMock.mockReset();
     askMock.mockReset();
+    toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
+    toastInfoMock.mockReset();
   });
 
   it("lists each version with its timestamp once expanded", async () => {
@@ -346,6 +356,34 @@ describe("EntryHistorySection", () => {
       expect(askMock).toHaveBeenCalledTimes(1);
     });
     expect(restoreHistoryMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a neutral info message (not a success) when the version is unchanged", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({ index: 0, fingerprint: "fp-zero", changedFields: [] }),
+    ]);
+    askMock.mockResolvedValue(true);
+    // The backend rejects a no-op (e.g. a move-only version) with this message.
+    restoreHistoryMock.mockRejectedValue(
+      "History version unchanged: this version's content matches the current entry"
+    );
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.restoreVersion",
+      })
+    );
+
+    await waitFor(() => {
+      expect(toastInfoMock).toHaveBeenCalledWith(
+        "entries.detail.restoreHistoryUnchanged"
+      );
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
   it("invalidates the password-health report after a restore", async () => {

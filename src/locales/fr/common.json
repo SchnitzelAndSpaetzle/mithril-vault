@@ -374,6 +374,7 @@
       "restoreHistoryConfirm": "Restaurer cette entrée à la version du {{date}} ? L'état actuel est d'abord enregistré dans l'historique, vous pourrez donc annuler.",
       "restoreHistorySuccess": "Entrée restaurée à la version sélectionnée",
       "restoreHistoryFailed": "Échec de la restauration de l'entrée",
+      "restoreHistoryUnchanged": "Cette version correspond à l'entrée actuelle — rien à restaurer",
       "historyField": {
         "title": "titre",
         "username": "nom d’utilisateur",

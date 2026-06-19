@@ -1076,6 +1076,60 @@ fn restore_guard_covers_attachment_bytes_for_same_second_versions() {
     );
 }
 
+#[test]
+fn restoring_a_location_only_version_is_rejected_as_unchanged() {
+    let (service, dir, db, entry_id) = create_entry_with_secret("svc", "pw", None);
+    // Move the entry to another Group. The move snapshots a location-only
+    // version whose *content* is identical to the live entry — only its parent
+    // Group differs, and restore deliberately never touches the parent Group.
+    let groups = service.list_groups(&db).expect("groups");
+    let root = &groups[0];
+    let target = root.children.first().expect("a default child group");
+    service
+        .move_entry(&db, &entry_id, &target.id)
+        .expect("move entry");
+
+    // A single move yields exactly one history version: the location-only
+    // snapshot, whose restorable content matches the live entry.
+    let history = service.list_entry_history(&db, &entry_id).expect("history");
+    assert_eq!(
+        history.len(),
+        1,
+        "the move snapshots one location-only version"
+    );
+    let version = history[0].clone();
+    let before_len = history.len();
+
+    // Restoring it would change nothing restorable, so it must be a no-op error
+    // — not a silent success that bumps mtime and appends a junk version.
+    let audit = AuditService::new(dir.path().join("audit"), Arc::new(InMemoryAuditKey::new()));
+    let result = audit_entry_history_restored_on_success(
+        &audit,
+        &db,
+        &entry_id,
+        service.restore_entry_history(&db, &entry_id, version.index, &version.fingerprint),
+    );
+    assert!(
+        matches!(result, Err(AppError::HistoryVersionUnchanged)),
+        "a content-identical restore must be rejected as unchanged, got {result:?}"
+    );
+
+    // No new history version, and nothing recorded — a true no-op.
+    let after = service.list_entry_history(&db, &entry_id).expect("history");
+    assert_eq!(
+        after.len(),
+        before_len,
+        "a no-op restore must not append a history version"
+    );
+    let events = audit
+        .read(Path::new(&db), &AuditFilter::default())
+        .expect("read audit");
+    assert!(
+        events.is_empty(),
+        "a no-op restore must record no audit event"
+    );
+}
+
 // ============================================================================
 // create_entry command tests
 // ============================================================================

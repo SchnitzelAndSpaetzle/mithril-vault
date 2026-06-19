@@ -109,6 +109,14 @@ export function EntryHistorySection({
           version.fingerprint
         );
       } catch (error) {
+        // A version whose restorable content matches the current entry (e.g. a
+        // move-only version — restore never touches the parent Group) is a
+        // no-op the backend rejects rather than reporting a phantom success.
+        // Surface it as a neutral info message, not a failure.
+        if (String(error).includes("History version unchanged")) {
+          toast.info(t("entries.detail.restoreHistoryUnchanged"));
+          return;
+        }
         console.error("Failed to restore entry version:", error);
         toast.error(t("entries.detail.restoreHistoryFailed"));
         return;

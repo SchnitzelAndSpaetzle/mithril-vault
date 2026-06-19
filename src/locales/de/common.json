@@ -374,6 +374,7 @@
       "restoreHistoryConfirm": "Diesen Eintrag auf die Version vom {{date}} zurücksetzen? Der aktuelle Stand wird zuerst im Verlauf gespeichert, sodass Sie dies rückgängig machen können.",
       "restoreHistorySuccess": "Eintrag auf die ausgewählte Version zurückgesetzt",
       "restoreHistoryFailed": "Eintrag konnte nicht wiederhergestellt werden",
+      "restoreHistoryUnchanged": "Diese Version entspricht dem aktuellen Eintrag – nichts wiederherzustellen",
       "historyField": {
         "title": "Titel",
         "username": "Benutzername",

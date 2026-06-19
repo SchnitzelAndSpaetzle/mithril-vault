@@ -7,7 +7,7 @@ use crate::dto::entry::{
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
 use keepass::db::{Entry as KeepassEntry, EntryRef, Icon, Times, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 
 use super::conversions::{
@@ -229,6 +229,42 @@ fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<Strin
 /// One restored attachment: its filename and the original `Value` (carrying the
 /// protected/unprotected flag, so restore preserves it).
 type RestoredAttachment = (String, Value<Vec<u8>>);
+
+/// Whether restoring `source` (with its `restored_attachments`) onto `live`
+/// would actually change any restorable content. Restore copies content but
+/// never identity or location, so a version that differs from the live Entry
+/// only in where it lived (a move-only snapshot) restores to a no-op. Comparing
+/// only the restorable subset — and attachments by name→`Value`, not pool id —
+/// lets the caller reject that no-op instead of bumping mtime, snapshotting,
+/// auditing, and reporting a phantom success (#328).
+fn restore_changes_content(
+    live: &EntryRef<'_>,
+    source: &KeepassEntry,
+    restored_attachments: &[RestoredAttachment],
+) -> bool {
+    if live.fields != source.fields
+        || live.tags != source.tags
+        || live.custom_data != source.custom_data
+        || live.autotype != source.autotype
+        || live.foreground_color != source.foreground_color
+        || live.background_color != source.background_color
+        || live.override_url != source.override_url
+        || live.quality_check != source.quality_check
+        || live.icon() != source.icon()
+        || live.times.expires != source.times.expires
+        || live.times.expiry != source.times.expiry
+    {
+        return true;
+    }
+    // Attachments by content (name → bytes + protection flag), not by the
+    // pool ids the rebuild would churn.
+    let live_attachments: BTreeMap<String, Value<Vec<u8>>> = live
+        .attachments_named()
+        .map(|(name, att)| (name.to_string(), att.data.clone()))
+        .collect();
+    let restored: BTreeMap<String, Value<Vec<u8>>> = restored_attachments.iter().cloned().collect();
+    live_attachments != restored
+}
 
 fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> String {
     // Length-prefix every segment so distinct field boundaries can't collide by
@@ -582,6 +618,15 @@ impl KdbxService {
                         .collect();
                     ((*snapshot).clone(), attachments)
                 };
+
+                // Reject a no-op restore: a version that differs from the live
+                // Entry only in where it lived (a move-only snapshot) would
+                // otherwise bump mtime, append a junk history version, audit,
+                // save, and report a phantom success even though nothing
+                // restorable changed. Checked before any mutation.
+                if !restore_changes_content(&entry.as_ref(), &source, &restored_attachments) {
+                    return Err(AppError::HistoryVersionUnchanged);
+                }
 
                 // Snapshot the pre-restore state so the restore is undoable: it
                 // becomes the newest history version. Attachment binaries that
