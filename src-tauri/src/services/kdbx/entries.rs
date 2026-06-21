@@ -6,7 +6,7 @@ use crate::dto::entry::{
 };
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
-use keepass::db::{Entry as KeepassEntry, EntryRef, Icon, Times, Value};
+use keepass::db::{Entry as KeepassEntry, EntryRef, History, Icon, Times, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 
@@ -14,6 +14,7 @@ use super::conversions::{
     apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
     replace_custom_fields, validate_expiry_enabled,
 };
+use super::history::HistoryRetention;
 use super::recycle::{is_group_in_recycle_bin, is_in_recycle_bin};
 use super::KdbxService;
 
@@ -92,8 +93,14 @@ pub(crate) fn plan_attachment_adds(
 /// S1 wired this only into `update_entry`; S2 routes the remaining
 /// content/location mutators (bulk tags, move between real Groups, attachment
 /// add, custom-icon/Favicon) through the same helper so coverage stays uniform.
-/// Retention pruning is intentionally not enforced here yet (S6) — history may
-/// grow unbounded for now.
+/// S6 enforces the per-Vault [`HistoryRetention`] here — the single place every
+/// mutation funnels through, so the limit applies uniformly:
+/// - [`HistoryRetention::Disabled`]: no new snapshot, and the Entry's existing
+///   history is dropped — the "pruned to zero lazily on the next content edit"
+///   rule. Because only snapshot-producing content edits reach this chokepoint,
+///   reversible Recycle-Bin transitions leave a disabled Entry's history intact.
+/// - [`HistoryRetention::Unlimited`]: append, never prune.
+/// - [`HistoryRetention::Limited`]`(n)`: append, then prune to the newest `n`.
 ///
 /// Takes `&mut KeepassEntry` rather than an `EntryMut` so both the `EntryMut`
 /// call sites (via deref coercion) and the raw-`Entry` closures handed to
@@ -106,11 +113,51 @@ pub(crate) fn plan_attachment_adds(
 /// blob referenced by *any* snapshot survives a later `delete_entry_attachment`
 /// and a save/reopen round-trip, and its id is never reused. The fork also
 /// prunes genuinely-orphaned binaries and re-indexes the pool at save time.
-pub(crate) fn snapshot_entry_history(entry: &mut KeepassEntry, mut pre_image: KeepassEntry) {
-    // `History::add_entry` also strips nested history, but clearing it here
-    // makes the intent explicit and keeps the pushed snapshot minimal.
-    pre_image.history = None;
-    entry.history.get_or_insert_default().add_entry(pre_image);
+/// Pruning the oldest versions drops their references the same way, so a blob
+/// only an evicted version held becomes a genuine orphan and is reclaimed.
+pub(crate) fn snapshot_entry_history(
+    entry: &mut KeepassEntry,
+    mut pre_image: KeepassEntry,
+    retention: HistoryRetention,
+) {
+    match retention {
+        HistoryRetention::Disabled => {
+            // No new snapshots; drop any existing history lazily on this
+            // content edit (Recycle-Bin transitions never reach here).
+            entry.history = None;
+        }
+        HistoryRetention::Unlimited => {
+            // `History::add_entry` also strips nested history, but clearing it
+            // here makes the intent explicit and keeps the snapshot minimal.
+            pre_image.history = None;
+            entry.history.get_or_insert_default().add_entry(pre_image);
+        }
+        HistoryRetention::Limited(max) => {
+            pre_image.history = None;
+            entry.history.get_or_insert_default().add_entry(pre_image);
+            prune_history_to_newest(entry, max);
+        }
+    }
+}
+
+/// Keeps the newest `max` history versions of `entry`, dropping the rest. The
+/// native [`History`] exposes no remove/truncate (its `entries` vec is
+/// crate-private), so the surviving newest-first prefix is rebuilt through the
+/// public `add_entry` API — re-added oldest-first so the result stays
+/// newest-first. A no-op when history already fits within `max`.
+fn prune_history_to_newest(entry: &mut KeepassEntry, max: usize) {
+    let Some(history) = entry.history.as_ref() else {
+        return;
+    };
+    if history.get_entries().len() <= max {
+        return;
+    }
+    let kept: Vec<KeepassEntry> = history.get_entries().iter().take(max).cloned().collect();
+    let mut rebuilt = History::default();
+    for version in kept.into_iter().rev() {
+        rebuilt.add_entry(version);
+    }
+    entry.history = Some(rebuilt);
 }
 
 /// Runs `mutate` against a clone-guarded `entry`, pushing a pre-mutation
@@ -119,11 +166,12 @@ pub(crate) fn snapshot_entry_history(entry: &mut KeepassEntry, mut pre_image: Ke
 /// where one snapshot must land per touched Entry and nothing on the rest.
 fn snapshot_on_change(
     entry: &mut KeepassEntry,
+    retention: HistoryRetention,
     mutate: impl FnOnce(&mut KeepassEntry) -> bool,
 ) -> bool {
     let before = entry.clone();
     if mutate(entry) {
-        snapshot_entry_history(entry, before);
+        snapshot_entry_history(entry, before, retention);
         true
     } else {
         false
@@ -592,6 +640,7 @@ impl KdbxService {
     ) -> Result<Entry, AppError> {
         self.with_vault_mut(db_id, |vault| {
             let eid = vault.find_entry_id(id)?;
+            let retention = vault.history_retention();
             let group_uuid = {
                 let mut entry = vault.entry_mut(id)?;
 
@@ -685,7 +734,7 @@ impl KdbxService {
                 entry.times.expiry = source.times.expiry;
                 entry.times.last_modification = Some(Times::now());
 
-                snapshot_entry_history(&mut entry, before);
+                snapshot_entry_history(&mut entry, before, retention);
 
                 entry.as_ref().parent().id().uuid().to_string()
             };
@@ -767,6 +816,7 @@ impl KdbxService {
         filename: &str,
     ) -> Result<(), AppError> {
         self.with_vault_mut(db_id, |vault| {
+            let retention = vault.history_retention();
             {
                 let mut entry = vault.entry_mut(entry_id)?;
                 if entry.attachment_by_name_mut(filename).is_none() {
@@ -777,7 +827,7 @@ impl KdbxService {
                 let before: KeepassEntry = (*entry.as_ref()).clone();
                 entry.remove_attachment_by_name(filename);
                 entry.times.last_modification = Some(Times::now());
-                snapshot_entry_history(&mut entry, before);
+                snapshot_entry_history(&mut entry, before, retention);
             }
             vault.mark_modified();
             Ok(())
@@ -869,6 +919,7 @@ impl KdbxService {
         }
 
         self.with_vault_mut(db_id, |vault| {
+            let retention = vault.history_retention();
             let stored_name = {
                 let mut entry = vault.entry_mut(entry_id)?;
                 // Snapshot the pre-add state before the new binary lands (#323).
@@ -878,7 +929,7 @@ impl KdbxService {
                 let stored_name = unique_attachment_name(&entry.as_ref(), &filename);
                 entry.add_attachment(stored_name.clone(), Value::unprotected(bytes));
                 entry.times.last_modification = Some(Times::now());
-                snapshot_entry_history(&mut entry, before);
+                snapshot_entry_history(&mut entry, before, retention);
                 stored_name
             };
             vault.mark_modified();
@@ -989,6 +1040,7 @@ impl KdbxService {
     ) -> Result<Entry, AppError> {
         self.with_vault_mut(db_id, |vault| {
             let eid = vault.find_entry_id(id)?;
+            let retention = vault.history_retention();
             // Validate the expiry timestamp before applying any field updates so
             // a malformed payload leaves the entry unchanged.
             let expiry = parse_expiry_time(data.expiry_time.as_deref())?;
@@ -1059,7 +1111,7 @@ impl KdbxService {
                 // versions. S1 wires the chokepoint here; S2 widens it to the
                 // other mutators.
                 if entry_content_changed(&before, &entry.as_ref()) {
-                    snapshot_entry_history(&mut entry, before);
+                    snapshot_entry_history(&mut entry, before, retention);
                 }
 
                 entry.as_ref().parent().id().uuid().to_string()
@@ -1111,8 +1163,11 @@ impl KdbxService {
 
             // One snapshot per touched Entry, captured before its tags are
             // rewritten (#323), kept only when the rename actually changed it.
+            let retention = vault.history_retention();
             let count = vault.modify_all_entries(&|entry| {
-                snapshot_on_change(entry, |e| rename_tag_in_entry(e, old_name, new_name))
+                snapshot_on_change(entry, retention, |e| {
+                    rename_tag_in_entry(e, old_name, new_name)
+                })
             });
 
             if count > 0 {
@@ -1127,8 +1182,9 @@ impl KdbxService {
     /// Returns the number of entries that were modified.
     pub fn delete_tag(&self, db_id: &str, tag_name: &str) -> Result<u32, AppError> {
         self.with_vault_mut(db_id, |vault| {
+            let retention = vault.history_retention();
             let count = vault.modify_all_entries(&|entry| {
-                snapshot_on_change(entry, |e| delete_tag_in_entry(e, tag_name))
+                snapshot_on_change(entry, retention, |e| delete_tag_in_entry(e, tag_name))
             });
 
             if count > 0 {
@@ -1167,6 +1223,7 @@ impl KdbxService {
                 });
                 current_parent != target_gid && !touches_recycle
             };
+            let retention = vault.history_retention();
 
             let now = Times::now();
             {
@@ -1181,7 +1238,7 @@ impl KdbxService {
                     .move_to(target_gid)
                     .map_err(|e| AppError::Kdbx(e.to_string()))?;
                 if should_snapshot {
-                    snapshot_entry_history(&mut entry, before);
+                    snapshot_entry_history(&mut entry, before, retention);
                 }
             }
 
@@ -3148,6 +3205,132 @@ mod tests {
         );
     }
 
+    /// Applies a single username edit — one content change, so one snapshot
+    /// under any non-disabled limit.
+    fn edit_username(service: &KdbxService, db_path: &str, entry_id: &str, username: &str) {
+        service
+            .update_entry(
+                db_path,
+                entry_id,
+                UpdateEntryData {
+                    username: Some(username.to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("edit username");
+    }
+
+    /// Renames the Entry's username `count` times, yielding `count` history
+    /// snapshots (each edit changes content, so each is kept). Returns nothing;
+    /// callers inspect via [`history_len`].
+    fn edit_username_n_times(service: &KdbxService, db_path: &str, entry_id: &str, count: usize) {
+        for i in 0..count {
+            edit_username(service, db_path, entry_id, &format!("user{i}"));
+        }
+    }
+
+    /// The number of history versions currently recorded for an Entry.
+    fn history_len(service: &KdbxService, db_path: &str, entry_id: &str) -> usize {
+        service
+            .list_entry_history(db_path, entry_id)
+            .expect("list history")
+            .len()
+    }
+
+    #[test]
+    fn positive_limit_prunes_oldest_keeping_newest_n() {
+        // With a positive History Limit, appending a snapshot beyond the cap
+        // prunes the oldest, keeping exactly the newest N (ADR-0008).
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        service
+            .update_vault_history_settings(&db_path, Some(3))
+            .expect("set limit to 3");
+
+        // Seed username is "alice"; five edits would otherwise yield five
+        // snapshots (pre-images: alice, user0, user1, user2, user3).
+        edit_username_n_times(&service, &db_path, &entry_a, 5);
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history");
+        assert_eq!(history.len(), 3, "history is capped at the limit of 3");
+        assert_eq!(
+            history[0].username, "user3",
+            "newest kept snapshot is the most recent pre-image"
+        );
+        assert_eq!(
+            history[2].username, "user1",
+            "oldest kept snapshot; 'alice' and 'user0' were pruned"
+        );
+    }
+
+    #[test]
+    fn negative_limit_lets_history_grow_unbounded() {
+        // A negative History Limit means unlimited: every edit accrues a
+        // version, past the default cap of 10.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        service
+            .update_vault_history_settings(&db_path, Some(-1))
+            .expect("set unlimited");
+
+        edit_username_n_times(&service, &db_path, &entry_a, 12);
+
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            12,
+            "unlimited history is never pruned"
+        );
+    }
+
+    #[test]
+    fn absent_limit_caps_history_at_the_default_of_ten() {
+        // A brand-new Vault never sets the field; history must still be capped
+        // at the default of 10, NOT left unbounded (ADR-0008).
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        edit_username_n_times(&service, &db_path, &entry_a, 15);
+
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            10,
+            "absent History Limit resolves to the bounded default of 10"
+        );
+    }
+
+    #[test]
+    fn disabled_limit_adds_no_snapshot_and_prunes_existing_lazily() {
+        // `0` disables history: no new snapshots, and existing history is pruned
+        // to zero lazily on the Entry's *next* edit — not wiped the instant the
+        // limit is set.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        // Accrue some history under the default limit first.
+        edit_username_n_times(&service, &db_path, &entry_a, 3);
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            3,
+            "precondition: three versions exist"
+        );
+
+        // Disabling must not wipe the existing history instantly.
+        service
+            .update_vault_history_settings(&db_path, Some(0))
+            .expect("disable history");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            3,
+            "setting the limit to 0 does not wipe history instantly"
+        );
+
+        // The next content edit adds no snapshot and prunes existing history to zero.
+        edit_username(&service, &db_path, &entry_a, "after-disable");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            0,
+            "disabled history is pruned to zero on the next content edit"
+        );
+    }
+
     /// Sets an Entry's tags directly through the vault, bypassing
     /// `update_entry` so the seeding itself records no history version.
     fn seed_tags(service: &KdbxService, db_path: &str, entry_id: &str, tags: &[&str]) {
@@ -3520,6 +3703,45 @@ mod tests {
         assert!(
             history.is_empty(),
             "restoring from the Recycle Bin must not create a history version"
+        );
+    }
+
+    #[test]
+    fn disabled_history_survives_trash_and_restore_then_prunes_on_next_content_edit() {
+        // Disabling history must not destroy existing versions through a
+        // reversible trash/restore round-trip — only a genuine content edit
+        // prunes them to zero. This pins the "next *content* edit" invariant:
+        // Recycle-Bin transitions are excluded from the snapshot chokepoint
+        // (#323 / ADR-0008), so they must neither snapshot nor prune.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let root = service.get_info(&db_path).expect("info").root_group_id;
+
+        // Accrue history under the default limit, then disable.
+        edit_username_n_times(&service, &db_path, &entry_a, 3);
+        service
+            .update_vault_history_settings(&db_path, Some(0))
+            .expect("disable history");
+
+        // Trash then restore: a reversible location round-trip must preserve
+        // the (already-frozen) history untouched.
+        service
+            .delete_entry(&db_path, &entry_a)
+            .expect("send to recycle bin");
+        service
+            .move_entry(&db_path, &entry_a, &root)
+            .expect("restore from recycle bin");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            3,
+            "history survives trash/restore while disabled"
+        );
+
+        // The next genuine content edit prunes the disabled history to zero.
+        edit_username(&service, &db_path, &entry_a, "after-restore");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            0,
+            "the next content edit prunes disabled history to zero"
         );
     }
 

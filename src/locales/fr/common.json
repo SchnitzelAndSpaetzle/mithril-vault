@@ -236,7 +236,15 @@
       "pendingTitle": "Implémentation en attente",
       "pendingItems": {
         "mutations": "Les contrôles de mutation au niveau de la base de données ne sont pas encore implémentés.",
-        "recycleBin": "L'édition de la corbeille/historique/politique de sécurité est à faire."
+        "recycleBin": "La modification de la corbeille et de la politique de sécurité est à faire."
+      },
+      "history": {
+        "title": "Historique des entrées",
+        "description": "Combien de versions précédentes de chaque entrée ce coffre conserve. Stocké dans le fichier de base de données, la limite voyage donc avec lui.",
+        "keepNewest": "Conserver les plus récentes",
+        "itemsLabel": "Nombre de versions à conserver",
+        "unlimited": "Illimité",
+        "disabled": "Désactivé"
       }
     },
     "sidebar": {

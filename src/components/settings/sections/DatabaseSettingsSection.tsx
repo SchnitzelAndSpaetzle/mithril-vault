@@ -3,7 +3,10 @@
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { VaultHistorySettingsControl } from "@/components/settings/sections/VaultHistorySettingsControl";
 import { formatKdf } from "@/components/settings/settings-utils";
+import { useVaultHistorySettings } from "@/hooks/use-vault-history-settings";
+import { Separator } from "@/components/ui/separator.tsx";
 import type { DatabaseConfig } from "@/lib/types";
 import type { JSX } from "react/jsx-runtime";
 
@@ -21,6 +24,11 @@ export function DatabaseSettingsSection({
   databaseConfigError,
 }: Readonly<DatabaseSettingsSectionProps>) {
   const { t } = useTranslation();
+  const {
+    settings: historySettings,
+    update: updateHistorySettings,
+    isUpdating: isUpdatingHistory,
+  } = useVaultHistorySettings(dbId);
 
   let databaseSectionContent: JSX.Element = (
     <p className="text-sm text-muted-foreground">
@@ -92,6 +100,17 @@ export function DatabaseSettingsSection({
       description={t("settings.database.description")}
     >
       {databaseSectionContent}
+
+      {dbId && historySettings && (
+        <>
+          <Separator />
+          <VaultHistorySettingsControl
+            maxItems={historySettings.maxItems}
+            onChange={updateHistorySettings}
+            disabled={isUpdatingHistory}
+          />
+        </>
+      )}
 
       <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
         <div className="flex items-center gap-2 font-medium">
