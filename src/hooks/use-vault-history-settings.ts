@@ -38,11 +38,29 @@ export function useVaultHistorySettings(dbId: string | null) {
     },
   });
 
+  // Empties every Entry's history vault-wide (#327), then persists to disk. Any
+  // open Entry-detail history view is refreshed so its now-empty list shows.
+  const clearAllMutation = useMutation<void, Error, void>({
+    mutationFn: async () => {
+      if (!dbId) throw new Error("no database open");
+      await database.clearAllHistory(dbId);
+      await saveWithErrorToast(dbId, t);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        predicate: (q) =>
+          q.queryKey[0] === queryKeys.entries.all[0] && q.queryKey[1] === dbId,
+      });
+    },
+  });
+
   return {
     settings: query.data ?? null,
     isLoading: query.isLoading,
     error: query.error,
     update: mutation.mutate,
     isUpdating: mutation.isPending,
+    clearAll: clearAllMutation.mutate,
+    isClearing: clearAllMutation.isPending,
   };
 }

@@ -10,6 +10,7 @@ import {
   History,
   Loader2,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
@@ -144,6 +145,32 @@ export function EntryHistorySection({
     [dbId, entryId, queryClient, t]
   );
 
+  // Clears this Entry's history after an explicit confirmation: the backend
+  // empties the Entry's native KDBX history (ADR-0008) — live content is
+  // untouched and the act is not audited. On success we persist via the shared
+  // helper and refresh the history view so the now-empty list shows.
+  const handleClear = useCallback(async () => {
+    const confirmed = await ask(t("entries.detail.clearHistoryConfirm"), {
+      title: t("entries.detail.clearHistoryConfirmTitle"),
+      kind: "warning",
+    });
+    if (!confirmed) return;
+
+    try {
+      await entriesApi.clearHistory(dbId, entryId);
+    } catch (error) {
+      console.error("Failed to clear entry history:", error);
+      toast.error(t("entries.detail.clearHistoryFailed"));
+      return;
+    }
+
+    await saveWithErrorToast(dbId, t);
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.entries.history(dbId, entryId),
+    });
+    toast.success(t("entries.detail.clearHistorySuccess"));
+  }, [dbId, entryId, queryClient, t]);
+
   return (
     <Collapsible
       open={open}
@@ -193,6 +220,22 @@ export function EntryHistorySection({
               />
             ))}
           </ul>
+        )}
+        {versions.length > 0 && (
+          <>
+            <Separator />
+            <div className="flex justify-end px-4 py-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 text-destructive"
+                onClick={handleClear}
+              >
+                <Trash2 className="h-3 w-3" />
+                {t("entries.detail.clearHistory")}
+              </Button>
+            </div>
+          </>
         )}
       </CollapsibleContent>
     </Collapsible>

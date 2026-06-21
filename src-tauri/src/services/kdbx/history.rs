@@ -64,6 +64,33 @@ impl KdbxService {
         })
     }
 
+    /// Clears one Entry's history, emptying its native KDBX `Entry.history`
+    /// (ADR-0008). The live content and its `last_modification` are left
+    /// untouched — clearing only drops the sidecar versions, it is not a content
+    /// edit — and the act is deliberately not audited (per the PRD). Marks the
+    /// Vault modified so the change persists on next save.
+    pub fn clear_entry_history(&self, db_id: &str, id: &str) -> Result<(), AppError> {
+        self.with_vault_mut(db_id, |vault| {
+            vault.entry_mut(id)?.history = None;
+            vault.mark_modified();
+            Ok(())
+        })
+    }
+
+    /// Clears every Entry's history across the whole Vault, emptying each
+    /// `Entry.history` (ADR-0008). Like the per-Entry clear, live content and
+    /// `last_modification` are left untouched and the act is not audited (per
+    /// the PRD). Marks the Vault modified so the change persists on next save.
+    pub fn clear_all_history(&self, db_id: &str) -> Result<(), AppError> {
+        self.with_vault_mut(db_id, |vault| {
+            vault.db_mut().foreach_entry_mut(|mut entry| {
+                entry.history = None;
+            });
+            vault.mark_modified();
+            Ok(())
+        })
+    }
+
     /// Writes the per-Vault `History Limit` into KDBX `Meta.history_max_items`
     /// and marks the Vault modified so the change persists on next save. Passing
     /// `None` clears the field back to absent (effective default 10).
@@ -85,7 +112,127 @@ impl KdbxService {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::dto::entry::UpdateEntryData;
     use crate::services::kdbx::test_support::create_test_database;
+
+    /// Seeds one history version on `entry_id` by renaming its username, which
+    /// snapshots the prior state into native KDBX history (ADR-0008).
+    fn seed_one_version(service: &KdbxService, db_path: &str, entry_id: &str, new_username: &str) {
+        service
+            .update_entry(
+                db_path,
+                entry_id,
+                UpdateEntryData {
+                    username: Some(new_username.to_string()),
+                    title: None,
+                    password: None,
+                    url: None,
+                    notes: None,
+                    icon_id: None,
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
+                },
+            )
+            .expect("rename username to seed history");
+    }
+
+    #[test]
+    fn clearing_one_entrys_history_empties_it_and_leaves_siblings_untouched() {
+        let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
+        seed_one_version(&service, &db_path, &entry_a, "alice2");
+        seed_one_version(&service, &db_path, &entry_b, "bob2");
+
+        service
+            .clear_entry_history(&db_path, &entry_a)
+            .expect("clear entry A history");
+
+        assert!(
+            service
+                .list_entry_history(&db_path, &entry_a)
+                .expect("list A history")
+                .is_empty(),
+            "the cleared Entry has no history versions left"
+        );
+        assert_eq!(
+            service
+                .list_entry_history(&db_path, &entry_b)
+                .expect("list B history")
+                .len(),
+            1,
+            "a sibling Entry's history is untouched"
+        );
+    }
+
+    #[test]
+    fn clearing_all_history_empties_every_entry() {
+        let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
+        seed_one_version(&service, &db_path, &entry_a, "alice2");
+        seed_one_version(&service, &db_path, &entry_b, "bob2");
+
+        service
+            .clear_all_history(&db_path)
+            .expect("clear all history");
+
+        for id in [&entry_a, &entry_b] {
+            assert!(
+                service
+                    .list_entry_history(&db_path, id)
+                    .expect("list history")
+                    .is_empty(),
+                "every Entry's history is emptied vault-wide"
+            );
+        }
+    }
+
+    #[test]
+    fn clearing_all_history_persists_across_save_and_reopen() {
+        let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
+        seed_one_version(&service, &db_path, &entry_a, "alice2");
+        seed_one_version(&service, &db_path, &entry_b, "bob2");
+
+        service
+            .clear_all_history(&db_path)
+            .expect("clear all history");
+        service.save(&db_path).expect("save vault");
+        service.close(&db_path).expect("close vault");
+
+        let reopened = KdbxService::new();
+        reopened.open(&db_path, "testpass").expect("reopen vault");
+        for id in [&entry_a, &entry_b] {
+            assert!(
+                reopened
+                    .list_entry_history(&db_path, id)
+                    .expect("list history after reopen")
+                    .is_empty(),
+                "vault-wide cleared history stays empty after a save → reopen"
+            );
+        }
+    }
+
+    #[test]
+    fn clearing_one_entrys_history_persists_across_save_and_reopen() {
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_one_version(&service, &db_path, &entry_a, "alice2");
+
+        service
+            .clear_entry_history(&db_path, &entry_a)
+            .expect("clear entry A history");
+        service.save(&db_path).expect("save vault");
+        service.close(&db_path).expect("close vault");
+
+        let reopened = KdbxService::new();
+        reopened.open(&db_path, "testpass").expect("reopen vault");
+        assert!(
+            reopened
+                .list_entry_history(&db_path, &entry_a)
+                .expect("list history after reopen")
+                .is_empty(),
+            "the cleared history stays empty after a save → reopen"
+        );
+    }
 
     #[test]
     fn history_settings_default_to_absent_on_a_new_vault() {

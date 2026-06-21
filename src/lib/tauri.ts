@@ -264,6 +264,16 @@ export const database = {
   },
 
   /**
+   * Clears every Entry's history across the whole Vault, emptying each native
+   * KDBX `Entry.history` (ADR-0008). Live content is untouched; persists on next
+   * save. Not audited (per the PRD).
+   */
+  async clearAllHistory(dbId: string): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    return invoke("clear_all_history", { dbId });
+  },
+
+  /**
    * Get info about the currently open database.
    * Returns null if no database is open.
    */
@@ -424,6 +434,17 @@ export const entries = {
       fingerprint,
     });
     return EntrySchema.parse(result);
+  },
+
+  /**
+   * Clears one Entry's history, emptying its native KDBX `Entry.history`
+   * (ADR-0008). The live content is untouched; persists on next save. Not
+   * audited (per the PRD).
+   */
+  async clearHistory(dbId: string, id: string): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    return invoke("clear_entry_history", { dbId, id });
   },
 
   /**
