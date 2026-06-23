@@ -59,7 +59,13 @@ describe("useVaultHistorySettings — clearAll", () => {
   it("clears all history, persists, and invalidates this vault's entry queries", async () => {
     clearAllHistoryMock.mockResolvedValue(undefined);
     const { result, queryClient } = renderUseVaultHistorySettings();
-    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    // Seed an open entry-history view for this vault, plus one for a different
+    // vault, so we can prove the refresh is scoped to the cleared vault only.
+    const thisVaultKey = queryKeys.entries.history(TEST_DB_ID, "entry-1");
+    const otherVaultKey = queryKeys.entries.history("/other.kdbx", "entry-9");
+    queryClient.setQueryData(thisVaultKey, []);
+    queryClient.setQueryData(otherVaultKey, []);
 
     act(() => {
       result.current.clearAll();
@@ -73,18 +79,12 @@ describe("useVaultHistorySettings — clearAll", () => {
       TEST_DB_ID,
       expect.anything()
     );
-    // ...and any open entry-history view for this vault is refreshed.
+    // ...and the open entry-history view for this vault is refreshed, while a
+    // different vault's cached history is left untouched.
     await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ predicate: expect.any(Function) })
-      );
+      expect(queryClient.getQueryState(thisVaultKey)?.isInvalidated).toBe(true);
     });
-    const predicate = invalidateSpy.mock.calls
-      .map((c) => c[0]?.predicate)
-      .find(Boolean) as (q: { queryKey: unknown[] }) => boolean;
-    expect(
-      predicate({ queryKey: queryKeys.entries.history(TEST_DB_ID, "entry-1") })
-    ).toBe(true);
+    expect(queryClient.getQueryState(otherVaultKey)?.isInvalidated).toBe(false);
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
