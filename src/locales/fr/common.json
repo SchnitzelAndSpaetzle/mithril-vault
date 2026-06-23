@@ -248,7 +248,8 @@
         "clearAll": "Effacer tout l'historique",
         "clearAllDescription": "Supprimer définitivement l'historique des versions enregistré de chaque entrée de ce coffre. Les valeurs actuelles des entrées sont conservées.",
         "clearAllConfirmTitle": "Effacer tout l'historique",
-        "clearAllConfirm": "Supprimer définitivement l'historique des versions enregistré de chaque entrée de ce coffre ? Les valeurs actuelles des entrées sont conservées. Cette action est irréversible."
+        "clearAllConfirm": "Supprimer définitivement l'historique des versions enregistré de chaque entrée de ce coffre ? Les valeurs actuelles des entrées sont conservées. Cette action est irréversible.",
+        "clearAllFailed": "Échec de la suppression de l'historique"
       }
     },
     "sidebar": {

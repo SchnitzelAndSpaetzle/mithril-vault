@@ -271,7 +271,8 @@
         "clearAll": "Clear all history",
         "clearAllDescription": "Permanently delete the saved version history of every entry in this vault. Current entry values are kept.",
         "clearAllConfirmTitle": "Clear all history",
-        "clearAllConfirm": "Permanently delete the saved version history of every entry in this vault? Current entry values are kept. This cannot be undone."
+        "clearAllConfirm": "Permanently delete the saved version history of every entry in this vault? Current entry values are kept. This cannot be undone.",
+        "clearAllFailed": "Failed to clear history"
       }
     },
     "sidebar": {

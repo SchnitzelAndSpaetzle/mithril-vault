@@ -248,7 +248,8 @@
         "clearAll": "Borrar todo el historial",
         "clearAllDescription": "Eliminar permanentemente el historial de versiones guardado de cada entrada de esta bóveda. Se conservan los valores actuales de las entradas.",
         "clearAllConfirmTitle": "Borrar todo el historial",
-        "clearAllConfirm": "¿Eliminar permanentemente el historial de versiones guardado de cada entrada de esta bóveda? Se conservan los valores actuales de las entradas. Esta acción no se puede deshacer."
+        "clearAllConfirm": "¿Eliminar permanentemente el historial de versiones guardado de cada entrada de esta bóveda? Se conservan los valores actuales de las entradas. Esta acción no se puede deshacer.",
+        "clearAllFailed": "No se pudo borrar el historial"
       }
     },
     "sidebar": {

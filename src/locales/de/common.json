@@ -248,7 +248,8 @@
         "clearAll": "Gesamten Verlauf löschen",
         "clearAllDescription": "Den gespeicherten Versionsverlauf jedes Eintrags in diesem Tresor dauerhaft löschen. Die aktuellen Eintragswerte bleiben erhalten.",
         "clearAllConfirmTitle": "Gesamten Verlauf löschen",
-        "clearAllConfirm": "Den gespeicherten Versionsverlauf jedes Eintrags in diesem Tresor dauerhaft löschen? Die aktuellen Eintragswerte bleiben erhalten. Dies kann nicht rückgängig gemacht werden."
+        "clearAllConfirm": "Den gespeicherten Versionsverlauf jedes Eintrags in diesem Tresor dauerhaft löschen? Die aktuellen Eintragswerte bleiben erhalten. Dies kann nicht rückgängig gemacht werden.",
+        "clearAllFailed": "Verlauf konnte nicht gelöscht werden"
       }
     },
     "sidebar": {

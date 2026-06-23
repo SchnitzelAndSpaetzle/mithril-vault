@@ -131,6 +131,25 @@ describe("tauri wrappers validation", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  it("clears one entry's history through the entries wrapper", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    const dbId = crypto.randomUUID();
+    const id = crypto.randomUUID();
+
+    await entries.clearHistory(dbId, id);
+
+    expect(invoke).toHaveBeenCalledWith("clear_entry_history", { dbId, id });
+  });
+
+  it("clears all history vault-wide through the database wrapper", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    const dbId = crypto.randomUUID();
+
+    await database.clearAllHistory(dbId);
+
+    expect(invoke).toHaveBeenCalledWith("clear_all_history", { dbId });
+  });
+
   it("gets, updates, and resets app preferences through settings wrappers", async () => {
     const preferences = {
       general: {
