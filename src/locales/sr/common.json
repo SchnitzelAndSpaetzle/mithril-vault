@@ -244,7 +244,12 @@
         "keepNewest": "Задржи најновије",
         "itemsLabel": "Број верзија за задржавање",
         "unlimited": "Неограничено",
-        "disabled": "Онемогућено"
+        "disabled": "Онемогућено",
+        "clearAll": "Обриши целу историју",
+        "clearAllDescription": "Трајно обришите сачувану историју верзија сваке ставке у овом сефу. Тренутне вредности ставки се задржавају.",
+        "clearAllConfirmTitle": "Обриши целу историју",
+        "clearAllConfirm": "Трајно обрисати сачувану историју верзија сваке ставке у овом сефу? Тренутне вредности ставки се задржавају. Ово се не може опозвати.",
+        "clearAllFailed": "Брисање историје није успело"
       }
     },
     "sidebar": {
@@ -383,6 +388,11 @@
       "restoreHistorySuccess": "Stavka je vraćena na izabranu verziju",
       "restoreHistoryFailed": "Vraćanje stavke nije uspelo",
       "restoreHistoryUnchanged": "Ova verzija odgovara trenutnoj stavci — nema šta da se vrati",
+      "clearHistory": "Obriši istoriju",
+      "clearHistoryConfirmTitle": "Obriši istoriju",
+      "clearHistoryConfirm": "Trajno obrisati sačuvanu istoriju verzija ove stavke? Njene trenutne vrednosti se zadržavaju. Ovo se ne može opozvati.",
+      "clearHistorySuccess": "Istorija stavke je obrisana",
+      "clearHistoryFailed": "Brisanje istorije stavke nije uspelo",
       "historyField": {
         "title": "naslov",
         "username": "korisničko ime",

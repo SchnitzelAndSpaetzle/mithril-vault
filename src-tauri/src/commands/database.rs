@@ -336,6 +336,17 @@ pub async fn update_vault_history_settings(
     state.update_vault_history_settings(&db_id, max_items)
 }
 
+/// Clears every Entry's history across the whole Vault, emptying each native
+/// KDBX `Entry.history` (ADR-0008). Live content is untouched; the change
+/// persists on next save. Clearing history is not audited (per the PRD).
+#[tauri::command]
+pub async fn clear_all_history(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.clear_all_history(&db_id)
+}
+
 /// Gets info about a specific open database.
 /// The `db_id` is the path to the database file.
 /// Returns None if the database is not open.

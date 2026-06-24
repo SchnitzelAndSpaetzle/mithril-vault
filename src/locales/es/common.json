@@ -244,7 +244,12 @@
         "keepNewest": "Conservar las más recientes",
         "itemsLabel": "Número de versiones a conservar",
         "unlimited": "Ilimitado",
-        "disabled": "Desactivado"
+        "disabled": "Desactivado",
+        "clearAll": "Borrar todo el historial",
+        "clearAllDescription": "Eliminar permanentemente el historial de versiones guardado de cada entrada de esta bóveda. Se conservan los valores actuales de las entradas.",
+        "clearAllConfirmTitle": "Borrar todo el historial",
+        "clearAllConfirm": "¿Eliminar permanentemente el historial de versiones guardado de cada entrada de esta bóveda? Se conservan los valores actuales de las entradas. Esta acción no se puede deshacer.",
+        "clearAllFailed": "No se pudo borrar el historial"
       }
     },
     "sidebar": {
@@ -383,6 +388,11 @@
       "restoreHistorySuccess": "Entrada restaurada a la versión seleccionada",
       "restoreHistoryFailed": "No se pudo restaurar la entrada",
       "restoreHistoryUnchanged": "Esta versión coincide con la entrada actual: no hay nada que restaurar",
+      "clearHistory": "Borrar historial",
+      "clearHistoryConfirmTitle": "Borrar historial",
+      "clearHistoryConfirm": "¿Eliminar permanentemente el historial de versiones guardado de esta entrada? Se conservan sus valores actuales. Esta acción no se puede deshacer.",
+      "clearHistorySuccess": "Historial de la entrada borrado",
+      "clearHistoryFailed": "No se pudo borrar el historial de la entrada",
       "historyField": {
         "title": "título",
         "username": "usuario",

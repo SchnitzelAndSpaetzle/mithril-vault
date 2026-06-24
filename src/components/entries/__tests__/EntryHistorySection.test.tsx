@@ -11,6 +11,7 @@ const listHistoryMock = vi.fn();
 const getHistoryPasswordMock = vi.fn();
 const getHistoryProtectedFieldMock = vi.fn();
 const restoreHistoryMock = vi.fn();
+const clearHistoryMock = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
   entries: {
@@ -19,6 +20,7 @@ vi.mock("@/lib/tauri", () => ({
     getHistoryProtectedField: (...args: unknown[]) =>
       getHistoryProtectedFieldMock(...args),
     restoreHistory: (...args: unknown[]) => restoreHistoryMock(...args),
+    clearHistory: (...args: unknown[]) => clearHistoryMock(...args),
   },
 }));
 
@@ -104,6 +106,7 @@ describe("EntryHistorySection", () => {
     getHistoryPasswordMock.mockReset();
     getHistoryProtectedFieldMock.mockReset();
     restoreHistoryMock.mockReset();
+    clearHistoryMock.mockReset();
     askMock.mockReset();
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
@@ -384,6 +387,52 @@ describe("EntryHistorySection", () => {
     });
     expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("clears this Entry's history after the user confirms", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({ index: 0, fingerprint: "fp-zero", changedFields: ["url"] }),
+    ]);
+    askMock.mockResolvedValue(true);
+    clearHistoryMock.mockResolvedValue(undefined);
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.clearHistory",
+      })
+    );
+
+    // The destructive action is gated on an explicit confirmation.
+    await waitFor(() => {
+      expect(askMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(clearHistoryMock).toHaveBeenCalledWith(TEST_DB_ID, TEST_ENTRY_ID);
+    });
+  });
+
+  it("does not clear this Entry's history when the user cancels", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({ index: 0, fingerprint: "fp-zero", changedFields: ["url"] }),
+    ]);
+    askMock.mockResolvedValue(false);
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.clearHistory",
+      })
+    );
+
+    await waitFor(() => {
+      expect(askMock).toHaveBeenCalledTimes(1);
+    });
+    expect(clearHistoryMock).not.toHaveBeenCalled();
   });
 
   it("invalidates the password-health report after a restore", async () => {
