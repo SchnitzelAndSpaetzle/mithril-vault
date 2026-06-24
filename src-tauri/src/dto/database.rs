@@ -2,6 +2,18 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The per-Vault Entry-History retention, surfaced over IPC as the raw KDBX
+/// `Meta.history_max_items` field (ADR-0008). This is the *writable* vault-meta
+/// surface, kept distinct from the read-only [`DatabaseConfigDto`] crypto
+/// snapshot. `max_items` is the raw signed value the frontend maps to its
+/// keep-N / unlimited / disabled control: `None` = absent (effective default
+/// 10), negative = unlimited, `0` = disabled, positive `n` = keep newest `n`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultHistorySettings {
+    pub max_items: Option<i32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseInfo {

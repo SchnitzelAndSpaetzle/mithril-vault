@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Passwort kopiert",
       "entryProtectedFieldRevealed": "Geschütztes Feld angezeigt",
       "entryAttachmentExported": "Anhang heruntergeladen",
+      "entryHistoryRestored": "Aus Verlauf wiederhergestellt",
       "preferencesSecurityChanged": "Sicherheitseinstellung geändert",
       "auditCleared": "Audit-Protokoll geleert"
     },
@@ -235,7 +236,20 @@
       "pendingTitle": "Ausstehende Implementierung",
       "pendingItems": {
         "mutations": "Datenbankebene-Steuerungen sind noch nicht implementiert.",
-        "recycleBin": "Papierkorb/Verlauf/Sicherheitsrichtlinien-Bearbeitung ist noch TODO."
+        "recycleBin": "Bearbeiten von Papierkorb- und Sicherheitsrichtlinien steht noch aus."
+      },
+      "history": {
+        "title": "Eintragsverlauf",
+        "description": "Wie viele frühere Versionen jedes Eintrags dieser Tresor behält. In der Datenbankdatei gespeichert, sodass das Limit mit ihr mitreist.",
+        "keepNewest": "Neueste behalten",
+        "itemsLabel": "Anzahl der zu behaltenden Versionen",
+        "unlimited": "Unbegrenzt",
+        "disabled": "Deaktiviert",
+        "clearAll": "Gesamten Verlauf löschen",
+        "clearAllDescription": "Den gespeicherten Versionsverlauf jedes Eintrags in diesem Tresor dauerhaft löschen. Die aktuellen Eintragswerte bleiben erhalten.",
+        "clearAllConfirmTitle": "Gesamten Verlauf löschen",
+        "clearAllConfirm": "Den gespeicherten Versionsverlauf jedes Eintrags in diesem Tresor dauerhaft löschen? Die aktuellen Eintragswerte bleiben erhalten. Dies kann nicht rückgängig gemacht werden.",
+        "clearAllFailed": "Verlauf konnte nicht gelöscht werden"
       }
     },
     "sidebar": {
@@ -365,6 +379,32 @@
       "noAttachments": "Keine Anhänge",
       "history": "Verlauf",
       "noHistory": "Noch kein Verlauf",
+      "historyChanged": "Geändert: {{fields}}",
+      "historyCreated": "Erstellt",
+      "historyEarliestKept": "Älteste aufbewahrte Version",
+      "restoreVersion": "Diese Version wiederherstellen",
+      "restoreHistoryConfirmTitle": "Version wiederherstellen",
+      "restoreHistoryConfirm": "Diesen Eintrag auf die Version vom {{date}} zurücksetzen? Der aktuelle Stand wird zuerst im Verlauf gespeichert, sodass Sie dies rückgängig machen können.",
+      "restoreHistorySuccess": "Eintrag auf die ausgewählte Version zurückgesetzt",
+      "restoreHistoryFailed": "Eintrag konnte nicht wiederhergestellt werden",
+      "restoreHistoryUnchanged": "Diese Version entspricht dem aktuellen Eintrag – nichts wiederherzustellen",
+      "clearHistory": "Verlauf löschen",
+      "clearHistoryConfirmTitle": "Verlauf löschen",
+      "clearHistoryConfirm": "Den gespeicherten Versionsverlauf dieses Eintrags dauerhaft löschen? Die aktuellen Werte bleiben erhalten. Dies kann nicht rückgängig gemacht werden.",
+      "clearHistorySuccess": "Eintragsverlauf gelöscht",
+      "clearHistoryFailed": "Verlauf des Eintrags konnte nicht gelöscht werden",
+      "historyField": {
+        "title": "Titel",
+        "username": "Benutzername",
+        "password": "Passwort",
+        "url": "URL",
+        "notes": "Notizen",
+        "tags": "Tags",
+        "icon": "Symbol",
+        "attachments": "Anhänge",
+        "expiry": "Ablauf",
+        "location": "Speicherort"
+      },
       "addAttachment": "Anhang hinzufügen",
       "addingAttachments": "Wird hinzugefügt…",
       "dropToAttach": "Dateien hier ablegen, um sie anzuhängen",

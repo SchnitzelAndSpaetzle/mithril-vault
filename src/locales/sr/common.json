@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Lozinka kopirana",
       "entryProtectedFieldRevealed": "Zaštićeno polje prikazano",
       "entryAttachmentExported": "Prilog preuzet",
+      "entryHistoryRestored": "Vraćeno iz istorije",
       "preferencesSecurityChanged": "Bezbednosno podešavanje promenjeno",
       "auditCleared": "Dnevnik nadzora obrisan"
     },
@@ -235,7 +236,20 @@
       "pendingTitle": "Implementacija na čekanju",
       "pendingItems": {
         "mutations": "Kontrole mutacije na nivou baze podataka još nisu implementirane.",
-        "recycleBin": "Uređivanje korpe za otpatke/istorije/bezbednosnih pravila je na čekanju."
+        "recycleBin": "Измена корпе за отпатке и безбедносне политике тек предстоји."
+      },
+      "history": {
+        "title": "Историја уноса",
+        "description": "Колико претходних верзија сваког уноса овај сеф чува. Чува се у датотеци базе података, па ограничење путује заједно с њом.",
+        "keepNewest": "Задржи најновије",
+        "itemsLabel": "Број верзија за задржавање",
+        "unlimited": "Неограничено",
+        "disabled": "Онемогућено",
+        "clearAll": "Обриши целу историју",
+        "clearAllDescription": "Трајно обришите сачувану историју верзија сваке ставке у овом сефу. Тренутне вредности ставки се задржавају.",
+        "clearAllConfirmTitle": "Обриши целу историју",
+        "clearAllConfirm": "Трајно обрисати сачувану историју верзија сваке ставке у овом сефу? Тренутне вредности ставки се задржавају. Ово се не може опозвати.",
+        "clearAllFailed": "Брисање историје није успело"
       }
     },
     "sidebar": {
@@ -365,6 +379,32 @@
       "noAttachments": "Nema priloga",
       "history": "Istorija",
       "noHistory": "Još nema istorije",
+      "historyChanged": "Izmenjeno: {{fields}}",
+      "historyCreated": "Kreirano",
+      "historyEarliestKept": "Najstarija sačuvana verzija",
+      "restoreVersion": "Vrati ovu verziju",
+      "restoreHistoryConfirmTitle": "Vraćanje verzije",
+      "restoreHistoryConfirm": "Vratiti ovu stavku na verziju od {{date}}? Trenutno stanje se prvo čuva u istoriji, pa možete poništiti ovu radnju.",
+      "restoreHistorySuccess": "Stavka je vraćena na izabranu verziju",
+      "restoreHistoryFailed": "Vraćanje stavke nije uspelo",
+      "restoreHistoryUnchanged": "Ova verzija odgovara trenutnoj stavci — nema šta da se vrati",
+      "clearHistory": "Obriši istoriju",
+      "clearHistoryConfirmTitle": "Obriši istoriju",
+      "clearHistoryConfirm": "Trajno obrisati sačuvanu istoriju verzija ove stavke? Njene trenutne vrednosti se zadržavaju. Ovo se ne može opozvati.",
+      "clearHistorySuccess": "Istorija stavke je obrisana",
+      "clearHistoryFailed": "Brisanje istorije stavke nije uspelo",
+      "historyField": {
+        "title": "naslov",
+        "username": "korisničko ime",
+        "password": "lozinka",
+        "url": "URL",
+        "notes": "beleške",
+        "tags": "oznake",
+        "icon": "ikona",
+        "attachments": "prilozi",
+        "expiry": "istek",
+        "location": "lokacija"
+      },
       "addAttachment": "Dodaj prilog",
       "addingAttachments": "Dodavanje…",
       "dropToAttach": "Prevucite datoteke ovde da biste ih priložili",

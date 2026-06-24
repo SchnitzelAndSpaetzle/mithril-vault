@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Mot de passe copié",
       "entryProtectedFieldRevealed": "Champ protégé affiché",
       "entryAttachmentExported": "Pièce jointe téléchargée",
+      "entryHistoryRestored": "Restauré depuis l'historique",
       "preferencesSecurityChanged": "Préférence de sécurité modifiée",
       "auditCleared": "Journal d'audit effacé"
     },
@@ -235,7 +236,20 @@
       "pendingTitle": "Implémentation en attente",
       "pendingItems": {
         "mutations": "Les contrôles de mutation au niveau de la base de données ne sont pas encore implémentés.",
-        "recycleBin": "L'édition de la corbeille/historique/politique de sécurité est à faire."
+        "recycleBin": "La modification de la corbeille et de la politique de sécurité est à faire."
+      },
+      "history": {
+        "title": "Historique des entrées",
+        "description": "Combien de versions précédentes de chaque entrée ce coffre conserve. Stocké dans le fichier de base de données, la limite voyage donc avec lui.",
+        "keepNewest": "Conserver les plus récentes",
+        "itemsLabel": "Nombre de versions à conserver",
+        "unlimited": "Illimité",
+        "disabled": "Désactivé",
+        "clearAll": "Effacer tout l'historique",
+        "clearAllDescription": "Supprimer définitivement l'historique des versions enregistré de chaque entrée de ce coffre. Les valeurs actuelles des entrées sont conservées.",
+        "clearAllConfirmTitle": "Effacer tout l'historique",
+        "clearAllConfirm": "Supprimer définitivement l'historique des versions enregistré de chaque entrée de ce coffre ? Les valeurs actuelles des entrées sont conservées. Cette action est irréversible.",
+        "clearAllFailed": "Échec de la suppression de l'historique"
       }
     },
     "sidebar": {
@@ -365,6 +379,32 @@
       "noAttachments": "Aucune pièce jointe",
       "history": "Historique",
       "noHistory": "Aucun historique pour l’instant",
+      "historyChanged": "Modifié : {{fields}}",
+      "historyCreated": "Créé",
+      "historyEarliestKept": "Version conservée la plus ancienne",
+      "restoreVersion": "Restaurer cette version",
+      "restoreHistoryConfirmTitle": "Restaurer la version",
+      "restoreHistoryConfirm": "Restaurer cette entrée à la version du {{date}} ? L'état actuel est d'abord enregistré dans l'historique, vous pourrez donc annuler.",
+      "restoreHistorySuccess": "Entrée restaurée à la version sélectionnée",
+      "restoreHistoryFailed": "Échec de la restauration de l'entrée",
+      "restoreHistoryUnchanged": "Cette version correspond à l'entrée actuelle — rien à restaurer",
+      "clearHistory": "Effacer l'historique",
+      "clearHistoryConfirmTitle": "Effacer l'historique",
+      "clearHistoryConfirm": "Supprimer définitivement l'historique des versions enregistré de cette entrée ? Ses valeurs actuelles sont conservées. Cette action est irréversible.",
+      "clearHistorySuccess": "Historique de l'entrée effacé",
+      "clearHistoryFailed": "Échec de l'effacement de l'historique de l'entrée",
+      "historyField": {
+        "title": "titre",
+        "username": "nom d’utilisateur",
+        "password": "mot de passe",
+        "url": "URL",
+        "notes": "notes",
+        "tags": "étiquettes",
+        "icon": "icône",
+        "attachments": "pièces jointes",
+        "expiry": "expiration",
+        "location": "emplacement"
+      },
       "addAttachment": "Ajouter une pièce jointe",
       "addingAttachments": "Ajout…",
       "dropToAttach": "Déposez des fichiers ici pour les joindre",

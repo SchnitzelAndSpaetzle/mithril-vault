@@ -6,13 +6,15 @@ use crate::dto::entry::{
 };
 use crate::dto::error::AppError;
 use crate::utils::atomic_write::{atomic_write, AtomicWriteOptions};
-use keepass::db::{Entry as KeepassEntry, Times, Value};
+use keepass::db::{Entry as KeepassEntry, EntryRef, History, Icon, Times, Value};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 
 use super::conversions::{
     apply_custom_fields, apply_expiry, convert_entry, is_standard_entry_field, parse_expiry_time,
     replace_custom_fields, validate_expiry_enabled,
 };
+use super::history::HistoryRetention;
 use super::recycle::{is_group_in_recycle_bin, is_in_recycle_bin};
 use super::KdbxService;
 
@@ -91,8 +93,14 @@ pub(crate) fn plan_attachment_adds(
 /// S1 wired this only into `update_entry`; S2 routes the remaining
 /// content/location mutators (bulk tags, move between real Groups, attachment
 /// add, custom-icon/Favicon) through the same helper so coverage stays uniform.
-/// Retention pruning is intentionally not enforced here yet (S6) — history may
-/// grow unbounded for now.
+/// S6 enforces the per-Vault [`HistoryRetention`] here — the single place every
+/// mutation funnels through, so the limit applies uniformly:
+/// - [`HistoryRetention::Disabled`]: no new snapshot, and the Entry's existing
+///   history is dropped — the "pruned to zero lazily on the next content edit"
+///   rule. Because only snapshot-producing content edits reach this chokepoint,
+///   reversible Recycle-Bin transitions leave a disabled Entry's history intact.
+/// - [`HistoryRetention::Unlimited`]: append, never prune.
+/// - [`HistoryRetention::Limited`]`(n)`: append, then prune to the newest `n`.
 ///
 /// Takes `&mut KeepassEntry` rather than an `EntryMut` so both the `EntryMut`
 /// call sites (via deref coercion) and the raw-`Entry` closures handed to
@@ -105,11 +113,51 @@ pub(crate) fn plan_attachment_adds(
 /// blob referenced by *any* snapshot survives a later `delete_entry_attachment`
 /// and a save/reopen round-trip, and its id is never reused. The fork also
 /// prunes genuinely-orphaned binaries and re-indexes the pool at save time.
-pub(crate) fn snapshot_entry_history(entry: &mut KeepassEntry, mut pre_image: KeepassEntry) {
-    // `History::add_entry` also strips nested history, but clearing it here
-    // makes the intent explicit and keeps the pushed snapshot minimal.
-    pre_image.history = None;
-    entry.history.get_or_insert_default().add_entry(pre_image);
+/// Pruning the oldest versions drops their references the same way, so a blob
+/// only an evicted version held becomes a genuine orphan and is reclaimed.
+pub(crate) fn snapshot_entry_history(
+    entry: &mut KeepassEntry,
+    mut pre_image: KeepassEntry,
+    retention: HistoryRetention,
+) {
+    match retention {
+        HistoryRetention::Disabled => {
+            // No new snapshots; drop any existing history lazily on this
+            // content edit (Recycle-Bin transitions never reach here).
+            entry.history = None;
+        }
+        HistoryRetention::Unlimited => {
+            // `History::add_entry` also strips nested history, but clearing it
+            // here makes the intent explicit and keeps the snapshot minimal.
+            pre_image.history = None;
+            entry.history.get_or_insert_default().add_entry(pre_image);
+        }
+        HistoryRetention::Limited(max) => {
+            pre_image.history = None;
+            entry.history.get_or_insert_default().add_entry(pre_image);
+            prune_history_to_newest(entry, max);
+        }
+    }
+}
+
+/// Keeps the newest `max` history versions of `entry`, dropping the rest. The
+/// native [`History`] exposes no remove/truncate (its `entries` vec is
+/// crate-private), so the surviving newest-first prefix is rebuilt through the
+/// public `add_entry` API — re-added oldest-first so the result stays
+/// newest-first. A no-op when history already fits within `max`.
+fn prune_history_to_newest(entry: &mut KeepassEntry, max: usize) {
+    let Some(history) = entry.history.as_ref() else {
+        return;
+    };
+    if history.get_entries().len() <= max {
+        return;
+    }
+    let kept: Vec<KeepassEntry> = history.get_entries().iter().take(max).cloned().collect();
+    let mut rebuilt = History::default();
+    for version in kept.into_iter().rev() {
+        rebuilt.add_entry(version);
+    }
+    entry.history = Some(rebuilt);
 }
 
 /// Runs `mutate` against a clone-guarded `entry`, pushing a pre-mutation
@@ -118,11 +166,12 @@ pub(crate) fn snapshot_entry_history(entry: &mut KeepassEntry, mut pre_image: Ke
 /// where one snapshot must land per touched Entry and nothing on the rest.
 fn snapshot_on_change(
     entry: &mut KeepassEntry,
+    retention: HistoryRetention,
     mutate: impl FnOnce(&mut KeepassEntry) -> bool,
 ) -> bool {
     let before = entry.clone();
     if mutate(entry) {
-        snapshot_entry_history(entry, before);
+        snapshot_entry_history(entry, before, retention);
         true
     } else {
         false
@@ -143,6 +192,234 @@ fn entry_content_changed(before: &KeepassEntry, after: &KeepassEntry) -> bool {
     b.history = None;
     b.times.last_modification = a.times.last_modification;
     a != b
+}
+
+/// Names the fields that differ between two versions of an Entry, for the
+/// history "Changed: …" line. `before` is the older version; `after` is the
+/// version immediately newer than it (the live Entry, for the newest
+/// snapshot). Field *values* — including the password and protected custom
+/// fields — are compared in-process so a rotation registers, but only the
+/// names are returned: no secret crosses IPC (ADR-0008).
+fn changed_field_names(before: &EntryRef<'_>, after: &EntryRef<'_>) -> Vec<String> {
+    let mut changed = Vec::new();
+
+    // Text fields: the union of keys present in either version. Compare the
+    // stored `Value`, not just the resolved string, so a value change *and* a
+    // protected/unprotected toggle of the same text both register. `Value`'s
+    // `PartialEq` compares protected secrets by content, so a password change
+    // is detected while only the field *name* is emitted.
+    let mut keys: BTreeSet<&str> = BTreeSet::new();
+    keys.extend(before.fields.keys().map(String::as_str));
+    keys.extend(after.fields.keys().map(String::as_str));
+    for key in keys {
+        if before.fields.get(key) != after.fields.get(key) {
+            changed.push(field_display_name(key));
+        }
+    }
+
+    // Tags: order-insensitive so a reorder isn't reported as a change.
+    let mut before_tags = before.tags.clone();
+    let mut after_tags = after.tags.clone();
+    before_tags.sort();
+    after_tags.sort();
+    if before_tags != after_tags {
+        changed.push("tags".to_string());
+    }
+
+    // Icon: builtin id or custom-icon reference (`Icon` is `PartialEq`).
+    if before.icon() != after.icon() {
+        changed.push("icon".to_string());
+    }
+
+    // Expiry: both the flag and the timestamp, so enabling/disabling or moving
+    // the date registers.
+    if (before.times.expires, before.times.expiry) != (after.times.expires, after.times.expiry) {
+        changed.push("expiry".to_string());
+    }
+
+    // Attachments: compare the set of filenames only. An add/delete/rename
+    // registers; the binary payloads are never read (ADR-0003).
+    let before_atts: BTreeSet<&str> = before.attachments_named().map(|(name, _)| name).collect();
+    let after_atts: BTreeSet<&str> = after.attachments_named().map(|(name, _)| name).collect();
+    if before_atts != after_atts {
+        changed.push("attachments".to_string());
+    }
+
+    // Location: a move between Groups bumps `location_changed` (but leaves the
+    // content untouched), so a move-only version would otherwise have a blank
+    // changed line. Second-resolution timestamps mean two moves within the same
+    // second don't register — an acceptable, non-crashing degradation versus
+    // resolving the (possibly deleted) parent group, which would panic.
+    if before.times.location_changed != after.times.location_changed {
+        changed.push("location".to_string());
+    }
+
+    changed
+}
+
+/// A stable per-version content fingerprint: a hex **keyed BLAKE3 MAC** over the
+/// snapshot's `modified_at`, every field (key + protected flag + resolved value,
+/// so a password rotation registers even when it shares a second with its
+/// predecessor), tags, icon, expiry and attachment names + bytes. This is the addressing
+/// guard for per-version reveal/restore (ADR-0008): a version is addressed by
+/// `index` but only acted on when its fingerprint still matches, so a concurrent
+/// edit that shifts the list can't silently retarget. `modified_at` alone is
+/// insufficient — `keepass::Times` stores it at second precision, so two
+/// snapshots made within the same second share it.
+///
+/// Secret *content* is fed in to disambiguate same-second rotations, but the
+/// MAC is **keyed** by a per-process backend key (`key`), so although the
+/// fingerprint is returned by `list_entry_history`, it is not an unsalted
+/// brute-force oracle over historical passwords/PINs: confirming a guess would
+/// require the key, which never leaves the backend. Inputs are streamed directly
+/// into the hasher rather than collected into an owned buffer, so no extra
+/// plaintext copy of the secrets lingers in allocator memory after the call.
+/// One restored attachment: its filename and the original `Value` (carrying the
+/// protected/unprotected flag, so restore preserves it).
+type RestoredAttachment = (String, Value<Vec<u8>>);
+
+/// Whether restoring `source` (with its `restored_attachments`) onto `live`
+/// would actually change any restorable content. Restore copies content but
+/// never identity or location, so a version that differs from the live Entry
+/// only in where it lived (a move-only snapshot) restores to a no-op. Comparing
+/// only the restorable subset — and attachments by name→`Value`, not pool id —
+/// lets the caller reject that no-op instead of bumping mtime, snapshotting,
+/// auditing, and reporting a phantom success (#328).
+fn restore_changes_content(
+    live: &EntryRef<'_>,
+    source: &KeepassEntry,
+    restored_attachments: &[RestoredAttachment],
+) -> bool {
+    if live.fields != source.fields
+        || live.tags != source.tags
+        || live.custom_data != source.custom_data
+        || live.autotype != source.autotype
+        || live.foreground_color != source.foreground_color
+        || live.background_color != source.background_color
+        || live.override_url != source.override_url
+        || live.quality_check != source.quality_check
+        || live.icon() != source.icon()
+        || live.times.expires != source.times.expires
+        || live.times.expiry != source.times.expiry
+    {
+        return true;
+    }
+    // Attachments by content (name → bytes + protection flag), not by the
+    // pool ids the rebuild would churn.
+    let live_attachments: BTreeMap<String, Value<Vec<u8>>> = live
+        .attachments_named()
+        .map(|(name, att)| (name.to_string(), att.data.clone()))
+        .collect();
+    let restored: BTreeMap<String, Value<Vec<u8>>> = restored_attachments.iter().cloned().collect();
+    live_attachments != restored
+}
+
+fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> String {
+    // Length-prefix every segment so distinct field boundaries can't collide by
+    // concatenation (e.g. key "ab"+value "c" vs key "a"+value "bc").
+    fn feed(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+        hasher.update(&(bytes.len() as u64).to_le_bytes());
+        hasher.update(bytes);
+    }
+
+    let mut hasher = blake3::Hasher::new_keyed(key);
+
+    feed(
+        &mut hasher,
+        snapshot
+            .times
+            .last_modification
+            .map(|t| t.to_string())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+
+    // Fields in key order so the fingerprint is independent of map iteration.
+    let mut keys: Vec<&str> = snapshot.fields.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    for field_key in keys {
+        feed(&mut hasher, field_key.as_bytes());
+        if let Some(value) = snapshot.fields.get(field_key) {
+            feed(
+                &mut hasher,
+                &[u8::from(matches!(value, Value::Protected(_)))],
+            );
+            feed(&mut hasher, value.get().as_bytes());
+        }
+    }
+
+    let mut tags = snapshot.tags.clone();
+    tags.sort();
+    for tag in &tags {
+        feed(&mut hasher, tag.as_bytes());
+    }
+
+    feed(&mut hasher, format!("{:?}", snapshot.icon()).as_bytes());
+    feed(
+        &mut hasher,
+        &[u8::from(snapshot.times.expires.unwrap_or(false))],
+    );
+    feed(
+        &mut hasher,
+        snapshot
+            .times
+            .expiry
+            .map(|t| t.to_string())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+
+    // Attachment name, protection flag, *and* bytes, in name order. Restore
+    // copies the whole `Value` — bytes and protected/unprotected state — so the
+    // guard must cover all three: a same-second delete + re-add of a different
+    // file (or the same file with a flipped protection flag) under the same name
+    // would otherwise share a fingerprint and let a stale index shift restore
+    // onto the wrong content. Bytes are streamed straight into the hasher (no
+    // owned copy lingers); `AttachmentRef` borrows the snapshot's Database, which
+    // outlives this call.
+    let mut attachments: Vec<_> = snapshot.attachments_named().collect();
+    attachments.sort_by(|a, b| a.0.cmp(b.0));
+    for (name, attachment) in &attachments {
+        feed(&mut hasher, name.as_bytes());
+        feed(
+            &mut hasher,
+            &[u8::from(matches!(attachment.data, Value::Protected(_)))],
+        );
+        feed(&mut hasher, attachment.get());
+    }
+
+    hasher.finalize().to_hex().to_string()
+}
+
+/// The keys of a snapshot's *protected custom* fields (excludes the standard
+/// Password etc.), sorted. Names only — values never cross IPC (ADR-0008); they
+/// let the view offer a per-version reveal action for each protected field.
+fn protected_field_keys(snapshot: &EntryRef<'_>) -> Vec<String> {
+    let mut keys: Vec<String> = snapshot
+        .fields
+        .iter()
+        .filter(|(key, value)| {
+            matches!(value, Value::Protected(_)) && !is_standard_entry_field(key)
+        })
+        .map(|(key, _)| key.clone())
+        .collect();
+    keys.sort();
+    keys
+}
+
+/// Maps a KDBX field key to the name surfaced in `changed_fields`. Standard
+/// fields read as lowercase domain names (`password`, `title`, …) so the view
+/// can localize them; custom fields keep their user-defined key verbatim.
+fn field_display_name(key: &str) -> String {
+    match key {
+        "Title" => "title",
+        "UserName" => "username",
+        "Password" => "password",
+        "URL" => "url",
+        "Notes" => "notes",
+        other => other,
+    }
+    .to_string()
 }
 
 impl KdbxService {
@@ -204,24 +481,45 @@ impl KdbxService {
     ) -> Result<Vec<EntryHistoryItem>, AppError> {
         self.with_vault(db_id, |vault| {
             let entry = vault.find_entry(id)?;
-            let items = entry.history.as_ref().map_or_else(Vec::new, |history| {
-                history
-                    .get_entries()
-                    .iter()
-                    .enumerate()
-                    .map(|(index, snapshot)| EntryHistoryItem {
-                        index,
-                        modified_at: snapshot
-                            .times
-                            .last_modification
-                            .map(|t| t.to_string())
-                            .unwrap_or_default(),
-                        title: snapshot.get_title().unwrap_or_default().to_string(),
-                        username: snapshot.get_username().unwrap_or_default().to_string(),
-                        url: snapshot.get_url().map(std::string::ToString::to_string),
-                    })
-                    .collect()
-            });
+            let count = entry.history.as_ref().map_or(0, |h| h.get_entries().len());
+            let mut items = Vec::with_capacity(count);
+            for index in 0..count {
+                let snapshot = entry
+                    .historical(index)
+                    .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+                // Diff this snapshot against the version immediately newer than
+                // it: the previous (newer) snapshot, or the live Entry when this
+                // is the newest snapshot (index 0).
+                let changed_fields = if index == 0 {
+                    changed_field_names(&snapshot, &entry)
+                } else {
+                    let newer = entry
+                        .historical(index - 1)
+                        .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+                    changed_field_names(&snapshot, &newer)
+                };
+                // The oldest version is the original "Created" snapshot only
+                // when its timestamp still matches the Entry's creation time; if
+                // retention pruned the original away, the oldest survivor is an
+                // "Earliest kept version" instead.
+                let is_creation =
+                    index + 1 == count && snapshot.times.last_modification == entry.times.creation;
+                items.push(EntryHistoryItem {
+                    index,
+                    modified_at: snapshot
+                        .times
+                        .last_modification
+                        .map(|t| t.to_string())
+                        .unwrap_or_default(),
+                    title: snapshot.get_title().unwrap_or_default().to_string(),
+                    username: snapshot.get_username().unwrap_or_default().to_string(),
+                    url: snapshot.get_url().map(std::string::ToString::to_string),
+                    changed_fields,
+                    is_creation,
+                    fingerprint: history_fingerprint(&snapshot, &self.history_fingerprint_key),
+                    protected_fields: protected_field_keys(&snapshot),
+                });
+            }
             Ok(items)
         })
     }
@@ -234,6 +532,220 @@ impl KdbxService {
                 .get_password()
                 .map(std::string::ToString::to_string)
                 .unwrap_or_default())
+        })
+    }
+
+    /// Resolves the snapshot at `index` in the newest-first history list and
+    /// verifies its content fingerprint still matches `expected_fingerprint`
+    /// before handing it to `read` (ADR-0008). The guard re-reads the live list
+    /// inside the same Vault lock, so a concurrent edit that prepended a new
+    /// version (shifting indices) or rewrote this one is caught: either the
+    /// index no longer exists or its fingerprint differs, both
+    /// [`AppError::HistoryVersionMismatch`]. This is the shared addressing
+    /// mechanism reused by Restore (#328). `read` extracts the secret from the
+    /// verified snapshot; the listing itself never carries secrets.
+    fn with_history_version<T>(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        expected_fingerprint: &str,
+        read: impl FnOnce(&EntryRef<'_>) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        self.with_vault(db_id, |vault| {
+            let entry = vault.find_entry(id)?;
+            let snapshot = entry
+                .historical(index)
+                .ok_or(AppError::HistoryVersionMismatch(index))?;
+            if history_fingerprint(&snapshot, &self.history_fingerprint_key) != expected_fingerprint
+            {
+                return Err(AppError::HistoryVersionMismatch(index));
+            }
+            read(&snapshot)
+        })
+    }
+
+    /// Fetches a historical version's password on demand, mirroring
+    /// [`get_entry_password`] for the live Entry (ADR-0008). The version is
+    /// addressed by `index` in the newest-first list and guarded by
+    /// `fingerprint`; a stale/mismatched fingerprint errors rather than
+    /// returning the wrong version's secret. The history listing never carries
+    /// this value.
+    ///
+    /// [`get_entry_password`]: Self::get_entry_password
+    pub fn get_history_entry_password(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+    ) -> Result<String, AppError> {
+        self.with_history_version(db_id, id, index, fingerprint, |snapshot| {
+            Ok(snapshot
+                .get_password()
+                .map(std::string::ToString::to_string)
+                .unwrap_or_default())
+        })
+    }
+
+    /// Fetches a historical version's protected custom field on demand,
+    /// mirroring [`get_entry_protected_custom_field`] for the live Entry. Same
+    /// index+fingerprint guard as [`get_history_entry_password`]; a non-existent
+    /// or unprotected key errors exactly as the live path does.
+    ///
+    /// [`get_entry_protected_custom_field`]: Self::get_entry_protected_custom_field
+    pub fn get_history_protected_field(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+        key: &str,
+    ) -> Result<CustomFieldValue, AppError> {
+        if is_standard_entry_field(key) {
+            return Err(AppError::CustomFieldNotFound(key.to_string()));
+        }
+        self.with_history_version(db_id, id, index, fingerprint, |snapshot| {
+            let value = snapshot
+                .fields
+                .get(key)
+                .ok_or_else(|| AppError::CustomFieldNotFound(key.to_string()))?;
+            match value {
+                Value::Protected(_) => Ok(CustomFieldValue {
+                    key: key.to_string(),
+                    value: value.get().clone(),
+                }),
+                Value::Unprotected(_) => Err(AppError::CustomFieldNotProtected(key.to_string())),
+            }
+        })
+    }
+
+    /// Restores an Entry to a past version, addressed by `index` in the
+    /// newest-first history list and guarded by `fingerprint` — the same
+    /// addressing mechanism as the per-version reveal (ADR-0008); a
+    /// stale/mismatched guard errors [`AppError::HistoryVersionMismatch`]
+    /// rather than restoring the wrong version. The current state is first
+    /// snapshotted into history (so the restore is itself undoable), then the
+    /// live Entry's content — all fields including the password — is overwritten
+    /// from the chosen version and `last_modification` bumped to now. The
+    /// Entry's UUID and parent Group are left untouched: a version carries
+    /// content, not location. The restored secret is read in-process and never
+    /// crosses IPC.
+    pub fn restore_entry_history(
+        &self,
+        db_id: &str,
+        id: &str,
+        index: usize,
+        fingerprint: &str,
+    ) -> Result<Entry, AppError> {
+        self.with_vault_mut(db_id, |vault| {
+            let eid = vault.find_entry_id(id)?;
+            let retention = vault.history_retention();
+            let group_uuid = {
+                let mut entry = vault.entry_mut(id)?;
+
+                // Resolve + guard the target version, then clone its content out
+                // before any mutation. The fingerprint is re-checked against the
+                // live snapshot inside the same Vault lock, so a concurrent edit
+                // that shifted indices is caught here. A full owned clone of the
+                // snapshot Entry is taken so every content field — text fields
+                // (incl. the password), tags, icon, expiry, attachments, and the
+                // remaining metadata — can be reapplied without holding the
+                // immutable borrow across the mutation.
+                let (source, restored_attachments): (KeepassEntry, Vec<RestoredAttachment>) = {
+                    let live = entry.as_ref();
+                    let snapshot = live
+                        .historical(index)
+                        .ok_or(AppError::HistoryVersionMismatch(index))?;
+                    if history_fingerprint(&snapshot, &self.history_fingerprint_key) != fingerprint
+                    {
+                        return Err(AppError::HistoryVersionMismatch(index));
+                    }
+                    // Attachments must be read here, while the snapshot's
+                    // `EntryRef` still has Database access — the owned clone
+                    // below can't resolve binaries on its own (the map is
+                    // crate-private and keyed into the pool). The whole `Value`
+                    // is cloned (not just the bytes) so a protected attachment
+                    // from an imported vault stays protected after restore.
+                    let attachments = snapshot
+                        .attachments_named()
+                        .map(|(name, att)| (name.to_string(), att.data.clone()))
+                        .collect();
+                    ((*snapshot).clone(), attachments)
+                };
+
+                // Reject a no-op restore: a version that differs from the live
+                // Entry only in where it lived (a move-only snapshot) would
+                // otherwise bump mtime, append a junk history version, audit,
+                // save, and report a phantom success even though nothing
+                // restorable changed. Checked before any mutation.
+                if !restore_changes_content(&entry.as_ref(), &source, &restored_attachments) {
+                    return Err(AppError::HistoryVersionUnchanged);
+                }
+
+                // Snapshot the pre-restore state so the restore is undoable: it
+                // becomes the newest history version. Attachment binaries that
+                // the live Entry still references are kept alive by this
+                // snapshot's reference even though the live map is overwritten
+                // below (the fork's retention rule).
+                let before: KeepassEntry = (*entry.as_ref()).clone();
+
+                // Overwrite content from the chosen version. Identity (UUID),
+                // location (parent Group), and the history list are deliberately
+                // left untouched — a version carries content, not where the
+                // Entry lives.
+                entry.fields.clone_from(&source.fields);
+                entry.tags.clone_from(&source.tags);
+                entry.custom_data.clone_from(&source.custom_data);
+                entry.autotype.clone_from(&source.autotype);
+                entry.foreground_color.clone_from(&source.foreground_color);
+                entry.background_color.clone_from(&source.background_color);
+                entry.override_url.clone_from(&source.override_url);
+                entry.quality_check = source.quality_check;
+
+                // Icon: the field is crate-private, so go through the setters.
+                match source.icon() {
+                    None => entry.set_icon_none(),
+                    Some(Icon::BuiltIn(n)) => entry.set_icon_builtin(*n),
+                    Some(Icon::Custom(cid)) => entry
+                        .set_icon_custom(*cid)
+                        .map_err(|e| AppError::Kdbx(e.to_string()))?,
+                }
+
+                // Attachments: the map is crate-private and shares binary-pool
+                // ids, so rebuild it through the public add/remove API. Re-adding
+                // by value restores the same bytes (and protection flag) under
+                // the same names; ids the live Entry no longer references survive
+                // via `before` and are pruned at save time.
+                let live_names: Vec<String> = entry
+                    .as_ref()
+                    .attachments_named()
+                    .map(|(name, _)| name.to_string())
+                    .collect();
+                for name in live_names {
+                    entry.remove_attachment_by_name(&name);
+                }
+                for (name, value) in restored_attachments {
+                    entry.add_attachment(name, value);
+                }
+
+                // Expiry (flag + timestamp), then bump last_modification to now.
+                entry.times.expires = source.times.expires;
+                entry.times.expiry = source.times.expiry;
+                entry.times.last_modification = Some(Times::now());
+
+                snapshot_entry_history(&mut entry, before, retention);
+
+                entry.as_ref().parent().id().uuid().to_string()
+            };
+
+            let entry_ref = vault
+                .db()
+                .entry(eid)
+                .ok_or_else(|| AppError::EntryNotFound(id.to_string()))?;
+            let result = convert_entry(&entry_ref, &group_uuid);
+            vault.mark_modified();
+            Ok(result)
         })
     }
 
@@ -304,6 +816,7 @@ impl KdbxService {
         filename: &str,
     ) -> Result<(), AppError> {
         self.with_vault_mut(db_id, |vault| {
+            let retention = vault.history_retention();
             {
                 let mut entry = vault.entry_mut(entry_id)?;
                 if entry.attachment_by_name_mut(filename).is_none() {
@@ -314,7 +827,7 @@ impl KdbxService {
                 let before: KeepassEntry = (*entry.as_ref()).clone();
                 entry.remove_attachment_by_name(filename);
                 entry.times.last_modification = Some(Times::now());
-                snapshot_entry_history(&mut entry, before);
+                snapshot_entry_history(&mut entry, before, retention);
             }
             vault.mark_modified();
             Ok(())
@@ -406,6 +919,7 @@ impl KdbxService {
         }
 
         self.with_vault_mut(db_id, |vault| {
+            let retention = vault.history_retention();
             let stored_name = {
                 let mut entry = vault.entry_mut(entry_id)?;
                 // Snapshot the pre-add state before the new binary lands (#323).
@@ -415,7 +929,7 @@ impl KdbxService {
                 let stored_name = unique_attachment_name(&entry.as_ref(), &filename);
                 entry.add_attachment(stored_name.clone(), Value::unprotected(bytes));
                 entry.times.last_modification = Some(Times::now());
-                snapshot_entry_history(&mut entry, before);
+                snapshot_entry_history(&mut entry, before, retention);
                 stored_name
             };
             vault.mark_modified();
@@ -526,6 +1040,7 @@ impl KdbxService {
     ) -> Result<Entry, AppError> {
         self.with_vault_mut(db_id, |vault| {
             let eid = vault.find_entry_id(id)?;
+            let retention = vault.history_retention();
             // Validate the expiry timestamp before applying any field updates so
             // a malformed payload leaves the entry unchanged.
             let expiry = parse_expiry_time(data.expiry_time.as_deref())?;
@@ -596,7 +1111,7 @@ impl KdbxService {
                 // versions. S1 wires the chokepoint here; S2 widens it to the
                 // other mutators.
                 if entry_content_changed(&before, &entry.as_ref()) {
-                    snapshot_entry_history(&mut entry, before);
+                    snapshot_entry_history(&mut entry, before, retention);
                 }
 
                 entry.as_ref().parent().id().uuid().to_string()
@@ -648,8 +1163,11 @@ impl KdbxService {
 
             // One snapshot per touched Entry, captured before its tags are
             // rewritten (#323), kept only when the rename actually changed it.
+            let retention = vault.history_retention();
             let count = vault.modify_all_entries(&|entry| {
-                snapshot_on_change(entry, |e| rename_tag_in_entry(e, old_name, new_name))
+                snapshot_on_change(entry, retention, |e| {
+                    rename_tag_in_entry(e, old_name, new_name)
+                })
             });
 
             if count > 0 {
@@ -664,8 +1182,9 @@ impl KdbxService {
     /// Returns the number of entries that were modified.
     pub fn delete_tag(&self, db_id: &str, tag_name: &str) -> Result<u32, AppError> {
         self.with_vault_mut(db_id, |vault| {
+            let retention = vault.history_retention();
             let count = vault.modify_all_entries(&|entry| {
-                snapshot_on_change(entry, |e| delete_tag_in_entry(e, tag_name))
+                snapshot_on_change(entry, retention, |e| delete_tag_in_entry(e, tag_name))
             });
 
             if count > 0 {
@@ -704,6 +1223,7 @@ impl KdbxService {
                 });
                 current_parent != target_gid && !touches_recycle
             };
+            let retention = vault.history_retention();
 
             let now = Times::now();
             {
@@ -718,7 +1238,7 @@ impl KdbxService {
                     .move_to(target_gid)
                     .map_err(|e| AppError::Kdbx(e.to_string()))?;
                 if should_snapshot {
-                    snapshot_entry_history(&mut entry, before);
+                    snapshot_entry_history(&mut entry, before, retention);
                 }
             }
 
@@ -944,12 +1464,71 @@ mod tests {
     use crate::dto::entry::{AttachmentMeta, AttachmentSizeStatus};
     use crate::services::kdbx::test_support::create_test_database;
     use keepass::db::Value;
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
 
     /// The hard cap the attachment add/round-trip tests inject. A generous
     /// fixed value so the round-trip cases never trip the cap; the over-cap
     /// cases seed a file one byte past it.
     const TEST_HARD_CAP: u64 = 25 * 1024 * 1024;
+
+    #[test]
+    fn history_fingerprint_is_keyed_and_deterministic() {
+        // The fingerprint is exposed by `list_entry_history`, so it must be a
+        // keyed MAC rather than an unsalted hash of the snapshot's (secret-
+        // bearing) content — otherwise it would be an offline brute-force oracle
+        // over historical passwords/PINs. This pins that property: fixed key →
+        // stable output, different key → different output.
+        let (service, _dir, db, entry_a, _entry_b) = create_test_database();
+        let key1 = [1u8; blake3::KEY_LEN];
+        let key2 = [2u8; blake3::KEY_LEN];
+        service
+            .with_vault(&db, |vault| {
+                let entry = vault.find_entry(&entry_a)?;
+                let under_key1 = history_fingerprint(&entry, &key1);
+                assert_eq!(
+                    under_key1,
+                    history_fingerprint(&entry, &key1),
+                    "same key + same content must be deterministic"
+                );
+                assert_ne!(
+                    under_key1,
+                    history_fingerprint(&entry, &key2),
+                    "a different key must yield a different fingerprint (keyed MAC)"
+                );
+                Ok(())
+            })
+            .expect("with_vault");
+    }
+
+    #[test]
+    fn history_fingerprint_distinguishes_attachment_protection_state() {
+        // Restore preserves an attachment's protected/unprotected `Value`, so the
+        // guard must too: two same-second versions whose attachment differs only
+        // by that flag (same name, same bytes) must not share a fingerprint, or a
+        // stale index could shift restore onto the wrong protection state. The
+        // app's own add path only stores unprotected, so this is constructed
+        // directly via the keepass API (imported vaults can carry protected
+        // binaries).
+        let (service, _dir, db, entry_a, _entry_b) = create_test_database();
+        let key = [7u8; blake3::KEY_LEN];
+        service
+            .with_vault_mut(&db, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.add_attachment("f.txt", Value::protected(vec![1u8, 2, 3]));
+                let protected_fp = history_fingerprint(&entry.as_ref(), &key);
+
+                entry.remove_attachment_by_name("f.txt");
+                entry.add_attachment("f.txt", Value::unprotected(vec![1u8, 2, 3]));
+                let unprotected_fp = history_fingerprint(&entry.as_ref(), &key);
+
+                assert_ne!(
+                    protected_fp, unprotected_fp,
+                    "fingerprint must reflect an attachment's protection state, not just its bytes"
+                );
+                Ok(())
+            })
+            .expect("with_vault_mut");
+    }
 
     #[test]
     fn classify_attachment_size_walks_the_thresholds() {
@@ -2203,6 +2782,391 @@ mod tests {
     }
 
     #[test]
+    fn the_newest_version_lists_the_fields_changed_against_the_live_entry() {
+        // `changed_fields` on a version names what differs from the version
+        // immediately newer than it — and the *newest* snapshot's newer
+        // neighbour is the live Entry. Entry A starts as username "alice";
+        // renaming it to "bob" leaves the sole snapshot (still "alice")
+        // reporting that username changed relative to the live "bob".
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("bob".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename username");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after edit");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["username".to_string()],
+            "the newest snapshot diffs against the live Entry; only username changed"
+        );
+    }
+
+    #[test]
+    fn each_version_diffs_against_the_next_newer_version_not_the_live_entry() {
+        // A multi-edit sequence: rename the username (alice → bob), then the
+        // title (Entry A → Renamed). Each snapshot's `changed_fields` reflects
+        // the *single* field that changed when it was superseded — proving the
+        // diff walks neighbour-to-neighbour, not every snapshot against live.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("bob".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename username");
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    title: Some("Renamed".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename title");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after two edits");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["title".to_string()],
+            "newest snapshot vs live Entry: only the title changed"
+        );
+        assert_eq!(
+            history[1].changed_fields,
+            vec!["username".to_string()],
+            "older snapshot vs its newer neighbour: only the username changed"
+        );
+    }
+
+    #[test]
+    fn a_password_rotation_surfaces_the_name_password_with_no_value() {
+        // The protected Password field is compared in-process (so a rotation is
+        // detected), but `changed_fields` carries only the name `password`. The
+        // DTO has no password field at all, so the secret structurally cannot
+        // cross IPC — names only (ADR-0008).
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    password: Some(SecureString::from("rotated-secret")),
+                    ..empty_update()
+                },
+            )
+            .expect("rotate password");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after rotation");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["password".to_string()],
+            "a changed password surfaces by name only"
+        );
+    }
+
+    #[test]
+    fn a_tags_only_edit_surfaces_the_tags_attribute() {
+        // Snapshots are captured for tag edits too (PRD #321), so a version
+        // created by a tags-only change must carry a meaningful changed line.
+        // Entry A starts untagged; applying a tag surfaces `tags`.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    tags: Some(vec!["work".to_string()]),
+                    ..empty_update()
+                },
+            )
+            .expect("apply a tag");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after tag edit");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["tags".to_string()],
+            "a tags-only edit surfaces the `tags` attribute"
+        );
+    }
+
+    #[test]
+    fn an_icon_change_surfaces_the_icon_attribute() {
+        // Entry A is seeded with builtin icon 0; switching it to icon 1 is a
+        // content change that snapshots, and the diff names `icon`.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    icon_id: Some(1),
+                    ..empty_update()
+                },
+            )
+            .expect("change icon");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after icon change");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["icon".to_string()],
+            "an icon change surfaces the `icon` attribute"
+        );
+    }
+
+    #[test]
+    fn enabling_expiry_surfaces_the_expiry_attribute() {
+        // Entry A has no expiry; enabling it with a timestamp is a content
+        // change that snapshots, and the diff names `expiry`.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    expires: Some(true),
+                    expiry_time: Some("2030-01-01T12:00:00+00:00".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("enable expiry");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after enabling expiry");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["expiry".to_string()],
+            "enabling expiry surfaces the `expiry` attribute"
+        );
+    }
+
+    #[test]
+    fn deleting_an_attachment_surfaces_the_attachments_attribute() {
+        // Attachment add/delete snapshots too (PRD #321). Seed an attachment,
+        // then delete it: the captured version still holds the file while the
+        // live Entry has none, so the diff names `attachments` — by name, never
+        // the blob.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
+
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after attachment delete");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["attachments".to_string()],
+            "an attachment delete surfaces the `attachments` attribute"
+        );
+    }
+
+    #[test]
+    fn toggling_a_custom_field_protection_surfaces_its_name() {
+        // Toggling a custom field between unprotected and protected without
+        // changing its text still snapshots (the stored `Value` variant
+        // changed), so the diff must report the field by name even though the
+        // resolved plaintext is identical on both sides.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    custom_fields: Some(BTreeMap::from([("API".to_string(), "xyz".to_string())])),
+                    ..empty_update()
+                },
+            )
+            .expect("add an unprotected custom field");
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    protected_custom_fields: Some(BTreeMap::from([(
+                        "API".to_string(),
+                        SecureString::from("xyz"),
+                    )])),
+                    ..empty_update()
+                },
+            )
+            .expect("re-store the same value as protected");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after protection toggle");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["API".to_string()],
+            "a protection toggle with unchanged text surfaces the field by name"
+        );
+    }
+
+    #[test]
+    fn moving_an_entry_between_groups_surfaces_the_location_attribute() {
+        // A move between real Groups snapshots (#321/#323) but changes none of
+        // the text fields, tags, icon, expiry, or attachments — only the
+        // entry's location. The diff reports `location` so the version isn't a
+        // blank "Changed:" row.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let target = service
+            .create_group(&db_path, None, "Target", None)
+            .expect("create target group");
+
+        service
+            .move_entry(&db_path, &entry_a, &target.id)
+            .expect("move the entry");
+
+        // The pre-move snapshot keeps the entry's creation-time
+        // `location_changed`; the live entry's is bumped to the move instant.
+        // In a fast test both land in the same second, so force them apart to
+        // model the realistic create-then-move-later case.
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                entry.times.location_changed = chrono::NaiveDate::from_ymd_opt(2099, 1, 1)
+                    .and_then(|d| d.and_hms_opt(0, 0, 0));
+                Ok(())
+            })
+            .expect("distinguish the move timestamp");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after move");
+
+        assert_eq!(
+            history[0].changed_fields,
+            vec!["location".to_string()],
+            "a move between groups surfaces the `location` attribute"
+        );
+    }
+
+    #[test]
+    fn the_oldest_version_is_the_creation_when_its_timestamp_matches_creation() {
+        // The original snapshot's `last_modification` is the Entry's creation
+        // instant (it was never edited while live). So after editing, the oldest
+        // kept version is flagged `is_creation` — the view labels it "Created".
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        service
+            .update_entry(
+                &db_path,
+                &entry_a,
+                UpdateEntryData {
+                    username: Some("bob".to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("rename username");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after edit");
+
+        let oldest = history.last().expect("a version exists");
+        assert!(
+            oldest.is_creation,
+            "the original snapshot's timestamp matches the Entry's creation time"
+        );
+    }
+
+    #[test]
+    fn the_oldest_version_is_not_the_creation_after_the_original_was_evicted() {
+        // Once retention prunes the original snapshot away, the oldest survivor
+        // postdates the Entry's creation, so it is NOT flagged `is_creation` —
+        // the view labels it "Earliest kept version". Pruning isn't enforced
+        // yet, so simulate eviction by dropping the oldest (creation) snapshot.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        for name in ["bob", "carol"] {
+            service
+                .update_entry(
+                    &db_path,
+                    &entry_a,
+                    UpdateEntryData {
+                        username: Some(name.to_string()),
+                        ..empty_update()
+                    },
+                )
+                .expect("rename username");
+        }
+
+        // Rebuild history keeping only the newest snapshot, mimicking eviction
+        // of the original creation version. Stamp the survivor with a clearly
+        // later timestamp, since a real evicted-original survivor postdates
+        // creation (KDBX timestamps are second-resolution, so same-second test
+        // edits would otherwise all collide with the creation instant).
+        service
+            .with_vault_mut(&db_path, |vault| {
+                let mut entry = vault.entry_mut(&entry_a)?;
+                if let Some(history) = entry.history.as_mut() {
+                    let mut newest = history.get_entries().first().cloned();
+                    if let Some(snapshot) = newest.as_mut() {
+                        snapshot.times.last_modification =
+                            chrono::NaiveDate::from_ymd_opt(2099, 1, 1)
+                                .and_then(|d| d.and_hms_opt(0, 0, 0));
+                    }
+                    let mut rebuilt = keepass::db::History::default();
+                    if let Some(snapshot) = newest {
+                        rebuilt.add_entry(snapshot);
+                    }
+                    entry.history = Some(rebuilt);
+                }
+                Ok(())
+            })
+            .expect("evict the original snapshot");
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after eviction");
+
+        assert_eq!(history.len(), 1, "only the newest snapshot survives");
+        let oldest = history.last().expect("a version exists");
+        assert!(
+            !oldest.is_creation,
+            "an earliest-kept survivor postdates creation and is not the original"
+        );
+    }
+
+    #[test]
     fn history_survives_a_save_then_reopen_round_trip() {
         // The interop proof point (ADR-0008): a captured version is real native
         // KDBX history, so it must survive being written to disk and read back.
@@ -2238,6 +3202,132 @@ mod tests {
         assert_eq!(
             history[0].username, "alice",
             "the reopened version preserves the prior username"
+        );
+    }
+
+    /// Applies a single username edit — one content change, so one snapshot
+    /// under any non-disabled limit.
+    fn edit_username(service: &KdbxService, db_path: &str, entry_id: &str, username: &str) {
+        service
+            .update_entry(
+                db_path,
+                entry_id,
+                UpdateEntryData {
+                    username: Some(username.to_string()),
+                    ..empty_update()
+                },
+            )
+            .expect("edit username");
+    }
+
+    /// Renames the Entry's username `count` times, yielding `count` history
+    /// snapshots (each edit changes content, so each is kept). Returns nothing;
+    /// callers inspect via [`history_len`].
+    fn edit_username_n_times(service: &KdbxService, db_path: &str, entry_id: &str, count: usize) {
+        for i in 0..count {
+            edit_username(service, db_path, entry_id, &format!("user{i}"));
+        }
+    }
+
+    /// The number of history versions currently recorded for an Entry.
+    fn history_len(service: &KdbxService, db_path: &str, entry_id: &str) -> usize {
+        service
+            .list_entry_history(db_path, entry_id)
+            .expect("list history")
+            .len()
+    }
+
+    #[test]
+    fn positive_limit_prunes_oldest_keeping_newest_n() {
+        // With a positive History Limit, appending a snapshot beyond the cap
+        // prunes the oldest, keeping exactly the newest N (ADR-0008).
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        service
+            .update_vault_history_settings(&db_path, Some(3))
+            .expect("set limit to 3");
+
+        // Seed username is "alice"; five edits would otherwise yield five
+        // snapshots (pre-images: alice, user0, user1, user2, user3).
+        edit_username_n_times(&service, &db_path, &entry_a, 5);
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history");
+        assert_eq!(history.len(), 3, "history is capped at the limit of 3");
+        assert_eq!(
+            history[0].username, "user3",
+            "newest kept snapshot is the most recent pre-image"
+        );
+        assert_eq!(
+            history[2].username, "user1",
+            "oldest kept snapshot; 'alice' and 'user0' were pruned"
+        );
+    }
+
+    #[test]
+    fn negative_limit_lets_history_grow_unbounded() {
+        // A negative History Limit means unlimited: every edit accrues a
+        // version, past the default cap of 10.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        service
+            .update_vault_history_settings(&db_path, Some(-1))
+            .expect("set unlimited");
+
+        edit_username_n_times(&service, &db_path, &entry_a, 12);
+
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            12,
+            "unlimited history is never pruned"
+        );
+    }
+
+    #[test]
+    fn absent_limit_caps_history_at_the_default_of_ten() {
+        // A brand-new Vault never sets the field; history must still be capped
+        // at the default of 10, NOT left unbounded (ADR-0008).
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        edit_username_n_times(&service, &db_path, &entry_a, 15);
+
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            10,
+            "absent History Limit resolves to the bounded default of 10"
+        );
+    }
+
+    #[test]
+    fn disabled_limit_adds_no_snapshot_and_prunes_existing_lazily() {
+        // `0` disables history: no new snapshots, and existing history is pruned
+        // to zero lazily on the Entry's *next* edit — not wiped the instant the
+        // limit is set.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+
+        // Accrue some history under the default limit first.
+        edit_username_n_times(&service, &db_path, &entry_a, 3);
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            3,
+            "precondition: three versions exist"
+        );
+
+        // Disabling must not wipe the existing history instantly.
+        service
+            .update_vault_history_settings(&db_path, Some(0))
+            .expect("disable history");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            3,
+            "setting the limit to 0 does not wipe history instantly"
+        );
+
+        // The next content edit adds no snapshot and prunes existing history to zero.
+        edit_username(&service, &db_path, &entry_a, "after-disable");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            0,
+            "disabled history is pruned to zero on the next content edit"
         );
     }
 
@@ -2613,6 +3703,45 @@ mod tests {
         assert!(
             history.is_empty(),
             "restoring from the Recycle Bin must not create a history version"
+        );
+    }
+
+    #[test]
+    fn disabled_history_survives_trash_and_restore_then_prunes_on_next_content_edit() {
+        // Disabling history must not destroy existing versions through a
+        // reversible trash/restore round-trip — only a genuine content edit
+        // prunes them to zero. This pins the "next *content* edit" invariant:
+        // Recycle-Bin transitions are excluded from the snapshot chokepoint
+        // (#323 / ADR-0008), so they must neither snapshot nor prune.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        let root = service.get_info(&db_path).expect("info").root_group_id;
+
+        // Accrue history under the default limit, then disable.
+        edit_username_n_times(&service, &db_path, &entry_a, 3);
+        service
+            .update_vault_history_settings(&db_path, Some(0))
+            .expect("disable history");
+
+        // Trash then restore: a reversible location round-trip must preserve
+        // the (already-frozen) history untouched.
+        service
+            .delete_entry(&db_path, &entry_a)
+            .expect("send to recycle bin");
+        service
+            .move_entry(&db_path, &entry_a, &root)
+            .expect("restore from recycle bin");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            3,
+            "history survives trash/restore while disabled"
+        );
+
+        // The next genuine content edit prunes the disabled history to zero.
+        edit_username(&service, &db_path, &entry_a, "after-restore");
+        assert_eq!(
+            history_len(&service, &db_path, &entry_a),
+            0,
+            "the next content edit prunes disabled history to zero"
         );
     }
 

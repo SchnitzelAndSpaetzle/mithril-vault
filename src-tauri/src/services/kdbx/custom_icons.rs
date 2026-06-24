@@ -52,6 +52,7 @@ impl KdbxService {
                 )));
             };
 
+            let retention = vault.history_retention();
             let changed = {
                 let mut entry = vault.entry_mut(entry_id)?;
                 if matches!(entry.icon(), Some(Icon::Custom(cid)) if *cid == icon_cid) {
@@ -63,7 +64,7 @@ impl KdbxService {
                         .set_icon_custom(icon_cid)
                         .map_err(|e| AppError::Kdbx(e.to_string()))?;
                     entry.times.last_modification = Some(Times::now());
-                    snapshot_entry_history(&mut entry, before);
+                    snapshot_entry_history(&mut entry, before, retention);
                     true
                 }
             };
@@ -77,6 +78,7 @@ impl KdbxService {
 
     pub fn clear_entry_custom_icon(&self, db_id: &str, entry_id: &str) -> Result<bool, AppError> {
         self.with_vault_mut(db_id, |vault| {
+            let retention = vault.history_retention();
             let changed = {
                 let mut entry = vault.entry_mut(entry_id)?;
                 if matches!(entry.icon(), Some(Icon::Custom(_))) {
@@ -84,7 +86,7 @@ impl KdbxService {
                     let before = (*entry.as_ref()).clone();
                     entry.set_icon_none();
                     entry.times.last_modification = Some(Times::now());
-                    snapshot_entry_history(&mut entry, before);
+                    snapshot_entry_history(&mut entry, before, retention);
                     true
                 } else {
                     false
@@ -129,6 +131,7 @@ impl KdbxService {
                 .find(|icon| hash_bytes(&icon.data) == target_hash)
                 .map(|icon| icon.id());
 
+            let retention = vault.history_retention();
             let changed = {
                 let mut entry = vault
                     .db_mut()
@@ -150,13 +153,13 @@ impl KdbxService {
                             .set_icon_custom(cid)
                             .map_err(|e| AppError::Kdbx(e.to_string()))?;
                         entry.times.last_modification = Some(Times::now());
-                        snapshot_entry_history(&mut entry, before);
+                        snapshot_entry_history(&mut entry, before, retention);
                         true
                     }
                     None => {
                         entry.set_icon_custom_new(icon_bytes.to_vec());
                         entry.times.last_modification = Some(Times::now());
-                        snapshot_entry_history(&mut entry, before);
+                        snapshot_entry_history(&mut entry, before, retention);
                         true
                     }
                 }

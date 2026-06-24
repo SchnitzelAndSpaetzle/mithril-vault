@@ -231,6 +231,7 @@ impl AuditService {
             | AuditEvent::EntryPasswordCopied { timestamp, .. }
             | AuditEvent::EntryProtectedFieldRevealed { timestamp, .. }
             | AuditEvent::EntryAttachmentExported { timestamp, .. }
+            | AuditEvent::EntryHistoryRestored { timestamp, .. }
             | AuditEvent::PreferencesSecurityChanged { timestamp, .. }
             | AuditEvent::AuditCleared { timestamp } => *timestamp,
         };
@@ -424,6 +425,18 @@ impl AuditService {
             timestamp: Utc::now(),
             entry_id: entry_id.to_string(),
             attachment_id: attachment_id.to_string(),
+        };
+        self.record(vault_path, &event);
+    }
+
+    /// Appends one `entry.history_restored` event after an Entry is
+    /// successfully restored to a past version (#328), carrying the Entry's
+    /// UUID. Infallible by contract — restoring a version is a content-changing
+    /// action the audit log records, the same as a reveal or export.
+    pub fn record_entry_history_restored(&self, vault_path: &Path, entry_id: &str) {
+        let event = AuditEvent::EntryHistoryRestored {
+            timestamp: Utc::now(),
+            entry_id: entry_id.to_string(),
         };
         self.record(vault_path, &event);
     }
@@ -649,6 +662,7 @@ fn event_timestamp(event: &AuditEvent) -> DateTime<Utc> {
         | AuditEvent::EntryPasswordCopied { timestamp, .. }
         | AuditEvent::EntryProtectedFieldRevealed { timestamp, .. }
         | AuditEvent::EntryAttachmentExported { timestamp, .. }
+        | AuditEvent::EntryHistoryRestored { timestamp, .. }
         | AuditEvent::PreferencesSecurityChanged { timestamp, .. }
         | AuditEvent::AuditCleared { timestamp } => *timestamp,
     }

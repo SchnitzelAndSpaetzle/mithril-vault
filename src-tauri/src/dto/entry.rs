@@ -145,6 +145,29 @@ pub struct EntryHistoryItem {
     pub title: String,
     pub username: String,
     pub url: Option<String>,
+    /// Names of the fields/attributes that differ from the version immediately
+    /// newer than this one (the newest snapshot diffs against the live Entry).
+    /// Names only — field *values*, including the password and protected custom
+    /// fields, are compared in-process but never cross IPC (ADR-0008).
+    pub changed_fields: Vec<String>,
+    /// True only for the oldest version, and only when its `modified_at` equals
+    /// the Entry's creation time — i.e. this is the original "Created" version.
+    /// When false on the oldest version, the true creation snapshot was pruned
+    /// away and the view labels it "Earliest kept version".
+    pub is_creation: bool,
+    /// Stable content fingerprint of this snapshot: a hex SHA-256 over the
+    /// version's fields (values included, so a same-second password rotation
+    /// changes it), tags, icon, expiry, attachment names and `modified_at`.
+    /// The reveal/restore commands address a version by `index` **guarded by**
+    /// this fingerprint, never by `modified_at` alone — `keepass::Times` stores
+    /// timestamps at second precision, so two snapshots made within the same
+    /// second share a `modified_at` and a timestamp guard would act on the
+    /// wrong version (ADR-0008). The hash is one-way: it carries no secret.
+    pub fingerprint: String,
+    /// Keys of this version's *protected* custom fields — names only, never
+    /// values (ADR-0008). Lets the view render a per-version reveal action for
+    /// each protected field, fetched on demand via `get_history_protected_field`.
+    pub protected_fields: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

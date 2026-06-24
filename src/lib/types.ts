@@ -92,13 +92,25 @@ export type Entry = z.infer<typeof EntrySchema>;
 /// One past version of an Entry, surfaced from native KDBX history (ADR-0008).
 /// Non-secret display fields only — passwords and protected values are never
 /// part of the listing. `index` is the version's position in the newest-first
-/// list; `modifiedAt` is the snapshot's timestamp.
+/// list; `modifiedAt` is the snapshot's timestamp. `changedFields` names what
+/// differs from the next-newer version (names only — never values); the oldest
+/// version is the original "Created" snapshot when `isCreation` is true.
 export const EntryHistoryItemSchema = z.object({
   index: z.number().int().nonnegative(),
   modifiedAt: z.string(),
   title: z.string(),
   username: z.string(),
   url: z.string().nullable().optional(),
+  changedFields: z.array(z.string()),
+  isCreation: z.boolean(),
+  // Stable content fingerprint of this snapshot. The reveal commands address a
+  // version by `index` *guarded by* this fingerprint (never `modifiedAt` alone,
+  // which is second-precision) — the view echoes it back so a concurrent edit
+  // that shifts the list can't silently retarget the reveal.
+  fingerprint: z.string(),
+  // Keys of this version's protected custom fields (names only — never values),
+  // so the view can render a per-version reveal action for each.
+  protectedFields: z.array(z.string()),
 });
 export type EntryHistoryItem = z.infer<typeof EntryHistoryItemSchema>;
 
@@ -268,6 +280,18 @@ export const DatabaseConfigSchema = z.object({
 });
 export type DatabaseConfig = z.infer<typeof DatabaseConfigSchema>;
 
+/**
+ * The per-Vault Entry-History retention, surfaced as the raw KDBX
+ * `Meta.history_max_items` value. This is the writable vault-meta surface, kept
+ * distinct from the read-only {@link DatabaseConfig}. `maxItems` is `null` when
+ * the field is absent (effective default of 10); negative = unlimited; `0` =
+ * disabled; positive `n` = keep newest `n`.
+ */
+export const VaultHistorySettingsSchema = z.object({
+  maxItems: z.number().int().nullable(),
+});
+export type VaultHistorySettings = z.infer<typeof VaultHistorySettingsSchema>;
+
 export const RecentDatabaseSchema = z.object({
   path: z.string(),
   keyfilePath: z.string().nullable(),
@@ -424,6 +448,7 @@ export const AuditEventKindSchema = z.enum([
   "entryPasswordCopied",
   "entryProtectedFieldRevealed",
   "entryAttachmentExported",
+  "entryHistoryRestored",
   "preferencesSecurityChanged",
   "auditCleared",
 ]);
