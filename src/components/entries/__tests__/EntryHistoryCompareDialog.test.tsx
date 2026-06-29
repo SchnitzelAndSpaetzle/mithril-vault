@@ -312,4 +312,57 @@ describe("EntryHistoryCompareDialog", () => {
     // A plain field is never fetched as a secret.
     expect(getProtectedCustomFieldMock).not.toHaveBeenCalled();
   });
+
+  it("treats a custom field named like a built-in token as a custom field", async () => {
+    // A user-defined custom field whose key collides with a built-in token
+    // (the backend emits both as lowercase) must render as the custom field,
+    // not the entry's built-in password.
+    getMock.mockResolvedValue(
+      makeEntry({
+        customFields: { password: "my-api-token" },
+        customFieldMeta: [{ key: "password", isProtected: false }],
+      })
+    );
+    renderDialog({
+      version: makeVersion({ index: 1 }),
+      changedFields: ["password"],
+    });
+
+    expect(await screen.findByText("my-api-token")).toBeInTheDocument();
+    expect(
+      screen.getByText("entries.detail.compare.previousNotAvailable")
+    ).toBeInTheDocument();
+    // It is the custom field, not the entry password: no password reveal.
+    expect(
+      screen.queryByRole("button", { name: "entries.detail.revealPassword" })
+    ).not.toBeInTheDocument();
+    expect(getPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt a two-sided secret reveal when protection differs across versions", async () => {
+    // "PIN" was protected in the version but is now a plain field. Fetching the
+    // current value via the protected endpoint would error, so the field must
+    // degrade to the 'previous not available' row instead of a broken reveal.
+    getMock.mockResolvedValue(
+      makeEntry({
+        customFields: { PIN: "1234" },
+        customFieldMeta: [{ key: "PIN", isProtected: false }],
+      })
+    );
+    renderDialog({
+      version: makeVersion({ index: 1, protectedFields: ["PIN"] }),
+      changedFields: ["PIN"],
+    });
+
+    expect(await screen.findByText("PIN")).toBeInTheDocument();
+    expect(
+      screen.getByText("entries.detail.compare.previousNotAvailable")
+    ).toBeInTheDocument();
+    // No reveal toggle, and neither protected endpoint is called.
+    expect(
+      screen.queryByRole("button", { name: "entries.detail.revealField" })
+    ).not.toBeInTheDocument();
+    expect(getProtectedCustomFieldMock).not.toHaveBeenCalled();
+    expect(getHistoryProtectedFieldMock).not.toHaveBeenCalled();
+  });
 });

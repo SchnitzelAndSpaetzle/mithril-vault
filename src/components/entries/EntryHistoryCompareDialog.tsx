@@ -145,12 +145,27 @@ function CompareBody({
 
   const rows: ReactNode[] = [];
 
+  // The backend emits built-in tokens (`password`, `tags`, …) and custom field
+  // keys verbatim into the same list, so a custom field named like a built-in
+  // collides. A token is a custom field when it's a known custom key — present
+  // in the current entry's meta or the version's protected set; everything else
+  // matching a built-in token is the built-in field.
+  const customMetaNow = new Map(
+    current.customFieldMeta.map((m) => [m.key, m.isProtected])
+  );
+  const customKeys = new Set([
+    ...customMetaNow.keys(),
+    ...version.protectedFields,
+  ]);
+  const isBuiltin = (token: string) =>
+    KNOWN_FIELDS.has(token) && !customKeys.has(token);
+
   // Direct text fields the history listing carries for both sides: compared by
   // exact value, so a changed-then-reverted field drops out of the diff.
   for (const field of ["title", "username", "url"] as const) {
     const before = version[field] ?? "";
     const after = current[field] ?? "";
-    if (changedFields.includes(field) && before !== after) {
+    if (isBuiltin(field) && changedFields.includes(field) && before !== after) {
       rows.push(
         <CompareRow
           key={field}
@@ -165,7 +180,7 @@ function CompareBody({
   // Password: a secret on both sides. Revealed only on the explicit toggle,
   // which fetches the current and historical values together (ADR-0008) — the
   // historical fetch carries the version's index + fingerprint guard.
-  if (changedFields.includes("password")) {
+  if (isBuiltin("password") && changedFields.includes("password")) {
     rows.push(
       <CompareSecretRow
         key="password"
@@ -196,7 +211,7 @@ function CompareBody({
     "expiry",
     "location",
   ] as const) {
-    if (changedFields.includes(field)) {
+    if (isBuiltin(field) && changedFields.includes(field)) {
       rows.push(
         <PreviousUnavailableRow
           key={field}
@@ -207,18 +222,16 @@ function CompareBody({
     }
   }
 
-  // Custom fields: any changed token that isn't a known built-in is a custom
-  // field key. Protected ones (now or in the version) are secrets revealed on
-  // demand from both sides; plain ones show the current value only, since the
-  // listing carries no historical custom-field value.
-  const protectedNow = new Set(
-    current.customFieldMeta.filter((m) => m.isProtected).map((m) => m.key)
-  );
+  // Custom fields: every changed token that isn't a built-in. A field is a
+  // two-sided secret only when it's protected in *both* versions — then it's
+  // revealed on demand from each side. When protection differs (toggled, or the
+  // field was added/removed), one protected endpoint would error, so we degrade
+  // to showing the current plain value (if any) with "previous not available".
   for (const key of changedFields) {
-    if (KNOWN_FIELDS.has(key)) continue;
-    const isProtected =
-      protectedNow.has(key) || version.protectedFields.includes(key);
-    if (isProtected) {
+    if (isBuiltin(key)) continue;
+    const protectedBoth =
+      customMetaNow.get(key) === true && version.protectedFields.includes(key);
+    if (protectedBoth) {
       rows.push(
         <CompareSecretRow
           key={`custom:${key}`}
