@@ -232,40 +232,17 @@ function CompareBody({
   // value (if any) with "previous not available".
   for (const key of changedFields) {
     if (!customKeys.has(key) && KNOWN_FIELDS.has(key)) continue;
-    const protectedBoth =
-      customMetaNow.get(key) === true && version.protectedFields.includes(key);
-    if (protectedBoth) {
-      rows.push(
-        <CompareSecretRow
-          key={`custom:${key}`}
-          label={key}
-          revealLabel={t("entries.detail.revealField", { field: key })}
-          hideLabel={t("entries.detail.hideField", { field: key })}
-          fetchBefore={async () =>
-            (
-              await entriesApi.getHistoryProtectedField(
-                dbId,
-                entryId,
-                version.index,
-                version.fingerprint,
-                key
-              )
-            ).value
-          }
-          fetchAfter={async () =>
-            (await entriesApi.getProtectedCustomField(dbId, entryId, key)).value
-          }
-        />
-      );
-    } else {
-      rows.push(
-        <PreviousUnavailableRow
-          key={`custom:${key}`}
-          label={key}
-          current={current.customFields[key] ?? null}
-        />
-      );
-    }
+    rows.push(
+      <CustomFieldCompareRow
+        key={`custom:${key}`}
+        dbId={dbId}
+        entryId={entryId}
+        version={version}
+        current={current}
+        fieldKey={key}
+        protectedNow={customMetaNow.get(key) === true}
+      />
+    );
   }
 
   if (rows.length === 0) {
@@ -277,6 +254,65 @@ function CompareBody({
   }
 
   return <>{rows}</>;
+}
+
+/**
+ * One custom field's comparison row. It's a two-sided secret only when the
+ * field is protected in *both* versions — then each side is revealed on demand.
+ * When protection differs (toggled, or the field added/removed), one protected
+ * endpoint would error, so it degrades to the current plain value (if any) with
+ * "previous value not available".
+ */
+function CustomFieldCompareRow({
+  dbId,
+  entryId,
+  version,
+  current,
+  fieldKey,
+  protectedNow,
+}: Readonly<{
+  dbId: string;
+  entryId: string;
+  version: EntryHistoryItem;
+  current: Entry;
+  fieldKey: string;
+  protectedNow: boolean;
+}>) {
+  const { t } = useTranslation();
+  const protectedBoth =
+    protectedNow && version.protectedFields.includes(fieldKey);
+
+  if (protectedBoth) {
+    return (
+      <CompareSecretRow
+        label={fieldKey}
+        revealLabel={t("entries.detail.revealField", { field: fieldKey })}
+        hideLabel={t("entries.detail.hideField", { field: fieldKey })}
+        fetchBefore={async () =>
+          (
+            await entriesApi.getHistoryProtectedField(
+              dbId,
+              entryId,
+              version.index,
+              version.fingerprint,
+              fieldKey
+            )
+          ).value
+        }
+        fetchAfter={async () =>
+          (await entriesApi.getProtectedCustomField(dbId, entryId, fieldKey))
+            .value
+        }
+      />
+    );
+  }
+
+  return (
+    <PreviousUnavailableRow
+      label={fieldKey}
+      current={current.customFields[fieldKey] ?? null}
+    />
+  );
 }
 
 /**
