@@ -313,10 +313,11 @@ describe("EntryHistoryCompareDialog", () => {
     expect(getProtectedCustomFieldMock).not.toHaveBeenCalled();
   });
 
-  it("treats a custom field named like a built-in token as a custom field", async () => {
-    // A user-defined custom field whose key collides with a built-in token
-    // (the backend emits both as lowercase) must render as the custom field,
-    // not the entry's built-in password.
+  it("renders both rows when a custom field key collides with a built-in token", async () => {
+    // The backend emits both the built-in Password and a custom field named
+    // `password` as the same lowercase token, so neither side can be hidden:
+    // render the built-in password compare AND the custom field row, so a real
+    // built-in rotation is never silently dropped.
     getMock.mockResolvedValue(
       makeEntry({
         customFields: { password: "my-api-token" },
@@ -328,14 +329,16 @@ describe("EntryHistoryCompareDialog", () => {
       changedFields: ["password"],
     });
 
+    // The custom field row (its current plain value + previous-unavailable).
     expect(await screen.findByText("my-api-token")).toBeInTheDocument();
     expect(
       screen.getByText("entries.detail.compare.previousNotAvailable")
     ).toBeInTheDocument();
-    // It is the custom field, not the entry password: no password reveal.
+    // The built-in password compare row is still present (reveal on demand).
     expect(
-      screen.queryByRole("button", { name: "entries.detail.revealPassword" })
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "entries.detail.revealPassword" })
+    ).toBeInTheDocument();
+    // Nothing fetched until an explicit reveal.
     expect(getPasswordMock).not.toHaveBeenCalled();
   });
 
