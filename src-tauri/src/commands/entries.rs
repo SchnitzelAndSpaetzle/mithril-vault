@@ -233,6 +233,18 @@ pub async fn restore_entry_history(
     )
 }
 
+/// Clears one Entry's history, emptying its native KDBX `Entry.history`
+/// (ADR-0008). The live content is untouched; the change persists on next save.
+/// Clearing history is not audited (per the PRD), so this records no event.
+#[tauri::command]
+pub async fn clear_entry_history(
+    db_id: String,
+    id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.clear_entry_history(&db_id, &id)
+}
+
 /// Fetches a single Attachment's bytes on demand, keyed by filename, as
 /// [`SecureBytes`]. This is the reusable lazy byte-fetch (Preview reuses
 /// it); it records no audit event. Bytes are never included in

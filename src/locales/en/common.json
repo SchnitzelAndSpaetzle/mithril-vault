@@ -267,7 +267,12 @@
         "keepNewest": "Keep newest",
         "itemsLabel": "Number of versions to keep",
         "unlimited": "Unlimited",
-        "disabled": "Disabled"
+        "disabled": "Disabled",
+        "clearAll": "Clear all history",
+        "clearAllDescription": "Permanently delete the saved version history of every entry in this vault. Current entry values are kept.",
+        "clearAllConfirmTitle": "Clear all history",
+        "clearAllConfirm": "Permanently delete the saved version history of every entry in this vault? Current entry values are kept. This cannot be undone.",
+        "clearAllFailed": "Failed to clear history"
       }
     },
     "sidebar": {
@@ -406,6 +411,11 @@
       "restoreHistorySuccess": "Entry restored to the selected version",
       "restoreHistoryFailed": "Failed to restore the entry",
       "restoreHistoryUnchanged": "This version matches the current entry — nothing to restore",
+      "clearHistory": "Clear history",
+      "clearHistoryConfirmTitle": "Clear history",
+      "clearHistoryConfirm": "Permanently delete the saved version history of this entry? Its current values are kept. This cannot be undone.",
+      "clearHistorySuccess": "Entry history cleared",
+      "clearHistoryFailed": "Failed to clear the entry history",
       "historyField": {
         "title": "title",
         "username": "username",
