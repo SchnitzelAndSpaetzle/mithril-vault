@@ -168,6 +168,10 @@ pub struct EntryHistoryItem {
     /// values (ADR-0008). Lets the view render a per-version reveal action for
     /// each protected field, fetched on demand via `get_history_protected_field`.
     pub protected_fields: Vec<String>,
+    /// Filenames of this version's attachments — names only, never bytes
+    /// (ADR-0008). The compare view diffs this set against the current Entry's
+    /// attachments to name what was added/removed; the payloads never cross IPC.
+    pub attachment_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

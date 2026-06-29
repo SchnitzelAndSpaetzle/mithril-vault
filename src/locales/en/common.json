@@ -411,7 +411,9 @@
         "title": "Compare with current version",
         "description": "Comparing the version from {{date}} with the current entry",
         "noChanges": "No differences between this version and the current entry",
-        "previousNotAvailable": "Previous value not available"
+        "previousNotAvailable": "Previous value not available",
+        "attachmentAdded": "Added",
+        "attachmentRemoved": "Removed"
       },
       "restoreHistoryConfirmTitle": "Restore version",
       "restoreHistoryConfirm": "Restore this entry to the version from {{date}}? The current state is saved to history first, so you can undo this.",

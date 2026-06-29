@@ -200,6 +200,33 @@ function CompareBody({
     );
   }
 
+  // Attachments: the listing carries the version's filenames (names only, never
+  // bytes — ADR-0008), so we can name what changed instead of falling back to
+  // the generic "previous not available" row (#356). A rename surfaces as one
+  // removed + one added, matching the backend's filename-set comparison. The
+  // row is shown only when something actually differs, which also corrects the
+  // changed-field signal's upper-bound false positives.
+  if (changedFields.includes("attachments")) {
+    const currentNames = new Set(current.attachments.map((a) => a.filename));
+    const versionNames = new Set(version.attachmentNames);
+    const added = current.attachments
+      .map((a) => a.filename)
+      .filter((name) => !versionNames.has(name));
+    const removed = version.attachmentNames.filter(
+      (name) => !currentNames.has(name)
+    );
+    if (added.length > 0 || removed.length > 0) {
+      rows.push(
+        <AttachmentCompareRow
+          key="attachments"
+          label={t("entries.detail.historyField.attachments")}
+          added={added}
+          removed={removed}
+        />
+      );
+    }
+  }
+
   // Value-less fields: the listing carries no historical value for these, so we
   // can only show the current value (where it's plain text) and note that the
   // previous value can't be displayed.
@@ -207,7 +234,6 @@ function CompareBody({
     "notes",
     "tags",
     "icon",
-    "attachments",
     "expiry",
     "location",
   ] as const) {
@@ -397,7 +423,7 @@ function CompareSecretRow({
  * attachments, expiry, location are shown by label alone).
  */
 function currentSummary(
-  field: "notes" | "tags" | "icon" | "attachments" | "expiry" | "location",
+  field: "notes" | "tags" | "icon" | "expiry" | "location",
   current: Entry
 ): string | null {
   if (field === "notes") return current.notes ?? "";
@@ -426,6 +452,51 @@ function PreviousUnavailableRow({
       <span className="text-xs italic text-muted-foreground">
         {t("entries.detail.compare.previousNotAvailable")}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Names the attachments added and removed between a version and the current
+ * Entry (#356). Names only — no size, MIME, preview, or bytes ever cross IPC
+ * (ADR-0008). Removed names are struck through (gone now), added names plain
+ * (present now); each is prefixed with a localized Added/Removed label.
+ */
+function AttachmentCompareRow({
+  label,
+  added,
+  removed,
+}: Readonly<{ label: string; added: string[]; removed: string[] }>) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-1 py-1">
+      <small className="text-xs font-medium text-muted-foreground">
+        {label}
+      </small>
+      {removed.map((name) => (
+        <div
+          key={`removed:${name}`}
+          className="flex min-w-0 items-center gap-2 text-sm"
+        >
+          <span className="shrink-0 text-xs font-medium text-muted-foreground">
+            {t("entries.detail.compare.attachmentRemoved")}
+          </span>
+          <span className="min-w-0 truncate text-muted-foreground line-through">
+            {name}
+          </span>
+        </div>
+      ))}
+      {added.map((name) => (
+        <div
+          key={`added:${name}`}
+          className="flex min-w-0 items-center gap-2 text-sm"
+        >
+          <span className="shrink-0 text-xs font-medium text-muted-foreground">
+            {t("entries.detail.compare.attachmentAdded")}
+          </span>
+          <span className="min-w-0 truncate">{name}</span>
+        </div>
+      ))}
     </div>
   );
 }

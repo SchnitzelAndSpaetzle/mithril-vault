@@ -388,7 +388,9 @@
         "title": "Mit aktueller Version vergleichen",
         "description": "Vergleich der Version vom {{date}} mit dem aktuellen Eintrag",
         "noChanges": "Keine Unterschiede zwischen dieser Version und dem aktuellen Eintrag",
-        "previousNotAvailable": "Vorheriger Wert nicht verfügbar"
+        "previousNotAvailable": "Vorheriger Wert nicht verfügbar",
+        "attachmentAdded": "Hinzugefügt",
+        "attachmentRemoved": "Entfernt"
       },
       "restoreHistoryConfirmTitle": "Version wiederherstellen",
       "restoreHistoryConfirm": "Diesen Eintrag auf die Version vom {{date}} zurücksetzen? Der aktuelle Stand wird zuerst im Verlauf gespeichert, sodass Sie dies rückgängig machen können.",

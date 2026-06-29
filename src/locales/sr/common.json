@@ -388,7 +388,9 @@
         "title": "Uporedi sa trenutnom verzijom",
         "description": "Poređenje verzije od {{date}} sa trenutnim unosom",
         "noChanges": "Nema razlika između ove verzije i trenutnog unosa",
-        "previousNotAvailable": "Prethodna vrednost nije dostupna"
+        "previousNotAvailable": "Prethodna vrednost nije dostupna",
+        "attachmentAdded": "Dodato",
+        "attachmentRemoved": "Uklonjeno"
       },
       "restoreHistoryConfirmTitle": "Vraćanje verzije",
       "restoreHistoryConfirm": "Vratiti ovu stavku na verziju od {{date}}? Trenutno stanje se prvo čuva u istoriji, pa možete poništiti ovu radnju.",

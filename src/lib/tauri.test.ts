@@ -483,6 +483,7 @@ describe("tauri wrappers validation", () => {
         isCreation: true,
         fingerprint: "abc123",
         protectedFields: ["PIN"],
+        attachmentNames: ["invoice.pdf"],
       },
     ]);
 
@@ -491,6 +492,7 @@ describe("tauri wrappers validation", () => {
     expect(invoke).toHaveBeenCalledWith("list_entry_history", { dbId, id });
     expect(version?.fingerprint).toBe("abc123");
     expect(version?.protectedFields).toEqual(["PIN"]);
+    expect(version?.attachmentNames).toEqual(["invoice.pdf"]);
   });
 
   it("reveals a historical password addressed by index + fingerprint", async () => {
