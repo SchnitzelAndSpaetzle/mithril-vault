@@ -12,6 +12,9 @@ const getHistoryPasswordMock = vi.fn();
 const getHistoryProtectedFieldMock = vi.fn();
 const restoreHistoryMock = vi.fn();
 const clearHistoryMock = vi.fn();
+const getMock = vi.fn();
+const getPasswordMock = vi.fn();
+const getProtectedCustomFieldMock = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
   entries: {
@@ -21,6 +24,10 @@ vi.mock("@/lib/tauri", () => ({
       getHistoryProtectedFieldMock(...args),
     restoreHistory: (...args: unknown[]) => restoreHistoryMock(...args),
     clearHistory: (...args: unknown[]) => clearHistoryMock(...args),
+    get: (...args: unknown[]) => getMock(...args),
+    getPassword: (...args: unknown[]) => getPasswordMock(...args),
+    getProtectedCustomField: (...args: unknown[]) =>
+      getProtectedCustomFieldMock(...args),
   },
 }));
 
@@ -107,6 +114,9 @@ describe("EntryHistorySection", () => {
     getHistoryProtectedFieldMock.mockReset();
     restoreHistoryMock.mockReset();
     clearHistoryMock.mockReset();
+    getMock.mockReset();
+    getPasswordMock.mockReset();
+    getProtectedCustomFieldMock.mockReset();
     askMock.mockReset();
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
@@ -476,5 +486,45 @@ describe("EntryHistorySection", () => {
           ?.isInvalidated
       ).toBe(true);
     });
+  });
+
+  it("opens the compare dialog for a version, diffing it against the current entry", async () => {
+    listHistoryMock.mockResolvedValue([
+      makeVersion({ index: 0, title: "Old Title", changedFields: ["title"] }),
+    ]);
+    getMock.mockResolvedValue({
+      id: TEST_ENTRY_ID,
+      groupId: "group-1",
+      title: "New Title",
+      username: "bob",
+      url: null,
+      notes: null,
+      iconId: 0,
+      customIconUuid: null,
+      tags: [],
+      customFields: {},
+      customFieldMeta: [],
+      createdAt: "2024-01-01T00:00:00Z",
+      modifiedAt: "2024-02-17T15:58:43Z",
+      accessedAt: "2024-02-17T15:58:43Z",
+      expires: false,
+      expiryTime: null,
+      attachments: [],
+    });
+
+    renderSection();
+    await expand();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "entries.detail.compare.action",
+      })
+    );
+
+    // The current title (only rendered inside the dialog) confirms the compare
+    // view opened and diffed against the current entry.
+    expect(await screen.findByText("New Title")).toBeInTheDocument();
+    // "Old Title" appears twice now: the history row and the dialog's before.
+    expect(screen.getAllByText("Old Title").length).toBeGreaterThanOrEqual(2);
   });
 });
