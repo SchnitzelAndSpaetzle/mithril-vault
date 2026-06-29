@@ -383,6 +383,13 @@
       "historyCreated": "Kreirano",
       "historyEarliestKept": "Najstarija sačuvana verzija",
       "restoreVersion": "Vrati ovu verziju",
+      "compare": {
+        "action": "Uporedi sa trenutnom verzijom",
+        "title": "Uporedi sa trenutnom verzijom",
+        "description": "Poređenje verzije od {{date}} sa trenutnim unosom",
+        "noChanges": "Nema razlika između ove verzije i trenutnog unosa",
+        "previousNotAvailable": "Prethodna vrednost nije dostupna"
+      },
       "restoreHistoryConfirmTitle": "Vraćanje verzije",
       "restoreHistoryConfirm": "Vratiti ovu stavku na verziju od {{date}}? Trenutno stanje se prvo čuva u istoriji, pa možete poništiti ovu radnju.",
       "restoreHistorySuccess": "Stavka je vraćena na izabranu verziju",
