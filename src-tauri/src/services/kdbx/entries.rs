@@ -3197,11 +3197,8 @@ mod tests {
                 },
             )
             .expect("rename username");
-        service.save(&db_path).expect("save vault");
-        service.close(&db_path).expect("close vault");
 
-        let reopened = KdbxService::new();
-        reopened.open(&db_path, "testpass").expect("reopen vault");
+        let reopened = save_close_reopen(&service, &db_path);
 
         let history = reopened
             .list_entry_history(&db_path, &entry_a)
@@ -3398,6 +3395,17 @@ mod tests {
             .expect("read historical attachment")
     }
 
+    /// Persists the vault, drops it, and reopens it with a *fresh* service so a
+    /// test can assert on-disk durability with nothing cached in memory. Returns
+    /// the reopened service.
+    fn save_close_reopen(service: &KdbxService, db_path: &str) -> KdbxService {
+        service.save(db_path).expect("save vault");
+        service.close(db_path).expect("close vault");
+        let reopened = KdbxService::new();
+        reopened.open(db_path, "testpass").expect("reopen vault");
+        reopened
+    }
+
     #[test]
     fn attachment_blob_is_retrievable_from_history_after_delete_and_reopen() {
         // The interop proof point (#332): after deleting an Attachment, the
@@ -3410,11 +3418,8 @@ mod tests {
         service
             .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
             .expect("delete attachment");
-        service.save(&db_path).expect("save vault");
-        service.close(&db_path).expect("close vault");
 
-        let reopened = KdbxService::new();
-        reopened.open(&db_path, "testpass").expect("reopen vault");
+        let reopened = save_close_reopen(&service, &db_path);
 
         // The live Entry still has no attachment after the round-trip...
         let entry = reopened.get_entry(&db_path, &entry_a).expect("get entry");
@@ -3471,11 +3476,7 @@ mod tests {
             .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
             .expect("delete attachment");
 
-        service.save(&db_path).expect("save vault");
-        service.close(&db_path).expect("close vault");
-
-        let reopened = KdbxService::new();
-        reopened.open(&db_path, "testpass").expect("reopen vault");
+        let reopened = save_close_reopen(&service, &db_path);
 
         let history = reopened
             .list_entry_history(&db_path, &entry_a)
@@ -3513,11 +3514,8 @@ mod tests {
         service
             .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
             .expect("delete attachment");
-        service.save(&db_path).expect("save vault");
-        service.close(&db_path).expect("close vault");
 
-        let reopened = KdbxService::new();
-        reopened.open(&db_path, "testpass").expect("reopen vault");
+        let reopened = save_close_reopen(&service, &db_path);
 
         let history = reopened
             .list_entry_history(&db_path, &entry_a)

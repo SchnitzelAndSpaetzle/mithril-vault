@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -200,32 +201,14 @@ function CompareBody({
     );
   }
 
-  // Attachments: the listing carries the version's filenames (names only, never
-  // bytes — ADR-0008), so we can name what changed instead of falling back to
-  // the generic "previous not available" row (#356). A rename surfaces as one
-  // removed + one added, matching the backend's filename-set comparison. The
-  // row is shown only when something actually differs, which also corrects the
-  // changed-field signal's upper-bound false positives.
-  if (changedFields.includes("attachments")) {
-    const currentNames = new Set(current.attachments.map((a) => a.filename));
-    const versionNames = new Set(version.attachmentNames);
-    const added = current.attachments
-      .map((a) => a.filename)
-      .filter((name) => !versionNames.has(name));
-    const removed = version.attachmentNames.filter(
-      (name) => !currentNames.has(name)
-    );
-    if (added.length > 0 || removed.length > 0) {
-      rows.push(
-        <AttachmentCompareRow
-          key="attachments"
-          label={t("entries.detail.historyField.attachments")}
-          added={added}
-          removed={removed}
-        />
-      );
-    }
-  }
+  // Attachments: the listing carries the version's filenames, so we name what
+  // changed instead of the generic "previous not available" row (#356). The
+  // helper returns null when nothing net-differs, so the empty-state check below
+  // still fires and the changed-field signal's false positives are corrected.
+  const attachmentRow = changedFields.includes("attachments")
+    ? attachmentCompareRow(version, current, t)
+    : null;
+  if (attachmentRow) rows.push(attachmentRow);
 
   // Value-less fields: the listing carries no historical value for these, so we
   // can only show the current value (where it's plain text) and note that the
@@ -453,6 +436,37 @@ function PreviousUnavailableRow({
         {t("entries.detail.compare.previousNotAvailable")}
       </span>
     </div>
+  );
+}
+
+/**
+ * Diffs the version's attachment filenames against the current Entry's and,
+ * when they net-differ, returns the row naming what was added/removed (#356). A
+ * rename surfaces as one removed + one added, matching the backend's
+ * filename-set comparison. Returns null when nothing differs so the caller can
+ * skip an empty row — names only, never bytes (ADR-0008).
+ */
+function attachmentCompareRow(
+  version: EntryHistoryItem,
+  current: Entry,
+  t: TFunction
+): ReactNode {
+  const currentNames = new Set(current.attachments.map((a) => a.filename));
+  const versionNames = new Set(version.attachmentNames);
+  const added = current.attachments
+    .map((a) => a.filename)
+    .filter((name) => !versionNames.has(name));
+  const removed = version.attachmentNames.filter(
+    (name) => !currentNames.has(name)
+  );
+  if (added.length === 0 && removed.length === 0) return null;
+  return (
+    <AttachmentCompareRow
+      key="attachments"
+      label={t("entries.detail.historyField.attachments")}
+      added={added}
+      removed={removed}
+    />
   );
 }
 
