@@ -67,6 +67,7 @@ function makeVersion(
     isCreation: false,
     fingerprint: `fp-${overrides.index}`,
     protectedFields: [],
+    attachmentNames: [],
     ...overrides,
   };
 }
@@ -340,6 +341,60 @@ describe("EntryHistoryCompareDialog", () => {
     ).toBeInTheDocument();
     // Nothing fetched until an explicit reveal.
     expect(getPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it("names the attachments added and removed since the version", async () => {
+    // The version carried `old-key.pem`; the current Entry carries
+    // `invoice.pdf`. The compare view must name both — `invoice.pdf` as added,
+    // `old-key.pem` as removed — instead of the generic 'previous not available'
+    // line.
+    getMock.mockResolvedValue(
+      makeEntry({
+        attachments: [
+          { filename: "invoice.pdf", size: 10, mimeType: "application/pdf" },
+        ],
+      })
+    );
+    renderDialog({
+      version: makeVersion({ index: 1, attachmentNames: ["old-key.pem"] }),
+      changedFields: ["attachments"],
+    });
+
+    expect(await screen.findByText("invoice.pdf")).toBeInTheDocument();
+    expect(screen.getByText("old-key.pem")).toBeInTheDocument();
+    expect(
+      screen.getByText("entries.detail.compare.attachmentAdded")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("entries.detail.compare.attachmentRemoved")
+    ).toBeInTheDocument();
+    // The generic fallback row must not be used for attachments anymore.
+    expect(
+      screen.queryByText("entries.detail.compare.previousNotAvailable")
+    ).not.toBeInTheDocument();
+  });
+
+  it("treats a renamed attachment as one removed plus one added", async () => {
+    // A rename is a filename-set difference: the old name is gone, the new name
+    // is present (matching the backend's names-only comparison).
+    getMock.mockResolvedValue(
+      makeEntry({
+        attachments: [
+          {
+            filename: "report-final.pdf",
+            size: 10,
+            mimeType: "application/pdf",
+          },
+        ],
+      })
+    );
+    renderDialog({
+      version: makeVersion({ index: 1, attachmentNames: ["report.pdf"] }),
+      changedFields: ["attachments"],
+    });
+
+    expect(await screen.findByText("report-final.pdf")).toBeInTheDocument();
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
   });
 
   it("does not attempt a two-sided secret reveal when protection differs across versions", async () => {

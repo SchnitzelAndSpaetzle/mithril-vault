@@ -111,6 +111,10 @@ export const EntryHistoryItemSchema = z.object({
   // Keys of this version's protected custom fields (names only — never values),
   // so the view can render a per-version reveal action for each.
   protectedFields: z.array(z.string()),
+  // Filenames of this version's attachments (names only — never bytes). The
+  // compare view diffs this set against the current Entry to name what was
+  // added/removed between the version and now.
+  attachmentNames: z.array(z.string()),
 });
 export type EntryHistoryItem = z.infer<typeof EntryHistoryItemSchema>;
 

@@ -76,6 +76,7 @@ function makeVersion(
     isCreation: false,
     fingerprint: `fp-${overrides.index}`,
     protectedFields: [],
+    attachmentNames: [],
     ...overrides,
   };
 }
