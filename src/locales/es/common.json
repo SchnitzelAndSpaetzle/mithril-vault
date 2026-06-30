@@ -383,6 +383,15 @@
       "historyCreated": "Creado",
       "historyEarliestKept": "Versión más antigua conservada",
       "restoreVersion": "Restaurar esta versión",
+      "compare": {
+        "action": "Comparar con la versión actual",
+        "title": "Comparar con la versión actual",
+        "description": "Comparando la versión del {{date}} con la entrada actual",
+        "noChanges": "No hay diferencias entre esta versión y la entrada actual",
+        "previousNotAvailable": "Valor anterior no disponible",
+        "attachmentAdded": "Añadido",
+        "attachmentRemoved": "Eliminado"
+      },
       "restoreHistoryConfirmTitle": "Restaurar versión",
       "restoreHistoryConfirm": "¿Restaurar esta entrada a la versión del {{date}}? El estado actual se guarda primero en el historial, para que puedas deshacerlo.",
       "restoreHistorySuccess": "Entrada restaurada a la versión seleccionada",

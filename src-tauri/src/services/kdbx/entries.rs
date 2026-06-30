@@ -394,6 +394,18 @@ fn history_fingerprint(snapshot: &EntryRef<'_>, key: &[u8; blake3::KEY_LEN]) -> 
 /// The keys of a snapshot's *protected custom* fields (excludes the standard
 /// Password etc.), sorted. Names only — values never cross IPC (ADR-0008); they
 /// let the view offer a per-version reveal action for each protected field.
+/// The filenames of a snapshot's attachments — names only, never the bytes
+/// (ADR-0008). Sorted so the listing is deterministic and the frontend's
+/// filename-set diff is stable.
+fn attachment_names(snapshot: &EntryRef<'_>) -> Vec<String> {
+    let mut names: Vec<String> = snapshot
+        .attachments_named()
+        .map(|(name, _)| name.to_string())
+        .collect();
+    names.sort();
+    names
+}
+
 fn protected_field_keys(snapshot: &EntryRef<'_>) -> Vec<String> {
     let mut keys: Vec<String> = snapshot
         .fields
@@ -518,6 +530,7 @@ impl KdbxService {
                     is_creation,
                     fingerprint: history_fingerprint(&snapshot, &self.history_fingerprint_key),
                     protected_fields: protected_field_keys(&snapshot),
+                    attachment_names: attachment_names(&snapshot),
                 });
             }
             Ok(items)
@@ -3184,11 +3197,8 @@ mod tests {
                 },
             )
             .expect("rename username");
-        service.save(&db_path).expect("save vault");
-        service.close(&db_path).expect("close vault");
 
-        let reopened = KdbxService::new();
-        reopened.open(&db_path, "testpass").expect("reopen vault");
+        let reopened = save_close_reopen(&service, &db_path);
 
         let history = reopened
             .list_entry_history(&db_path, &entry_a)
@@ -3385,6 +3395,17 @@ mod tests {
             .expect("read historical attachment")
     }
 
+    /// Persists the vault, drops it, and reopens it with a *fresh* service so a
+    /// test can assert on-disk durability with nothing cached in memory. Returns
+    /// the reopened service.
+    fn save_close_reopen(service: &KdbxService, db_path: &str) -> KdbxService {
+        service.save(db_path).expect("save vault");
+        service.close(db_path).expect("close vault");
+        let reopened = KdbxService::new();
+        reopened.open(db_path, "testpass").expect("reopen vault");
+        reopened
+    }
+
     #[test]
     fn attachment_blob_is_retrievable_from_history_after_delete_and_reopen() {
         // The interop proof point (#332): after deleting an Attachment, the
@@ -3397,11 +3418,8 @@ mod tests {
         service
             .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
             .expect("delete attachment");
-        service.save(&db_path).expect("save vault");
-        service.close(&db_path).expect("close vault");
 
-        let reopened = KdbxService::new();
-        reopened.open(&db_path, "testpass").expect("reopen vault");
+        let reopened = save_close_reopen(&service, &db_path);
 
         // The live Entry still has no attachment after the round-trip...
         let entry = reopened.get_entry(&db_path, &entry_a).expect("get entry");
@@ -3458,11 +3476,7 @@ mod tests {
             .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
             .expect("delete attachment");
 
-        service.save(&db_path).expect("save vault");
-        service.close(&db_path).expect("close vault");
-
-        let reopened = KdbxService::new();
-        reopened.open(&db_path, "testpass").expect("reopen vault");
+        let reopened = save_close_reopen(&service, &db_path);
 
         let history = reopened
             .list_entry_history(&db_path, &entry_a)
@@ -3485,6 +3499,33 @@ mod tests {
                 "history version {index} must retain the original attachment bytes"
             );
         }
+    }
+
+    #[test]
+    fn history_listing_exposes_a_versions_attachment_filenames_across_reopen() {
+        // The compare view names which attachments a version carried (#356), so
+        // the listing DTO must surface each snapshot's attachment filenames
+        // (names only — never bytes) and they must survive the on-disk
+        // round-trip. Seeding then deleting an attachment captures a pre-delete
+        // version that still references it.
+        let (service, _dir, db_path, entry_a, _b) = create_test_database();
+        seed_attachment(&service, &db_path, &entry_a, "codes.txt", b"secret");
+
+        service
+            .delete_entry_attachment(&db_path, &entry_a, "codes.txt")
+            .expect("delete attachment");
+
+        let reopened = save_close_reopen(&service, &db_path);
+
+        let history = reopened
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after reopen");
+        let version = history.first().expect("one pre-delete version");
+        assert_eq!(
+            version.attachment_names,
+            vec!["codes.txt".to_string()],
+            "the version's attachment filename must round-trip into the listing"
+        );
     }
 
     #[test]

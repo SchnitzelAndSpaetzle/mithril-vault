@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  GitCompare,
   History,
   Loader2,
   RotateCcw,
@@ -22,6 +23,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator.tsx";
 import { entries as entriesApi } from "@/lib/tauri";
+import {
+  changedSince,
+  EntryHistoryCompareDialog,
+} from "@/components/entries/EntryHistoryCompareDialog";
 import { saveWithErrorToast } from "@/lib/save-with-error-toast";
 import type { EntryHistoryItem } from "@/lib/types";
 import { queryKeys } from "@/lib/query-keys";
@@ -216,6 +221,10 @@ export function EntryHistorySection({
                 isOldest={index === versions.length - 1}
                 showSeparator={index > 0}
                 fieldLabels={fieldLabels}
+                // What differs between this version and the current Entry: the
+                // union of changedFields from the newest version through this
+                // one (#324), used by the compare dialog (#329).
+                changedSinceFields={changedSince(versions, index)}
                 onRestore={handleRestore}
               />
             ))}
@@ -257,6 +266,7 @@ function HistoryVersionItem({
   isOldest,
   showSeparator,
   fieldLabels,
+  changedSinceFields,
   onRestore,
 }: Readonly<{
   dbId: string;
@@ -265,9 +275,11 @@ function HistoryVersionItem({
   isOldest: boolean;
   showSeparator: boolean;
   fieldLabels: Record<string, string>;
+  changedSinceFields: string[];
   onRestore: (version: EntryHistoryItem) => void;
 }>) {
   const { t } = useTranslation();
+  const [compareOpen, setCompareOpen] = useState(false);
   // The changed line is shown even on the oldest "Earliest kept" version:
   // changedFields is diffed against the next-newer version, so it's accurate
   // even when the original predecessor was pruned.
@@ -287,12 +299,29 @@ function HistoryVersionItem({
           variant="outline"
           size="icon-xs"
           className="shrink-0"
+          aria-label={t("entries.detail.compare.action")}
+          onClick={() => setCompareOpen(true)}
+        >
+          <GitCompare className="h-3 w-3" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon-xs"
+          className="shrink-0"
           aria-label={t("entries.detail.restoreVersion")}
           onClick={() => onRestore(version)}
         >
           <RotateCcw className="h-3 w-3" />
         </Button>
       </div>
+      <EntryHistoryCompareDialog
+        dbId={dbId}
+        entryId={entryId}
+        version={version}
+        changedFields={changedSinceFields}
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+      />
       {isOldest && (
         <p className="px-4 pb-2 text-xs font-medium text-muted-foreground">
           {version.isCreation

@@ -11,8 +11,10 @@
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
-use chacha20poly1305::aead::{Aead, KeyInit, OsRng};
-use chacha20poly1305::{AeadCore, XChaCha20Poly1305, XNonce};
+use chacha20poly1305::aead::{Aead, KeyInit};
+use chacha20poly1305::{XChaCha20Poly1305, XNonce};
+use rand::rand_core::TryRng;
+use rand::rngs::SysRng;
 use thiserror::Error;
 
 pub const KEY_LEN: usize = 32;
@@ -26,6 +28,9 @@ pub enum CryptoError {
     #[error("frame too short")]
     FrameTooShort,
 
+    #[error("nonce RNG failed")]
+    Rng,
+
     #[error("frame base64-decode failed")]
     Base64,
 
@@ -36,7 +41,11 @@ pub enum CryptoError {
 /// Encrypts a plaintext byte slice into a frame: `nonce || ciphertext+tag`.
 pub fn encrypt(key: &[u8; KEY_LEN], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let cipher = XChaCha20Poly1305::new_from_slice(key).map_err(|_| CryptoError::InvalidKey)?;
-    let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+    let mut nonce_bytes = [0u8; NONCE_LEN];
+    SysRng
+        .try_fill_bytes(&mut nonce_bytes)
+        .map_err(|_| CryptoError::Rng)?;
+    let nonce = XNonce::from(nonce_bytes);
     let mut ct = cipher
         .encrypt(&nonce, plaintext)
         .map_err(|_| CryptoError::AuthFailed)?;
@@ -53,9 +62,9 @@ pub fn decrypt(key: &[u8; KEY_LEN], frame: &[u8]) -> Result<Vec<u8>, CryptoError
     }
     let cipher = XChaCha20Poly1305::new_from_slice(key).map_err(|_| CryptoError::InvalidKey)?;
     let (nonce_bytes, ciphertext) = frame.split_at(NONCE_LEN);
-    let nonce = XNonce::from_slice(nonce_bytes);
+    let nonce = XNonce::try_from(nonce_bytes).map_err(|_| CryptoError::FrameTooShort)?;
     cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|_| CryptoError::AuthFailed)
 }
 
