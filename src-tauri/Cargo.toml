@@ -47,8 +47,8 @@ arboard = "3"
 tokio = { version = "1", features = ["time", "rt"] }
 chrono = { version = "0.4", features = ["serde"] } # Timestamp handling
 psl = "2"
-chacha20poly1305 = "0.10"
-fs4 = { version = "0.13", features = ["sync"] }
+chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
+fs4 = { version = "1.1", features = ["sync"] }
 # Password Health analyzer's strength check (zxcvbn score 0/1).
 # Entropy/pattern detection only; no network.
 zxcvbn = "3"
@@ -79,3 +79,16 @@ must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 cargo_common_metadata = "allow"
+
+# Temporary fork of keepass 0.13.11 that retains attachment binaries referenced
+# by historical entry versions instead of garbage-collecting them on the last
+# *live* reference. Stock 0.13.x GCs a blob keyed by entry_id only (ignoring the
+# history index) and reuses the freed AttachmentId on the next add, which
+# corrupts Entry History on attachment delete (#332). The fork drops only the
+# exact live forward reference (mirroring set_icon_none), derives referrers from
+# forward references rather than a stale cache, and prunes/re-indexes the pool at
+# save time. It also fixes the matching custom-icon stale-history-index bug,
+# hardening the existing custom-icon snapshot path. To be dropped once the fix is
+# released upstream (PRs pending against sseemayer/keepass-rs).
+[patch.crates-io]
+keepass = { git = "https://github.com/SchnitzelAndSpaetzle/keepass-rs", tag = "v0.13.11" }

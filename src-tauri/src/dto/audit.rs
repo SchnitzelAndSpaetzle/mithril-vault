@@ -19,6 +19,7 @@ pub enum AuditEventKindDto {
     EntryPasswordCopied,
     EntryProtectedFieldRevealed,
     EntryAttachmentExported,
+    EntryHistoryRestored,
     PreferencesSecurityChanged,
     AuditCleared,
 }
@@ -204,6 +205,18 @@ impl From<AuditEvent> for AuditEventDto {
                 setting_name: None,
                 attachment_id: Some(attachment_id),
             },
+            AuditEvent::EntryHistoryRestored {
+                timestamp,
+                entry_id,
+            } => Self {
+                kind: AuditEventKindDto::EntryHistoryRestored,
+                timestamp,
+                attempt_count: None,
+                reason: None,
+                entry_id: Some(entry_id),
+                setting_name: None,
+                attachment_id: None,
+            },
             AuditEvent::AuditCleared { timestamp } => Self {
                 kind: AuditEventKindDto::AuditCleared,
                 timestamp,
@@ -356,6 +369,30 @@ mod tests {
             json.contains("\"attachmentId\":\"recovery-codes.txt\""),
             "attachmentId must be camelCase on the wire, got: {json}"
         );
+    }
+
+    #[test]
+    fn entry_history_restored_event_converts_to_dto_with_camel_case_kind_and_entry_id() {
+        let ts = Utc.with_ymd_and_hms(2026, 6, 18, 10, 0, 0).unwrap();
+        let dto: AuditEventDto = AuditEvent::EntryHistoryRestored {
+            timestamp: ts,
+            entry_id: "uuid-restore".to_string(),
+        }
+        .into();
+
+        assert!(matches!(dto.kind, AuditEventKindDto::EntryHistoryRestored));
+        assert_eq!(dto.timestamp, ts);
+        assert_eq!(dto.entry_id.as_deref(), Some("uuid-restore"));
+        assert!(dto.attempt_count.is_none());
+        assert!(dto.reason.is_none());
+        assert!(dto.attachment_id.is_none());
+
+        let json = serde_json::to_string(&dto).expect("ser");
+        assert!(
+            json.contains("\"entryHistoryRestored\""),
+            "kind must serialize as camelCase, got: {json}"
+        );
+        assert!(json.contains("\"entryId\":\"uuid-restore\""));
     }
 
     /// The clear-log surviving event reaches the UI as a camelCase

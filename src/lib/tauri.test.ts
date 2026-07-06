@@ -131,6 +131,25 @@ describe("tauri wrappers validation", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  it("clears one entry's history through the entries wrapper", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    const dbId = crypto.randomUUID();
+    const id = crypto.randomUUID();
+
+    await entries.clearHistory(dbId, id);
+
+    expect(invoke).toHaveBeenCalledWith("clear_entry_history", { dbId, id });
+  });
+
+  it("clears all history vault-wide through the database wrapper", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    const dbId = crypto.randomUUID();
+
+    await database.clearAllHistory(dbId);
+
+    expect(invoke).toHaveBeenCalledWith("clear_all_history", { dbId });
+  });
+
   it("gets, updates, and resets app preferences through settings wrappers", async () => {
     const preferences = {
       general: {
@@ -358,6 +377,24 @@ describe("tauri wrappers validation", () => {
     });
   });
 
+  it("audit.list accepts an entryHistoryRestored event", async () => {
+    // Regression: a vault with a restore event must not make the whole audit
+    // query reject. The kind has to be in AuditEventKindSchema.
+    const payload = {
+      events: [
+        {
+          kind: "entryHistoryRestored",
+          timestamp: "2026-06-18T12:00:00.000Z",
+          entryId: "uuid-restore",
+        },
+      ],
+      degraded: false,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(payload);
+
+    await expect(audit.list("/mock/vault.kdbx")).resolves.toEqual(payload);
+  });
+
   it("audit.list surfaces a degraded flag from the backend", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({
       events: [],
@@ -429,6 +466,65 @@ describe("tauri wrappers validation", () => {
     expect(invoke).toHaveBeenCalledWith("delete_backup", {
       backupPath:
         "/mock/.kdbx-backups/vault.kdbx.backup.20260512T143045.123Z.kdbx",
+    });
+  });
+
+  it("parses list_entry_history including the fingerprint and protected-field keys", async () => {
+    const dbId = "/mock/test.kdbx";
+    const id = crypto.randomUUID();
+    vi.mocked(invoke).mockResolvedValueOnce([
+      {
+        index: 0,
+        modifiedAt: "2024-02-17T15:58:43Z",
+        title: "Example",
+        username: "bob",
+        url: null,
+        changedFields: ["password"],
+        isCreation: true,
+        fingerprint: "abc123",
+        protectedFields: ["PIN"],
+        attachmentNames: ["invoice.pdf"],
+      },
+    ]);
+
+    const [version] = await entries.listHistory(dbId, id);
+
+    expect(invoke).toHaveBeenCalledWith("list_entry_history", { dbId, id });
+    expect(version?.fingerprint).toBe("abc123");
+    expect(version?.protectedFields).toEqual(["PIN"]);
+    expect(version?.attachmentNames).toEqual(["invoice.pdf"]);
+  });
+
+  it("reveals a historical password addressed by index + fingerprint", async () => {
+    const dbId = "/mock/test.kdbx";
+    const id = crypto.randomUUID();
+    vi.mocked(invoke).mockResolvedValueOnce("orig-pw");
+
+    await expect(
+      entries.getHistoryPassword(dbId, id, 0, "fp-zero")
+    ).resolves.toBe("orig-pw");
+    expect(invoke).toHaveBeenCalledWith("get_history_entry_password", {
+      dbId,
+      id,
+      index: 0,
+      fingerprint: "fp-zero",
+    });
+  });
+
+  it("reveals a historical protected field addressed by index + fingerprint", async () => {
+    const dbId = "/mock/test.kdbx";
+    const id = crypto.randomUUID();
+    vi.mocked(invoke).mockResolvedValueOnce({ key: "PIN", value: "0451" });
+
+    await expect(
+      entries.getHistoryProtectedField(dbId, id, 0, "fp-zero", "PIN")
+    ).resolves.toEqual({ key: "PIN", value: "0451" });
+    expect(invoke).toHaveBeenCalledWith("get_history_protected_field", {
+      dbId,
+      id,
+      index: 0,
+      fingerprint: "fp-zero",
+      key: "PIN",
     });
   });
 });

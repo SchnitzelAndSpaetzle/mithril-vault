@@ -6,6 +6,8 @@ export const queryKeys = {
     info: (dbId: string) => [...queryKeys.database.all, dbId, "info"] as const,
     config: (dbId: string) =>
       [...queryKeys.database.all, dbId, "config"] as const,
+    historySettings: (dbId: string) =>
+      [...queryKeys.database.all, dbId, "historySettings"] as const,
     customIcons: (dbId: string) =>
       [...queryKeys.database.all, dbId, "customIcons"] as const,
   },

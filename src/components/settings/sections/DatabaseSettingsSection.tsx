@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MIT
 
-import { AlertTriangle } from "lucide-react";
+import { useCallback } from "react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { VaultHistorySettingsControl } from "@/components/settings/sections/VaultHistorySettingsControl";
 import { formatKdf } from "@/components/settings/settings-utils";
+import { useVaultHistorySettings } from "@/hooks/use-vault-history-settings";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator.tsx";
 import type { DatabaseConfig } from "@/lib/types";
 import type { JSX } from "react/jsx-runtime";
 
@@ -21,6 +27,27 @@ export function DatabaseSettingsSection({
   databaseConfigError,
 }: Readonly<DatabaseSettingsSectionProps>) {
   const { t } = useTranslation();
+  const {
+    settings: historySettings,
+    update: updateHistorySettings,
+    isUpdating: isUpdatingHistory,
+    clearAll: clearAllHistory,
+    isClearing: isClearingHistory,
+  } = useVaultHistorySettings(dbId);
+
+  // Empties every Entry's history across the Vault after an explicit
+  // confirmation (#327). Destructive and irreversible, so it is gated behind a
+  // warning dialog; the hook persists to disk and refreshes any open history.
+  const handleClearAll = useCallback(async () => {
+    const confirmed = await ask(
+      t("settings.database.history.clearAllConfirm"),
+      {
+        title: t("settings.database.history.clearAllConfirmTitle"),
+        kind: "warning",
+      }
+    );
+    if (confirmed) clearAllHistory();
+  }, [clearAllHistory, t]);
 
   let databaseSectionContent: JSX.Element = (
     <p className="text-sm text-muted-foreground">
@@ -92,6 +119,32 @@ export function DatabaseSettingsSection({
       description={t("settings.database.description")}
     >
       {databaseSectionContent}
+
+      {dbId && historySettings && (
+        <>
+          <Separator />
+          <VaultHistorySettingsControl
+            maxItems={historySettings.maxItems}
+            onChange={updateHistorySettings}
+            disabled={isUpdatingHistory}
+          />
+          <div className="flex flex-col gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-fit gap-2 text-destructive"
+              onClick={handleClearAll}
+              disabled={isClearingHistory}
+            >
+              <Trash2 className="size-4" />
+              {t("settings.database.history.clearAll")}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.database.history.clearAllDescription")}
+            </p>
+          </div>
+        </>
+      )}
 
       <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
         <div className="flex items-center gap-2 font-medium">

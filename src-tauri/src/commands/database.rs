@@ -2,6 +2,7 @@
 
 use crate::dto::database::{
     CustomIconData, DatabaseConfigDto, DatabaseCreationOptions, DatabaseHeaderInfo, DatabaseInfo,
+    VaultHistorySettings,
 };
 use crate::dto::error::AppError;
 use crate::services::audit::format::Reason;
@@ -311,6 +312,39 @@ pub async fn get_database_config(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<DatabaseConfigDto, AppError> {
     state.get_config(&db_id)
+}
+
+/// Reads the per-Vault Entry-History retention (`Meta.history_max_items`) — the
+/// writable vault-meta surface, distinct from the read-only Database Config.
+#[tauri::command]
+pub async fn get_vault_history_settings(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<VaultHistorySettings, AppError> {
+    state.get_vault_history_settings(&db_id)
+}
+
+/// Writes the per-Vault `History Limit` into `Meta.history_max_items`. `None`
+/// clears the field (effective default 10); negative = unlimited; `0` =
+/// disabled; positive `n` = keep newest `n`. The change persists on next save.
+#[tauri::command]
+pub async fn update_vault_history_settings(
+    db_id: String,
+    max_items: Option<i32>,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.update_vault_history_settings(&db_id, max_items)
+}
+
+/// Clears every Entry's history across the whole Vault, emptying each native
+/// KDBX `Entry.history` (ADR-0008). Live content is untouched; the change
+/// persists on next save. Clearing history is not audited (per the PRD).
+#[tauri::command]
+pub async fn clear_all_history(
+    db_id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.clear_all_history(&db_id)
 }
 
 /// Gets info about a specific open database.

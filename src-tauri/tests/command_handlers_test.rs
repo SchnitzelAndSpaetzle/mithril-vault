@@ -14,8 +14,9 @@ use mithril_vault_lib::commands::database::{
     save_database, unlock_database,
 };
 use mithril_vault_lib::commands::entries::{
-    audit_attachment_exported_on_success, clear_entry_custom_icon, delete_tag, fetch_entry_favicon,
-    list_entries, rename_tag,
+    audit_attachment_exported_on_success, clear_entry_custom_icon, create_entry, delete_tag,
+    fetch_entry_favicon, get_history_entry_password, get_history_protected_field, list_entries,
+    list_entry_history, rename_tag, update_entry,
 };
 use mithril_vault_lib::commands::generator::{
     generate_passphrase, generate_password, PassphraseGeneratorOptions, PasswordGeneratorOptions,
@@ -27,6 +28,9 @@ use mithril_vault_lib::commands::groups::{
 use mithril_vault_lib::commands::secure_storage::{
     clear_session_key, has_session_key, store_session_key,
 };
+use mithril_vault_lib::domain::secure::SecureString;
+use mithril_vault_lib::dto::database::DatabaseCreationOptions;
+use mithril_vault_lib::dto::entry::{CreateEntryData, EntryHistoryItem, UpdateEntryData};
 use mithril_vault_lib::dto::error::AppError;
 use mithril_vault_lib::dto::group::UpdateGroupData;
 use mithril_vault_lib::register_services;
@@ -34,6 +38,7 @@ use mithril_vault_lib::services::audit::format::AuditEvent;
 use mithril_vault_lib::services::audit::key::InMemoryAuditKey;
 use mithril_vault_lib::services::audit::{AuditFilter, AuditService};
 use mithril_vault_lib::services::kdbx::backups::BackupKind;
+use std::collections::BTreeMap;
 use tauri::test::mock_app;
 use tauri::Manager;
 
@@ -676,4 +681,163 @@ fn audit_entry_protected_field_copied_on_success_records_exactly_one_event() {
         }
         other => panic!("unexpected event kind: {other:?}"),
     }
+}
+
+/// Seeds, through the command layer, a vault with one entry whose password and
+/// protected custom field have each been rotated once — so the originals
+/// ("orig-pw" / PIN "0451") sit in a single history version. Returns the app,
+/// its temp dir (kept alive so the db file survives), the db path, the entry id
+/// and the lone history version.
+fn seed_rotated_history_entry() -> (
+    tauri::App<tauri::test::MockRuntime>,
+    tempfile::TempDir,
+    String,
+    String,
+    EntryHistoryItem,
+) {
+    let app = setup_app();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let db = temp_dir
+        .path()
+        .join("history-reveal.kdbx")
+        .to_string_lossy()
+        .to_string();
+
+    let options = DatabaseCreationOptions {
+        create_default_groups: true,
+        kdf_memory: Some(1024 * 1024),
+        kdf_iterations: Some(1),
+        kdf_parallelism: Some(1),
+        description: None,
+    };
+    let info = tauri::async_runtime::block_on(create_database(
+        db.clone(),
+        "History Reveal".to_string(),
+        Some("password".to_string()),
+        None,
+        Some(options),
+        app.state(),
+    ))
+    .expect("create database");
+
+    let mut protected = BTreeMap::new();
+    protected.insert("PIN".to_string(), SecureString::from("0451"));
+    let entry = tauri::async_runtime::block_on(create_entry(
+        db.clone(),
+        info.root_group_id.clone(),
+        CreateEntryData {
+            title: "secret".to_string(),
+            username: String::new(),
+            password: SecureString::from("orig-pw"),
+            url: None,
+            notes: None,
+            icon_id: None,
+            tags: None,
+            custom_fields: None,
+            protected_custom_fields: Some(protected),
+            expires: None,
+            expiry_time: None,
+        },
+        app.state(),
+    ))
+    .expect("create entry");
+
+    let mut rotated = BTreeMap::new();
+    rotated.insert("PIN".to_string(), SecureString::from("9999"));
+    tauri::async_runtime::block_on(update_entry(
+        db.clone(),
+        entry.id.clone(),
+        UpdateEntryData {
+            title: None,
+            username: None,
+            password: Some(SecureString::from("new-pw")),
+            url: None,
+            notes: None,
+            icon_id: None,
+            tags: None,
+            custom_fields: None,
+            protected_custom_fields: Some(rotated),
+            expires: None,
+            expiry_time: None,
+        },
+        app.state(),
+    ))
+    .expect("update entry");
+
+    let mut history = tauri::async_runtime::block_on(list_entry_history(
+        db.clone(),
+        entry.id.clone(),
+        app.state(),
+    ))
+    .expect("history");
+    assert_eq!(history.len(), 1, "one prior version after a single edit");
+    let version = history.remove(0);
+    (app, temp_dir, db, entry.id, version)
+}
+
+/// Success path: the per-version reveal commands return the addressed version's
+/// secrets through the full `#[tauri::command]` layer (mock app, real state).
+#[test]
+fn history_reveal_commands_return_versioned_secrets() {
+    let (app, _temp_dir, db, entry_id, version) = seed_rotated_history_entry();
+
+    let password = tauri::async_runtime::block_on(get_history_entry_password(
+        db.clone(),
+        entry_id.clone(),
+        version.index,
+        version.fingerprint.clone(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("history password");
+    assert_eq!(password, "orig-pw");
+
+    let field = tauri::async_runtime::block_on(get_history_protected_field(
+        db.clone(),
+        entry_id,
+        version.index,
+        version.fingerprint.clone(),
+        "PIN".to_string(),
+        app.state(),
+        app.state(),
+    ))
+    .expect("history protected field");
+    assert_eq!(field.value, "0451");
+
+    cleanup_app_files(&app);
+}
+
+/// Guard path: a stale fingerprint is rejected by both reveal commands.
+#[test]
+fn history_reveal_commands_reject_a_stale_fingerprint() {
+    let (app, _temp_dir, db, entry_id, version) = seed_rotated_history_entry();
+
+    let stale_password = tauri::async_runtime::block_on(get_history_entry_password(
+        db.clone(),
+        entry_id.clone(),
+        version.index,
+        "stale-fingerprint".to_string(),
+        app.state(),
+        app.state(),
+    ));
+    assert!(matches!(
+        stale_password,
+        Err(AppError::HistoryVersionMismatch(_))
+    ));
+
+    let stale_field = tauri::async_runtime::block_on(get_history_protected_field(
+        db,
+        entry_id,
+        version.index,
+        "stale-fingerprint".to_string(),
+        "PIN".to_string(),
+        app.state(),
+        app.state(),
+    ));
+    assert!(matches!(
+        stale_field,
+        Err(AppError::HistoryVersionMismatch(_))
+    ));
+
+    cleanup_app_files(&app);
 }
