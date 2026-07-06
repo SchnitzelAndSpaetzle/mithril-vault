@@ -33,8 +33,7 @@ export function DatabaseTabBar() {
     select: (state) => {
       for (let i = state.matches.length - 1; i >= 0; i -= 1) {
         const params = state.matches[i]?.params as
-          | Record<string, string>
-          | undefined;
+          Record<string, string> | undefined;
         if (params && typeof params["dbId"] === "string") {
           return params["dbId"];
         }

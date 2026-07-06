@@ -86,7 +86,12 @@ function DateTimePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar mode="single" selected={value} onSelect={handleDaySelect} />
+        <Calendar
+          mode="single"
+          selected={value}
+          defaultMonth={value}
+          onSelect={handleDaySelect}
+        />
         <div className="border-t p-3">
           <Input
             type="time"
