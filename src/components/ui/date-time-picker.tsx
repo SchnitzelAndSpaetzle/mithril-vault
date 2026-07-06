@@ -89,7 +89,7 @@ function DateTimePicker({
         <Calendar
           mode="single"
           selected={value}
-          defaultMonth={value}
+          {...(value ? { defaultMonth: value } : {})}
           onSelect={handleDaySelect}
         />
         <div className="border-t p-3">
