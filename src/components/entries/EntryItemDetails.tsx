@@ -859,7 +859,12 @@ function AttachmentsSection({
       ) : (
         <ul>
           {sorted.map((attachment, index) => {
-            const Icon = attachmentIcon(attachment.mimeType);
+            // attachmentIcon returns a stable module-level lucide component
+            // (Image/FileText/File); render it via createElement so the icon
+            // lookup isn't misread as a component defined during render.
+            const icon = createElement(attachmentIcon(attachment.mimeType), {
+              className: "h-4 w-4 shrink-0 text-muted-foreground",
+            });
             // Non-previewable types (PDF, SVG, archives, opaque binaries)
             // don't get a Preview affordance at all — the spec says no
             // broken preview button.
@@ -869,7 +874,7 @@ function AttachmentsSection({
               <li key={attachment.filename}>
                 {index > 0 && <Separator />}
                 <div className="flex min-w-0 items-center gap-3 px-4 py-2">
-                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {icon}
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">
                     {attachment.filename}
                   </span>

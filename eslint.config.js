@@ -1,6 +1,6 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
-import react from "eslint-plugin-react";
+import eslintReact from "@eslint-react/eslint-plugin";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import prettier from "eslint-plugin-prettier/recommended";
@@ -29,11 +29,17 @@ export default defineConfig(
   // TanstackQuery rules
   ...pluginQuery.configs["flat/recommended"],
 
-  // React configuration
+  // React rules (@eslint-react — replaces the ESLint 10-incompatible
+  // eslint-plugin-react; TypeScript-tuned preset, no type information required)
+  {
+    files: ["**/*.{ts,tsx}"],
+    ...eslintReact.configs["recommended-typescript"],
+  },
+
+  // React Hooks (official plugin) + React Refresh + project rules
   {
     files: ["**/*.{ts,tsx}"],
     plugins: {
-      react,
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
     },
@@ -50,16 +56,16 @@ export default defineConfig(
         },
       },
     },
-    settings: {
-      react: {
-        version: "detect",
-      },
-    },
     rules: {
-      // React rules
-      ...react.configs.recommended.rules,
-      ...react.configs["jsx-runtime"].rules,
+      // Hooks linting is owned by the official (React-team) plugin, which ships
+      // the comprehensive React Compiler rule set.
       ...reactHooks.configs.recommended.rules,
+
+      // Defer to react-hooks above; silence @eslint-react's overlapping hook
+      // rules so the same issues aren't reported twice.
+      "@eslint-react/rules-of-hooks": "off",
+      "@eslint-react/exhaustive-deps": "off",
+      "@eslint-react/set-state-in-effect": "off",
 
       // React Refresh (for Vite HMR)
       "react-refresh/only-export-components": [
