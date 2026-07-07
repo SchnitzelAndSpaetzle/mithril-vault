@@ -27,7 +27,7 @@ export function useEntryListKeyboard({
         ? entries.findIndex((entry) => entry.id === selectedEntryId)
         : -1;
 
-      let nextIndex: number | null = null;
+      let nextIndex: number;
 
       switch (e.key) {
         case "ArrowDown":
@@ -57,7 +57,7 @@ export function useEntryListKeyboard({
           return;
       }
 
-      const nextEntry = nextIndex !== null ? entries[nextIndex] : undefined;
+      const nextEntry = entries[nextIndex];
       if (nextEntry) {
         onSelect(nextEntry.id);
         scrollToIndex(nextIndex);
