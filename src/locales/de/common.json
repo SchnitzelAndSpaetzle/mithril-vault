@@ -567,7 +567,8 @@
     "openAnother": "Andere Datenbank öffnen",
     "openDatabase": "Datenbank öffnen",
     "settings": "Einstellungen",
-    "lockDatabase": "Datenbank sperren"
+    "lockDatabase": "Datenbank sperren",
+    "mergeFromFile": "Aus Datei zusammenführen…"
   },
   "createDatabase": {
     "title": "Neue Datenbank erstellen",
@@ -713,6 +714,22 @@
   "database": {
     "save": {
       "failed": "Datenbank konnte nicht gespeichert werden: {{error}}. Die letzte Änderung ist im Speicher, aber nicht auf der Festplatte."
+    },
+    "merge": {
+      "toast": {
+        "added_one": "{{count}} Eintrag hinzugefügt",
+        "added_other": "{{count}} Einträge hinzugefügt",
+        "updated_one": "{{count}} Eintrag aktualisiert",
+        "updated_other": "{{count}} Einträge aktualisiert",
+        "deleted_one": "{{count}} Eintrag gelöscht",
+        "deleted_other": "{{count}} Einträge gelöscht",
+        "conflicts_one": "{{count}} Konflikt",
+        "conflicts_other": "{{count}} Konflikte",
+        "conflictDetail": "{{title}}: neuere Version übernommen, andere im Verlauf",
+        "noChanges": "Bereits aktuell — nichts zusammenzuführen",
+        "securityPosture": "Die ausgewählte Datei verwendet andere Sicherheitseinstellungen (z. B. Schlüsselableitung). Sie wurden nicht übernommen — prüfen Sie sie in den Einstellungen.",
+        "failed": "Zusammenführen fehlgeschlagen: {{error}}"
+      }
     }
   },
   "shortcuts": {

@@ -440,6 +440,36 @@ export const BackupInfoSchema = z.object({
 });
 export type BackupInfo = z.infer<typeof BackupInfoSchema>;
 
+/// One aspect of the vault's security posture that differed between the
+/// two sides of a merge. Reported only — a merge never applies the
+/// incoming security settings.
+export const SecurityPostureChangeSchema = z.enum([
+  "kdf",
+  "outerCipher",
+  "innerCipher",
+  "compression",
+]);
+export type SecurityPostureChange = z.infer<typeof SecurityPostureChangeSchema>;
+
+/// One same-entry conflict the merge resolved newest-wins; the losing
+/// version was preserved in that entry's KDBX history.
+export const MergeConflictSchema = z.object({
+  entryId: z.string().min(1),
+  title: z.string(),
+});
+export type MergeConflict = z.infer<typeof MergeConflictSchema>;
+
+/// Structured report of what "Merge from file…" combined and what
+/// conflicted, rendered as the post-merge summary toast.
+export const MergeSummarySchema = z.object({
+  entriesAdded: z.number().int().nonnegative(),
+  entriesUpdated: z.number().int().nonnegative(),
+  entriesDeleted: z.number().int().nonnegative(),
+  conflicts: z.array(MergeConflictSchema),
+  securityPostureChanges: z.array(SecurityPostureChangeSchema),
+});
+export type MergeSummary = z.infer<typeof MergeSummarySchema>;
+
 /// Audit log event — security-relevant action recorded on this device.
 /// Each kind plugs into the same row shape so the panel does not need
 /// per-kind layouts; optional fields (`attemptCount`, `reason`, `entryId`)

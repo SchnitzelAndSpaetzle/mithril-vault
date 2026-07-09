@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: MIT
 
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Database, Loader2, Lock, Settings } from "lucide-react";
+import {
+  ChevronDown,
+  Database,
+  GitMerge,
+  Loader2,
+  Lock,
+  Settings,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -21,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button.tsx";
 import { useActiveDatabase } from "@/hooks/use-active-database";
 import { useAppPreferences } from "@/hooks/use-app-preferences";
+import { useMergeFromFile } from "@/hooks/use-merge-from-file";
 import { useRecentDatabases } from "@/hooks/use-recent-databases.ts";
 import { clipboard, database } from "@/lib/tauri.ts";
 import {
@@ -46,6 +54,7 @@ export function DatabaseSwitcher() {
   );
   const { recentDatabases, isLoading: isLoadingRecent } = useRecentDatabases();
   const { preferences } = useAppPreferences();
+  const mergeFromFile = useMergeFromFile(dbId);
 
   const handleLock = async () => {
     if (!tab?.id || !dbId) {
@@ -156,6 +165,18 @@ export function DatabaseSwitcher() {
                 </div>
                 <div className="text-muted-foreground font-medium">
                   {t("databaseSwitcher.openAnother")}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => mergeFromFile.mutate()}
+                disabled={mergeFromFile.isPending}
+                className="gap-2 p-2"
+              >
+                <div className="bg-background flex size-6 items-center justify-center rounded-md border">
+                  <GitMerge className="size-4" />
+                </div>
+                <div className="text-muted-foreground font-medium">
+                  {t("databaseSwitcher.mergeFromFile")}
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>

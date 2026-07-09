@@ -9,6 +9,7 @@ pub mod header;
 pub mod history;
 pub mod key;
 pub mod keyfile;
+pub mod merge;
 pub mod open;
 pub mod recycle;
 pub mod restore;

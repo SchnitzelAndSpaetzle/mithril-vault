@@ -592,7 +592,8 @@
     "openAnother": "Open another database",
     "openDatabase": "Open Database",
     "settings": "Settings",
-    "lockDatabase": "Lock Database"
+    "lockDatabase": "Lock Database",
+    "mergeFromFile": "Merge from file…"
   },
   "createDatabase": {
     "title": "Create New Database",
@@ -738,6 +739,22 @@
   "database": {
     "save": {
       "failed": "Failed to save database: {{error}}. Your last change is in memory but not on disk."
+    },
+    "merge": {
+      "toast": {
+        "added_one": "{{count}} entry added",
+        "added_other": "{{count}} entries added",
+        "updated_one": "{{count}} entry updated",
+        "updated_other": "{{count}} entries updated",
+        "deleted_one": "{{count}} entry deleted",
+        "deleted_other": "{{count}} entries deleted",
+        "conflicts_one": "{{count}} conflict",
+        "conflicts_other": "{{count}} conflicts",
+        "conflictDetail": "{{title}}: newer version kept, other in history",
+        "noChanges": "Already up to date — nothing to merge",
+        "securityPosture": "The selected file uses different security settings (e.g. key derivation). They were not applied — review them in Settings.",
+        "failed": "Merge failed: {{error}}"
+      }
     }
   },
   "shortcuts": {

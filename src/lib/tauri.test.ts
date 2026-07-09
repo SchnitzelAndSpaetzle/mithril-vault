@@ -469,6 +469,33 @@ describe("tauri wrappers validation", () => {
     });
   });
 
+  it("database.mergeFromFile parses the merge summary", async () => {
+    const dbId = "/mock/test.kdbx";
+    const summary = {
+      entriesAdded: 2,
+      entriesUpdated: 1,
+      entriesDeleted: 0,
+      conflicts: [{ entryId: crypto.randomUUID(), title: "Netflix" }],
+      securityPostureChanges: ["kdf"],
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(summary);
+
+    await expect(database.mergeFromFile(dbId)).resolves.toEqual(summary);
+    expect(invoke).toHaveBeenCalledWith("merge_database_from_file", { dbId });
+  });
+
+  it("database.mergeFromFile returns null when the user cancels the pick", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(null);
+
+    await expect(database.mergeFromFile("/mock/test.kdbx")).resolves.toBeNull();
+  });
+
+  it("database.mergeFromFile rejects malformed summaries", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({ entriesAdded: 1 });
+
+    await expect(database.mergeFromFile("/mock/test.kdbx")).rejects.toThrow();
+  });
+
   it("parses list_entry_history including the fingerprint and protected-field keys", async () => {
     const dbId = "/mock/test.kdbx";
     const id = crypto.randomUUID();
