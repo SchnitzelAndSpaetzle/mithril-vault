@@ -134,6 +134,9 @@ pub enum AppError {
 
     #[error("Audit log clear failed: {0}")]
     AuditClear(String),
+
+    #[error("The selected file is not a copy of the open Vault")]
+    MergeUnrelatedVault,
 }
 
 impl Serialize for AppError {

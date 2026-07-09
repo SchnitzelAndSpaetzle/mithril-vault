@@ -32,9 +32,10 @@ impl KdbxService {
         db_id: &str,
         source_path: &str,
     ) -> Result<(MergeSummary, Option<BackupInfo>), AppError> {
-        // Snapshot credentials first so the databases lock is not held
-        // across the (KDF-slow) unlock of the incoming file.
-        let (password, keyfile_path) = {
+        // Snapshot credentials (and the pre-merge modified flag, for the
+        // save-failure rollback below) first so the databases lock is not
+        // held across the (KDF-slow) unlock of the incoming file.
+        let (password, keyfile_path, was_modified) = {
             let normalized_path = Self::normalize_path(db_id);
             let databases = self.lock_databases()?;
             let open_db = databases
@@ -46,7 +47,11 @@ impl KdbxService {
             if open_db.password.is_none() && open_db.keyfile_path.is_none() {
                 return Err(AppError::NoCredentials);
             }
-            (open_db.password.clone(), open_db.keyfile_path.clone())
+            (
+                open_db.password.clone(),
+                open_db.keyfile_path.clone(),
+                open_db.is_modified,
+            )
         };
 
         let mut file = File::open(source_path).map_err(|e| AppError::InvalidPath(e.to_string()))?;
@@ -56,15 +61,46 @@ impl KdbxService {
         )?;
         let incoming = Database::open(&mut file, key).map_err(map_open_error)?;
 
-        let summary = self.with_vault_mut(db_id, |vault| {
+        let (summary, pre_merge_db) = self.with_vault_mut(db_id, |vault| {
             let outcome = merge_vaults(vault.db(), &incoming)?;
-            *vault.db_mut() = outcome.merged;
+            let previous = std::mem::replace(vault.db_mut(), outcome.merged);
             vault.mark_modified();
-            Ok(outcome.summary)
+            Ok((outcome.summary, previous))
         })?;
 
-        let backup = self.save(db_id)?;
-        Ok((summary, backup))
+        match self.save(db_id) {
+            Ok(backup) => {
+                // Refresh cached metadata that derives from the database
+                // content — the incoming side may have renamed the root,
+                // and `get_database_info`/`list_open_databases` read the
+                // cached name rather than the live database.
+                let normalized_path = Self::normalize_path(db_id);
+                let mut databases = self.lock_databases()?;
+                if let Some(open_db) = databases.get_mut(&normalized_path) {
+                    if let Some(db) = open_db.db.as_ref() {
+                        let name = db.root().name.clone();
+                        open_db.name = name;
+                    }
+                }
+                Ok((summary, backup))
+            }
+            Err(save_error) => {
+                // Roll the in-memory Vault back to its pre-merge state so a
+                // later unrelated save cannot silently persist a merge the
+                // user was told had failed.
+                let normalized_path = Self::normalize_path(db_id);
+                if let Ok(mut databases) = self.lock_databases() {
+                    if let Some(open_db) = databases.get_mut(&normalized_path) {
+                        open_db.db = Some(pre_merge_db);
+                        open_db.is_modified = was_modified;
+                        // Content changed back: bump the generation so caches
+                        // keyed on it (Password Health) re-analyze.
+                        open_db.generation = open_db.generation.saturating_add(1);
+                    }
+                }
+                Err(save_error)
+            }
+        }
     }
 }
 
@@ -79,6 +115,12 @@ pub struct MergeOutcome {
 /// Merges `incoming` into a copy of `local`, returning the merged database
 /// plus a structured [`MergeSummary`]. Neither input is mutated.
 pub fn merge_vaults(local: &Database, incoming: &Database) -> Result<MergeOutcome, AppError> {
+    // A diverged copy of the same Vault shares its root-group UUID. An
+    // unrelated Vault does not, and the upstream merge panics trying to
+    // re-add a foreign root — reject it with a normal error instead.
+    if local.root().id() != incoming.root().id() {
+        return Err(AppError::MergeUnrelatedVault);
+    }
     let conflicts = detect_conflicts(local, incoming);
     let mut merged = local.clone();
     // The keepass crate's KeePassXC-style merge applies the combine; the
@@ -92,7 +134,12 @@ pub fn merge_vaults(local: &Database, incoming: &Database) -> Result<MergeOutcom
     // only when the entry already had history; the engine's contract is
     // stronger — every conflict is loss-free in both directions.
     for conflict in &conflicts {
-        ensure_version_in_history(&mut merged, conflict.id, &conflict.losing_version);
+        let loser_db = if conflict.loser_is_incoming {
+            incoming
+        } else {
+            local
+        };
+        ensure_version_in_history(&mut merged, conflict.id, &conflict.losing_version, loser_db);
     }
     let mut summary = summarize(local, &merged, &conflicts);
     summary.security_posture_changes = detect_security_posture_changes(local, incoming);
@@ -130,6 +177,9 @@ struct DetectedConflict {
     id: EntryId,
     title: String,
     losing_version: Entry,
+    /// Which side the losing version was cloned from — its attachment
+    /// references are only meaningful against that database's pool.
+    loser_is_incoming: bool,
 }
 
 /// An entry conflicts when it was edited on both sides: the two current
@@ -145,22 +195,23 @@ fn detect_conflicts(local: &Database, incoming: &Database) -> Vec<DetectedConfli
         };
         let local_entry = &*local_entry;
         let incoming_entry = &*incoming_entry;
-        if !entry_content_differs(local_entry, incoming_entry) {
+        if !entry_content_differs(local_entry, local, incoming_entry, incoming) {
             continue;
         }
         let incoming_is_newer = last_modification(incoming_entry) > last_modification(local_entry);
-        let (winner, loser) = if incoming_is_newer {
-            (incoming_entry, local_entry)
+        let (winner, winner_db, loser, loser_db, loser_is_incoming) = if incoming_is_newer {
+            (incoming_entry, incoming, local_entry, local, false)
         } else {
-            (local_entry, incoming_entry)
+            (local_entry, local, incoming_entry, incoming, true)
         };
-        if version_in_history(winner, loser) {
+        if version_in_history(winner, winner_db, loser, loser_db) {
             continue;
         }
         conflicts.push(DetectedConflict {
             id,
             title: winner.get(fields::TITLE).unwrap_or_default().to_string(),
             losing_version: loser.clone(),
+            loser_is_incoming,
         });
     }
     conflicts
@@ -170,34 +221,57 @@ fn last_modification(entry: &Entry) -> chrono::NaiveDateTime {
     entry.times.last_modification.unwrap_or_else(Times::epoch)
 }
 
-fn version_in_history(entry: &Entry, version: &Entry) -> bool {
+fn version_in_history(
+    entry: &Entry,
+    entry_db: &Database,
+    version: &Entry,
+    version_db: &Database,
+) -> bool {
     entry.history.as_ref().is_some_and(|history| {
         history
             .get_entries()
             .iter()
-            .any(|archived| !entry_content_differs(archived, version))
+            .any(|archived| !entry_content_differs(archived, entry_db, version, version_db))
     })
 }
 
-/// Appends `version` to the merged entry's history unless an equivalent
-/// version is already archived, keeping the newest-first ordering the
-/// KDBX history carries. Content-based dedup keeps re-merging the same
-/// inputs idempotent.
-fn ensure_version_in_history(merged: &mut Database, id: EntryId, version: &Entry) {
-    let Some(mut entry) = merged.entry_mut(id) else {
-        return;
-    };
-    let history = entry.history.get_or_insert_default();
-    let already_archived = history
-        .get_entries()
-        .iter()
-        .any(|archived| !entry_content_differs(archived, version));
-    if already_archived {
-        return;
-    }
-    let mut versions: Vec<Entry> = history.get_entries().clone();
+/// Appends `version` (cloned from `version_db`) to the merged entry's
+/// history unless an equivalent version is already archived, keeping the
+/// newest-first ordering the KDBX history carries. The version's attachment
+/// references are imported into the merged pool first — they point into
+/// `version_db`'s pool and would otherwise dangle or collide. Content-based
+/// dedup keeps re-merging the same inputs idempotent.
+fn ensure_version_in_history(
+    merged: &mut Database,
+    id: EntryId,
+    version: &Entry,
+    version_db: &Database,
+) {
     let mut version = version.clone();
     version.history = None;
+    version.remap_attachments(version_db, merged);
+
+    let Some(mut versions) = ({
+        let Some(entry) = merged.entry(id) else {
+            return;
+        };
+        let history_versions: Vec<Entry> = entry
+            .history
+            .as_ref()
+            .map(|history| history.get_entries().clone())
+            .unwrap_or_default();
+        let already_archived = history_versions
+            .iter()
+            .any(|archived| !entry_content_differs(archived, merged, &version, merged));
+        if already_archived {
+            None
+        } else {
+            Some(history_versions)
+        }
+    }) else {
+        return;
+    };
+
     versions.push(version);
     // `History::add_entry` prepends, so inserting oldest-to-newest leaves
     // the rebuilt history newest-first like the upstream merge produces.
@@ -206,6 +280,9 @@ fn ensure_version_in_history(merged: &mut Database, id: EntryId, version: &Entry
     for v in versions {
         rebuilt.add_entry(v);
     }
+    let Some(mut entry) = merged.entry_mut(id) else {
+        return;
+    };
     entry.history = Some(rebuilt);
 }
 
@@ -214,17 +291,12 @@ fn count(n: usize) -> u32 {
     u32::try_from(n).unwrap_or(u32::MAX)
 }
 
-/// Compares two versions of the same Entry by content, ignoring
-/// timestamps and history — the same notion of divergence the `KeePassXC`
-/// merge uses.
-fn entry_content_differs(a: &Entry, b: &Entry) -> bool {
-    let mut a = a.clone();
-    a.times = Times::default();
-    a.history = None;
-    let mut b = b.clone();
-    b.times = Times::default();
-    b.history = None;
-    a != b
+/// Compares two versions of the same Entry by content, ignoring timestamps,
+/// history, and attachment pool ids (attachments compare by name and bytes,
+/// resolved against each version's own database) — the same notion of
+/// divergence the `KeePassXC`-style upstream merge uses.
+fn entry_content_differs(a: &Entry, a_db: &Database, b: &Entry, b_db: &Database) -> bool {
+    !a.content_equivalent(a_db, b, b_db)
 }
 
 fn summarize(local: &Database, merged: &Database, conflicts: &[DetectedConflict]) -> MergeSummary {
@@ -244,7 +316,7 @@ fn summarize(local: &Database, merged: &Database, conflicts: &[DetectedConflict]
             .filter(|merged_entry| {
                 !conflicted_ids.contains(&merged_entry.id())
                     && local.entry(merged_entry.id()).is_some_and(|local_entry| {
-                        entry_content_differs(&local_entry, merged_entry)
+                        entry_content_differs(&local_entry, local, merged_entry, merged)
                     })
             })
             .count(),
@@ -760,6 +832,124 @@ mod tests {
         );
     }
 
+    fn attach(db: &mut Database, id: EntryId, name: &str, bytes: &[u8]) {
+        let mut entry = db.entry_mut(id).expect("entry exists");
+        entry.add_attachment(name, keepass::db::Value::unprotected(bytes.to_vec()));
+    }
+
+    fn attachment_bytes(db: &Database, id: EntryId, name: &str) -> Option<Vec<u8>> {
+        db.entry(id)?
+            .attachment_by_name(name)
+            .map(|a| a.data.get().clone())
+    }
+
+    /// The picked file must be a diverged copy of the open Vault. Merging an
+    /// unrelated Vault that happens to unlock with the same credentials must
+    /// fail with a clear error instead of panicking inside the upstream merge
+    /// (which cannot re-add a foreign root group).
+    #[test]
+    fn merging_an_unrelated_vault_is_rejected() {
+        let mut local = Database::new();
+        add_entry(&mut local, "Mine", "alice", ts(0));
+        let mut unrelated = Database::new();
+        add_entry(&mut unrelated, "Theirs", "bob", ts(1));
+
+        let result = merge_vaults(&local, &unrelated);
+
+        assert!(
+            matches!(result, Err(AppError::MergeUnrelatedVault)),
+            "an unrelated Vault must be rejected with MergeUnrelatedVault"
+        );
+    }
+
+    /// An attachment added on the newer incoming side must survive the merge
+    /// with its bytes reachable from the merged Vault's pool.
+    #[test]
+    fn attachment_added_on_newer_incoming_side_survives_merge() {
+        let mut base = Database::new();
+        let id = add_entry(&mut base, "Netflix", "alice", ts(0));
+        let local = base.clone();
+        let mut incoming = base;
+        attach(&mut incoming, id, "invoice.pdf", b"pdf bytes");
+        edit_entry_without_history(&mut incoming, id, "alice", ts(5));
+
+        let outcome = merge_vaults(&local, &incoming).expect("merge succeeds");
+
+        assert_eq!(
+            attachment_bytes(&outcome.merged, id, "invoice.pdf").as_deref(),
+            Some(b"pdf bytes".as_slice()),
+            "attachment added on the newer incoming side must survive the merge"
+        );
+    }
+
+    /// When the incoming side loses a conflict, the version archived into the
+    /// merged Entry's history must have its attachment bytes imported into
+    /// the merged pool — not left referencing the incoming file's pool, where
+    /// the id dangles or collides with an unrelated local blob.
+    #[test]
+    fn losing_incoming_version_archives_attachment_bytes_into_merged_pool() {
+        let mut base = Database::new();
+        let id = add_entry(&mut base, "Netflix", "alice", ts(0));
+        let mut local = base.clone();
+        let mut incoming = base;
+        // Local pool id 0: unrelated bytes; the local edit wins the conflict.
+        attach(&mut local, id, "local.bin", b"local blob");
+        edit_entry_without_history(&mut local, id, "alice@local", ts(7));
+        // Incoming pool id 0: the losing version's bytes — colliding id.
+        attach(&mut incoming, id, "incoming.bin", b"incoming blob");
+        edit_entry_without_history(&mut incoming, id, "alice@incoming", ts(3));
+
+        let outcome = merge_vaults(&local, &incoming).expect("merge succeeds");
+
+        assert_eq!(
+            attachment_bytes(&outcome.merged, id, "local.bin").as_deref(),
+            Some(b"local blob".as_slice()),
+            "winning local version keeps its own attachment"
+        );
+        let entry = outcome.merged.entry(id).expect("entry present");
+        let history_len = entry.history.as_ref().map_or(0, |h| h.get_entries().len());
+        let archived_bytes = (0..history_len)
+            .filter_map(|i| entry.historical(i))
+            .find_map(|version| {
+                version
+                    .attachment_by_name("incoming.bin")
+                    .map(|a| a.data.get().clone())
+            });
+        assert_eq!(
+            archived_bytes.as_deref(),
+            Some(b"incoming blob".as_slice()),
+            "archived losing version must resolve to its own bytes in the merged pool"
+        );
+    }
+
+    /// Two copies whose attachment sets are identical by name and bytes must
+    /// not report a conflict just because their pools assigned different ids
+    /// to the same data (e.g. attachments added in a different order).
+    #[test]
+    fn identical_attachments_with_drifted_pool_ids_do_not_conflict() {
+        let mut base = Database::new();
+        let first = add_entry(&mut base, "First", "alice", ts(0));
+        let second = add_entry(&mut base, "Second", "bob", ts(0));
+        let mut local = base.clone();
+        attach(&mut local, first, "a.bin", b"A");
+        attach(&mut local, second, "b.bin", b"B");
+        let mut incoming = base;
+        attach(&mut incoming, second, "b.bin", b"B");
+        attach(&mut incoming, first, "a.bin", b"A");
+        for db in [&mut local, &mut incoming] {
+            edit_entry_without_history(db, first, "alice", ts(2));
+            edit_entry_without_history(db, second, "bob", ts(2));
+        }
+
+        let outcome = merge_vaults(&local, &incoming).expect("merge succeeds");
+
+        assert!(
+            outcome.summary.conflicts.is_empty(),
+            "identical content must not be reported as a conflict"
+        );
+        assert_eq!(outcome.summary.entries_updated, 0);
+    }
+
     /// The picked file must unlock with the open Vault's credentials; a
     /// file with a different master password surfaces `InvalidPassword`
     /// and leaves the open Vault untouched.
@@ -791,5 +981,127 @@ mod tests {
         assert!(matches!(result, Err(AppError::InvalidPassword)));
         let entries = service.list_entries(&db_path, None).expect("list entries");
         assert_eq!(entries.len(), 2, "open Vault must be untouched");
+    }
+
+    /// Prepares a diverged on-disk copy of the open test Vault containing one
+    /// extra entry titled "From Copy".
+    fn make_diverged_copy(service: &KdbxService, dir: &std::path::Path, db_path: &str) -> String {
+        use crate::dto::entry::CreateEntryData;
+
+        let copy_path = dir.join("diverged-copy.kdbx").to_string_lossy().to_string();
+        std::fs::copy(db_path, &copy_path).expect("copy vault file");
+        let copy_info = service.open(&copy_path, "testpass").expect("open copy");
+        service
+            .create_entry(
+                &copy_path,
+                &copy_info.root_group_id,
+                CreateEntryData {
+                    title: "From Copy".to_string(),
+                    username: "dave".to_string(),
+                    password: crate::domain::secure::SecureString::from("secret"),
+                    url: None,
+                    notes: None,
+                    icon_id: Some(0),
+                    tags: None,
+                    custom_fields: None,
+                    protected_custom_fields: None,
+                    expires: None,
+                    expiry_time: None,
+                },
+            )
+            .expect("create entry in copy");
+        service.save(&copy_path).expect("save copy");
+        service.close(&copy_path).expect("close copy");
+        copy_path
+    }
+
+    /// When the post-merge save fails, the in-memory Vault must roll back to
+    /// its pre-merge state — otherwise the UI reports a failed merge while a
+    /// later save would silently persist it anyway.
+    #[cfg(unix)]
+    #[test]
+    fn merge_from_file_rolls_back_in_memory_state_when_save_fails() {
+        use crate::services::kdbx::test_support::create_test_database;
+        use std::os::unix::fs::PermissionsExt;
+
+        let (service, dir, db_path, _entry_a, _entry_b) = create_test_database();
+        service.save(&db_path).expect("save original to disk");
+        let copy_path = make_diverged_copy(&service, dir.path(), &db_path);
+
+        // Make the Vault's directory read-only so the post-merge save (backup
+        // snapshot + atomic write) fails after the in-memory merge succeeded.
+        let mut perms = std::fs::metadata(dir.path())
+            .expect("stat dir")
+            .permissions();
+        perms.set_mode(0o555);
+        std::fs::set_permissions(dir.path(), perms).expect("make dir read-only");
+
+        let result = service.merge_from_file(&db_path, &copy_path);
+
+        let mut restore = std::fs::metadata(dir.path())
+            .expect("stat dir")
+            .permissions();
+        restore.set_mode(0o755);
+        std::fs::set_permissions(dir.path(), restore).expect("restore dir permissions");
+
+        assert!(result.is_err(), "the failed save must surface as an error");
+        let titles: Vec<String> = service
+            .list_entries(&db_path, None)
+            .expect("list entries")
+            .into_iter()
+            .map(|e| e.title)
+            .collect();
+        assert!(
+            !titles.contains(&"From Copy".to_string()),
+            "in-memory merge must be rolled back when the save fails"
+        );
+        let info = service.get_info(&db_path).expect("info");
+        assert!(
+            !info.is_modified,
+            "rolled-back Vault must not report unsaved changes"
+        );
+    }
+
+    /// A newer root-group rename on the incoming side must be reflected in
+    /// the cached database info right after "Merge from file…" — not only
+    /// after a lock/unlock cycle reloads it.
+    #[test]
+    fn merge_from_file_refreshes_cached_database_name() {
+        use crate::services::kdbx::test_support::create_test_database;
+        use keepass::db::Times;
+
+        let (service, dir, db_path, _entry_a, _entry_b) = create_test_database();
+        service.save(&db_path).expect("save original to disk");
+
+        let copy_path = dir
+            .path()
+            .join("renamed-copy.kdbx")
+            .to_string_lossy()
+            .to_string();
+        std::fs::copy(&db_path, &copy_path).expect("copy vault file");
+        service.open(&copy_path, "testpass").expect("open copy");
+        service
+            .with_vault_mut(&copy_path, |vault| {
+                let mut root = vault.db_mut().root_mut();
+                root.name = "Renamed Vault".to_string();
+                // Force the rename to be strictly newer than the original's
+                // creation timestamps.
+                root.times.last_modification = Some(Times::now() + chrono::Duration::seconds(5));
+                vault.mark_modified();
+                Ok(())
+            })
+            .expect("rename copy root");
+        service.save(&copy_path).expect("save copy");
+        service.close(&copy_path).expect("close copy");
+
+        service
+            .merge_from_file(&db_path, &copy_path)
+            .expect("merge from file");
+
+        let info = service.get_info(&db_path).expect("info");
+        assert_eq!(
+            info.name, "Renamed Vault",
+            "cached database name must reflect the merged root rename"
+        );
     }
 }
