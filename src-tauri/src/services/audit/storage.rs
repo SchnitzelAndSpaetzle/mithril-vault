@@ -12,7 +12,7 @@
 //! appender cannot corrupt an in-progress line.
 
 use crate::services::audit::crypto::{decode_frame, encode_frame};
-use fs4::fs_std::FileExt;
+use fs4::FileExt;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -60,7 +60,7 @@ impl AuditLogFile {
     }
 
     /// Opens the sidecar lockfile (creating it if needed) and returns it.
-    /// The caller is responsible for `lock_exclusive` / `lock_shared`
+    /// The caller is responsible for `lock` / `lock_shared`
     /// before touching the real log file and `unlock` after.
     ///
     /// The sidecar is the *only* lock target shared by append, read, and
@@ -90,7 +90,7 @@ impl AuditLogFile {
             .map_err(|_| StorageError::Io("audit append mutex poisoned".into()))?;
 
         let lock = self.open_sidecar_lock()?;
-        FileExt::lock_exclusive(&lock)?;
+        FileExt::lock(&lock)?;
 
         let result = (|| -> std::io::Result<()> {
             let mut file = OpenOptions::new()
@@ -132,7 +132,7 @@ impl AuditLogFile {
             .map_err(|_| StorageError::Io("audit replace mutex poisoned".into()))?;
 
         let lock = self.open_sidecar_lock()?;
-        FileExt::lock_exclusive(&lock)?;
+        FileExt::lock(&lock)?;
 
         let result = (|| -> std::io::Result<()> {
             let tmp_path = tmp_path_for(&self.path);
@@ -185,7 +185,7 @@ impl AuditLogFile {
             .map_err(|_| StorageError::Io("audit compact mutex poisoned".into()))?;
 
         let lock = self.open_sidecar_lock()?;
-        FileExt::lock_exclusive(&lock)?;
+        FileExt::lock(&lock)?;
 
         let result = (|| -> std::io::Result<CompactStats> {
             // Read existing frames under the exclusive lock so no
@@ -416,7 +416,7 @@ mod tests {
             .write(true)
             .open(log.lock_path())
             .expect("open sidecar lock");
-        FileExt::lock_exclusive(&blocker).expect("lock exclusive");
+        FileExt::lock(&blocker).expect("lock exclusive");
 
         let (tx, rx) = mpsc::channel();
         let reader_path = path.clone();
@@ -527,7 +527,7 @@ mod tests {
             .write(true)
             .open(&lock_path)
             .expect("open sidecar");
-        FileExt::lock_exclusive(&held_lock).expect("acquire sidecar lock");
+        FileExt::lock(&held_lock).expect("acquire sidecar lock");
 
         let barrier = Arc::new(Barrier::new(2));
         let log_for_thread = Arc::clone(&log);

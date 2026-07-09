@@ -19,6 +19,7 @@ import type {
   DatabaseHeaderInfo,
   DatabaseInfo,
   Entry,
+  EntryHistoryItem,
   FaviconFetchOutcome,
   GeneratedPassphrase,
   GeneratedPassword,
@@ -29,6 +30,7 @@ import type {
   PasswordHealthReport,
   RecentDatabase,
   UpdateEntryData,
+  VaultHistorySettings,
 } from "./types";
 import {
   AddAttachmentsOutcomeSchema,
@@ -45,6 +47,7 @@ import {
   DatabaseCreationOptionsSchema,
   DatabaseHeaderInfoSchema,
   DatabaseInfoSchema,
+  EntryHistoryItemSchema,
   EntrySchema,
   FaviconFetchOutcomeSchema,
   GeneratedPassphraseSchema,
@@ -56,6 +59,7 @@ import {
   PasswordHealthReportSchema,
   RecentDatabaseSchema,
   UpdateEntryDataSchema,
+  VaultHistorySettingsSchema,
 } from "./types";
 
 export const KeepassIdSchema = z.guid();
@@ -253,6 +257,41 @@ export const database = {
   },
 
   /**
+   * Reads the per-Vault Entry-History retention (`Meta.history_max_items`) — the
+   * writable vault-meta surface, distinct from the read-only crypto config
+   * returned by {@link getConfig}. `maxItems` is the raw signed value (`null`
+   * when absent → effective default 10).
+   */
+  async getHistorySettings(dbId: string): Promise<VaultHistorySettings> {
+    DbIdSchema.parse({ dbId });
+    const result = await invoke("get_vault_history_settings", { dbId });
+    return VaultHistorySettingsSchema.parse(result);
+  },
+
+  /**
+   * Writes the per-Vault History Limit. Pass `null` to clear the field (default
+   * 10), a negative value for unlimited, `0` to disable, or positive `n` to keep
+   * the newest `n` versions. Persists on next save.
+   */
+  async updateHistorySettings(
+    dbId: string,
+    maxItems: number | null
+  ): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    return invoke("update_vault_history_settings", { dbId, maxItems });
+  },
+
+  /**
+   * Clears every Entry's history across the whole Vault, emptying each native
+   * KDBX `Entry.history` (ADR-0008). Live content is untouched; persists on next
+   * save. Not audited (per the PRD).
+   */
+  async clearAllHistory(dbId: string): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    return invoke("clear_all_history", { dbId });
+  },
+
+  /**
    * Get info about the currently open database.
    * Returns null if no database is open.
    */
@@ -324,6 +363,106 @@ export const entries = {
     IdSchema.parse({ id });
     const result = await invoke("get_entry_password", { dbId, id });
     return z.string().parse(result);
+  },
+
+  /**
+   * Lists an Entry's history — its past versions, newest-first — from native
+   * KDBX history (ADR-0008). Each item carries its `index`, the snapshot's
+   * `modifiedAt`, and non-secret display fields only; no password or protected
+   * value crosses IPC. An Entry with no recorded history returns an empty list.
+   */
+  async listHistory(dbId: string, id: string): Promise<EntryHistoryItem[]> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("list_entry_history", { dbId, id });
+    return z.array(EntryHistoryItemSchema).parse(result);
+  },
+
+  /**
+   * Reveals a historical version's password on demand (ADR-0008), mirroring
+   * {@link getPassword} for the live Entry. The version is addressed by its
+   * `index` in the newest-first list and guarded by `fingerprint` (taken from
+   * the {@link EntryHistoryItem}); a stale/mismatched fingerprint errors rather
+   * than returning the wrong version's secret. The listing never carries this.
+   */
+  async getHistoryPassword(
+    dbId: string,
+    id: string,
+    index: number,
+    fingerprint: string
+  ): Promise<string> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("get_history_entry_password", {
+      dbId,
+      id,
+      index,
+      fingerprint,
+    });
+    return z.string().parse(result);
+  },
+
+  /**
+   * Reveals a historical version's protected custom field on demand, under the
+   * same index+fingerprint guard as {@link getHistoryPassword}.
+   */
+  async getHistoryProtectedField(
+    dbId: string,
+    id: string,
+    index: number,
+    fingerprint: string,
+    key: string
+  ): Promise<CustomFieldValue> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    CustomFieldKeySchema.parse({ key });
+    const result = await invoke("get_history_protected_field", {
+      dbId,
+      id,
+      index,
+      fingerprint,
+      key,
+    });
+    return CustomFieldValueSchema.parse(result);
+  },
+
+  /**
+   * Restores an Entry to a past version (ADR-0008). The version is addressed by
+   * its `index` in the newest-first list and guarded by `fingerprint` (taken
+   * from the {@link EntryHistoryItem}); a stale/mismatched fingerprint errors
+   * rather than restoring the wrong version. The backend snapshots the current
+   * state into history first (so the restore is undoable), then overwrites the
+   * live Entry's content from the chosen version — all fields incl. password,
+   * attachments, icon and expiry — leaving its UUID and parent Group untouched.
+   * Secrets are read backend-side and never round-trip. Returns the updated
+   * Entry (no secret fields).
+   */
+  async restoreHistory(
+    dbId: string,
+    id: string,
+    index: number,
+    fingerprint: string
+  ): Promise<Entry> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    const result = await invoke("restore_entry_history", {
+      dbId,
+      id,
+      index,
+      fingerprint,
+    });
+    return EntrySchema.parse(result);
+  },
+
+  /**
+   * Clears one Entry's history, emptying its native KDBX `Entry.history`
+   * (ADR-0008). The live content is untouched; persists on next save. Not
+   * audited (per the PRD).
+   */
+  async clearHistory(dbId: string, id: string): Promise<void> {
+    DbIdSchema.parse({ dbId });
+    IdSchema.parse({ id });
+    return invoke("clear_entry_history", { dbId, id });
   },
 
   /**

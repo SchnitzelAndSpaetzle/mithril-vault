@@ -86,7 +86,15 @@ function DateTimePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar mode="single" selected={value} onSelect={handleDaySelect} />
+        <Calendar
+          mode="single"
+          selected={value}
+          onSelect={handleDaySelect}
+          // Open on the selected date's month rather than today. Guarded
+          // because defaultMonth is strictly `Date` under
+          // exactOptionalPropertyTypes (passing `undefined` is a type error).
+          {...(value ? { defaultMonth: value } : {})}
+        />
         <div className="border-t p-3">
           <Input
             type="time"

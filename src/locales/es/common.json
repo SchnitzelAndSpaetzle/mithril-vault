@@ -35,6 +35,7 @@
       "entryPasswordCopied": "Contraseña copiada",
       "entryProtectedFieldRevealed": "Campo protegido revelado",
       "entryAttachmentExported": "Adjunto descargado",
+      "entryHistoryRestored": "Restaurado desde el historial",
       "preferencesSecurityChanged": "Preferencia de seguridad modificada",
       "auditCleared": "Registro de auditoría borrado"
     },
@@ -235,7 +236,20 @@
       "pendingTitle": "Implementación pendiente",
       "pendingItems": {
         "mutations": "Los controles de mutación a nivel de base de datos aún no están implementados.",
-        "recycleBin": "La edición de papelera de reciclaje/historial/políticas de seguridad está pendiente."
+        "recycleBin": "La edición de la papelera y de la política de seguridad está pendiente."
+      },
+      "history": {
+        "title": "Historial de entradas",
+        "description": "Cuántas versiones anteriores de cada entrada conserva esta caja fuerte. Se almacena en el archivo de base de datos, por lo que el límite viaja con él.",
+        "keepNewest": "Conservar las más recientes",
+        "itemsLabel": "Número de versiones a conservar",
+        "unlimited": "Ilimitado",
+        "disabled": "Desactivado",
+        "clearAll": "Borrar todo el historial",
+        "clearAllDescription": "Eliminar permanentemente el historial de versiones guardado de cada entrada de esta bóveda. Se conservan los valores actuales de las entradas.",
+        "clearAllConfirmTitle": "Borrar todo el historial",
+        "clearAllConfirm": "¿Eliminar permanentemente el historial de versiones guardado de cada entrada de esta bóveda? Se conservan los valores actuales de las entradas. Esta acción no se puede deshacer.",
+        "clearAllFailed": "No se pudo borrar el historial"
       }
     },
     "sidebar": {
@@ -363,6 +377,43 @@
       "hideField": "ocultar {{field}}",
       "attachments": "Adjuntos",
       "noAttachments": "Sin adjuntos",
+      "history": "Historial",
+      "noHistory": "Aún no hay historial",
+      "historyChanged": "Cambiado: {{fields}}",
+      "historyCreated": "Creado",
+      "historyEarliestKept": "Versión más antigua conservada",
+      "restoreVersion": "Restaurar esta versión",
+      "compare": {
+        "action": "Comparar con la versión actual",
+        "title": "Comparar con la versión actual",
+        "description": "Comparando la versión del {{date}} con la entrada actual",
+        "noChanges": "No hay diferencias entre esta versión y la entrada actual",
+        "previousNotAvailable": "Valor anterior no disponible",
+        "attachmentAdded": "Añadido",
+        "attachmentRemoved": "Eliminado"
+      },
+      "restoreHistoryConfirmTitle": "Restaurar versión",
+      "restoreHistoryConfirm": "¿Restaurar esta entrada a la versión del {{date}}? El estado actual se guarda primero en el historial, para que puedas deshacerlo.",
+      "restoreHistorySuccess": "Entrada restaurada a la versión seleccionada",
+      "restoreHistoryFailed": "No se pudo restaurar la entrada",
+      "restoreHistoryUnchanged": "Esta versión coincide con la entrada actual: no hay nada que restaurar",
+      "clearHistory": "Borrar historial",
+      "clearHistoryConfirmTitle": "Borrar historial",
+      "clearHistoryConfirm": "¿Eliminar permanentemente el historial de versiones guardado de esta entrada? Se conservan sus valores actuales. Esta acción no se puede deshacer.",
+      "clearHistorySuccess": "Historial de la entrada borrado",
+      "clearHistoryFailed": "No se pudo borrar el historial de la entrada",
+      "historyField": {
+        "title": "título",
+        "username": "usuario",
+        "password": "contraseña",
+        "url": "URL",
+        "notes": "notas",
+        "tags": "etiquetas",
+        "icon": "icono",
+        "attachments": "adjuntos",
+        "expiry": "caducidad",
+        "location": "ubicación"
+      },
       "addAttachment": "Añadir adjunto",
       "addingAttachments": "Añadiendo…",
       "dropToAttach": "Suelta archivos aquí para adjuntarlos",

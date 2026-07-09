@@ -1,7 +1,7 @@
 use crate::domain::secure::SecureBytes;
 use crate::dto::entry::{
     AddAttachmentsOutcome, AttachmentAddPlan, CreateEntryData, CustomFieldValue, Entry,
-    UpdateEntryData,
+    EntryHistoryItem, UpdateEntryData,
 };
 use crate::dto::error::AppError;
 use crate::services::audit::AuditService;
@@ -72,6 +72,25 @@ pub fn audit_attachment_exported_on_success<T>(
     result
 }
 
+/// Maps a `restore_entry_history` outcome through the audit subsystem: a
+/// successful restore records exactly one `entry.history_restored` event
+/// carrying the Entry's UUID; any error path (including a guard mismatch)
+/// records nothing.
+///
+/// Kept as a free function (mirroring the reveal/export wrappers above) so
+/// integration tests can drive it without a Tauri runtime.
+pub fn audit_entry_history_restored_on_success<T>(
+    audit: &AuditService,
+    vault_path: &str,
+    entry_id: &str,
+    result: Result<T, AppError>,
+) -> Result<T, AppError> {
+    if result.is_ok() {
+        audit.record_entry_history_restored(Path::new(vault_path), entry_id);
+    }
+    result
+}
+
 /// Lists entries, optionally filtered by group.
 /// The `db_id` is the path to the database file.
 #[tauri::command]
@@ -92,6 +111,19 @@ pub async fn get_entry(
     state: State<'_, Arc<KdbxService>>,
 ) -> Result<Entry, AppError> {
     state.get_entry(&db_id, &id)
+}
+
+/// Lists an Entry's history — its past versions, newest-first. Each item
+/// carries its `index`, the snapshot's `modified_at`, and non-secret display
+/// fields only; no password or protected value crosses IPC. A read-only
+/// command, so it records no audit event.
+#[tauri::command]
+pub async fn list_entry_history(
+    db_id: String,
+    id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<Vec<EntryHistoryItem>, AppError> {
+    state.list_entry_history(&db_id, &id)
 }
 
 /// Fetches an entry password. A successful read also appends one
@@ -129,6 +161,88 @@ pub async fn get_entry_protected_custom_field(
         &id,
         state.get_entry_protected_custom_field(&db_id, &id, &key),
     )
+}
+
+/// Fetches a historical version's password on demand, addressed by `index` in
+/// the newest-first history list and guarded by `fingerprint` (a stale guard
+/// errors rather than returning the wrong version). A successful read appends
+/// one `entry.password_revealed` event — the same audit kind as the live
+/// reveal; a failure (including a guard mismatch) records nothing.
+#[tauri::command]
+pub async fn get_history_entry_password(
+    db_id: String,
+    id: String,
+    index: usize,
+    fingerprint: String,
+    state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<String, AppError> {
+    audit_entry_password_revealed_on_success(
+        audit.inner(),
+        &db_id,
+        &id,
+        state.get_history_entry_password(&db_id, &id, index, &fingerprint),
+    )
+}
+
+/// Fetches a historical version's protected custom field on demand, under the
+/// same index+fingerprint guard as [`get_history_entry_password`]. A successful
+/// read appends one `entry.protected_field_revealed` event; a failure records
+/// nothing.
+#[tauri::command]
+pub async fn get_history_protected_field(
+    db_id: String,
+    id: String,
+    index: usize,
+    fingerprint: String,
+    key: String,
+    state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<CustomFieldValue, AppError> {
+    audit_entry_protected_field_revealed_on_success(
+        audit.inner(),
+        &db_id,
+        &id,
+        state.get_history_protected_field(&db_id, &id, index, &fingerprint, &key),
+    )
+}
+
+/// Restores an Entry to a past version, addressed by `index` in the
+/// newest-first history list and guarded by `fingerprint` (a stale guard
+/// errors rather than restoring the wrong version). The current state is
+/// snapshotted into history first so the restore is undoable, then the live
+/// Entry's content — all fields including the password, attachments, icon and
+/// expiry — is overwritten from the chosen version; UUID and parent Group are
+/// untouched. The restored secret is read in Rust and never crosses IPC. A
+/// successful restore appends one `entry.history_restored` event; a failure
+/// (including a guard mismatch) records nothing.
+#[tauri::command]
+pub async fn restore_entry_history(
+    db_id: String,
+    id: String,
+    index: usize,
+    fingerprint: String,
+    state: State<'_, Arc<KdbxService>>,
+    audit: State<'_, Arc<AuditService>>,
+) -> Result<Entry, AppError> {
+    audit_entry_history_restored_on_success(
+        audit.inner(),
+        &db_id,
+        &id,
+        state.restore_entry_history(&db_id, &id, index, &fingerprint),
+    )
+}
+
+/// Clears one Entry's history, emptying its native KDBX `Entry.history`
+/// (ADR-0008). The live content is untouched; the change persists on next save.
+/// Clearing history is not audited (per the PRD), so this records no event.
+#[tauri::command]
+pub async fn clear_entry_history(
+    db_id: String,
+    id: String,
+    state: State<'_, Arc<KdbxService>>,
+) -> Result<(), AppError> {
+    state.clear_entry_history(&db_id, &id)
 }
 
 /// Fetches a single Attachment's bytes on demand, keyed by filename, as

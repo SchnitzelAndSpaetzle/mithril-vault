@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use super::entries::snapshot_entry_history;
 use super::KdbxService;
 
 impl KdbxService {
@@ -51,15 +52,19 @@ impl KdbxService {
                 )));
             };
 
+            let retention = vault.history_retention();
             let changed = {
                 let mut entry = vault.entry_mut(entry_id)?;
                 if matches!(entry.icon(), Some(Icon::Custom(cid)) if *cid == icon_cid) {
                     false
                 } else {
+                    // Snapshot the prior icon state before swapping (#323).
+                    let before = (*entry.as_ref()).clone();
                     entry
                         .set_icon_custom(icon_cid)
                         .map_err(|e| AppError::Kdbx(e.to_string()))?;
                     entry.times.last_modification = Some(Times::now());
+                    snapshot_entry_history(&mut entry, before, retention);
                     true
                 }
             };
@@ -73,11 +78,15 @@ impl KdbxService {
 
     pub fn clear_entry_custom_icon(&self, db_id: &str, entry_id: &str) -> Result<bool, AppError> {
         self.with_vault_mut(db_id, |vault| {
+            let retention = vault.history_retention();
             let changed = {
                 let mut entry = vault.entry_mut(entry_id)?;
                 if matches!(entry.icon(), Some(Icon::Custom(_))) {
+                    // Snapshot the prior (icon-bearing) state before removing it (#323).
+                    let before = (*entry.as_ref()).clone();
                     entry.set_icon_none();
                     entry.times.last_modification = Some(Times::now());
+                    snapshot_entry_history(&mut entry, before, retention);
                     true
                 } else {
                     false
@@ -122,11 +131,16 @@ impl KdbxService {
                 .find(|icon| hash_bytes(&icon.data) == target_hash)
                 .map(|icon| icon.id());
 
+            let retention = vault.history_retention();
             let changed = {
                 let mut entry = vault
                     .db_mut()
                     .entry_mut(eid)
                     .ok_or_else(|| AppError::EntryNotFound(entry_id.to_string()))?;
+
+                // Snapshot the prior icon state before any swap (#323). Cloned
+                // up front, kept only when the icon actually changes below.
+                let before = (*entry.as_ref()).clone();
 
                 match existing_cid {
                     Some(cid)
@@ -139,11 +153,13 @@ impl KdbxService {
                             .set_icon_custom(cid)
                             .map_err(|e| AppError::Kdbx(e.to_string()))?;
                         entry.times.last_modification = Some(Times::now());
+                        snapshot_entry_history(&mut entry, before, retention);
                         true
                     }
                     None => {
                         entry.set_icon_custom_new(icon_bytes.to_vec());
                         entry.times.last_modification = Some(Times::now());
+                        snapshot_entry_history(&mut entry, before, retention);
                         true
                     }
                 }
@@ -210,6 +226,23 @@ mod tests {
     use super::*;
     use crate::services::kdbx::test_support::create_test_database;
 
+    /// Returns the UUID of the first Custom Icon in the pool — the shape tests
+    /// use to address an icon they just seeded via `assign_entry_custom_icon`.
+    fn first_custom_icon_uuid(service: &KdbxService, db_path: &str) -> String {
+        service
+            .with_vault(db_path, |vault| {
+                Ok(vault
+                    .db()
+                    .iter_all_custom_icons()
+                    .next()
+                    .expect("custom icon exists")
+                    .id()
+                    .uuid()
+                    .to_string())
+            })
+            .expect("vault scope")
+    }
+
     #[test]
     fn detect_icon_mime_recognizes_supported_signatures() {
         assert_eq!(
@@ -234,18 +267,7 @@ mod tests {
             .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
             .expect("seed icon");
 
-        let icon_uuid = service
-            .with_vault(&db_path, |vault| {
-                Ok(vault
-                    .db()
-                    .iter_all_custom_icons()
-                    .next()
-                    .expect("custom icon exists")
-                    .id()
-                    .uuid()
-                    .to_string())
-            })
-            .expect("vault scope");
+        let icon_uuid = first_custom_icon_uuid(&service, &db_path);
 
         let changed = service
             .set_entry_custom_icon(&db_path, &entry_b, &icon_uuid)
@@ -476,5 +498,110 @@ mod tests {
                 Ok(())
             })
             .expect("vault scope");
+    }
+
+    #[test]
+    fn assigning_a_custom_icon_snapshots_the_prior_state() {
+        // Setting an Entry's Custom Icon / Favicon is a content change, so the
+        // chokepoint captures the prior (iconless) state first (#323).
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 7];
+
+        assert!(service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign icon"));
+
+        let history = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("list history after icon assign");
+        assert_eq!(history.len(), 1, "assigning an icon captures one version");
+
+        service
+            .with_vault(&db_path, |vault| {
+                let entry = vault.find_entry(&entry_a).expect("entry ref");
+                assert!(
+                    !matches!(
+                        entry.historical(0).expect("version").icon(),
+                        Some(Icon::Custom(_))
+                    ),
+                    "the snapshot predates the icon, so it carries no custom icon"
+                );
+                Ok(())
+            })
+            .expect("vault scope");
+    }
+
+    #[test]
+    fn setting_an_existing_custom_icon_snapshots_the_prior_state() {
+        // Pointing an Entry at an already-stored Custom Icon also snapshots.
+        let (service, _dir, db_path, entry_a, entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 8];
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("seed icon in pool");
+        let icon_uuid = first_custom_icon_uuid(&service, &db_path);
+
+        assert!(service
+            .set_entry_custom_icon(&db_path, &entry_b, &icon_uuid)
+            .expect("set icon on b"));
+
+        let history = service
+            .list_entry_history(&db_path, &entry_b)
+            .expect("list history after set");
+        assert_eq!(history.len(), 1, "setting an icon captures one version");
+    }
+
+    #[test]
+    fn clearing_a_custom_icon_snapshots_the_prior_state() {
+        // Removing a Custom Icon is a content change too: the prior state (with
+        // the icon) must be recoverable.
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 9];
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign icon");
+        let before = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("history after assign")
+            .len();
+
+        assert!(service
+            .clear_entry_custom_icon(&db_path, &entry_a)
+            .expect("clear icon"));
+
+        let after = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("history after clear")
+            .len();
+        assert_eq!(after, before + 1, "clearing the icon adds one version");
+    }
+
+    #[test]
+    fn a_no_op_icon_set_snapshots_nothing() {
+        // Re-pointing an Entry at the icon it already has changes nothing, so it
+        // must not accrue a history version.
+        let (service, _dir, db_path, entry_a, _entry_b) = create_test_database();
+        let icon_bytes = [0x89, b'P', b'N', b'G', 10];
+        service
+            .assign_entry_custom_icon(&db_path, &entry_a, &icon_bytes, "image/png", true)
+            .expect("assign icon");
+        let icon_uuid = first_custom_icon_uuid(&service, &db_path);
+        let before = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("history after assign")
+            .len();
+
+        assert!(
+            !service
+                .set_entry_custom_icon(&db_path, &entry_a, &icon_uuid)
+                .expect("re-set same icon"),
+            "re-setting the same icon reports no change"
+        );
+
+        let after = service
+            .list_entry_history(&db_path, &entry_a)
+            .expect("history after no-op set")
+            .len();
+        assert_eq!(after, before, "a no-op icon set accrues no version");
     }
 }

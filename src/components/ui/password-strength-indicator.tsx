@@ -2,20 +2,19 @@
 
 import { useDeferredValue, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { zxcvbnAsync, zxcvbnOptions } from "@zxcvbn-ts/core";
+import { ZxcvbnFactory } from "@zxcvbn-ts/core";
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common";
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en";
 import { cn } from "@/lib/utils";
 
-const zxcvbnConfig = {
+const zxcvbn = new ZxcvbnFactory({
   dictionary: {
     ...zxcvbnCommonPackage.dictionary,
     ...zxcvbnEnPackage.dictionary,
   },
   graphs: zxcvbnCommonPackage.adjacencyGraphs,
   translations: zxcvbnEnPackage.translations,
-};
-zxcvbnOptions.setOptions(zxcvbnConfig);
+});
 
 const STRENGTH_BARS = [0, 1, 2, 3, 4] as const;
 
@@ -137,7 +136,7 @@ function usePasswordFeedback(password: string): PasswordFeedback {
     }
 
     let cancelled = false;
-    zxcvbnAsync(deferredPassword).then((res) => {
+    zxcvbn.checkAsync(deferredPassword).then((res) => {
       if (!cancelled) {
         setResolvedFeedback({
           password: deferredPassword,

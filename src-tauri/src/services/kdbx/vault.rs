@@ -271,6 +271,14 @@ impl VaultMut<'_> {
         *self.is_modified = true;
         *self.generation = self.generation.saturating_add(1);
     }
+
+    /// The per-Vault Entry-History retention, resolved from
+    /// `Meta.history_max_items` (ADR-0008). Read before taking an `entry_mut`
+    /// borrow so the resolved policy (a `Copy` value) can be handed to the
+    /// snapshot chokepoint without aliasing the database.
+    pub fn history_retention(&self) -> super::history::HistoryRetention {
+        super::history::resolve_history_retention(self.db.meta.history_max_items)
+    }
 }
 
 #[cfg(test)]
