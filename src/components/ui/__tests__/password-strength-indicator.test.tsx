@@ -7,11 +7,14 @@ import {
   PasswordStrengthIndicator,
 } from "@/components/ui/password-strength-indicator";
 
-const mockZxcvbnAsync = vi.fn();
+const mockCheckAsync = vi.fn();
 
 vi.mock("@zxcvbn-ts/core", () => ({
-  zxcvbnAsync: (password: string) => mockZxcvbnAsync(password),
-  zxcvbnOptions: { setOptions: vi.fn() },
+  ZxcvbnFactory: class {
+    checkAsync(password: string) {
+      return mockCheckAsync(password);
+    }
+  },
 }));
 
 vi.mock("@zxcvbn-ts/language-common", () => ({
@@ -34,7 +37,7 @@ function makeFeedbackWithScore(
 describe("PasswordStrengthIndicator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockZxcvbnAsync.mockImplementation(async (password: string) => {
+    mockCheckAsync.mockImplementation(async (password: string) => {
       const defaultScores: Record<string, 0 | 1 | 2 | 3 | 4> = {
         ab: 0,
         abcdefg: 1,
@@ -77,7 +80,7 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Very Weak: shows zxcvbn feedback when available", async () => {
-    mockZxcvbnAsync.mockResolvedValue(
+    mockCheckAsync.mockResolvedValue(
       makeFeedbackWithScore(0, ["Use a longer password"])
     );
     render(<PasswordStrengthIndicator password="ab" />);
@@ -103,7 +106,7 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Weak: shows zxcvbn feedback when available", async () => {
-    mockZxcvbnAsync.mockResolvedValue(
+    mockCheckAsync.mockResolvedValue(
       makeFeedbackWithScore(1, ["Avoid common words"])
     );
     render(<PasswordStrengthIndicator password="abcdefg" />);
@@ -121,7 +124,7 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Fair: shows feedback (boundary: level <= 2)", async () => {
-    mockZxcvbnAsync.mockResolvedValue(
+    mockCheckAsync.mockResolvedValue(
       makeFeedbackWithScore(2, ["Add more symbols"])
     );
     render(<PasswordStrengthIndicator password="abcdefghijk" />);
@@ -147,11 +150,11 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Strong: does NOT show feedback", async () => {
-    mockZxcvbnAsync.mockResolvedValue(makeFeedbackWithScore(3, ["Some tip"]));
+    mockCheckAsync.mockResolvedValue(makeFeedbackWithScore(3, ["Some tip"]));
     render(<PasswordStrengthIndicator password="Password1!" />);
 
     await waitFor(() => {
-      expect(mockZxcvbnAsync).toHaveBeenCalled();
+      expect(mockCheckAsync).toHaveBeenCalled();
     });
 
     expect(screen.queryByText("Some tip")).not.toBeInTheDocument();
@@ -190,13 +193,13 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("Excellent: does NOT show feedback", async () => {
-    mockZxcvbnAsync.mockResolvedValue(
+    mockCheckAsync.mockResolvedValue(
       makeFeedbackWithScore(4, ["This should not show"])
     );
     render(<PasswordStrengthIndicator password="Correct-Horse-Batt1!" />);
 
     await waitFor(() => {
-      expect(mockZxcvbnAsync).toHaveBeenCalled();
+      expect(mockCheckAsync).toHaveBeenCalled();
     });
 
     expect(screen.queryByText("This should not show")).not.toBeInTheDocument();
@@ -246,7 +249,7 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("pending typed-password fallback does not overrate repetitive patterns", () => {
-    mockZxcvbnAsync.mockReturnValue(
+    mockCheckAsync.mockReturnValue(
       new Promise<ReturnType<typeof makeFeedbackWithScore>>(() => {
         // Keep pending so the synchronous fallback is asserted.
       })
@@ -262,7 +265,7 @@ describe("PasswordStrengthIndicator", () => {
   });
 
   it("pending typed-password fallback penalizes medium uniqueness repetition", () => {
-    mockZxcvbnAsync.mockReturnValue(
+    mockCheckAsync.mockReturnValue(
       new Promise<ReturnType<typeof makeFeedbackWithScore>>(() => {
         // Keep pending so the synchronous fallback is asserted.
       })
@@ -275,11 +278,11 @@ describe("PasswordStrengthIndicator", () => {
   // --- General behavior ---
 
   it("does not render feedback when suggestions are empty", async () => {
-    mockZxcvbnAsync.mockResolvedValue(makeFeedbackWithScore(0, []));
+    mockCheckAsync.mockResolvedValue(makeFeedbackWithScore(0, []));
     render(<PasswordStrengthIndicator password="ab" />);
 
     await waitFor(() => {
-      expect(mockZxcvbnAsync).toHaveBeenCalled();
+      expect(mockCheckAsync).toHaveBeenCalled();
     });
 
     const paragraphs = screen
@@ -321,7 +324,7 @@ describe("PasswordStrengthIndicator", () => {
       }
     );
 
-    mockZxcvbnAsync
+    mockCheckAsync
       .mockReturnValueOnce(firstPromise)
       .mockResolvedValue(makeFeedbackWithScore(1, []));
 
